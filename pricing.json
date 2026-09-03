@@ -6,10 +6,10 @@
     "supportEmail": "senthil930@gmail.com"
   },
   "urls": {
-    "privacy": "https://senthilmkm.github.io/Predict/docs/privacy.html",
-    "terms": "https://senthilmkm.github.io/Predict/docs/terms.html",
-    "support": "https://senthilmkm.github.io/Predict/docs/support.html",
-    "marketing": "https://senthilmkm.github.io/Predict/docs/index.html",
+    "privacy": "https://senthilmkm.github.io/Predict/privacy.html",
+    "terms": "https://senthilmkm.github.io/Predict/terms.html",
+    "support": "https://senthilmkm.github.io/Predict/support.html",
+    "marketing": "https://senthilmkm.github.io/Predict/",
     "manageSubscriptionsIOS": "https://apps.apple.com/account/subscriptions"
   },
   "subscription": {
