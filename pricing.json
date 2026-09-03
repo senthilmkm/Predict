@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "app": {
+    "name": "Predict",
+    "tagline": "Prediction trades, with a buffer.",
+    "supportEmail": "senthil930@gmail.com"
+  },
+  "urls": {
+    "privacy": "https://senthilmkm.github.io/Predict/docs/privacy.html",
+    "terms": "https://senthilmkm.github.io/Predict/docs/terms.html",
+    "support": "https://senthilmkm.github.io/Predict/docs/support.html",
+    "marketing": "https://senthilmkm.github.io/Predict/docs/index.html",
+    "manageSubscriptionsIOS": "https://apps.apple.com/account/subscriptions"
+  },
+  "subscription": {
+    "enabled": true,
+    "entitlementId": "predict_pro",
+    "offeringId": "default",
+    "productId": "predict_pro_monthly",
+    "displayName": "Predict Pro",
+    "billingPeriod": "month",
+    "priceUsd": 19.99,
+    "priceLabel": "$19.99",
+    "periodLabel": "/ month",
+    "currencyCode": "USD",
+    "freeTrial": {
+      "enabled": true,
+      "days": 7,
+      "label": "7-day free trial",
+      "detail": "Then $19.99/month. Cancel anytime in Apple Subscriptions."
+    },
+    "features": [
+      "Kalshi 15m lean signals",
+      "Auto-trade with cushions & risk gates",
+      "Protect-sell & settlement tracking",
+      "Alerts, history export & dashboard"
+    ],
+    "paywall": {
+      "headline": "Trade predictions with a buffer",
+      "subheadline": "Unlock live lean signals and auto-trade on Kalshi 15-minute markets.",
+      "ctaTrial": "Start 7-day free trial",
+      "ctaSubscribe": "Subscribe — $19.99/mo",
+      "ctaLoading": "Contacting App Store…",
+      "footnote": "Payment is charged to your Apple ID. Subscription renews monthly unless canceled at least 24 hours before the period ends."
+    }
+  },
+  "promotions": [
+    {
+      "id": "launch_trial",
+      "enabled": true,
+      "badge": "Launch offer",
+      "title": "Try Predict free for 7 days",
+      "subtitle": "Full Pro access. Then $19.99/month.",
+      "accent": "gold"
+    }
+  ],
+  "revenueCat": {
+    "iosApiKey": "appl_REPLACE_WITH_REVENUECAT_IOS_KEY",
+    "androidApiKey": "goog_REPLACE_WITH_REVENUECAT_ANDROID_KEY",
+    "usesStoreKit2": true
+  },
+  "antiAbuse": {
+    "bindToAppleAccount": true,
+    "requireRestoreOnReinstall": true,
+    "note": "Access is tied to the App Store / RevenueCat customer (Apple ID). Uninstalling does not reset a used free trial or paid entitlement."
+  }
+}

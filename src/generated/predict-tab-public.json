@@ -1,0 +1,33 @@
+{
+  "source": "Command Center Predict + Kalshi tabs",
+  "updated_at": "2026-09-03T09:21:56.848Z",
+  "key_id_suffix": "46da",
+  "api_env": "production",
+  "cushions": {
+    "WTI": 0.3,
+    "Gold": 7,
+    "Silver": 0.23,
+    "BTC": 175,
+    "ETH": 9
+  },
+  "risk": {
+    "fixed_dollars_per_trade": 5,
+    "max_dollars_per_trade": 5,
+    "daily_loss_stop_usd": 50,
+    "max_open_positions": 5,
+    "max_entry_ask_usd": 0.9,
+    "min_minutes_left": 2
+  },
+  "assets_enabled": {
+    "WTI": true,
+    "Gold": true,
+    "Silver": true,
+    "BTC": true,
+    "ETH": true
+  },
+  "desktop_execution_mode": "live",
+  "desktop_trade_enabled": true,
+  "foresight_execution_mode": "dry_run",
+  "max_entry_ask_usd": 0.9,
+  "min_minutes_left": 2
+}

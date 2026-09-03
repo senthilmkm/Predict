@@ -1,17 +1,28 @@
 {
   "expo": {
-    "name": "ForesightApp",
-    "slug": "ForesightApp",
+    "name": "Predict",
+    "slug": "Predict",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "scheme": "predict",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.predict.trading",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Predict uses Face ID to unlock Kalshi credentials and enable auto-trading.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "aps-environment": "production"
+      }
     },
     "android": {
+      "package": "com.predict.trading",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0F1419",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -20,6 +31,40 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-document-picker",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Predict uses Face ID to unlock Kalshi credentials and enable auto-trading."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#3DB8A0",
+          "sounds": [],
+          "mode": "production",
+          "enableBackgroundRemoteNotifications": false
+        }
+      ],
+      "expo-sharing",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0F1419",
+          "image": "./assets/splash-mark.png",
+          "imageWidth": 200
+        }
+      ],
+      "expo-dev-client"
+    ],
+    "extra": {
+      "eas": {}
     }
   }
 }

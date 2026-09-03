@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Predict — Prediction trades, with a buffer</title>
+  <style>
+    :root {
+      --bg: #0F1419;
+      --surface: #1A222C;
+      --text: #F2F5F7;
+      --muted: #8B98A5;
+      --accent: #3DB8A0;
+      --gold: #C6A75E;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, rgba(61,184,160,0.18), transparent), var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    main { max-width: 720px; margin: 0 auto; padding: 48px 20px 64px; }
+    .brand { color: var(--gold); letter-spacing: 0.18em; text-transform: uppercase; font-weight: 800; font-size: 13px; }
+    h1 { font-size: clamp(2rem, 5vw, 2.8rem); line-height: 1.1; margin: 12px 0 10px; }
+    .lead { color: var(--muted); font-size: 1.1rem; }
+    .card {
+      margin-top: 28px;
+      background: var(--surface);
+      border: 1px solid #2E3A48;
+      border-radius: 18px;
+      padding: 22px;
+    }
+    .price { font-size: 2.2rem; font-weight: 800; }
+    .accent { color: var(--accent); }
+    a { color: var(--accent); }
+    ul { padding-left: 1.1rem; }
+    footer { margin-top: 36px; color: var(--muted); font-size: 0.92rem; }
+    nav a { margin-right: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">Predict</div>
+    <h1>Prediction trades,<br/>with a buffer.</h1>
+    <p class="lead">Kalshi 15‑minute lean signals, cushions, and optional auto-trade — built for careful prediction markets.</p>
+
+    <div class="card">
+      <div class="accent" style="font-weight:800; margin-bottom:6px;">Predict Pro</div>
+      <div class="price">$19.99 <span style="font-size:1rem;color:var(--muted);font-weight:600;">/ month</span></div>
+      <p>Includes a <strong>7‑day free trial</strong>. Cancel anytime in Apple Subscriptions.</p>
+      <ul>
+        <li>Live lean YES/NO with static cushions</li>
+        <li>Auto-trade risk gates &amp; protect-sell</li>
+        <li>Alerts, history export, dashboard</li>
+      </ul>
+    </div>
+
+    <footer>
+      <nav>
+        <a href="./privacy.html">Privacy Policy</a>
+        <a href="./terms.html">Terms of Use</a>
+        <a href="./support.html">Support</a>
+      </nav>
+      <p>Support: <a href="mailto:senthil930@gmail.com">senthil930@gmail.com</a></p>
+    </footer>
+  </main>
+</body>
+</html>
