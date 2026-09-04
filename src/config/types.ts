@@ -169,8 +169,22 @@ export function defaultAppConfig(): AppConfig {
 }
 
 export function modeLabel(cfg: AppConfig): string {
-  if (cfg.auto_trade_enabled && cfg.alerts_enabled) return 'Alerts + Auto-trade';
-  if (cfg.auto_trade_enabled) return 'Auto-trade';
-  if (cfg.alerts_enabled) return 'Alerts only';
+  if (cfg.auto_trade_enabled && cfg.alerts_enabled) return 'Alerts on · auto-trading';
+  if (cfg.auto_trade_enabled) return 'Auto-trading · alerts off';
+  if (cfg.alerts_enabled) return 'Alerts on · not trading';
   return 'Paused';
+}
+
+/** One-line explanation under the Settings status chip. */
+export function modeHint(cfg: AppConfig): string {
+  if (cfg.auto_trade_enabled && cfg.alerts_enabled) {
+    return 'You’ll get lean alerts and Predict may place real Kalshi orders when gates pass.';
+  }
+  if (cfg.auto_trade_enabled) {
+    return 'Orders can place automatically, but lean notifications are muted.';
+  }
+  if (cfg.alerts_enabled) {
+    return 'You’ll be notified of lean signals. No orders are placed until auto-trade is on.';
+  }
+  return 'No lean alerts and no automatic orders. Turn either control on below.';
 }

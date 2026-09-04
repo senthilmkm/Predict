@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,7 +18,13 @@ import {
 import { hasPredictAccess, useSubscriptionStore } from '../state/subscriptionStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 
-export function PaywallScreen() {
+type PaywallBodyProps = {
+  /** When true, show status for already-subscribed users and Apple manage CTA. */
+  manageMode?: boolean;
+  onClose?: () => void;
+};
+
+export function PaywallBody({ manageMode = false, onClose }: PaywallBodyProps) {
   const pricing = getPricingConfig();
   const sub = pricing.subscription;
   const promo = useMemo(() => activePromotions()[0] || null, []);
@@ -26,22 +33,56 @@ export function PaywallScreen() {
   const error = useSubscriptionStore((s) => s.error);
   const sdkConfigured = useSubscriptionStore((s) => s.sdkConfigured);
   const isTrialing = useSubscriptionStore((s) => s.isTrialing);
+  const willRenew = useSubscriptionStore((s) => s.willRenew);
+  const managementUrl = useSubscriptionStore((s) => s.managementUrl);
   const purchase = useSubscriptionStore((s) => s.purchase);
   const restore = useSubscriptionStore((s) => s.restore);
   const [localNote, setLocalNote] = useState<string | null>(null);
 
-  if (entitled) return null;
-
   const cta = primaryCtaLabel();
+  const statusLine = !sub.enabled
+    ? 'Gating disabled'
+    : entitled
+      ? isTrialing
+        ? 'Free trial active'
+        : willRenew
+          ? 'Active · renews monthly'
+          : 'Active'
+      : 'Not subscribed';
 
   return (
-    <View style={styles.root} testID="screen-paywall">
-      <ScrollView contentContainerStyle={styles.content} bounces={false}>
+    <View style={styles.root} testID={manageMode ? 'paywall-manage-modal' : 'screen-paywall'}>
+      <ScrollView
+        contentContainerStyle={[styles.content, manageMode && styles.contentModal]}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.heroGlow} />
+
+        {manageMode && onClose ? (
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalHeaderTitle}>Predict Pro</Text>
+            <Pressable
+              testID="btn-paywall-close"
+              onPress={onClose}
+              hitSlop={12}
+              style={styles.closeBtn}
+            >
+              <Text style={styles.closeBtnText}>Close</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <Text style={styles.brand}>{pricing.app.name}</Text>
         <Text style={styles.tag}>{pricing.app.tagline}</Text>
 
-        {promo ? (
+        {manageMode ? (
+          <View style={styles.statusPill} testID="paywall-status-pill">
+            <Text style={styles.statusPillText}>{statusLine}</Text>
+          </View>
+        ) : null}
+
+        {promo && !entitled ? (
           <View style={styles.promo} testID="paywall-promo">
             <Text style={styles.promoBadge}>{promo.badge}</Text>
             <Text style={styles.promoTitle}>{promo.title}</Text>
@@ -49,11 +90,17 @@ export function PaywallScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.headline}>{sub.paywall.headline}</Text>
-        <Text style={styles.subhead}>{sub.paywall.subheadline}</Text>
+        <Text style={styles.headline}>
+          {manageMode && entitled ? 'Your subscription' : sub.paywall.headline}
+        </Text>
+        <Text style={styles.subhead}>
+          {manageMode && entitled
+            ? 'Restore purchases, review plan details, or manage billing in Apple Subscriptions.'
+            : sub.paywall.subheadline}
+        </Text>
 
         <View style={styles.priceCard}>
-          {sub.freeTrial.enabled ? (
+          {sub.freeTrial.enabled && !entitled ? (
             <Text style={styles.trialLabel} testID="paywall-trial-label">
               {sub.freeTrial.label}
             </Text>
@@ -76,22 +123,37 @@ export function PaywallScreen() {
           ))}
         </View>
 
-        <Pressable
-          testID="btn-paywall-subscribe"
-          style={[styles.cta, busy && styles.ctaDisabled]}
-          disabled={busy}
-          onPress={async () => {
-            setLocalNote(null);
-            const next = await purchase();
-            if (next.error) setLocalNote(next.error);
-          }}
-        >
-          {busy ? (
-            <ActivityIndicator color={colors.bg} />
-          ) : (
-            <Text style={styles.ctaText}>{cta}</Text>
-          )}
-        </Pressable>
+        {!entitled ? (
+          <Pressable
+            testID="btn-paywall-subscribe"
+            style={[styles.cta, busy && styles.ctaDisabled]}
+            disabled={busy}
+            onPress={async () => {
+              setLocalNote(null);
+              const next = await purchase();
+              if (next.error) setLocalNote(next.error);
+              else if (next.entitled && onClose) onClose();
+            }}
+          >
+            {busy ? (
+              <ActivityIndicator color={colors.bg} />
+            ) : (
+              <Text style={styles.ctaText}>{cta}</Text>
+            )}
+          </Pressable>
+        ) : (
+          <Pressable
+            testID="btn-paywall-apple-manage"
+            style={[styles.ctaSecondary, busy && styles.ctaDisabled]}
+            disabled={busy}
+            onPress={() => {
+              const url = managementUrl || pricing.urls.manageSubscriptionsIOS;
+              void Linking.openURL(url);
+            }}
+          >
+            <Text style={styles.ctaSecondaryText}>Manage in Apple Subscriptions</Text>
+          </Pressable>
+        )}
 
         <Pressable
           testID="btn-paywall-restore"
@@ -102,6 +164,7 @@ export function PaywallScreen() {
             const next = await restore();
             if (next.error) setLocalNote(next.error);
             else if (next.entitled) setLocalNote('Purchases restored.');
+            else setLocalNote('No active subscription for this Apple ID.');
           }}
         >
           <Text style={styles.restoreText}>Restore Purchases</Text>
@@ -113,7 +176,7 @@ export function PaywallScreen() {
           </Text>
         ) : null}
 
-        {(localNote || error) && !isTrialing ? (
+        {localNote || error ? (
           <Text style={styles.error} testID="paywall-error">
             {localNote || error}
           </Text>
@@ -144,6 +207,33 @@ export function PaywallScreen() {
   );
 }
 
+/** Full-screen gate when the user is not entitled. */
+export function PaywallScreen() {
+  const entitled = useSubscriptionStore((s) => hasPredictAccess(s));
+  if (entitled) return null;
+  return <PaywallBody />;
+}
+
+/** Settings → Predict Pro → Manage */
+export function PaywallManageModal({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <PaywallBody manageMode onClose={onClose} />
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: {
@@ -152,6 +242,29 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     gap: 12,
   },
+  contentModal: {
+    paddingTop: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  modalHeaderTitle: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  closeBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  closeBtnText: { color: colors.accent, fontWeight: '700', fontSize: 13 },
   heroGlow: {
     position: 'absolute',
     top: -40,
@@ -169,6 +282,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   tag: { color: colors.textSecondary, fontSize: 14, marginBottom: 4 },
+  statusPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(61, 184, 160, 0.16)',
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  statusPillText: { color: colors.accent, fontWeight: '800', fontSize: 12 },
   promo: {
     borderRadius: 16,
     borderWidth: 1,
@@ -232,6 +355,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
+  ctaSecondary: {
+    marginTop: 10,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 16,
+    minHeight: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  ctaSecondaryText: { color: colors.accent, fontSize: 16, fontWeight: '800' },
   ctaDisabled: { opacity: 0.7 },
   ctaText: { color: colors.bg, fontSize: 17, fontWeight: '800' },
   restoreBtn: { alignItems: 'center', paddingVertical: 10 },

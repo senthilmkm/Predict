@@ -4,5 +4,15 @@
     "strict": true,
     "resolveJsonModule": true,
     "types": ["jest"]
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js",
+    "jest.ui.config.js",
+    "jest.ui.setup.js",
+    "__tests__",
+    "scripts"
+  ]
 }

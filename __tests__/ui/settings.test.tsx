@@ -40,9 +40,9 @@ describe('Settings toggles', () => {
     const s = await render(<SettingsScreen />);
     expect(s.getByTestId('screen-settings')).toBeTruthy();
     expect(useConfigStore.getState().config.poll_interval_seconds).toBe(15);
-    await fireEvent.press(s.getByTestId('toggle-alerts'));
+    await fireEvent(s.getByTestId('toggle-alerts'), 'valueChange', false);
     await waitFor(() => expect(useConfigStore.getState().config.alerts_enabled).toBe(false));
-    await fireEvent.press(s.getByTestId('toggle-autotrade'));
+    await fireEvent(s.getByTestId('toggle-autotrade'), 'valueChange', true);
     await waitFor(() =>
       expect(useConfigStore.getState().config.auto_trade_enabled).toBe(true)
     );

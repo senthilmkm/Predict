@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -17,6 +16,7 @@ import {
   ALERT_RETENTION_DEFAULT_DAYS,
   ALERT_RETENTION_MAX_DAYS,
   ALERT_RETENTION_MIN_DAYS,
+  modeHint,
   modeLabel,
   POLL_INTERVAL_DEFAULT_SEC,
   POLL_INTERVAL_MAX_SEC,
@@ -28,6 +28,7 @@ import { RISK_FIELD_META, TIME_IN_FORCE_OPTIONS } from '../config/riskDefaults';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { getPricingConfig } from '../config/pricing';
 import { SupportContactFooter } from '../components/SupportContactFooter';
+import { PaywallManageModal } from './PaywallScreen';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { hasPredictAccess, useSubscriptionStore } from '../state/subscriptionStore';
@@ -93,9 +94,8 @@ export function SettingsScreen() {
   const subProductId = useSubscriptionStore((s) => s.productId);
   const subExpirationAt = useSubscriptionStore((s) => s.expirationAt);
   const subWillRenew = useSubscriptionStore((s) => s.willRenew);
-  const subManagementUrl = useSubscriptionStore((s) => s.managementUrl);
-  const restorePurchases = useSubscriptionStore((s) => s.restore);
   const refreshSub = useSubscriptionStore((s) => s.refresh);
+  const [paywallOpen, setPaywallOpen] = useState(false);
 
   const [hasCreds, setHasCreds] = useState(false);
   const [keyId, setKeyId] = useState('');
@@ -390,9 +390,11 @@ export function SettingsScreen() {
   return (
     <View style={styles.root} testID="screen-settings">
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.mode} testID="settings-mode">
-          {modeLabel(config)}
-        </Text>
+        <View style={styles.statusCard} testID="settings-mode">
+          <Text style={styles.statusEyebrow}>Current mode</Text>
+          <Text style={styles.statusTitle}>{modeLabel(config)}</Text>
+          <Text style={styles.statusHint}>{modeHint(config)}</Text>
+        </View>
         {feedback ? (
           <Text style={styles.actionFeedback} testID="settings-message">
             {feedback}
@@ -401,7 +403,17 @@ export function SettingsScreen() {
 
         <Text style={styles.section}>Subscription</Text>
         <View style={styles.subCard} testID="subscription-manage-card">
-          <Text style={styles.slimLabel}>Predict Pro</Text>
+          <View style={styles.subCardHeader}>
+            <Text style={styles.slimLabel}>Predict Pro</Text>
+            <Pressable
+              testID="btn-manage-subscription"
+              onPress={() => setPaywallOpen(true)}
+              hitSlop={10}
+              style={styles.manageLinkBtn}
+            >
+              <Text style={styles.manageLink}>Manage</Text>
+            </Pressable>
+          </View>
           <Text style={styles.slimMeta} testID="subscription-status">
             {!pricing.subscription.enabled
               ? 'Gating disabled in pricing.json'
@@ -430,36 +442,6 @@ export function SettingsScreen() {
           ) : null}
         </View>
         <Row
-          testID="btn-manage-subscription"
-          label="Manage in Apple Subscriptions"
-          value="Open"
-          busy={false}
-          busyLabel="Opening…"
-          disabled={anyBusy || subBusy}
-          onPress={() => {
-            const url = subManagementUrl || pricing.urls.manageSubscriptionsIOS;
-            void Linking.openURL(url);
-          }}
-        />
-        <Row
-          testID="btn-restore-purchases"
-          label="Restore Purchases"
-          value={subBusy ? '…' : 'Restore'}
-          busy={subBusy}
-          busyLabel="Restoring…"
-          disabled={anyBusy || subBusy}
-          onPress={() => {
-            void (async () => {
-              const next = await restorePurchases();
-              note(
-                next.entitled
-                  ? 'Purchases restored — Pro unlocked'
-                  : next.error || 'No active subscription for this Apple ID'
-              );
-            })();
-          }}
-        />
-        <Row
           testID="btn-refresh-subscription"
           label="Refresh status"
           value="Refresh"
@@ -473,43 +455,31 @@ export function SettingsScreen() {
             })();
           }}
         />
-        <View style={styles.legalInline}>
-          <Pressable onPress={() => void Linking.openURL(pricing.urls.privacy)}>
-            <Text style={styles.legalInlineLink}>Privacy Policy</Text>
-          </Pressable>
-          <Text style={styles.legalInlineDot}>·</Text>
-          <Pressable onPress={() => void Linking.openURL(pricing.urls.terms)}>
-            <Text style={styles.legalInlineLink}>Terms of Use</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.hint}>{pricing.antiAbuse.note}</Text>
-
-        <Text style={styles.section}>Alerts</Text>
-        <Row
-          testID="toggle-alerts"
-          label="Alerts"
-          value={config.alerts_enabled ? 'On' : 'Off'}
-          busy={busyKey === 'alerts'}
-          busyLabel="Updating…"
-          disabled={anyBusy}
-          onPress={() => void toggleAlerts()}
-        />
-        <Row
-          testID="toggle-autotrade"
-          label="Auto-trade"
-          value={config.auto_trade_enabled ? 'On' : 'Off'}
-          busy={busyKey === 'autotrade'}
-          busyLabel={config.auto_trade_enabled ? 'Turning off…' : 'Turning on…'}
-          disabled={anyBusy}
-          onPress={() => void toggleAutoTrade()}
-        />
         <Text style={styles.hint}>
-          Alerts notify on lean signals. Auto-trade places real Kalshi orders when cushions pass
-          (Face ID required to turn on).
+          Tap Manage for plan details, Restore Purchases, Privacy Policy, and Terms of Use.
         </Text>
 
+        <Text style={styles.section}>Signal alerts</Text>
+        <View style={styles.controlCard}>
+          <View style={styles.controlRow}>
+            <View style={styles.controlCopy}>
+              <Text style={styles.controlTitle}>Notify on lean signals</Text>
+              <Text style={styles.controlHint}>
+                Local alerts when a lean appears. Does not place any orders.
+              </Text>
+            </View>
+            <Switch
+              testID="toggle-alerts"
+              value={config.alerts_enabled}
+              disabled={anyBusy}
+              onValueChange={() => void toggleAlerts()}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.textPrimary}
+            />
+          </View>
+        </View>
         <View style={styles.slimCard} testID="alert-retention-row">
-          <Text style={styles.slimLabel}>Keep history</Text>
+          <Text style={styles.slimLabel}>Keep alert history</Text>
           <View style={styles.pollControls}>
             <Pressable
               testID="btn-retention-down"
@@ -559,6 +529,35 @@ export function SettingsScreen() {
           Default {ALERT_RETENTION_DEFAULT_DAYS}d · {ALERT_RETENTION_MIN_DAYS}–
           {ALERT_RETENTION_MAX_DAYS}d. Older alerts auto-delete from this phone.
         </Text>
+
+        <Text style={styles.section}>Auto-trade</Text>
+        <View style={styles.controlCard}>
+          <View style={styles.controlRow}>
+            <View style={styles.controlCopy}>
+              <Text style={styles.controlTitle}>Place orders automatically</Text>
+              <Text style={styles.controlHint}>
+                Real Kalshi orders when cushions and risk gates pass. Face ID required to turn on.
+              </Text>
+            </View>
+            <Switch
+              testID="toggle-autotrade"
+              value={config.auto_trade_enabled}
+              disabled={anyBusy}
+              onValueChange={() => void toggleAutoTrade()}
+              trackColor={{ false: colors.border, true: colors.gold }}
+              thumbColor={colors.textPrimary}
+            />
+          </View>
+          {config.auto_trade_enabled ? (
+            <Text style={styles.liveWarn} testID="autotrade-live-warn">
+              Live trading is on. Keep the app open while polling — orders can fill with real money.
+            </Text>
+          ) : (
+            <Text style={styles.controlHint}>
+              Off = research & alerts only. No automatic buys or sells.
+            </Text>
+          )}
+        </View>
 
         <Text style={styles.section}>Polling</Text>
         <View style={styles.slimCard}>
@@ -881,6 +880,7 @@ export function SettingsScreen() {
 
       <KalshiCredsHelpModal visible={credsHelpOpen} onClose={() => setCredsHelpOpen(false)} />
       <RiskHelpModal visible={riskHelpOpen} onClose={() => setRiskHelpOpen(false)} />
+      <PaywallManageModal visible={paywallOpen} onClose={() => setPaywallOpen(false)} />
     </View>
   );
 }
@@ -915,16 +915,17 @@ function RiskHelpModal({
               signal fails a limit, Home shows “no order · …” instead of trading.
             </Text>
 
-            <Text style={styles.modalSection}>Modes (Alerts / Auto-trade)</Text>
-            <HelpItem title="Alerts">
-              When On, you get notifications for lean signals and (if not muted) order events. A
-              signal is research only — it is not an order by itself.
+            <Text style={styles.modalSection}>Signal alerts vs Auto-trade</Text>
+            <HelpItem title="Signal alerts">
+              When On, you get notifications for lean signals. A signal is research only — it is not
+              an order by itself. Independent from auto-trade.
             </HelpItem>
             <HelpItem title="Auto-trade">
-              When On, the app may place real buy orders when cushions and Risk gates pass. Turning
-              this On requires Face ID / biometrics. Keep the app open while auto-trading.
+              When On, the app may place real Kalshi buy orders when cushions and Risk gates pass.
+              Turning this On requires Face ID / biometrics. Keep the app open while auto-trading.
+              Independent from alerts — you can trade with alerts muted.
             </HelpItem>
-            <HelpItem title="Keep history / Prune">
+            <HelpItem title="Keep alert history / Prune">
               How many days of alerts to keep on this phone. “Prune older alerts” deletes alerts
               older than that window (today’s stay).
             </HelpItem>
@@ -1261,6 +1262,70 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.lg, gap: 5, paddingBottom: 48 },
   mode: { color: colors.gold, fontSize: 17, fontWeight: '700', marginBottom: 2 },
+  statusCard: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 4,
+    marginBottom: 4,
+  },
+  statusEyebrow: {
+    color: colors.mute,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  statusTitle: {
+    color: colors.gold,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  statusHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  controlCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  controlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  controlCopy: { flex: 1, gap: 3 },
+  controlTitle: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  controlHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  liveWarn: {
+    color: colors.gold,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    backgroundColor: 'rgba(198, 167, 94, 0.12)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
   connectionTestResult: {
     fontSize: 13,
     lineHeight: 18,
@@ -1313,6 +1378,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     gap: 4,
+  },
+  subCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  manageLinkBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  manageLink: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '800',
   },
   legalInline: {
     flexDirection: 'row',

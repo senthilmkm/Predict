@@ -133,14 +133,28 @@ export function HomeScreen() {
 
       <View style={styles.card}>
         <Text style={styles.label}>Today snapshot (ET)</Text>
-        <Text style={styles.value}>
-          P&L ${stats.realized_pnl_usd.toFixed(2)} · {stats.wins}W / {stats.losses}L · pending{' '}
-          {stats.pending}
-          {stats.misses > 0 ? ` · miss ${stats.misses}` : ''}
-        </Text>
-        <Text style={styles.snapHint}>
-          Counts only today's fills (America/New_York). Pending = filled, not settled yet.
-        </Text>
+        {stats.wins + stats.losses + stats.pending + stats.misses === 0 ? (
+          <>
+            <Text style={styles.value}>No app fills today</Text>
+            <Text style={styles.snapHint}>
+              This card only counts trades Predict placed on this phone (America/New_York). It does
+              not pull Kalshi account history or desktop Command Center trades. Turn on Auto-trade
+              and keep the app open to record fills here.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.value}>
+              P&L ${stats.realized_pnl_usd.toFixed(2)} · {stats.wins}W / {stats.losses}L · pending{' '}
+              {stats.pending}
+              {stats.misses > 0 ? ` · miss ${stats.misses}` : ''}
+            </Text>
+            <Text style={styles.snapHint}>
+              Today’s fills only (America/New_York). Pending = filled, not settled yet. Wins/losses
+              update after the 15m market resolves.
+            </Text>
+          </>
+        )}
       </View>
 
       <View style={styles.card} testID="home-last-signals">
