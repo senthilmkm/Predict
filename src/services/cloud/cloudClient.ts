@@ -1,6 +1,6 @@
 import { UserStatusDoc } from '../../../packages/trading-core/src';
 
-const CLOUD_BASE_URL = process.env.EXPO_PUBLIC_CLOUD_API_URL || 'https://predict-cloud-api-prod.run.app';
+const CLOUD_BASE_URL = process.env.EXPO_PUBLIC_CLOUD_API_URL || 'https://predict-cloud-api-428463178740.us-east1.run.app';
 
 export interface KalshiUploadInput {
   keyId: string;
