@@ -55,7 +55,7 @@ export function OnboardingScreen({ onFinished }: Props) {
   const [record, setRecord] = useState<OnboardingRecord | null>(null);
   const [step, setStep] = useState(0);
   const [riskChecked, setRiskChecked] = useState(false);
-  const [intent, setIntent] = useState<OnboardingIntentMode | null>(null);
+  const [intent, setIntent] = useState<OnboardingIntentMode | null>('alerts_only');
   const [assets, setAssets] = useState<AssetKey[]>(['Gold', 'BTC']);
   const [experience, setExperience] = useState<OnboardingExperience | null>(null);
   const [capital, setCapital] = useState<OnboardingCapital | null>(null);
@@ -79,7 +79,7 @@ export function OnboardingScreen({ onFinished }: Props) {
         setRecord(rec);
         setStep(Math.min(Math.max(rec.currentStep || 0, 0), 5));
         setRiskChecked(Boolean(rec.riskUnderstoodChecked));
-        setIntent(rec.intentMode);
+        setIntent(rec.intentMode || 'alerts_only');
         setAssets(rec.assetsOfInterest?.length ? rec.assetsOfInterest : ['Gold', 'BTC']);
         setExperience(rec.experienceLevel);
         setCapital(rec.capitalComfort);
