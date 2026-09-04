@@ -7,6 +7,9 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CLOUD_API_URL": "https://predict-cloud-api-428463178740.us-east1.run.app"
+      },
       "ios": {
         "simulator": false,
         "autoIncrement": "buildNumber"
@@ -18,6 +21,9 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CLOUD_API_URL": "https://predict-cloud-api-428463178740.us-east1.run.app"
+      },
       "ios": {
         "simulator": false,
         "autoIncrement": "buildNumber"
@@ -30,6 +36,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_CLOUD_API_URL": "https://predict-cloud-api-428463178740.us-east1.run.app"
+      },
       "ios": {
         "autoIncrement": "buildNumber"
       },

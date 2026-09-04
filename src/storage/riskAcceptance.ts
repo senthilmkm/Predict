@@ -106,14 +106,32 @@ async function appendAcceptance(
   return row;
 }
 
+const CLOUD_BASE_URL = process.env.EXPO_PUBLIC_CLOUD_API_URL || 'https://predict-cloud-api-428463178740.us-east1.run.app';
+
+async function syncDisclaimerToCloud(disclaimerVersion: string, source: RiskAcceptanceSource): Promise<void> {
+  try {
+    await fetch(`${CLOUD_BASE_URL}/me/disclaimer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ disclaimerVersion, source }),
+    });
+  } catch {
+    /* Silent catch — local storage remains authoritative offline */
+  }
+}
+
 /** Onboarding step 2 — full disclaimer understanding (does not arm Auto-trade). */
 export async function recordOnboardingRiskAcceptance(): Promise<AutoTradeRiskAcceptance> {
-  return appendAcceptance({ source: 'onboarding', autoTradeEnabled: false });
+  const row = await appendAcceptance({ source: 'onboarding', autoTradeEnabled: false });
+  syncDisclaimerToCloud(DISCLAIMER_VERSION, 'onboarding').catch(() => {});
+  return row;
 }
 
 /** After Face ID when turning Auto-trade ON (audit of arming, not a second disclaimer ask). */
 export async function recordAutoTradeRiskAcceptance(): Promise<AutoTradeRiskAcceptance> {
-  return appendAcceptance({ source: 'autotrade_enable', autoTradeEnabled: true });
+  const row = await appendAcceptance({ source: 'autotrade_enable', autoTradeEnabled: true });
+  syncDisclaimerToCloud(DISCLAIMER_VERSION, 'autotrade_enable').catch(() => {});
+  return row;
 }
 
 export async function getLatestAutoTradeRiskAcceptance(): Promise<AutoTradeRiskAcceptance | null> {
