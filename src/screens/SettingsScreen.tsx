@@ -986,6 +986,16 @@ function RiskHelpModal({
               2 means “don’t enter in the last 2 minutes.” If you see “too little time left,” the
               clock is under this number.
             </HelpItem>
+            <HelpItem title="Min minutes elapsed">
+              Only enter after this many whole minutes have already passed in the 15‑minute window.
+              Skips the noisy open when price/lean can flip quickly.{'\n\n'}
+              • 0 = allow buys from the window open{'\n'}
+              • 2 (default) = wait ~2 minutes before buying{'\n'}
+              • 3–5 = stricter — fewer early entries{'\n\n'}
+              Works together with Min minutes left. Example: elapsed ≥ 2 and left ≥ 2 → roughly the
+              middle of the window only.{'\n\n'}
+              If you see “too early in window,” the clock has not reached this number yet.
+            </HelpItem>
             <HelpItem title="Max entry ask ($)">
               Do not buy if the contract ask is above this (example: $0.90). Protects you from paying
               too much for a low-edge ticket.

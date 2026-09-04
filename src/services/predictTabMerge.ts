@@ -32,6 +32,7 @@ export interface KalshiPublicConfig {
   eth_cushion_usd?: number;
   max_entry_ask_usd?: number;
   min_minutes_left?: number;
+  min_minutes_elapsed?: number;
   time_in_force?: string;
   price_improvement_usd?: number;
 }
@@ -90,6 +91,9 @@ export function mergePredictTabConfig(
       ),
       max_entry_ask_usd: Number(kalshi.max_entry_ask_usd ?? base.risk.max_entry_ask_usd),
       min_minutes_left: Number(kalshi.min_minutes_left ?? base.risk.min_minutes_left),
+      min_minutes_elapsed: Number(
+        kalshi.min_minutes_elapsed ?? base.risk.min_minutes_elapsed
+      ),
       time_in_force: (kalshi.time_in_force as any) ?? base.risk.time_in_force,
       chase_above_ask_usd: Number(
         kalshi.price_improvement_usd ?? base.risk.chase_above_ask_usd

@@ -15,6 +15,7 @@ function lean(over: Partial<LeanSignal> = {}): LeanSignal {
     strike: 2640,
     abs_gap: 10,
     minutes_left: 8,
+    minutes_elapsed: 5,
     phase: 'live',
     yes_ask: 0.55,
     no_ask: 0.48,
@@ -91,6 +92,16 @@ describe('evaluateStaticGate edge cases', () => {
 
   test('minutes_left', () => {
     expect(evaluateStaticGate(lean({ minutes_left: 1 }), base()).skip_reason).toBe('minutes_left');
+  });
+
+  test('minutes_elapsed', () => {
+    expect(evaluateStaticGate(lean({ minutes_elapsed: 0 }), base()).skip_reason).toBe(
+      'minutes_elapsed'
+    );
+    expect(evaluateStaticGate(lean({ minutes_elapsed: 1 }), base()).skip_reason).toBe(
+      'minutes_elapsed'
+    );
+    expect(evaluateStaticGate(lean({ minutes_elapsed: 2 }), base()).ok).toBe(true);
   });
 
   test('window_ended', () => {

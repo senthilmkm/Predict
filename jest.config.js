@@ -7,6 +7,9 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/__tests__/ui/'],
   moduleFileExtensions: ['ts', 'tsx', 'js'],
   clearMocks: true,
+  moduleNameMapper: {
+    '^react-native$': '<rootDir>/__tests__/mocks/react-native.js',
+  },
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',

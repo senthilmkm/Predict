@@ -72,6 +72,8 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'SKIP signal';
     case 'minutes_left':
       return 'too little time left';
+    case 'minutes_elapsed':
+      return 'too early in window';
     case 'below_cushion':
       return 'below cushion';
     case 'max_open':
@@ -526,6 +528,7 @@ export class AppRuntime {
           strike: lean.strike ?? 0,
           abs_gap: lean.abs_gap ?? 0,
           minutes_left: lean.minutes_left ?? 0,
+          minutes_elapsed: lean.minutes_elapsed ?? 0,
           phase: lean.phase === 'live' ? 'live' : 'ended',
           yes_ask: lean.yes_ask ?? undefined,
           no_ask: lean.no_ask ?? undefined,

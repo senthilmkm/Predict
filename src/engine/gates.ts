@@ -9,6 +9,8 @@ export interface LeanSignal {
   strike: number;
   abs_gap: number;
   minutes_left: number;
+  /** Whole minutes since the 15m window opened (0 at the open). */
+  minutes_elapsed?: number;
   phase: 'live' | 'ended';
   yes_ask?: number;
   no_ask?: number;
@@ -66,6 +68,10 @@ export function evaluateStaticGate(
   }
   if (lean.minutes_left < cfg.risk.min_minutes_left) {
     return { ok: false, skip_reason: 'minutes_left' };
+  }
+  const elapsed = Number(lean.minutes_elapsed ?? 0);
+  if (elapsed < cfg.risk.min_minutes_elapsed) {
+    return { ok: false, skip_reason: 'minutes_elapsed' };
   }
 
   const cushion = Number(cfg.cushions[lean.asset]);

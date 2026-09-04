@@ -72,6 +72,12 @@
         "projectId": "a03a8787-9892-4b03-b817-802af17715cf"
       }
     },
-    "owner": "senthil930"
+    "owner": "senthil930",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a03a8787-9892-4b03-b817-802af17715cf"
+    }
   }
 }

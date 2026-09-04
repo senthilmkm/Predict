@@ -81,6 +81,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     ),
     daily_loss_stop_usd: clamp(Number(r.daily_loss_stop_usd ?? d.daily_loss_stop_usd), 1, 10000),
     min_minutes_left: Math.round(clamp(Number(r.min_minutes_left ?? d.min_minutes_left), 0, 14)),
+    min_minutes_elapsed: Math.round(
+      clamp(Number(r.min_minutes_elapsed ?? d.min_minutes_elapsed), 0, 10)
+    ),
     max_entry_ask_usd: clamp(Number(r.max_entry_ask_usd ?? d.max_entry_ask_usd), 0.5, 0.99),
     time_in_force: normalizeTimeInForce(r.time_in_force ?? d.time_in_force),
     chase_above_ask_usd: snap(

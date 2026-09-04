@@ -40,6 +40,11 @@ export interface RiskConfig {
   max_trades_per_asset_per_day: number;
   daily_loss_stop_usd: number;
   min_minutes_left: number;
+  /**
+   * Only enter after this many whole minutes have already passed in the 15m window.
+   * 0 = allow from the open. Example: 2 = skip the first ~2 noisy minutes.
+   */
+  min_minutes_elapsed: number;
   /** Do not buy if side ask is above this. */
   max_entry_ask_usd: number;
   time_in_force: TimeInForce;
@@ -157,6 +162,7 @@ export function defaultAppConfig(): AppConfig {
       max_trades_per_asset_per_day: 100,
       daily_loss_stop_usd: 50,
       min_minutes_left: 2,
+      min_minutes_elapsed: 2,
       max_entry_ask_usd: 0.9,
       time_in_force: 'immediate_or_cancel',
       chase_above_ask_usd: 0.02,

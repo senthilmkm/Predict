@@ -13,7 +13,8 @@
       },
       "android": {
         "autoIncrement": "versionCode"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -24,7 +25,8 @@
       "android": {
         "buildType": "apk",
         "autoIncrement": "versionCode"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
@@ -33,7 +35,8 @@
       },
       "android": {
         "autoIncrement": "versionCode"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {
