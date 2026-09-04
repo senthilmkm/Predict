@@ -590,7 +590,7 @@ function ModeStep({
     <View testID="onboarding-step-mode">
       <Text style={styles.hero}>Choose how you want to start</Text>
       <Text style={styles.sub}>
-        Pick one path. You can change this later in Settings. Auto-trade never turns on by itself.
+        Pick one path below. You can change this anytime in Settings.
       </Text>
 
       <Pressable
@@ -598,12 +598,27 @@ function ModeStep({
         style={[styles.modeCard, intent === 'alerts_only' && styles.modeCardOn]}
         onPress={() => onIntent('alerts_only')}
       >
+        <View style={styles.modeHeaderRow}>
+          <View style={styles.pillBeginner}>
+            <Text style={styles.pillBeginnerText}>RECOMMENDED FOR BEGINNERS</Text>
+          </View>
+          <View style={[styles.radioCircle, intent === 'alerts_only' && styles.radioCircleOn]}>
+            {intent === 'alerts_only' ? <Text style={styles.radioCheckText}>✓</Text> : null}
+          </View>
+        </View>
+
         <Text style={styles.modeTitle}>Lean signals only</Text>
-        <Text style={styles.modeBody}>
-          Predict shows leans and can send alerts. You place every trade yourself in Kalshi (or
-          elsewhere). The app does not place orders.
-        </Text>
-        <Text style={styles.modeTag}>Safest way to learn</Text>
+        <Text style={styles.modeBullet}>• Receive real-time probability lean alerts</Text>
+        <Text style={styles.modeBullet}>• You place trades yourself manually in Kalshi</Text>
+        <Text style={styles.modeBullet}>• Zero risk of automated order placement</Text>
+
+        {intent === 'alerts_only' ? (
+          <View style={styles.selectedBadge}>
+            <Text style={styles.selectedBadgeText}>✓ SELECTED PATH</Text>
+          </View>
+        ) : (
+          <Text style={styles.modeTag}>Safest way to learn</Text>
+        )}
       </Pressable>
 
       <Pressable
@@ -611,12 +626,27 @@ function ModeStep({
         style={[styles.modeCard, intent === 'alerts_and_autotrade' && styles.modeCardOn]}
         onPress={() => onIntent('alerts_and_autotrade')}
       >
-        <Text style={styles.modeTitle}>Lean signals + Auto-trade (later)</Text>
-        <Text style={styles.modeBody}>
-          Same leans and alerts — plus the option to let Predict place IOC orders with your Kalshi
-          API keys when cushions and risk gates pass. Keep the app open while Auto-trade is on.
-        </Text>
-        <Text style={styles.modeTag}>Still requires Face ID in Settings to arm</Text>
+        <View style={styles.modeHeaderRow}>
+          <View style={styles.pillPro}>
+            <Text style={styles.pillProText}>FOR AUTOMATED EXECUTION</Text>
+          </View>
+          <View style={[styles.radioCircle, intent === 'alerts_and_autotrade' && styles.radioCircleOn]}>
+            {intent === 'alerts_and_autotrade' ? <Text style={styles.radioCheckText}>✓</Text> : null}
+          </View>
+        </View>
+
+        <Text style={styles.modeTitle}>Lean signals + Auto-trade</Text>
+        <Text style={styles.modeBullet}>• Real-time probability leans and alerts</Text>
+        <Text style={styles.modeBullet}>• Option to place IOC orders automatically on Kalshi</Text>
+        <Text style={styles.modeBullet}>• Protected by custom cushions & risk limits</Text>
+
+        {intent === 'alerts_and_autotrade' ? (
+          <View style={styles.selectedBadge}>
+            <Text style={styles.selectedBadgeText}>✓ SELECTED PATH</Text>
+          </View>
+        ) : (
+          <Text style={styles.modeTag}>Requires Face ID in Settings to arm</Text>
+        )}
       </Pressable>
 
       <View style={styles.compare}>
@@ -883,13 +913,63 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     padding: 16,
-    marginBottom: 10,
-    gap: 8,
+    marginBottom: 12,
+    gap: 6,
   },
   modeCardOn: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  modeTitle: { color: colors.textPrimary, fontWeight: '800', fontSize: 17 },
+  modeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  pillBeginner: {
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  pillBeginnerText: { color: colors.gold, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  pillPro: {
+    backgroundColor: 'rgba(74, 144, 226, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(74, 144, 226, 0.3)',
+  },
+  pillProText: { color: '#4A90E2', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  radioCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.mute,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioCircleOn: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
+  },
+  radioCheckText: { color: '#000', fontSize: 12, fontWeight: '900' },
+  modeTitle: { color: colors.textPrimary, fontWeight: '800', fontSize: 17, marginBottom: 2 },
   modeBody: { color: colors.textSecondary, fontSize: 14, lineHeight: 20 },
-  modeTag: { color: colors.gold, fontSize: 12, fontWeight: '700' },
+  modeBullet: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  modeTag: { color: colors.mute, fontSize: 12, fontWeight: '600', marginTop: 4 },
+  selectedBadge: {
+    marginTop: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: colors.accentSoft,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  selectedBadgeText: { color: colors.accent, fontSize: 11, fontWeight: '800' },
   compare: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: 12,
