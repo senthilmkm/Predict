@@ -32,6 +32,16 @@
       border-radius: 18px;
       padding: 22px;
     }
+    .callout {
+      margin-top: 22px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      border: 1px solid var(--gold);
+      background: rgba(198,167,94,0.1);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .callout strong { color: var(--gold); }
     .price { font-size: 2.2rem; font-weight: 800; }
     .accent { color: var(--accent); }
     a { color: var(--accent); }
@@ -46,10 +56,22 @@
     <h1>Prediction trades,<br/>with a buffer.</h1>
     <p class="lead">Kalshi 15‑minute lean signals, cushions, and optional auto-trade — built for careful prediction markets.</p>
 
+    <div class="callout">
+      <p style="margin:0;">
+        <strong>Risk disclaimer:</strong>
+        Trading involves risk of loss. Predict does <em>not</em> guarantee profits or successful trades —
+        whether you use alerts only, auto-trade, or both. You alone are responsible for any trades you place,
+        including trades you place yourself outside this app based on Predict alerts, and trades placed when
+        you enable Auto-trade. The app owner is not liable for your losses.
+        <a href="./disclaimer.html">Full disclaimer</a> ·
+        <a href="./terms.html">Terms</a>
+      </p>
+    </div>
+
     <div class="card">
       <div class="accent" style="font-weight:800; margin-bottom:6px;">Predict Pro</div>
       <div class="price">$19.99 <span style="font-size:1rem;color:var(--muted);font-weight:600;">/ month</span></div>
-      <p>Includes a <strong>7‑day free trial</strong>. Cancel anytime in Apple Subscriptions.</p>
+      <p>Includes a <strong>7‑day free trial</strong>. Cancel anytime in Apple Subscriptions. A subscription does not guarantee trading profits.</p>
       <ul>
         <li>Live lean YES/NO with static cushions</li>
         <li>Auto-trade risk gates &amp; protect-sell</li>
@@ -58,9 +80,23 @@
     </div>
 
     <footer>
+      <div class="card" style="margin-top:0;margin-bottom:24px;">
+        <p style="margin:0 0 10px;color:var(--muted);font-size:0.95rem;">
+          <strong style="color:var(--gold);">Before you trade:</strong>
+          Review every alert yourself before placing any order outside Predict. Turn on Auto-trade only if you
+          accept that the app may place real Kalshi orders under your settings — still with no promise of profit
+          or successful fills. You remain fully responsible for all activity on your Kalshi account.
+        </p>
+        <p style="margin:0;color:var(--muted);font-size:0.95rem;">
+          <strong style="color:var(--gold);">No liability / no profit guarantee:</strong>
+          The Predict owner and author are not responsible for losses incurred while using this app.
+          <a href="./disclaimer.html">Read the full Risk Disclaimer</a>.
+        </p>
+      </div>
       <nav>
         <a href="./privacy.html">Privacy Policy</a>
         <a href="./terms.html">Terms of Use</a>
+        <a href="./disclaimer.html">Risk Disclaimer</a>
         <a href="./support.html">Support</a>
       </nav>
       <p>Support: <a href="mailto:senthil930@gmail.com">senthil930@gmail.com</a></p>

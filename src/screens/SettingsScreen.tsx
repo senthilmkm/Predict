@@ -28,6 +28,7 @@ import { RISK_FIELD_META, TIME_IN_FORCE_OPTIONS } from '../config/riskDefaults';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { getPricingConfig } from '../config/pricing';
 import { SupportContactFooter } from '../components/SupportContactFooter';
+import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { PaywallManageModal } from './PaywallScreen';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
@@ -871,6 +872,9 @@ export function SettingsScreen() {
           Paste your Kalshi API key ID and private key PEM. Keep the app open while auto-trading.
         </Text>
 
+        <Text style={styles.section}>Legal</Text>
+        <TradingDisclaimer variant="long" testID="settings-disclaimer" />
+
         <Text style={styles.section}>Support</Text>
         <Text style={styles.hint}>
           Email from config.json — tap the address to write us if something breaks.
@@ -913,6 +917,12 @@ function RiskHelpModal({
               Plain-English guide to every setting in this app. Risk limits below decide how much
               money may be used and when the app may place or exit a real Kalshi order. If a new
               signal fails a limit, Home shows “no order · …” instead of trading.
+            </Text>
+            <Text style={styles.modalLead}>
+              Important: Trading involves risk of loss. Predict does not guarantee profits or
+              successful trades — whether you use alerts only, auto-trade, or both. You alone are
+              responsible for trades you place outside this app based on alerts, and for trades
+              placed when Auto-trade is on. The app owner is not liable for your losses.
             </Text>
 
             <Text style={styles.modalSection}>Signal alerts vs Auto-trade</Text>

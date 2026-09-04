@@ -17,6 +17,7 @@ import {
 } from '../config/pricing';
 import { hasPredictAccess, useSubscriptionStore } from '../state/subscriptionStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
+import { TradingDisclaimer } from '../components/TradingDisclaimer';
 
 type PaywallBodyProps = {
   /** When true, show status for already-subscribed users and Apple manage CTA. */
@@ -185,6 +186,8 @@ export function PaywallBody({ manageMode = false, onClose }: PaywallBodyProps) {
         <Text style={styles.footnote}>{sub.paywall.footnote}</Text>
         <Text style={styles.antiAbuse}>{pricing.antiAbuse.note}</Text>
 
+        <TradingDisclaimer variant="short" testID="paywall-disclaimer" />
+
         <View style={styles.legalRow}>
           <Pressable
             testID="link-paywall-privacy"
@@ -198,6 +201,15 @@ export function PaywallBody({ manageMode = false, onClose }: PaywallBodyProps) {
             onPress={() => void Linking.openURL(pricing.urls.terms)}
           >
             <Text style={styles.legalLink}>Terms of Use</Text>
+          </Pressable>
+          <Text style={styles.legalDot}>·</Text>
+          <Pressable
+            testID="link-paywall-disclaimer"
+            onPress={() =>
+              void Linking.openURL(pricing.urls.disclaimer || pricing.urls.terms)
+            }
+          >
+            <Text style={styles.legalLink}>Risk Disclaimer</Text>
           </Pressable>
         </View>
 

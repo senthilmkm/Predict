@@ -12,6 +12,13 @@
     h1 { margin:10px 0 16px; }
     .muted { color:#8B98A5; }
     .card { background:#1A222C; border:1px solid #2E3A48; border-radius:16px; padding:18px; margin:18px 0; }
+    .callout {
+      margin: 18px 0;
+      padding: 16px 18px;
+      border-radius: 14px;
+      border: 1px solid #C6A75E;
+      background: rgba(198,167,94,0.1);
+    }
   </style>
 </head>
 <body>
@@ -19,12 +26,30 @@
     <div class="brand">Predict</div>
     <h1>Support</h1>
     <p class="muted">We’re here to help with subscriptions, Kalshi API setup, and app issues.</p>
+
+    <div class="callout">
+      <p style="margin:0;">
+        <strong>Risk disclaimer:</strong>
+        Trading involves risk of loss. Predict does not guarantee profits or successful trades —
+        whether you use alerts only, auto-trade, or both. You alone are responsible for any trades you place,
+        including trades you place yourself outside this app based on Predict alerts, and trades placed when
+        you enable Auto-trade. The app owner is not liable for your losses.
+        <a href="./disclaimer.html">Full Risk Disclaimer</a> ·
+        <a href="./terms.html">Terms of Use</a>
+      </p>
+    </div>
+
     <div class="card">
       <p><strong>Email:</strong> <a href="mailto:senthil930@gmail.com">senthil930@gmail.com</a></p>
       <p><strong>Typical topics:</strong> restore purchases, trial status, Face ID / credentials, connection test failures.</p>
       <p>Include your Apple ID email (do not send Kalshi private keys).</p>
     </div>
-    <p><a href="./index.html">Home</a> · <a href="./privacy.html">Privacy</a> · <a href="./terms.html">Terms</a></p>
+
+    <div class="card">
+      <p><strong>Before you trade:</strong> Review every alert yourself before placing any order outside Predict. Enable Auto-trade only if you accept that the app may place real Kalshi orders under your settings — with no promise of profit or successful fills. Support can help with app setup; we cannot reverse market losses or guarantee results.</p>
+    </div>
+
+    <p><a href="./index.html">Home</a> · <a href="./privacy.html">Privacy</a> · <a href="./terms.html">Terms</a> · <a href="./disclaimer.html">Risk Disclaimer</a></p>
   </main>
 </body>
 </html>

@@ -35,6 +35,8 @@ export interface PricingConfig {
     support: string;
     marketing: string;
     manageSubscriptionsIOS: string;
+    /** Optional dedicated risk disclaimer page. */
+    disclaimer?: string;
   };
   subscription: {
     enabled: boolean;

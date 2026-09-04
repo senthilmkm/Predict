@@ -10,6 +10,7 @@
     "terms": "https://senthilmkm.github.io/Predict/terms.html",
     "support": "https://senthilmkm.github.io/Predict/support.html",
     "marketing": "https://senthilmkm.github.io/Predict/",
+    "disclaimer": "https://senthilmkm.github.io/Predict/disclaimer.html",
     "manageSubscriptionsIOS": "https://apps.apple.com/account/subscriptions"
   },
   "subscription": {
@@ -41,7 +42,7 @@
       "ctaTrial": "Start 7-day free trial",
       "ctaSubscribe": "Subscribe — $19.99/mo",
       "ctaLoading": "Contacting App Store…",
-      "footnote": "Payment is charged to your Apple ID. Subscription renews monthly unless canceled at least 24 hours before the period ends."
+      "footnote": "Payment is charged to your Apple ID. Subscription renews monthly unless canceled at least 24 hours before the period ends. Trading involves risk of loss. Predict does not guarantee profits or successful trades."
     }
   },
   "promotions": [

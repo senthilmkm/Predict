@@ -6,6 +6,7 @@ import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { LastTradeAction } from '../runtime/AppRuntime';
 import { SupportContactFooter } from '../components/SupportContactFooter';
+import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 
 const ASSET_ORDER: AssetKey[] = ['WTI', 'Gold', 'Silver', 'BTC', 'ETH'];
@@ -240,6 +241,7 @@ export function HomeScreen() {
       <Text style={styles.hint}>
         Keep the app open while auto-trading. iOS will not poll every few seconds in background.
       </Text>
+      <TradingDisclaimer variant="short" showTitle testID="home-disclaimer" />
       <SupportContactFooter />
     </ScrollView>
   );
