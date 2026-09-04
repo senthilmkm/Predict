@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -14,9 +14,12 @@ import { AlertsHubScreen } from '../screens/AlertsHubScreen';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { exportAndShareHistory } from '../services/exportHistory';
 import { withSupportContact } from '../config/appMeta';
+import { useAutoTradeBackgroundGuard } from '../hooks/useAutoTradeBackgroundGuard';
+import { PostTrialNextStepsModal } from '../components/PostTrialNextStepsModal';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef();
 
 const navTheme = {
   ...DarkTheme,
@@ -125,8 +128,10 @@ function MainTabs({ navigation }: any) {
 }
 
 export function RootNavigator() {
+  useAutoTradeBackgroundGuard();
+
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme}>
       <StatusBar style="light" />
       <Stack.Navigator>
         <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
@@ -141,6 +146,14 @@ export function RootNavigator() {
           }}
         />
       </Stack.Navigator>
+      <PostTrialNextStepsModal
+        onOpenSettings={() => {
+          if (navigationRef.isReady()) {
+            // @ts-expect-error nested tab route
+            navigationRef.navigate('Main', { screen: 'Settings' });
+          }
+        }}
+      />
     </NavigationContainer>
   );
 }

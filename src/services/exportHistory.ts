@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import { AlertRecord, TradeRecord } from '../storage/repos';
+import { listAutoTradeRiskAcceptances } from '../storage/riskAcceptance';
+import { loadOnboardingRecord } from '../storage/onboarding';
 
 function stamp(): string {
   const d = new Date();
@@ -7,10 +9,12 @@ function stamp(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-/** Build workbook bytes for auto-trading history (trades + alerts). */
+/** Build workbook bytes for auto-trading history (trades + alerts + risk + onboarding). */
 export function buildHistoryWorkbook(
   trades: TradeRecord[],
-  alerts: AlertRecord[]
+  alerts: AlertRecord[],
+  riskAcceptances: Awaited<ReturnType<typeof listAutoTradeRiskAcceptances>> = [],
+  onboarding: Awaited<ReturnType<typeof loadOnboardingRecord>> = null
 ): Uint8Array {
   const wb = XLSX.utils.book_new();
 
@@ -58,9 +62,69 @@ export function buildHistoryWorkbook(
   );
   XLSX.utils.book_append_sheet(wb, alertSheet, 'Alerts');
 
+  const riskRows = riskAcceptances.map((r) => ({
+    accepted_at: r.acceptedAt,
+    source: r.source || '',
+    disclaimer_version: r.disclaimerVersion,
+    app_version: r.appVersion,
+    build_number: r.buildNumber ?? '',
+    platform: r.platform,
+    understood_checked: r.understoodChecked ? 'yes' : 'no',
+    auto_trade_enabled: r.autoTradeEnabled ? 'yes' : 'no',
+    disclaimer_short: r.disclaimerShort,
+  }));
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet(
+      riskRows.length
+        ? riskRows
+        : [
+            {
+              accepted_at: '',
+              source: '',
+              disclaimer_version: '',
+              app_version: '',
+              build_number: '',
+              platform: '',
+              understood_checked: '',
+              auto_trade_enabled: '',
+              disclaimer_short: '',
+            },
+          ]
+    ),
+    'RiskAcceptance'
+  );
+
+  const ob = onboarding;
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet([
+      {
+        id: ob?.id ?? '',
+        started_at: ob?.startedAt ?? '',
+        completed_at: ob?.completedAt ?? '',
+        disclaimer_version: ob?.disclaimerVersion ?? '',
+        risk_understood: ob?.riskUnderstoodChecked ? 'yes' : 'no',
+        risk_accepted_at: ob?.riskAcceptedAt ?? '',
+        intent_mode: ob?.intentMode ?? '',
+        assets: (ob?.assetsOfInterest || []).join(','),
+        experience: ob?.experienceLevel ?? '',
+        capital_comfort: ob?.capitalComfort ?? '',
+        notifications: ob?.notificationsStatus ?? '',
+        kalshi_added: ob?.kalshiCredentialsAdded ? 'yes' : 'no',
+        kalshi_skipped: ob?.kalshiSkipped ? 'yes' : 'no',
+        app_version: ob?.appVersion ?? '',
+        platform: ob?.platform ?? '',
+      },
+    ]),
+    'Onboarding'
+  );
+
   const summary = [
     { metric: 'trades', value: trades.length },
     { metric: 'alerts', value: alerts.length },
+    { metric: 'risk_acceptances', value: riskAcceptances.length },
+    { metric: 'onboarding_completed', value: ob?.completedAt ? 'yes' : 'no' },
     { metric: 'exported_at', value: new Date().toISOString() },
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Summary');
@@ -77,7 +141,9 @@ export async function exportAndShareHistory(
   alerts: AlertRecord[]
 ): Promise<{ ok: boolean; uri?: string; error?: string }> {
   try {
-    const bytes = buildHistoryWorkbook(trades, alerts);
+    const riskAcceptances = await listAutoTradeRiskAcceptances();
+    const onboarding = await loadOnboardingRecord();
+    const bytes = buildHistoryWorkbook(trades, alerts, riskAcceptances, onboarding);
     const name = `predict-history-${stamp()}.xlsx`;
 
     const { File, Paths } = await import('expo-file-system');

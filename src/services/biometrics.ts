@@ -26,6 +26,7 @@ export async function authenticateForSecrets(
     });
     return Boolean(res.success);
   } catch {
-    return true;
+    // Fail closed: never arm Auto-trade / unlock secrets on auth errors
+    return false;
   }
 }

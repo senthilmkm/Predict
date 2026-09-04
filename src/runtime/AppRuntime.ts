@@ -240,6 +240,13 @@ export class AppRuntime {
   async hydrateHistory(): Promise<void> {
     const days = this.getConfig().alert_retention_days ?? 30;
     await hydrateRepos(this.trades, this.alerts, days);
+    // Prevent double-entry on the same 15m window after restart
+    for (const t of this.trades.pendingFilled()) {
+      this.engine.windows.claimExisting(
+        t.market_ticker,
+        t.order_id || t.id || 'hydrated'
+      );
+    }
     this.onChange?.();
   }
 
@@ -266,12 +273,12 @@ export class AppRuntime {
     return removed;
   }
 
-  start(intervalMs = 15000): void {
+  start(intervalMs = 20000): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
     }
-    const ms = Math.max(10000, Number(intervalMs) || 15000);
+    const ms = Math.max(10000, Number(intervalMs) || 20000);
     this.status.running = true;
     this.status.lastPulseAt = new Date().toISOString();
     void this.tick();
@@ -389,10 +396,10 @@ export class AppRuntime {
         }
       }
 
-      const openPositions = this.trades.pendingFilled().length;
       const dailyPnl = this.trades.stats().realized_pnl_usd;
       const dayCounts = this.tradesTodayCounts();
       const tickAt = new Date().toISOString();
+      let openPositions = this.trades.pendingFilled().length;
 
       for (let i = 0; i < assets.length; i++) {
         const asset = assets[i];
@@ -414,9 +421,7 @@ export class AppRuntime {
             break;
           }
           if (isQuietIntegrationError(raw)) {
-            if (isAuthError(raw)) {
-              this.authBlockedUntilMs = Date.now() + 5 * 60_000;
-            }
+            // Public lean/spot 401 must NOT block signed Kalshi trading for 5m.
             this.noteAssetError(asset, humanizeQuietError(raw), tickErrors);
             this.pulseHeartbeat();
             continue;
@@ -620,6 +625,8 @@ export class AppRuntime {
           if (!isMiss) {
             dayCounts.total += 1;
             dayCounts.byAsset[asset] = (dayCounts.byAsset[asset] || 0) + 1;
+            // Live count so later assets in this tick respect max_open_positions
+            openPositions += 1;
           }
           if (isMiss) {
             const body = `${asset} ${trade.side} · IOC no fill`;

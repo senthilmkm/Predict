@@ -110,7 +110,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     });
   },
   start: () => {
-    const sec = useConfigStore.getState().config.poll_interval_seconds || 15;
+    const sec = useConfigStore.getState().config.poll_interval_seconds || 20;
     get().ensure().start(Math.max(10, sec) * 1000);
     get().syncFromRuntime();
   },

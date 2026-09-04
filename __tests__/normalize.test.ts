@@ -25,10 +25,10 @@ describe('normalize / cushions', () => {
     expect(clampCushion('BTC', 10)).toBe(25);
   });
 
-  test('clampPollIntervalSeconds enforces min 10 default 15', () => {
+  test('clampPollIntervalSeconds enforces min 10 default 20', () => {
     expect(clampPollIntervalSeconds(5)).toBe(POLL_INTERVAL_MIN_SEC);
     expect(clampPollIntervalSeconds(NaN)).toBe(POLL_INTERVAL_DEFAULT_SEC);
-    expect(clampPollIntervalSeconds(15)).toBe(15);
+    expect(clampPollIntervalSeconds(20)).toBe(20);
     expect(clampPollIntervalSeconds(200)).toBe(120);
   });
 

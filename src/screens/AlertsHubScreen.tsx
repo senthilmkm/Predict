@@ -1,5 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { ALL_ALERT_KINDS, AlertKind } from '../config/types';
 import { useConfigStore } from '../state/configStore';
@@ -28,6 +37,7 @@ export function AlertsHubScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [markingRead, setMarkingRead] = useState(false);
 
   const mutedCount = ALL_ALERT_KINDS.filter((k) => !(prefs[k].enabled && prefs[k].push)).length;
 
@@ -66,14 +76,44 @@ export function AlertsHubScreen() {
     }
   };
 
+  const onMarkAllRead = () => {
+    if (markingRead || unread <= 0) return;
+    setMarkingRead(true);
+    // Let the spinner paint before sync list restyle.
+    requestAnimationFrame(() => {
+      const started = Date.now();
+      try {
+        markAllRead();
+      } finally {
+        const wait = Math.max(0, 280 - (Date.now() - started));
+        setTimeout(() => setMarkingRead(false), wait);
+      }
+    });
+  };
+
   return (
     <View style={styles.root} testID="screen-alerts-hub">
       <View style={styles.header}>
         <Text style={styles.intro} testID="alerts-unread">
           Unread: {unread}
         </Text>
-        <Pressable onPress={markAllRead} testID="btn-mark-all-read">
-          <Text style={styles.link}>Mark all read</Text>
+        <Pressable
+          onPress={onMarkAllRead}
+          disabled={markingRead || unread <= 0}
+          testID="btn-mark-all-read"
+          style={styles.markAllBtn}
+          accessibilityState={{ busy: markingRead, disabled: markingRead || unread <= 0 }}
+        >
+          {markingRead ? (
+            <ActivityIndicator
+              size="small"
+              color={colors.accent}
+              testID="mark-all-read-spinner"
+            />
+          ) : null}
+          <Text style={[styles.link, (markingRead || unread <= 0) && styles.linkMuted]}>
+            {markingRead ? 'Marking…' : 'Mark all read'}
+          </Text>
         </Pressable>
       </View>
 
@@ -219,7 +259,9 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, padding: spacing.md, gap: 6 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   intro: { color: colors.textSecondary, fontSize: 13 },
+  markAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 22 },
   link: { color: colors.accent, fontWeight: '700', fontSize: 13 },
+  linkMuted: { opacity: 0.55 },
   section: { color: colors.gold, fontWeight: '700', fontSize: 13 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   selectAllBtn: {

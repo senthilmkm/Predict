@@ -16,10 +16,31 @@ let notifyImpl: NotifyFn = async () => {
   /* default no-op */
 };
 
+let permissionStatus: string = 'undetermined';
+
 export function setNotifyImpl(fn: NotifyFn) {
   notifyImpl = fn;
 }
 
+function wireNotifyImpl(Notifications: any, status: string) {
+  permissionStatus = status;
+  setNotifyImpl(async (p) => {
+    if (status !== 'granted') return;
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: p.title,
+        body: p.body,
+        data: { kind: p.kind },
+        sound: 'default',
+        priority: Notifications.AndroidNotificationPriority?.HIGH,
+        ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
+      },
+      trigger: null,
+    });
+  });
+}
+
+/** Bind handlers/channels only — do not prompt until onboarding / explicit request. */
 export async function bindNativeNotifications(): Promise<void> {
   try {
     const Notifications = require('expo-notifications');
@@ -43,7 +64,19 @@ export async function bindNativeNotifications(): Promise<void> {
       });
     }
 
-    // iOS / Android: without permission, alerts are silent or suppressed
+    const settings = await Notifications.getPermissionsAsync();
+    wireNotifyImpl(Notifications, settings.status);
+  } catch {
+    /* node / tests — or Expo Go without native entitlements */
+  }
+}
+
+/** Prompt for notification permission (onboarding step 4 or Settings). */
+export async function requestNotificationPermission(): Promise<
+  'granted' | 'denied' | 'unavailable'
+> {
+  try {
+    const Notifications = require('expo-notifications');
     const settings = await Notifications.getPermissionsAsync();
     let status = settings.status;
     if (status !== 'granted') {
@@ -56,24 +89,15 @@ export async function bindNativeNotifications(): Promise<void> {
       });
       status = req.status;
     }
-
-    setNotifyImpl(async (p) => {
-      if (status !== 'granted') return;
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: p.title,
-          body: p.body,
-          data: { kind: p.kind },
-          sound: 'default',
-          priority: Notifications.AndroidNotificationPriority?.HIGH,
-          ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
-        },
-        trigger: null,
-      });
-    });
+    wireNotifyImpl(Notifications, status);
+    return status === 'granted' ? 'granted' : 'denied';
   } catch {
-    /* node / tests — or Expo Go without native entitlements */
+    return 'unavailable';
   }
+}
+
+export function getCachedNotificationPermissionStatus(): string {
+  return permissionStatus;
 }
 
 export async function maybeNotify(
@@ -85,4 +109,16 @@ export async function maybeNotify(
   if (!shouldPushAlert(cfg, kind)) return false;
   await notifyImpl({ kind, title, body });
   return true;
+}
+
+/**
+ * Always try to show a local OS notification (ignores mute matrix).
+ * Used for Auto-trade background pause warnings.
+ */
+export async function notifySystemBanner(title: string, body: string): Promise<void> {
+  try {
+    await notifyImpl({ kind: 'error', title, body });
+  } catch {
+    /* tests / no permission */
+  }
 }

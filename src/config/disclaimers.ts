@@ -1,7 +1,11 @@
 /**
  * Canonical risk / liability copy for Predict.
  * Keep docs/*.html in sync when changing these strings.
+ * Bump DISCLAIMER_VERSION whenever SHORT/LONG text changes materially.
  */
+
+/** Version tag stored with on-device Auto-trade risk acceptance records. */
+export const DISCLAIMER_VERSION = '2026-09-04.1';
 
 /** Short banner for paywall, Home, Settings, and web footers. */
 export const DISCLAIMER_SHORT =

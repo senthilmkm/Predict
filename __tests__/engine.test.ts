@@ -49,6 +49,14 @@ describe('AsyncMutex / WindowLock', () => {
     w.release('M1');
     expect(w.tryClaim('M1', 'd')).toBe(true);
   });
+
+  test('claimExisting rebuilds lock after hydrate/restart', () => {
+    const w = new WindowLockRegistry();
+    w.claimExisting('M1', 'hydrated');
+    expect(w.tryClaim('M1', 'new')).toBe(false);
+    w.release('M1');
+    expect(w.tryClaim('M1', 'new')).toBe(true);
+  });
 });
 
 describe('evaluateStaticGate edge cases', () => {

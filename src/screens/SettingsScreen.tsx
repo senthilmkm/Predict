@@ -29,7 +29,15 @@ import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { getPricingConfig } from '../config/pricing';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
+import { AutoTradeRiskAcceptModal } from '../components/AutoTradeRiskAcceptModal';
+import { KalshiApiKeyHelpContent } from '../components/KalshiApiKeyHelpContent';
 import { PaywallManageModal } from './PaywallScreen';
+import {
+  AutoTradeRiskAcceptance,
+  getLatestAutoTradeRiskAcceptance,
+  hasAcceptedCurrentDisclaimer,
+  recordAutoTradeRiskAcceptance,
+} from '../storage/riskAcceptance';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { hasPredictAccess, useSubscriptionStore } from '../state/subscriptionStore';
@@ -97,6 +105,9 @@ export function SettingsScreen() {
   const subWillRenew = useSubscriptionStore((s) => s.willRenew);
   const refreshSub = useSubscriptionStore((s) => s.refresh);
   const [paywallOpen, setPaywallOpen] = useState(false);
+  const [autoTradeRiskOpen, setAutoTradeRiskOpen] = useState(false);
+  const [lastRiskAcceptance, setLastRiskAcceptance] =
+    useState<AutoTradeRiskAcceptance | null>(null);
 
   const [hasCreds, setHasCreds] = useState(false);
   const [keyId, setKeyId] = useState('');
@@ -116,6 +127,10 @@ export function SettingsScreen() {
 
   useEffect(() => {
     void hasCredentials().then(setHasCreds);
+  }, []);
+
+  useEffect(() => {
+    void getLatestAutoTradeRiskAcceptance().then(setLastRiskAcceptance);
   }, []);
 
   /** Safe against stale Zustand HMR instances missing newer actions. */
@@ -205,15 +220,50 @@ export function SettingsScreen() {
   }
 
   async function toggleAutoTrade() {
+    const next = !config.auto_trade_enabled;
+    if (next) {
+      // Skip risk modal if onboarding (or prior) already accepted current disclaimer
+      if (await hasAcceptedCurrentDisclaimer()) {
+        await confirmAutoTradeAfterRiskAccept();
+        return;
+      }
+      setAutoTradeRiskOpen(true);
+      return;
+    }
     try {
       await withBusy('autotrade', async () => {
-        const next = !config.auto_trade_enabled;
-        const r = await setAutoTrade(next);
+        const r = await setAutoTrade(false);
         if (!r.ok) {
           note(r.error || 'Could not update auto-trade');
           return;
         }
-        note(next ? 'Auto-trade on — real orders when signals pass' : 'Auto-trade off — alerts only');
+        note('Auto-trade off — alerts only');
+      });
+    } catch {
+      /* busy */
+    }
+  }
+
+  async function confirmAutoTradeAfterRiskAccept() {
+    setAutoTradeRiskOpen(false);
+    try {
+      await withBusy('autotrade', async () => {
+        const r = await setAutoTrade(true);
+        if (!r.ok) {
+          note(r.error || 'Could not update auto-trade');
+          return;
+        }
+        try {
+          // Audit log that Auto-trade was armed (disclaimer already accepted earlier)
+          const rec = await recordAutoTradeRiskAcceptance();
+          setLastRiskAcceptance(rec);
+        } catch {
+          /* still enable even if local log fails */
+        }
+        if (!status?.running) {
+          start();
+        }
+        note('Auto-trade on — keep app open');
       });
     } catch {
       /* busy */
@@ -874,17 +924,43 @@ export function SettingsScreen() {
 
         <Text style={styles.section}>Legal</Text>
         <TradingDisclaimer variant="long" testID="settings-disclaimer" />
+        <View style={styles.subCard} testID="risk-acceptance-local">
+          <Text style={styles.slimLabel}>Risk disclaimer acceptance (this device)</Text>
+          {lastRiskAcceptance ? (
+            <>
+              <Text style={styles.slimMeta} testID="risk-acceptance-at">
+                Last recorded: {new Date(lastRiskAcceptance.acceptedAt).toLocaleString()}
+                {lastRiskAcceptance.source ? ` · ${lastRiskAcceptance.source}` : ''}
+              </Text>
+              <Text style={styles.hint}>
+                Disclaimer {lastRiskAcceptance.disclaimerVersion} · app{' '}
+                {lastRiskAcceptance.appVersion}
+                {lastRiskAcceptance.buildNumber
+                  ? ` (${lastRiskAcceptance.buildNumber})`
+                  : ''}{' '}
+                · stored only on this phone. Same disclaimer is not asked again until the text
+                version changes.
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.hint} testID="risk-acceptance-none">
+              No acceptance recorded yet. First-launch onboarding saves this after you confirm.
+            </Text>
+          )}
+        </View>
 
         <Text style={styles.section}>Support</Text>
-        <Text style={styles.hint}>
-          Email from config.json — tap the address to write us if something breaks.
-        </Text>
         <SupportContactFooter />
       </ScrollView>
 
       <KalshiCredsHelpModal visible={credsHelpOpen} onClose={() => setCredsHelpOpen(false)} />
       <RiskHelpModal visible={riskHelpOpen} onClose={() => setRiskHelpOpen(false)} />
       <PaywallManageModal visible={paywallOpen} onClose={() => setPaywallOpen(false)} />
+      <AutoTradeRiskAcceptModal
+        visible={autoTradeRiskOpen}
+        onCancel={() => setAutoTradeRiskOpen(false)}
+        onAccept={() => void confirmAutoTradeAfterRiskAccept()}
+      />
     </View>
   );
 }
@@ -1112,46 +1188,7 @@ function KalshiCredsHelpModal({
             </Pressable>
           </View>
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-            <Text style={styles.modalLead}>
-              You need a Kalshi account first. Without an account you cannot create an API key.
-            </Text>
-
-            <Step n={1} title="Create a Kalshi account (required)">
-              Open kalshi.com (or the Kalshi app), sign up, and finish account setup. You must be
-              logged in before the next steps.
-            </Step>
-            <Step n={2} title="Open account profile">
-              On the website, click your profile / account icon (usually top-right). Open Account
-              Settings or Profile.
-            </Step>
-            <Step n={3} title="Find API Keys">
-              Scroll to the API Keys section. Or go to:{'\n'}
-              kalshi.com/account/profile
-            </Step>
-            <Step n={4} title="Create a new API key">
-              Tap Create New API Key (or Generate API Key). Kalshi will make a new key for you.
-            </Step>
-            <Step n={5} title="Copy the Key ID">
-              You will see a Key ID (a long ID string). Copy it. Paste it into this app’s “API Key
-              ID” field.
-            </Step>
-            <Step n={6} title="Save the private key (PEM) right away">
-              Kalshi also shows a private key that looks like:{'\n'}
-              -----BEGIN RSA PRIVATE KEY-----{'\n'}
-              …{'\n'}
-              -----END RSA PRIVATE KEY-----{'\n\n'}
-              Copy all of it, or download the .txt / .pem file. You usually cannot see this private
-              key again later — save it now.
-            </Step>
-            <Step n={7} title="Add it in Predict">
-              In this app: Unlock / Add credentials → paste the Key ID → paste or Import the PEM
-              file → Save to Secure Store → tap Test connection.
-            </Step>
-
-            <Text style={styles.modalTip}>
-              Tip: Keep the private key private. Do not share it or post it anywhere. If you lose
-              it, create a new API key in Kalshi and update this app.
-            </Text>
+            <KalshiApiKeyHelpContent />
           </ScrollView>
           <Pressable
             testID="btn-got-it-kalshi-creds-help"

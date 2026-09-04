@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { PaywallScreen } from './src/screens/PaywallScreen';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { bindNativeStores } from './src/platform/storage';
 import { bindNativeNotifications } from './src/services/notifications';
 import { useConfigStore } from './src/state/configStore';
 import { useRuntimeStore } from './src/state/runtimeStore';
 import { hasPredictAccess, useSubscriptionStore } from './src/state/subscriptionStore';
+import { isOnboardingCompleted } from './src/storage/onboarding';
 import { colors } from './src/theme/tokens';
 
 export default function App() {
@@ -18,6 +21,7 @@ export default function App() {
   const subReady = useSubscriptionStore((s) => s.ready);
   const entitled = useSubscriptionStore((s) => hasPredictAccess(s));
   const [ready, setReady] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,7 +33,11 @@ export default function App() {
       const rt = ensure();
       await rt.hydrateHistory();
       useRuntimeStore.getState().syncFromRuntime();
-      if (!cancelled) setReady(true);
+      const done = await isOnboardingCompleted();
+      if (!cancelled) {
+        setOnboardingDone(done);
+        setReady(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -49,27 +57,57 @@ export default function App() {
           live_armed: false,
         });
       }
+      return;
     }
-  }, [entitled, subReady, stop]);
+    // Cold start: if Auto-trade was left on, resume lean polling
+    if (ready && onboardingDone && useConfigStore.getState().config.auto_trade_enabled) {
+      const running = Boolean(useRuntimeStore.getState().status?.running);
+      if (!running) useRuntimeStore.getState().start();
+    }
+  }, [entitled, subReady, stop, ready, onboardingDone]);
 
-  if (!ready || !hydrated || !subReady) {
+  if (!ready || !hydrated || !subReady || onboardingDone == null) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: colors.bg,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <ActivityIndicator color={colors.accent} />
-      </View>
+      <SafeAreaProvider>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.bg,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
+  // First install: full onboarding (includes trial/paywall as last step)
+  if (!onboardingDone) {
+    return (
+      <SafeAreaProvider>
+        <OnboardingScreen
+          onFinished={() => {
+            // Entitled users land in app; others stay until RC entitles (parent re-renders)
+            void isOnboardingCompleted().then(setOnboardingDone);
+          }}
+        />
+      </SafeAreaProvider>
     );
   }
 
   if (!entitled) {
-    return <PaywallScreen />;
+    return (
+      <SafeAreaProvider>
+        <PaywallScreen />
+      </SafeAreaProvider>
+    );
   }
 
-  return <RootNavigator />;
+  return (
+    <SafeAreaProvider>
+      <RootNavigator />
+    </SafeAreaProvider>
+  );
 }

@@ -15,12 +15,12 @@ import { saveCredentials } from '../../src/services/credentials';
 import { KalshiClient } from '../../src/services/kalshi/client';
 
 function reset() {
+  cleanup();
+  cancelScheduledPersist();
   setKeyValueStore(new MemoryKeyValueStore());
   setSecureStore(new MemoryKeyValueStore());
   resetRuntimeStoreForTests();
   useConfigStore.setState({ config: defaultAppConfig(), hydrated: true });
-  cancelScheduledPersist();
-  cleanup();
 }
 
 describe('Settings toggles', () => {
@@ -39,14 +39,32 @@ describe('Settings toggles', () => {
     });
     const s = await render(<SettingsScreen />);
     expect(s.getByTestId('screen-settings')).toBeTruthy();
-    expect(useConfigStore.getState().config.poll_interval_seconds).toBe(15);
+    expect(useConfigStore.getState().config.poll_interval_seconds).toBe(20);
     await fireEvent(s.getByTestId('toggle-alerts'), 'valueChange', false);
     await waitFor(() => expect(useConfigStore.getState().config.alerts_enabled).toBe(false));
     await fireEvent(s.getByTestId('toggle-autotrade'), 'valueChange', true);
+    await waitFor(() => expect(s.getByTestId('modal-autotrade-risk')).toBeTruthy());
+    await fireEvent(s.getByTestId('switch-autotrade-understand'), 'valueChange', true);
+    await fireEvent.press(s.getByTestId('btn-autotrade-risk-continue'));
     await waitFor(() =>
       expect(useConfigStore.getState().config.auto_trade_enabled).toBe(true)
     );
     expect(useConfigStore.getState().config.execution_mode).toBe('live');
+    // Turn off then on again — disclaimer already accepted, no modal
+    await fireEvent(s.getByTestId('toggle-autotrade'), 'valueChange', false);
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.auto_trade_enabled).toBe(false)
+    );
+    await fireEvent(s.getByTestId('toggle-autotrade'), 'valueChange', true);
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.auto_trade_enabled).toBe(true)
+    );
+    expect(s.queryByTestId('modal-autotrade-risk')).toBeNull();
+
+    await fireEvent.press(s.getByTestId('btn-poll-down'));
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.poll_interval_seconds).toBe(15)
+    );
     await fireEvent.press(s.getByTestId('btn-poll-down'));
     await waitFor(() =>
       expect(useConfigStore.getState().config.poll_interval_seconds).toBe(10)
@@ -163,9 +181,10 @@ describe('Settings credentials', () => {
     }
   });
 
-  test('support contact from config.json is rendered', async () => {
+  test('support contact email is shown without config.json hint', async () => {
     const s = await render(<SettingsScreen />);
     expect(s.getByTestId('support-contact')).toBeTruthy();
     expect(s.getByText(/senthil930@gmail\.com/)).toBeTruthy();
+    expect(s.queryByText(/Email from config\.json/i)).toBeNull();
   });
 });

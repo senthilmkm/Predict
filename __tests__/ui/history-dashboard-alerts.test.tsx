@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, cleanup } from './test-utils';
+import { fireEvent, render, waitFor, cleanup } from './test-utils';
 import {
   MemoryKeyValueStore,
   setKeyValueStore,
@@ -105,6 +105,37 @@ describe('History / Dashboard / AlertsHub', () => {
     await fireEvent(s.getByTestId('alert-push-lean_signal'), 'valueChange', false);
     expect(useConfigStore.getState().config.alert_prefs.lean_signal.push).toBe(false);
     await fireEvent.press(s.getByTestId('btn-mark-all-read'));
+  });
+
+  test('Mark all read shows spinner then clears unread', async () => {
+    const rt = useRuntimeStore.getState().ensure();
+    rt.alerts.insert({
+      id: 'u1',
+      at: new Date().toISOString(),
+      kind: 'lean_signal',
+      title: 'Gold YES',
+      body: 'gap',
+      read: false,
+    });
+    rt.alerts.insert({
+      id: 'u2',
+      at: new Date().toISOString(),
+      kind: 'order_placed',
+      title: 'BTC',
+      body: 'placed',
+      read: false,
+    });
+    useRuntimeStore.getState().syncFromRuntime();
+    expect(useRuntimeStore.getState().unread).toBe(2);
+
+    const s = await render(<AlertsHubScreen />);
+    expect(s.getByText(/Unread:\s*2/)).toBeTruthy();
+
+    await fireEvent.press(s.getByTestId('btn-mark-all-read'));
+    await waitFor(() => expect(s.getByTestId('mark-all-read-spinner')).toBeTruthy());
+    await waitFor(() => expect(useRuntimeStore.getState().unread).toBe(0));
+    await waitFor(() => expect(s.queryByTestId('mark-all-read-spinner')).toBeNull());
+    expect(s.getByText('Mark all read')).toBeTruthy();
   });
 
   test('AlertsHub Recent: select all + confirm bulk delete', async () => {

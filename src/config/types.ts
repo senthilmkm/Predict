@@ -73,7 +73,7 @@ export interface AlertPref {
 }
 
 export const POLL_INTERVAL_MIN_SEC = 10;
-export const POLL_INTERVAL_DEFAULT_SEC = 15;
+export const POLL_INTERVAL_DEFAULT_SEC = 20;
 export const POLL_INTERVAL_MAX_SEC = 120;
 
 export const ALERT_RETENTION_MIN_DAYS = 1;
@@ -87,7 +87,7 @@ export interface AppConfig {
   /** Synced with auto_trade: live when on, off when off. */
   execution_mode: ExecutionMode;
   live_armed: boolean;
-  /** How often the lean poller runs. Default 15s; minimum 10s. */
+  /** How often the lean poller runs. Default 20s; minimum 10s. */
   poll_interval_seconds: number;
   /** Keep alert history on device for this many days; older rows auto-delete. */
   alert_retention_days: number;

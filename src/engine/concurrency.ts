@@ -35,6 +35,13 @@ export class WindowLockRegistry {
     return true;
   }
 
+  /** Rebuild locks from hydrated pending fills (survives app restart). */
+  claimExisting(marketTicker: string, clientOrderId = 'hydrated'): void {
+    if (!marketTicker) return;
+    if (this.locks.has(marketTicker)) return;
+    this.locks.set(marketTicker, { claimedAt: Date.now(), clientOrderId });
+  }
+
   release(marketTicker: string): void {
     this.locks.delete(marketTicker);
   }

@@ -4,6 +4,7 @@ import {
   fireEvent,
   waitFor,
   cleanup,
+  act,
 } from '@testing-library/react-native';
 
 export async function render(ui: React.ReactElement) {
@@ -11,4 +12,4 @@ export async function render(ui: React.ReactElement) {
   return result;
 }
 
-export { fireEvent, waitFor, cleanup };
+export { fireEvent, waitFor, cleanup, act };
