@@ -393,6 +393,14 @@ export function SettingsScreen() {
         const bal = await client.balance();
         if (bal.ok) {
           useRuntimeStore.getState().runtime?.clearAuthBlock();
+          try {
+            await cloudClient.uploadCredentials({
+              keyId: c.keyId.trim(),
+              privateKeyPem: c.privateKeyPem.trim(),
+            });
+          } catch {
+            /* ignore background upload error */
+          }
           const cash =
             bal.balance_usd != null && Number.isFinite(Number(bal.balance_usd))
               ? `$${Number(bal.balance_usd).toFixed(2)}`
