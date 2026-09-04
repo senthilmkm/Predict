@@ -144,4 +144,15 @@ export class PredictCloudClient {
       return { ok: false, error: e?.message || 'network_error' };
     }
   }
+
+  async getTrades(): Promise<{ ok: boolean; trades?: any[]; error?: string }> {
+    try {
+      const res = await this.fetchWithAuth('/me/trades', { method: 'GET' });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.error || 'trades_fetch_failed' };
+      return { ok: true, trades: data.trades || [] };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'network_error' };
+    }
+  }
 }

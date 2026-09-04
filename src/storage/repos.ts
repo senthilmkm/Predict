@@ -123,6 +123,35 @@ export class MemoryTradeRepo {
   }
 }
 
+export function statsFromCloudTrades(cloudTrades: any[], now = new Date()): DashboardStats {
+  const repo = new MemoryTradeRepo();
+  for (const ct of cloudTrades || []) {
+    const row: TradeRecord = {
+      id: ct.tradeId || ct.id || `trade_${Math.random()}`,
+      at: ct.executedAt || ct.at || new Date().toISOString(),
+      asset: ct.asset || ct.ticker || 'WTI',
+      market_ticker: ct.ticker || ct.market_ticker || '',
+      side: ct.decision || ct.side || 'YES',
+      notional_usd: Number(ct.notionalUsd || ct.notional_usd || 0),
+      fill_price: ct.price != null ? Number(ct.price) : null,
+      fill_count: ct.count != null ? Number(ct.count) : 1,
+      pnl_usd: ct.pnlUsd != null ? Number(ct.pnlUsd) : ct.pnl_usd != null ? Number(ct.pnl_usd) : null,
+      outcome:
+        ct.outcome ||
+        (ct.status === 'SETTLED'
+          ? Number(ct.pnlUsd || 0) >= 0
+            ? 'win'
+            : 'loss'
+          : ct.status === 'FILLED' || ct.status === 'SUBMITTED'
+            ? 'pending'
+            : 'miss'),
+      dry_run: Boolean(ct.dryRun || ct.dry_run),
+    };
+    repo.insert(row);
+  }
+  return repo.statsToday(now);
+}
+
 export class MemoryAlertRepo {
   private alerts: AlertRecord[] = [];
 

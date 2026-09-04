@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -36,6 +37,8 @@ export function HomeScreen() {
   const predictionsBalanceUsd = useRuntimeStore((s) => s.predictionsBalanceUsd);
   const cashBalanceUsd = useRuntimeStore((s) => s.cashBalanceUsd);
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
+  const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
+  const alerts = useRuntimeStore((s) => s.alerts);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
@@ -46,18 +49,39 @@ export function HomeScreen() {
     return () => clearInterval(id);
   }, []);
 
+  // 1. On Mount: Fetch Cloud Snapshot & Balances
   useEffect(() => {
     void refreshPredictionsBalance();
-  }, [refreshPredictionsBalance]);
+    void refreshCloudSnapshot();
+  }, [refreshPredictionsBalance, refreshCloudSnapshot]);
 
+  // 2. On App Foregrounding / Return
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void refreshCloudSnapshot();
+      }
+    });
+    return () => sub.remove();
+  }, [refreshCloudSnapshot]);
+
+  // 3. On `trade_result` Alert Received
+  useEffect(() => {
+    const latestAlert = alerts[0];
+    if (latestAlert && latestAlert.kind === 'trade_result') {
+      void refreshCloudSnapshot();
+    }
+  }, [alerts, refreshCloudSnapshot]);
+
+  // 4. On Manual Pull-to-Refresh
   const onPullToRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await refreshPredictionsBalance();
+      await Promise.all([refreshPredictionsBalance(), refreshCloudSnapshot()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refreshPredictionsBalance]);
+  }, [refreshPredictionsBalance, refreshCloudSnapshot]);
 
   const runKillSwitch = useCallback(async () => {
     if (killBusy) return;

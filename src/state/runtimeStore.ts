@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { AppRuntime, getAppRuntime, resetAppRuntimeForTests, LastTradeAction } from '../runtime/AppRuntime';
 import { useConfigStore } from './configStore';
-import { DashboardStats, TradeRecord, AlertRecord } from '../storage/repos';
+import { DashboardStats, TradeRecord, AlertRecord, statsFromCloudTrades } from '../storage/repos';
+import { PredictCloudClient } from '../services/cloud/cloudClient';
 import { LeanResult } from '../services/lean/lean';
 import { AssetKey } from '../config/types';
 
@@ -41,6 +42,7 @@ interface RuntimeState {
   markAllRead: () => void;
   pruneAlerts: () => number;
   deleteAlertsByIds: (ids: string[]) => Promise<number>;
+  refreshCloudSnapshot: () => Promise<void>;
 }
 
 export const useRuntimeStore = create<RuntimeState>((set, get) => ({
@@ -152,6 +154,18 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     const removed = await rt.deleteAlertsByIds(ids);
     get().syncFromRuntime();
     return removed;
+  },
+  refreshCloudSnapshot: async () => {
+    try {
+      const client = new PredictCloudClient(async () => null);
+      const res = await client.getTrades();
+      if (res.ok && Array.isArray(res.trades)) {
+        const stats = statsFromCloudTrades(res.trades);
+        set({ stats });
+      }
+    } catch {
+      /* Keep local stats on network error */
+    }
   },
 }));
 
