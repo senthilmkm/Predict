@@ -157,5 +157,9 @@ export class PredictCloudClient {
   }
 }
 
-export const cloudClient = new PredictCloudClient(async () => 'default_user');
+import { getPersistentUserId } from '../userId';
+
+export const cloudClient = new PredictCloudClient(async () => {
+  return await getPersistentUserId();
+});
 
