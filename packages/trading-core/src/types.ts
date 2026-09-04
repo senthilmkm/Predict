@@ -151,6 +151,7 @@ export interface UserStatusDoc {
   disclaimerAccepted?: boolean;
   disclaimerAcceptedAt?: string;
   disclaimerVersion?: string;
+  onboardingRecord?: Record<string, any>;
   lastTickAt?: string;
   lastError?: string | null;
   fcmTokens?: string[];

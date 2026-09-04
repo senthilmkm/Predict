@@ -130,4 +130,18 @@ export class PredictCloudClient {
       return { ok: false, error: e?.message || 'network_error' };
     }
   }
+
+  async recordOnboardingChoice(onboardingRecord: any): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const res = await this.fetchWithAuth('/me/onboarding', {
+        method: 'POST',
+        body: JSON.stringify({ onboardingRecord }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.error || 'onboarding_sync_failed' };
+      return { ok: true };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'network_error' };
+    }
+  }
 }

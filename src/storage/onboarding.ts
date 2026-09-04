@@ -129,8 +129,23 @@ export async function loadOnboardingRecord(): Promise<OnboardingRecord | null> {
   }
 }
 
+const CLOUD_BASE_URL = process.env.EXPO_PUBLIC_CLOUD_API_URL || 'https://predict-cloud-api-428463178740.us-east1.run.app';
+
+async function syncOnboardingRecordToCloud(record: OnboardingRecord): Promise<void> {
+  try {
+    await fetch(`${CLOUD_BASE_URL}/me/onboarding`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ onboardingRecord: record }),
+    });
+  } catch {
+    /* Silent catch — local storage remains authoritative offline */
+  }
+}
+
 export async function saveOnboardingRecord(record: OnboardingRecord): Promise<void> {
   await getKeyValueStore().setItem(RECORD_KEY, JSON.stringify(record));
+  syncOnboardingRecordToCloud(record).catch(() => {});
 }
 
 export async function isOnboardingCompleted(): Promise<boolean> {

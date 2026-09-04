@@ -159,13 +159,14 @@ apiRouter.get('/me/status', async (req: Request, res: Response) => {
 // Update User Status & Config
 apiRouter.post('/me/status', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
-  const { cloudTradingEnabled, state, config } = req.body || {};
+  const { cloudTradingEnabled, state, config, onboardingRecord } = req.body || {};
 
   try {
     const updateData: any = {};
     if (typeof cloudTradingEnabled === 'boolean') updateData.cloudTradingEnabled = cloudTradingEnabled;
     if (state === 'ARMED' || state === 'DISARMED') updateData.state = state;
     if (config) updateData.config = config;
+    if (onboardingRecord) updateData.onboardingRecord = onboardingRecord;
 
     const userDoc = await upsertUserDoc(userId, updateData);
     await writeAuditLog(
@@ -177,6 +178,40 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
     res.json({ ok: true, userDoc });
   } catch (err: any) {
     res.status(500).json({ error: 'update_failed', message: err?.message || 'Failed to update user status' });
+  }
+});
+
+// Record Full Onboarding Choices under Apple ID
+apiRouter.post('/me/onboarding', async (req: Request, res: Response) => {
+  const userId = extractUserId(req);
+  const { onboardingRecord } = req.body || {};
+
+  if (!onboardingRecord) {
+    res.status(400).json({ error: 'missing_data', message: 'onboardingRecord required' });
+    return;
+  }
+
+  try {
+    const userDoc = await upsertUserDoc(userId, {
+      onboardingRecord,
+      disclaimerAccepted: Boolean(onboardingRecord.riskUnderstoodChecked),
+      disclaimerAcceptedAt: onboardingRecord.riskAcceptedAt || new Date().toISOString(),
+      disclaimerVersion: onboardingRecord.disclaimerVersion || '2026.1',
+    });
+    await writeAuditLog(userId, 'DISCLAIMER_ACCEPTED', {
+      disclaimerVersion: onboardingRecord.disclaimerVersion || '2026.1',
+      source: 'onboarding',
+      intentMode: onboardingRecord.intentMode,
+      assetsOfInterest: onboardingRecord.assetsOfInterest,
+    });
+
+    res.json({
+      ok: true,
+      onboardingRecord: userDoc.onboardingRecord,
+      message: 'Onboarding survey responses and legal disclaimer consent saved to Firestore DB',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'onboarding_sync_failed', message: err?.message || 'Failed to save onboarding record' });
   }
 });
 
