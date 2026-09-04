@@ -457,7 +457,17 @@ export function OnboardingScreen({ onFinished }: Props) {
           </View>
         ) : null}
 
-        {step !== 3 && step !== 4 && step !== 5 ? (
+        {step === 0 ? (
+          <Pressable
+            testID="btn-onboarding-next"
+            style={styles.btnPrimaryWide}
+            onPress={() => void goNext()}
+          >
+            <Text style={styles.btnPrimaryText}>Get started →</Text>
+          </Pressable>
+        ) : null}
+
+        {step > 0 && step !== 3 && step !== 4 && step !== 5 ? (
           <View style={styles.row}>
             {showBack ? (
               <Pressable testID="btn-onboarding-back" style={styles.btnGhost} onPress={() => void goBack()}>
@@ -473,7 +483,7 @@ export function OnboardingScreen({ onFinished }: Props) {
                 disabled={!canNext}
                 onPress={() => void goNext()}
               >
-                <Text style={styles.btnPrimaryText}>{step === 0 ? 'Get started' : 'Next'}</Text>
+                <Text style={styles.btnPrimaryText}>Next</Text>
               </Pressable>
             ) : null}
           </View>
