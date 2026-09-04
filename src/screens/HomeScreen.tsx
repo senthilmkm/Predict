@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { AssetKey, modeLabel } from '../config/types';
 import { useConfigStore } from '../state/configStore';
@@ -30,6 +39,7 @@ export function HomeScreen() {
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
+  const [killBusy, setKillBusy] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 500);
@@ -48,6 +58,37 @@ export function HomeScreen() {
       setRefreshing(false);
     }
   }, [refreshPredictionsBalance]);
+
+  const runKillSwitch = useCallback(async () => {
+    if (killBusy) return;
+    setKillBusy(true);
+    const started = Date.now();
+    try {
+      kill();
+    } finally {
+      const wait = Math.max(0, 320 - (Date.now() - started));
+      setTimeout(() => setKillBusy(false), wait);
+    }
+  }, [kill, killBusy]);
+
+  const requestKillSwitch = useCallback(() => {
+    if (killBusy) return;
+    if (!config.auto_trade_enabled) {
+      Alert.alert(
+        'Already disarmed',
+        'Auto-trade is off on this phone. To turn it back on, open the Settings tab and enable Auto-trade (you may need Face ID).'
+      );
+      return;
+    }
+    Alert.alert('Turn off Auto-trade now?', 'This stops new auto-trades on this phone right away.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disarm',
+        style: 'destructive',
+        onPress: () => void runKillSwitch(),
+      },
+    ]);
+  }, [killBusy, config.auto_trade_enabled, runKillSwitch]);
 
   void bump;
 
@@ -70,6 +111,12 @@ export function HomeScreen() {
   const integrationError = status?.lastError;
   const hasAssetErrors = signalRows.some((r) => r.err);
   const autoTradeOn = config.auto_trade_enabled;
+  const killDisarmed = !autoTradeOn || Boolean(status?.killSwitch);
+  const killLabel = killBusy
+    ? 'Disarming…'
+    : killDisarmed
+      ? 'Disarmed — Auto-trade off'
+      : 'Kill switch — disarm now';
 
   return (
     <ScrollView
@@ -128,8 +175,17 @@ export function HomeScreen() {
         </View>
       ) : null}
 
-      <Pressable style={styles.kill} onPress={kill} testID="btn-kill-switch">
-        <Text style={styles.killText}>Kill switch — disarm now</Text>
+      <Pressable
+        style={[styles.kill, (killDisarmed || killBusy) && styles.killMuted]}
+        onPress={requestKillSwitch}
+        disabled={killBusy}
+        testID="btn-kill-switch"
+        accessibilityState={{ busy: killBusy, disabled: killBusy }}
+      >
+        {killBusy ? (
+          <ActivityIndicator color="#fff" size="small" testID="kill-switch-spinner" />
+        ) : null}
+        <Text style={styles.killText}>{killLabel}</Text>
       </Pressable>
 
       <View style={styles.card}>
@@ -434,7 +490,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: spacing.md,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 48,
   },
+  killMuted: { opacity: 0.72 },
   killText: { color: '#fff', fontWeight: '800' },
   card: {
     backgroundColor: colors.surface,

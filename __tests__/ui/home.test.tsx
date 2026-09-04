@@ -51,18 +51,50 @@ describe('HomeScreen', () => {
     expect(s.getAllByText(/senthil930@gmail\.com/).length).toBeGreaterThanOrEqual(1);
   });
 
-  test('kill switch disarms', async () => {
-    useConfigStore.setState({
-      config: {
-        ...defaultAppConfig(),
-        auto_trade_enabled: true,
-        execution_mode: 'live',
-        live_armed: true,
-      },
-      hydrated: true,
+  test('kill switch confirms then shows processing and Disarmed label', async () => {
+    const Alert = require('react-native').Alert;
+    const spy = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+      const disarm = buttons?.find((b: { text?: string }) => b.text === 'Disarm');
+      disarm?.onPress?.();
     });
-    const s = await render(<HomeScreen />);
-    await fireEvent.press(s.getByTestId('btn-kill-switch'));
-    await waitFor(() => expect(useConfigStore.getState().config.auto_trade_enabled).toBe(false));
+    try {
+      useConfigStore.setState({
+        config: {
+          ...defaultAppConfig(),
+          auto_trade_enabled: true,
+          execution_mode: 'live',
+          live_armed: true,
+        },
+        hydrated: true,
+      });
+      useRuntimeStore.getState().ensure();
+      const s = await render(<HomeScreen />);
+      expect(s.getByText('Kill switch — disarm now')).toBeTruthy();
+      await fireEvent.press(s.getByTestId('btn-kill-switch'));
+      expect(spy).toHaveBeenCalled();
+      expect(String(spy.mock.calls[0][0])).toMatch(/Turn off Auto-trade/i);
+      await waitFor(() => expect(s.getByTestId('kill-switch-spinner')).toBeTruthy());
+      await waitFor(() => expect(useConfigStore.getState().config.auto_trade_enabled).toBe(false));
+      await waitFor(() => expect(s.getByText('Disarmed — Auto-trade off')).toBeTruthy());
+      await waitFor(() => expect(s.queryByTestId('kill-switch-spinner')).toBeNull());
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('kill switch when already off explains already disarmed', async () => {
+    const Alert = require('react-native').Alert;
+    const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      const s = await render(<HomeScreen />);
+      expect(s.getByText('Disarmed — Auto-trade off')).toBeTruthy();
+      await fireEvent.press(s.getByTestId('btn-kill-switch'));
+      expect(spy).toHaveBeenCalledWith(
+        'Already disarmed',
+        expect.stringMatching(/Settings tab.*enable Auto-trade/i)
+      );
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

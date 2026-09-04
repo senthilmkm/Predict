@@ -187,4 +187,29 @@ describe('Settings credentials', () => {
     expect(s.getByText(/senthil930@gmail\.com/)).toBeTruthy();
     expect(s.queryByText(/Email from config\.json/i)).toBeNull();
   });
+
+  test('Wipe credentials asks Are you sure before Face ID', async () => {
+    const Alert = require('react-native').Alert;
+    const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      await saveCredentials({
+        keyId: 'k',
+        privateKeyPem: generateKeyPairSync('rsa', {
+          modulusLength: 2048,
+          privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+          publicKeyEncoding: { type: 'spki', format: 'pem' },
+        }).privateKey,
+        env: 'production',
+      });
+      const s = await render(<SettingsScreen />);
+      await fireEvent.press(s.getByTestId('btn-wipe-creds'));
+      expect(spy).toHaveBeenCalled();
+      const [title, message, buttons] = spy.mock.calls[0];
+      expect(title).toMatch(/Wipe credentials/i);
+      expect(String(message)).toMatch(/Remove Kalshi API keys/i);
+      expect(buttons.map((b: { text: string }) => b.text)).toEqual(['Cancel', 'Wipe']);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

@@ -416,6 +416,22 @@ export function SettingsScreen() {
     }
   }
 
+  function requestWipeCreds() {
+    if (busyKey != null) return;
+    Alert.alert(
+      'Wipe credentials?',
+      'Remove Kalshi API keys from this phone? You will need to add them again before Auto-trade or balance checks can work.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Wipe',
+          style: 'destructive',
+          onPress: () => void wipeCreds(),
+        },
+      ]
+    );
+  }
+
   async function wipeCreds() {
     try {
       await withBusy('wipe', async () => {
@@ -915,7 +931,7 @@ export function SettingsScreen() {
           busyLabel="Wiping credentials…"
           busy={busyKey === 'wipe'}
           disabled={anyBusy && busyKey !== 'wipe'}
-          onPress={() => void wipeCreds()}
+          onPress={requestWipeCreds}
         />
 
         <Text style={styles.warn}>
