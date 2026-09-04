@@ -40,6 +40,7 @@ import {
 } from '../storage/riskAcceptance';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
+import { cloudClient } from '../services/cloud/cloudClient';
 import { hasPredictAccess, useSubscriptionStore } from '../state/subscriptionStore';
 import {
   authenticateForSecrets,
@@ -194,11 +195,15 @@ export function SettingsScreen() {
           privateKeyPem: pem,
           env: 'production',
         });
+        await cloudClient.uploadCredentials({
+          keyId: keyId.trim(),
+          privateKeyPem: pem.trim(),
+        });
         setHasCreds(true);
         setShowSecrets(false);
         setPem('');
         useRuntimeStore.getState().runtime?.clearAuthBlock();
-        note('Credentials saved to Secure Store');
+        note('Credentials saved to Secure Store & GCP Secret Manager');
       });
     } catch (e: any) {
       if (String(e?.message) === 'busy') return;

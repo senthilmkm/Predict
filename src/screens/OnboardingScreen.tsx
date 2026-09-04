@@ -21,6 +21,7 @@ import {
   assertPemLooksValid,
 } from '../services/kalshi/sign';
 import { saveCredentials } from '../services/credentials';
+import { cloudClient } from '../services/cloud/cloudClient';
 import { requestNotificationPermission } from '../services/notifications';
 import { recordOnboardingRiskAcceptance } from '../storage/riskAcceptance';
 import {
@@ -252,6 +253,10 @@ export function OnboardingScreen({ onFinished }: Props) {
         keyId: keyId.trim(),
         privateKeyPem: pem.trim(),
         env: 'production',
+      });
+      await cloudClient.uploadCredentials({
+        keyId: keyId.trim(),
+        privateKeyPem: pem.trim(),
       });
       const next = await markOnboardingCompleted({
         ...record,

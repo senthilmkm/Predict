@@ -156,3 +156,6 @@ export class PredictCloudClient {
     }
   }
 }
+
+export const cloudClient = new PredictCloudClient(async () => 'default_user');
+

@@ -1,6 +1,7 @@
 import { AppConfig } from '../config/types';
 import { normalizeAppConfig } from '../config/normalize';
 import { getKeyValueStore } from '../platform/storage';
+import { cloudClient } from '../services/cloud/cloudClient';
 
 const CONFIG_KEY = 'foresight.config.v1';
 
@@ -17,6 +18,13 @@ export async function loadPersistedConfig(): Promise<AppConfig> {
 export async function savePersistedConfig(cfg: AppConfig): Promise<void> {
   const normalized = normalizeAppConfig(cfg);
   await getKeyValueStore().setItem(CONFIG_KEY, JSON.stringify(normalized));
+  if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
+    void cloudClient.updateStatus(
+      normalized.auto_trade_enabled,
+      normalized.auto_trade_enabled ? 'ARMED' : 'DISARMED',
+      normalized
+    );
+  }
 }
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
