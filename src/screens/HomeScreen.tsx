@@ -15,7 +15,7 @@ import { AssetKey, modeLabel } from '../config/types';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { LastTradeAction } from '../runtime/AppRuntime';
-import { getMarketScheduleNotice } from '../services/marketHours';
+import { getMarketScheduleNotice, isMarketOpen } from '../services/marketHours';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
@@ -120,21 +120,31 @@ export function HomeScreen() {
   const signalRows = ASSET_ORDER.filter((a) => config.assets_enabled[a]).map((asset) => {
     const lean = leans[asset];
     const at = leanAt[asset];
-    const err = assetErrors[asset];
+    const open = isMarketOpen(asset, new Date(nowMs)).open;
+    const rawErr = assetErrors[asset];
+    const err = open && rawErr && !rawErr.includes('no market ticker') && !rawErr.includes('Market closed') ? rawErr : undefined;
     return {
       asset,
-      decision: lean?.decision ?? '—',
-      gap: lean?.abs_gap,
+      decision: !open ? 'SKIP' : (lean?.decision ?? '—'),
+      gap: open ? lean?.abs_gap : undefined,
       at,
       err,
       trade: tradeActions[asset] as LastTradeAction | undefined,
       priceSource: lean?.price_source,
+      isOpen: open,
     };
   });
 
   const lastTick = status?.lastTickAt ?? status?.lastPulseAt;
-  const integrationError = status?.lastError;
-  const hasAssetErrors = signalRows.some((r) => r.err);
+  const rawIntegrationError = status?.lastError;
+  const integrationError =
+    rawIntegrationError &&
+    !rawIntegrationError.includes('no market ticker') &&
+    !rawIntegrationError.includes('Market closed') &&
+    !rawIntegrationError.includes('no_market')
+      ? rawIntegrationError
+      : null;
+  const hasAssetErrors = signalRows.some((r) => r.isOpen && r.err);
   const autoTradeOn = config.auto_trade_enabled;
   const killDisarmed = !autoTradeOn || Boolean(status?.killSwitch);
   const killLabel = killBusy
@@ -296,7 +306,7 @@ export function HomeScreen() {
                 ) : null}
               </View>
               <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
-                {row.at ? `(${formatSignalTime(row.at)} · ${relativeAge(row.at, nowMs)})` : '(—)'}
+                {!row.isOpen ? '(Market closed)' : row.at ? `(${formatSignalTime(row.at)} · ${relativeAge(row.at, nowMs)})` : '(—)'}
               </Text>
             </View>
           ))

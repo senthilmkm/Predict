@@ -13,7 +13,7 @@ export async function sendPushNotification(
     sound: 'default',
     title,
     body,
-    data: data || {},
+    data: { source: 'gcp', ...(data || {}) },
   }));
 
   try {

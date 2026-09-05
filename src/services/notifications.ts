@@ -64,6 +64,21 @@ export async function bindNativeNotifications(): Promise<void> {
       });
     }
 
+    Notifications.addNotificationReceivedListener((n: any) => {
+      try {
+        const { useRuntimeStore } = require('../state/runtimeStore');
+        const content = n?.request?.content;
+        if (!content) return;
+        const title = content.title || 'Alert';
+        const body = content.body || '';
+        const kind = content.data?.kind || 'lean_signal';
+        const source = content.data?.source || 'gcp';
+        useRuntimeStore.getState().runtime?.recordAlert(kind, title, body, source);
+      } catch {
+        /* best effort */
+      }
+    });
+
     const settings = await Notifications.getPermissionsAsync();
     wireNotifyImpl(Notifications, settings.status);
   } catch {

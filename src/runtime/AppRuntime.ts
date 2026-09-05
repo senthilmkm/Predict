@@ -5,6 +5,7 @@ import { LeanSignal } from '../engine/gates';
 import { KalshiClient } from '../services/kalshi/client';
 import { loadCredentials } from '../services/credentials';
 import { computeLean, LeanResult } from '../services/lean/lean';
+import { isMarketOpen } from '../services/marketHours';
 import { maybeNotify } from '../services/notifications';
 import { MemoryAlertRepo, MemoryTradeRepo, TradeRecord, AlertRecord } from '../storage/repos';
 import { hydrateRepos, persistRepos } from '../storage/historyPersistence';
@@ -451,13 +452,20 @@ export class AppRuntime {
         this.status.lastLeans[asset] = lean;
         this.status.lastLeanAt[asset] = tickAt;
 
+        const open = isMarketOpen(asset, new Date()).open;
+        if (!open || lean.message?.includes('Market closed')) {
+          // Closed market is normal scheduled operation, not an error
+          delete this.status.assetErrors[asset];
+          continue;
+        }
+
         if (!lean.ok) {
           const msg = lean.message
             ? `lean unavailable · ${lean.message}`
             : 'lean unavailable';
-          this.status.assetErrors[asset] = msg;
           // Soft market states stay on the row only; escalate real integration issues
           if (lean.message !== 'no_market' && lean.message !== 'strike_tbd') {
+            this.status.assetErrors[asset] = msg;
             tickErrors.push(`${asset}: ${msg}`);
           }
           if (cfg.auto_trade_enabled) {
@@ -470,7 +478,9 @@ export class AppRuntime {
           continue;
         }
         if (!lean.market_ticker) {
-          this.noteAssetError(asset, 'no market ticker', tickErrors);
+          if (open) {
+            this.noteAssetError(asset, 'no market ticker', tickErrors);
+          }
           if (cfg.auto_trade_enabled) {
             this.status.lastTradeAction[asset] = {
               status: 'idle',
