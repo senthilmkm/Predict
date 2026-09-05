@@ -15,6 +15,8 @@ export async function sendPushNotification(
     badge: 1,
     title,
     body,
+    _contentAvailable: true,
+    interruptionLevel: 'active',
     data: { source: 'gcp', ...(data || {}) },
   }));
 
