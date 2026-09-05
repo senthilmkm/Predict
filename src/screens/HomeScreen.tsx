@@ -15,6 +15,7 @@ import { AssetKey, modeLabel } from '../config/types';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { LastTradeAction } from '../runtime/AppRuntime';
+import { getMarketScheduleNotice } from '../services/marketHours';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
@@ -180,6 +181,15 @@ export function HomeScreen() {
           nowMs={nowMs}
         />
       </View>
+
+      {getMarketScheduleNotice(new Date(nowMs)) ? (
+        <View style={styles.scheduleBanner} testID="home-market-schedule-banner">
+          <Text style={styles.scheduleTitle}>📅 Market Schedule Notice</Text>
+          <Text style={styles.scheduleBody}>
+            {getMarketScheduleNotice(new Date(nowMs))}
+          </Text>
+        </View>
+      ) : null}
 
       {integrationError || hasAssetErrors ? (
         <View style={styles.errorBanner} testID="home-integration-error">
@@ -494,6 +504,16 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  scheduleBanner: {
+    backgroundColor: 'rgba(255, 171, 0, 0.08)',
+    borderColor: colors.gold,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: spacing.md,
+    gap: 4,
+  },
+  scheduleTitle: { color: colors.gold, fontWeight: '800', fontSize: 13 },
+  scheduleBody: { color: colors.textPrimary, fontSize: 12, lineHeight: 17 },
   errorBanner: {
     backgroundColor: '#3a1515',
     borderColor: colors.danger,

@@ -1,5 +1,6 @@
 import { AssetKey } from '../../config/types';
 import { SERIES_BY_ASSET } from '../kalshi/client';
+import { isMarketOpen } from '../marketHours';
 
 const PUBLIC_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
@@ -258,6 +259,19 @@ export async function computeLean(
   fetchImpl: typeof fetch = fetch,
   now = new Date()
 ): Promise<LeanResult> {
+  const hours = isMarketOpen(asset, now);
+  if (!hours.open) {
+    const msg = hours.reopensAt ? `Market closed (${hours.reopensAt})` : hours.reason || 'Market closed';
+    return {
+      ok: true,
+      asset,
+      decision: 'SKIP',
+      phase: 'ended',
+      message: msg,
+      cushion,
+    };
+  }
+
   const series = SERIES_BY_ASSET[asset];
   const pick = await getCurrentOrNext15mMarket(series, fetchImpl, now);
   if (!pick) {

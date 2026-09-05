@@ -63,10 +63,10 @@ describe('AppRuntime does not Expo-push 401/429', () => {
       ...defaultAppConfig(),
       auto_trade_enabled: false,
       assets_enabled: {
-        WTI: true,
+        WTI: false,
         Gold: false,
         Silver: false,
-        BTC: false,
+        BTC: true,
         ETH: false,
       },
     };
@@ -103,10 +103,10 @@ describe('AppRuntime does not Expo-push 401/429', () => {
       ...defaultAppConfig(),
       auto_trade_enabled: false,
       assets_enabled: {
-        WTI: true,
+        WTI: false,
         Gold: false,
         Silver: false,
-        BTC: false,
+        BTC: true,
         ETH: false,
       },
     };
@@ -140,10 +140,10 @@ describe('AppRuntime does not Expo-push 401/429', () => {
       ...defaultAppConfig(),
       auto_trade_enabled: false,
       assets_enabled: {
-        WTI: true,
+        WTI: false,
         Gold: false,
         Silver: false,
-        BTC: false,
+        BTC: true,
         ETH: false,
       },
     };

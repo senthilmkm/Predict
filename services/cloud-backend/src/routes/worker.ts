@@ -11,10 +11,12 @@ import {
   getEnrolledActiveUsers,
   upsertUserDoc,
   saveTradeRecord,
+  getTradeRecords,
   writeAuditLog,
   TradeRecordDoc,
 } from '../services/firestore';
 import { sendPushNotification } from '../services/notifications';
+import { isMarketOpen } from '../services/marketHours';
 
 export const workerRouter = Router();
 
@@ -51,6 +53,10 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
   await Promise.all(
     assets.map(async (asset) => {
       try {
+        const hours = isMarketOpen(asset, now);
+        if (!hours.open) {
+          return;
+        }
         // Compute lean with base cushion 0.0 to retrieve raw spot price, strike & market ticker
         const lean = await computeLean(asset, 0.0, fetch, now);
         sharedLeans[asset] = lean;
