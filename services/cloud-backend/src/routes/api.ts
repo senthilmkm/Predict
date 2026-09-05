@@ -236,10 +236,12 @@ apiRouter.post('/me/push-token', async (req: Request, res: Response) => {
 
   try {
     const existing = await getUserDoc(userId);
-    const tokens = new Set(existing?.fcmTokens || []);
-    tokens.add(pushToken);
+    const tokens = new Set([...(existing?.pushTokens || []), ...(existing?.fcmTokens || []), pushToken]);
 
-    await upsertUserDoc(userId, { fcmTokens: Array.from(tokens) });
+    await upsertUserDoc(userId, {
+      pushTokens: Array.from(tokens),
+      fcmTokens: Array.from(tokens),
+    });
     res.json({ ok: true, registeredTokenCount: tokens.size });
   } catch (err: any) {
     res.status(500).json({ error: 'token_failed', message: err?.message || 'Failed to register token' });

@@ -110,28 +110,29 @@ export async function upsertUserDoc(
   return updated;
 }
 
-export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { config?: any })[]> {
+export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { config?: any; pushTokens?: string[]; fcmTokens?: string[] })[]> {
   const f = getDb();
+  let users: any[] = [];
   if (!f) {
-    return Array.from(localUserStore.values()).filter(
-      (u) =>
-        (u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured) ||
-        (u.config?.alerts_enabled !== false && Array.isArray(u.pushTokens) && u.pushTokens.length > 0)
-    );
+    users = Array.from(localUserStore.values());
+  } else {
+    try {
+      const snapshot = await f.collection('users').get();
+      users = snapshot.docs.map((doc: any) => doc.data() as any);
+    } catch {
+      users = Array.from(localUserStore.values());
+    }
   }
-  try {
-    const snapshot = await f.collection('users').get();
-    return snapshot.docs
-      .map((doc: any) => doc.data() as UserStatusDoc & { config?: any })
-      .filter((u) => {
-        const isArmedTrader = u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured;
-        const isAlertSubscriber =
-          u.config?.alerts_enabled !== false && Array.isArray(u.pushTokens) && u.pushTokens.length > 0;
-        return isArmedTrader || isAlertSubscriber;
-      });
-  } catch {
-    return Array.from(localUserStore.values());
-  }
+
+  return users.filter((u) => {
+    if (u.state === 'KILL_SWITCH') return false;
+    const hasTokens =
+      (Array.isArray(u.pushTokens) && u.pushTokens.length > 0) ||
+      (Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0);
+    const isArmedTrader = u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured;
+    const isAlertSubscriber = u.config?.alerts_enabled !== false && hasTokens;
+    return isArmedTrader || isAlertSubscriber;
+  });
 }
 
 export async function saveTradeRecord(userId: string, trade: TradeRecordDoc): Promise<void> {
