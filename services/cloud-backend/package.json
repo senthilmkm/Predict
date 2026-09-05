@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --outfile=dist/bundle.js",
+    "start": "node dist/bundle.js",
     "dev": "tsx watch src/index.ts",
     "test": "jest --runInBand"
   },

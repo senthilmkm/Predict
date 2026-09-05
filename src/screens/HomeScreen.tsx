@@ -319,7 +319,7 @@ export function HomeScreen() {
       </View>
 
       <Text style={styles.hint}>
-        Keep the app open while auto-trading. iOS will not poll every few seconds in background.
+        24/7 background trading runs securely on GCP Cloud Run. Your phone does not need to stay open.
       </Text>
       <TradingDisclaimer variant="short" showTitle testID="home-disclaimer" />
       <SupportContactFooter />

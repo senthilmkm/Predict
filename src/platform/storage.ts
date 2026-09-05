@@ -52,10 +52,13 @@ export async function bindNativeStores(): Promise<void> {
   }
   try {
     const SecureStore = require('expo-secure-store');
+    const options = {
+      keychainAccessibility: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+    };
     setSecureStore({
-      getItem: (k) => SecureStore.getItemAsync(k),
-      setItem: (k, v) => SecureStore.setItemAsync(k, v),
-      deleteItem: (k) => SecureStore.deleteItemAsync(k),
+      getItem: (k) => SecureStore.getItemAsync(k, options),
+      setItem: (k, v) => SecureStore.setItemAsync(k, v, options),
+      deleteItem: (k) => SecureStore.deleteItemAsync(k, options),
     });
   } catch {
     /* keep memory */

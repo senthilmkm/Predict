@@ -154,6 +154,7 @@ export interface UserStatusDoc {
   onboardingRecord?: Record<string, any>;
   lastTickAt?: string;
   lastError?: string | null;
+  pushTokens?: string[];
   fcmTokens?: string[];
   updatedAt: string;
 }

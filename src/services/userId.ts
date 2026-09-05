@@ -2,24 +2,30 @@ import { getSecureStore } from '../platform/storage';
 
 const USER_ID_KEY = 'foresight.persistent_user_id.v1';
 
+let cachedUserId: string | null = null;
+
 /**
  * Returns the persistent User ID (Apple Subject ID or persistent hardware-backed ID).
  * Ensures Secret Manager and Firestore DB keys use distinct multi-tenant User IDs.
  */
 export async function getPersistentUserId(): Promise<string> {
+  if (cachedUserId) return cachedUserId;
   const store = getSecureStore();
   try {
     let id = await store.getItem(USER_ID_KEY);
     if (id && id.trim()) {
-      return id.trim();
+      cachedUserId = id.trim();
+      return cachedUserId;
     }
     // Generate clean persistent ID for this account/device
     const rand = Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
     id = `usr_${rand}`;
     await store.setItem(USER_ID_KEY, id);
+    cachedUserId = id;
     return id;
-  } catch {
-    return 'default_user';
+  } catch (e: any) {
+    console.warn('[USER_ID_SECURESTORE_NOTE]', e?.message || e);
+    return cachedUserId || 'default_user';
   }
 }
 
@@ -30,6 +36,7 @@ export async function setAppleUserId(appleUserId: string): Promise<void> {
   if (!appleUserId || !appleUserId.trim()) return;
   const store = getSecureStore();
   const sanitized = appleUserId.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  cachedUserId = sanitized;
   try {
     await store.setItem(USER_ID_KEY, sanitized);
   } catch {

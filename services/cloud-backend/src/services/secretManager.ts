@@ -15,8 +15,9 @@ function getClient(): SecretManagerServiceClient | null {
   }
   if (!client) {
     try {
-      client = new SecretManagerServiceClient();
-    } catch {
+      client = new SecretManagerServiceClient({ projectId: 'predict-trading-0904' });
+    } catch (e: any) {
+      console.error('[SECRET_MANAGER_CLIENT_INIT_ERROR]', e?.message || e);
       client = null;
     }
   }
@@ -35,9 +36,12 @@ export async function saveUserSecret(
   privateKeyPem: string
 ): Promise<void> {
   const sm = getClient();
-  const projectId = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-autotrade-prod';
+  const projectId = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-trading-0904';
+
+  console.log('[SECRET_MANAGER_SAVE_ATTEMPT]', { userId, projectId, clientReady: Boolean(sm) });
 
   if (!sm) {
+    console.warn('[SECRET_MANAGER_FALLBACK_MEMORY]', { userId });
     localSecretStore.set(userId, { keyId, privateKeyPem });
     return;
   }
@@ -47,6 +51,7 @@ export async function saveUserSecret(
 
   // Create secret if it does not exist
   try {
+    console.log('[SECRET_MANAGER_CREATING]', { secretId, parent: `projects/${projectId}` });
     await sm.createSecret({
       parent: `projects/${projectId}`,
       secretId,
@@ -56,27 +61,30 @@ export async function saveUserSecret(
         },
       },
     });
+    console.log('[SECRET_MANAGER_CREATED_SUCCESS]', { secretId });
   } catch (err: any) {
     if (!err?.message?.includes('already exists')) {
-      // Fallback to local store if GCP API call fails
-      localSecretStore.set(userId, { keyId, privateKeyPem });
-      return;
+      console.warn('[SECRET_MANAGER_CREATE_NOTE]', err?.message || err);
+    } else {
+      console.log('[SECRET_MANAGER_EXISTS]', { secretId });
     }
   }
 
   // Add secret version payload
   const payload = JSON.stringify({ keyId, privateKeyPem });
-  await sm.addSecretVersion({
+  console.log('[SECRET_MANAGER_ADDING_VERSION]', { parent: name });
+  const [v] = await sm.addSecretVersion({
     parent: name,
     payload: {
       data: Buffer.from(payload, 'utf8'),
     },
   });
+  console.log('[SECRET_MANAGER_VERSION_ADDED]', { version: v.name });
 }
 
 export async function getUserSecret(userId: string): Promise<UserKalshiSecret | null> {
   const sm = getClient();
-  const projectId = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-autotrade-prod';
+  const projectId = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-trading-0904';
 
   if (!sm) {
     return localSecretStore.get(userId) || null;
@@ -97,7 +105,7 @@ export async function deleteUserSecret(userId: string): Promise<void> {
   localSecretStore.delete(userId);
 
   const sm = getClient();
-  const projectId = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-autotrade-prod';
+  const projectId = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-trading-0904';
 
   if (!sm) return;
 

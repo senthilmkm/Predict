@@ -630,7 +630,7 @@ export function SettingsScreen() {
           </View>
           {config.auto_trade_enabled ? (
             <Text style={styles.liveWarn} testID="autotrade-live-warn">
-              Live trading is on. Keep the app open while polling — orders can fill with real money.
+              Auto-trade is active. 24/7 background trading runs securely on GCP Cloud Run.
             </Text>
           ) : (
             <Text style={styles.controlHint}>
@@ -638,44 +638,6 @@ export function SettingsScreen() {
             </Text>
           )}
         </View>
-
-        <Text style={styles.section}>Polling</Text>
-        <View style={styles.slimCard}>
-          <Text style={styles.slimLabel}>Interval</Text>
-          <View style={styles.pollControls}>
-            <Pressable
-              testID="btn-poll-down"
-              style={styles.chip}
-              onPress={() => void bumpPoll(-5)}
-              disabled={anyBusy || config.poll_interval_seconds <= POLL_INTERVAL_MIN_SEC}
-            >
-              {busyKey === 'poll' ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <Text style={styles.chipText}>−5s</Text>
-              )}
-            </Pressable>
-            <Text style={styles.pollValue} testID="poll-interval-value">
-              {config.poll_interval_seconds}s
-            </Text>
-            <Pressable
-              testID="btn-poll-up"
-              style={styles.chip}
-              onPress={() => void bumpPoll(5)}
-              disabled={anyBusy || config.poll_interval_seconds >= POLL_INTERVAL_MAX_SEC}
-            >
-              {busyKey === 'poll' ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <Text style={styles.chipText}>+5s</Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-        <Text style={styles.hint}>
-          Default {POLL_INTERVAL_DEFAULT_SEC}s · minimum {POLL_INTERVAL_MIN_SEC}s. Keep the app open
-          while polling.
-        </Text>
 
         <Row
           testID="toggle-poller"

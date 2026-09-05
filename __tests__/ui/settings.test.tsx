@@ -61,15 +61,6 @@ describe('Settings toggles', () => {
     );
     expect(s.queryByTestId('modal-autotrade-risk')).toBeNull();
 
-    await fireEvent.press(s.getByTestId('btn-poll-down'));
-    await waitFor(() =>
-      expect(useConfigStore.getState().config.poll_interval_seconds).toBe(15)
-    );
-    await fireEvent.press(s.getByTestId('btn-poll-down'));
-    await waitFor(() =>
-      expect(useConfigStore.getState().config.poll_interval_seconds).toBe(10)
-    );
-
     expect(useConfigStore.getState().config.alert_retention_days).toBe(30);
     await fireEvent.press(s.getByTestId('btn-retention-down'));
     await waitFor(() =>
