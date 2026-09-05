@@ -59,8 +59,18 @@ export function getETParts(date: Date = new Date()) {
  */
 import { AssetRegistry } from 'trading-core';
 
+function getSchedule(asset: string): string {
+  try {
+    if (AssetRegistry && typeof AssetRegistry.getScheduleType === 'function') {
+      return AssetRegistry.getScheduleType(asset);
+    }
+  } catch {}
+  if (asset === 'BTC' || asset === 'ETH') return 'CRYPTO_24_7';
+  return 'CME_COMMODITY';
+}
+
 export function isMarketOpen(asset: string, date: Date = new Date()): MarketHoursResult {
-  const scheduleType = AssetRegistry.getScheduleType(asset);
+  const scheduleType = getSchedule(asset);
   if (scheduleType === 'CRYPTO_24_7') {
     return { open: true };
   }

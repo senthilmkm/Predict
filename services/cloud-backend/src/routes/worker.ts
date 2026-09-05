@@ -77,14 +77,6 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
         const userClaimedWindows = new Set<string>();
 
         try {
-          // Fetch encrypted Kalshi secret
-          const secret = await getUserSecret(userId);
-          if (!secret || !secret.privateKeyPem || !secret.keyId) {
-            await upsertUserDoc(userId, { lastError: 'missing_secret_key' });
-            results.push({ userId, tradesPlaced: 0, leansEvaluated: 0, error: 'missing_secret_key' });
-            return;
-          }
-
           // Fetch user trade history for window deduplication & risk gate limits
           const userTrades = await getTradeRecords(userId);
           const existingTickers = new Set(userTrades.map((t) => t.ticker));
@@ -171,7 +163,14 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
               });
             }
 
-            if (!cfg.auto_trade_enabled || !gate.ok || !gate.price || !gate.count) continue;
+            if (!cfg.auto_trade_enabled || user.state !== 'ARMED' || !gate.ok || !gate.price || !gate.count) continue;
+
+            // Fetch encrypted Kalshi secret for trade execution
+            const secret = await getUserSecret(userId);
+            if (!secret || !secret.privateKeyPem || !secret.keyId) {
+              await upsertUserDoc(userId, { lastError: 'missing_secret_key' });
+              continue;
+            }
 
             // Lock window key for this user tick
             userClaimedWindows.add(windowKey);

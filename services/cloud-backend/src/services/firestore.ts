@@ -114,21 +114,23 @@ export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { confi
   const f = getDb();
   if (!f) {
     return Array.from(localUserStore.values()).filter(
-      (u) => u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured
+      (u) =>
+        (u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured) ||
+        (u.config?.alerts_enabled !== false && Array.isArray(u.pushTokens) && u.pushTokens.length > 0)
     );
   }
   try {
-    const snapshot = await f
-      .collection('users')
-      .where('cloudTradingEnabled', '==', true)
-      .where('state', '==', 'ARMED')
-      .where('kalshiConfigured', '==', true)
-      .get();
-    return snapshot.docs.map((doc: any) => doc.data() as UserStatusDoc & { config?: any });
+    const snapshot = await f.collection('users').get();
+    return snapshot.docs
+      .map((doc: any) => doc.data() as UserStatusDoc & { config?: any })
+      .filter((u) => {
+        const isArmedTrader = u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured;
+        const isAlertSubscriber =
+          u.config?.alerts_enabled !== false && Array.isArray(u.pushTokens) && u.pushTokens.length > 0;
+        return isArmedTrader || isAlertSubscriber;
+      });
   } catch {
-    return Array.from(localUserStore.values()).filter(
-      (u) => u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured
-    );
+    return Array.from(localUserStore.values());
   }
 }
 
