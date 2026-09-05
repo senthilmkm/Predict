@@ -48,12 +48,11 @@ export async function bindNativeNotifications(): Promise<void> {
       handleNotification: async () => ({
         shouldShowAlert: true,
         shouldPlaySound: true,
-        shouldSetBadge: false,
+        shouldSetBadge: true,
         shouldShowBanner: true,
         shouldShowList: true,
       }),
     });
-    void Notifications.setBadgeCountAsync(0);
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
