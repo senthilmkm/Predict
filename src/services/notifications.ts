@@ -72,7 +72,7 @@ export async function bindNativeNotifications(): Promise<void> {
         const title = content.title || 'Alert';
         const body = content.body || '';
         const kind = content.data?.kind || 'lean_signal';
-        const source = content.data?.source || 'gcp';
+        const source = content.data?.source || 'local';
         useRuntimeStore.getState().runtime?.recordAlert(kind, title, body, source);
       } catch {
         /* best effort */

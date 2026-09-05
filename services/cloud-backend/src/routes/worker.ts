@@ -29,8 +29,7 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
-// Endpoint triggered every 20 seconds by Cloud Scheduler / Pub/Sub
-workerRouter.post('/tick', async (_req: Request, res: Response) => {
+async function runOneTick() {
   const now = new Date();
   const activeUsers = await getEnrolledActiveUsers();
 
@@ -42,8 +41,7 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
   }> = [];
 
   if (activeUsers.length === 0) {
-    res.json({ ok: true, status: 'ok', activeUserCount: 0, activeUsersCount: 0, results: [] });
-    return;
+    return { timestamp: now.toISOString(), activeUserCount: 0, results: [] };
   }
 
   const assets: AssetKey[] = ['WTI', 'Gold', 'Silver', 'BTC', 'ETH'];
@@ -57,7 +55,6 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
         if (!hours.open) {
           return;
         }
-        // Compute lean with base cushion 0.0 to retrieve raw spot price, strike & market ticker
         const lean = await computeLean(asset, 0.0, fetch, now);
         sharedLeans[asset] = lean;
       } catch (err: any) {
@@ -77,7 +74,6 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
         const userClaimedWindows = new Set<string>();
 
         try {
-          // Fetch user trade history for window deduplication & risk gate limits
           const userTrades = await getTradeRecords(userId);
           const existingTickers = new Set(userTrades.map((t) => t.ticker));
 
@@ -98,37 +94,23 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
 
           for (const asset of assets) {
             if (!cfg.assets_enabled?.[asset]) continue;
-            const rawLean = sharedLeans[asset];
-            if (!rawLean || !rawLean.ok || !rawLean.market_ticker) continue;
 
-            const userCushion = cfg.cushions?.[asset] ?? 0.3;
-            const absGap = rawLean.abs_gap ?? 0;
+            const lean = sharedLeans[asset];
+            if (!lean || !lean.market_ticker) continue;
             leansCount++;
 
-            // Evaluate custom cushion decision for this user
-            let decision: 'YES' | 'NO' | 'SKIP' = 'SKIP';
-            if (absGap >= userCushion && rawLean.decision && rawLean.decision !== 'SKIP') {
-              decision = rawLean.decision;
-            }
+            const userCushion = cfg.cushions?.[asset] ?? 25.0;
+            const absGap = Math.abs((lean.live || 0) - (lean.strike || 0));
 
-            if (decision === 'SKIP') continue;
+            if (absGap < userCushion) continue;
 
-            const marketTicker = rawLean.market_ticker;
-            const windowKey = `${userId}:${marketTicker}`;
+            const marketTicker = lean.market_ticker;
+            const windowKey = `${marketTicker}_${lean.window_end || 'window'}`;
 
-            // RACE CONDITION GUARD: Prevent duplicate orders in the same 15-minute market window
-            if (existingTickers.has(marketTicker) || userClaimedWindows.has(windowKey)) {
-              continue;
-            }
-
-            const lean = {
-              ...rawLean,
-              decision,
-            };
+            if (existingTickers.has(marketTicker) || userClaimedWindows.has(windowKey)) continue;
 
             const assetTradesToday = tradesTodayList.filter((t) => t.asset === asset).length;
 
-            // Evaluate static risk gates (time left, ask price, max open positions, daily loss stop)
             const gate = evaluateStaticGate(
               {
                 asset: lean.asset,
@@ -151,7 +133,6 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
               }
             );
 
-            // Signal Push Notification Dispatch (when user requested Signal Alerts)
             if (cfg.alerts_enabled && userTokens.length > 0) {
               const title = `Signal · ${asset} ${lean.decision}`;
               const body = `Gap $${absGap.toFixed(2)} · Cushion $${userCushion} · ${lean.minutes_left ?? '?'}m left`;
@@ -165,17 +146,14 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
 
             if (!cfg.auto_trade_enabled || user.state !== 'ARMED' || !gate.ok || !gate.price || !gate.count) continue;
 
-            // Fetch encrypted Kalshi secret for trade execution
             const secret = await getUserSecret(userId);
             if (!secret || !secret.privateKeyPem || !secret.keyId) {
               await upsertUserDoc(userId, { lastError: 'missing_secret_key' });
               continue;
             }
 
-            // Lock window key for this user tick
             userClaimedWindows.add(windowKey);
 
-            // Execute Kalshi Order
             const client = new KalshiClient(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo');
             const placeRes = await client.placeOrder({
               ticker: marketTicker,
@@ -216,7 +194,6 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
                 mode: isLive ? 'live' : 'demo',
               });
 
-              // Order Filled Push Notification
               if (userTokens.length > 0) {
                 const fillTitle = isLive ? `Order Placed · ${asset} ${lean.decision}` : `Dry-Run Order · ${asset} ${lean.decision}`;
                 const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
@@ -249,12 +226,28 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
     );
   }
 
+  return { timestamp: now.toISOString(), activeUserCount: activeUsers.length, results };
+}
+
+// Endpoint triggered every minute by Cloud Scheduler (executes 3 x 20s sub-ticks per invocation in production)
+workerRouter.post('/tick', async (req: Request, res: Response) => {
+  const isTest = process.env.NODE_ENV === 'test' || req.query.single === 'true';
+  const tickCount = isTest ? 1 : 3;
+  let lastResult: any = { activeUserCount: 0, results: [] };
+
+  for (let i = 0; i < tickCount; i++) {
+    lastResult = await runOneTick();
+    if (i < tickCount - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20000));
+    }
+  }
+
   res.json({
     ok: true,
     status: 'ok',
-    timestamp: now.toISOString(),
-    activeUsersCount: activeUsers.length,
-    activeUserCount: activeUsers.length,
-    results,
+    timestamp: lastResult.timestamp,
+    activeUsersCount: lastResult.activeUserCount,
+    activeUserCount: lastResult.activeUserCount,
+    results: lastResult.results,
   });
 });
