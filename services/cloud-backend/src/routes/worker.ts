@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import {
   AssetKey,
+  AssetRegistry,
   computeLean,
   evaluateStaticGate,
   KalshiClient,
@@ -44,7 +45,29 @@ async function runOneTick() {
     return { timestamp: now.toISOString(), activeUserCount: 0, results: [] };
   }
 
-  const assets: AssetKey[] = ['WTI', 'Gold', 'Silver', 'BTC', 'ETH'];
+  const assets: AssetKey[] =
+    AssetRegistry?.keys ||
+    AssetRegistry?.list?.map((a) => a.key) || [
+      'BTC',
+      'ETH',
+      'SOL',
+      'DOGE',
+      'XRP',
+      'BNB',
+      'AVAX',
+      'SUI',
+      'LINK',
+      'WTI',
+      'Gold',
+      'Silver',
+      'NG',
+      'COPPER',
+      'SPX',
+      'NDX',
+      'EURUSD',
+      'GBPUSD',
+      'USDJPY',
+    ];
 
   // 1. DEDUPLICATION: Fetch market prices ONCE per tick for all assets (shared across all users)
   const sharedLeans: Partial<Record<AssetKey, any>> = {};

@@ -22,6 +22,15 @@ import { supportContactEmail, withSupportContact } from '../config/appMeta';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
+export function formatGapDisplay(gap: number | undefined | null, assetKey?: string): string {
+  if (gap == null || !Number.isFinite(gap)) return '';
+  const abs = Math.abs(gap);
+  const bounds = assetKey ? AssetRegistry.getCushionBounds(assetKey) : null;
+  const decimals = bounds?.step ? (String(bounds.step).split('.')[1]?.length || 2) : 2;
+  const prec = Math.max(decimals, abs < 0.01 ? 4 : abs < 1 ? 3 : 2);
+  return `gap $${abs.toFixed(prec)}`;
+}
+
 export function HomeScreen() {
   const config = useConfigStore((s) => s.config);
   const status = useRuntimeStore((s) => s.status);
@@ -276,6 +285,11 @@ export function HomeScreen() {
               <View style={{ flex: 1 }}>
                 <View style={styles.signalLeft}>
                   <Text style={styles.signalAsset}>{row.asset}</Text>
+                  {AssetRegistry.get(row.asset)?.category ? (
+                    <Text style={styles.signalCategoryIcon} testID={`signal-category-icon-${row.asset}`}>
+                      {AssetRegistry.getCategoryIcon(AssetRegistry.get(row.asset)?.category)}
+                    </Text>
+                  ) : null}
                   <Text
                     style={[
                       styles.signalDecision,
@@ -286,7 +300,9 @@ export function HomeScreen() {
                     {row.err ? 'ERR' : row.decision}
                   </Text>
                   {!row.err && row.gap != null ? (
-                    <Text style={styles.signalMeta}>gap ${row.gap.toFixed(2)}</Text>
+                    <Text style={styles.signalMeta}>
+                      {formatGapDisplay(row.gap, row.asset)}
+                    </Text>
                   ) : null}
                 </View>
                 {row.err ? (
@@ -580,7 +596,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   signalLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
-  signalAsset: { color: colors.textPrimary, fontWeight: '700', width: 52 },
+  signalAsset: { color: colors.textPrimary, fontWeight: '700', minWidth: 44 },
+  signalCategoryIcon: {
+    fontSize: 13,
+    marginRight: 2,
+  },
   signalDecision: { color: colors.accent, fontWeight: '800', minWidth: 36 },
   signalMeta: { color: colors.mute, fontSize: 12 },
   signalErr: { color: colors.loss, fontSize: 11, marginTop: 2, marginLeft: 52 },

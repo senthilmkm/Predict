@@ -64,16 +64,29 @@ export async function bindNativeNotifications(): Promise<void> {
       });
     }
 
+    const seenNotificationIds = new Set<string>();
+    const handleIncomingNotification = (content: any, identifier?: string) => {
+      if (!content) return;
+      if (identifier && seenNotificationIds.has(identifier)) return;
+      if (identifier) {
+        seenNotificationIds.add(identifier);
+        if (seenNotificationIds.size > 100) {
+          const first = seenNotificationIds.values().next().value;
+          if (first) seenNotificationIds.delete(first);
+        }
+      }
+      const title = content.title || 'Alert';
+      const body = content.body || '';
+      const kind = content.data?.kind || content.data?.type || 'lean_signal';
+      const source = content.data?.source || 'gcp';
+      const { useRuntimeStore } = require('../state/runtimeStore');
+      const rt = useRuntimeStore.getState().ensure();
+      rt.recordAlert(kind, title, body, source);
+    };
+
     Notifications.addNotificationReceivedListener((n: any) => {
       try {
-        const { useRuntimeStore } = require('../state/runtimeStore');
-        const content = n?.request?.content;
-        if (!content) return;
-        const title = content.title || 'Alert';
-        const body = content.body || '';
-        const kind = content.data?.kind || content.data?.type || 'lean_signal';
-        const source = content.data?.source || 'gcp';
-        useRuntimeStore.getState().runtime?.recordAlert(kind, title, body, source);
+        handleIncomingNotification(n?.request?.content, n?.request?.identifier);
       } catch {
         /* best effort */
       }
@@ -81,14 +94,10 @@ export async function bindNativeNotifications(): Promise<void> {
 
     Notifications.addNotificationResponseReceivedListener((response: any) => {
       try {
-        const { useRuntimeStore } = require('../state/runtimeStore');
-        const content = response?.notification?.request?.content;
-        if (!content) return;
-        const title = content.title || 'Alert';
-        const body = content.body || '';
-        const kind = content.data?.kind || content.data?.type || 'lean_signal';
-        const source = content.data?.source || 'gcp';
-        useRuntimeStore.getState().runtime?.recordAlert(kind, title, body, source);
+        handleIncomingNotification(
+          response?.notification?.request?.content,
+          response?.notification?.request?.identifier
+        );
       } catch {
         /* best effort */
       }
@@ -97,14 +106,10 @@ export async function bindNativeNotifications(): Promise<void> {
     Notifications.getLastNotificationResponseAsync().then((response: any) => {
       if (!response) return;
       try {
-        const { useRuntimeStore } = require('../state/runtimeStore');
-        const content = response?.notification?.request?.content;
-        if (!content) return;
-        const title = content.title || 'Alert';
-        const body = content.body || '';
-        const kind = content.data?.kind || content.data?.type || 'lean_signal';
-        const source = content.data?.source || 'gcp';
-        useRuntimeStore.getState().runtime?.recordAlert(kind, title, body, source);
+        handleIncomingNotification(
+          response?.notification?.request?.content,
+          response?.notification?.request?.identifier
+        );
       } catch {
         /* best effort */
       }
@@ -120,26 +125,47 @@ export async function bindNativeNotifications(): Promise<void> {
   }
 }
 
-export async function syncPushTokenWithCloud(): Promise<void> {
+export async function syncPushTokenWithCloud(): Promise<string | null> {
   try {
     const Notifications = require('expo-notifications');
     const settings = await Notifications.getPermissionsAsync();
-    if (settings.status !== 'granted') return;
+    if (settings.status !== 'granted') return null;
 
     let projectId = 'a03a8787-9892-4b03-b817-802af17715cf';
     try {
       const Constants = require('expo-constants').default;
-      projectId = Constants?.expoConfig?.extra?.eas?.projectId || projectId;
+      const easId =
+        Constants?.expoConfig?.extra?.eas?.projectId ||
+        Constants?.easConfig?.projectId ||
+        Constants?.manifest?.extra?.eas?.projectId;
+      if (easId) projectId = easId;
     } catch {}
 
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const pushToken = tokenData?.data;
+
+    let deviceToken: string | null = null;
+    try {
+      const devTokenData = await Notifications.getDevicePushTokenAsync();
+      deviceToken = devTokenData?.data;
+    } catch {}
+
+    const { cloudClient } = require('./cloud/cloudClient');
     if (pushToken) {
-      const { cloudClient } = require('./cloud/cloudClient');
       await cloudClient.registerPushToken(pushToken);
     }
-  } catch {
-    /* node / tests fallback */
+    if (deviceToken && typeof deviceToken === 'string') {
+      const formattedDevToken = deviceToken.startsWith('ExponentPushToken')
+        ? deviceToken
+        : `ExponentPushToken[${deviceToken}]`;
+      await cloudClient.registerPushToken(formattedDevToken);
+      await cloudClient.registerPushToken(deviceToken);
+    }
+
+    return pushToken || deviceToken || null;
+  } catch (err: any) {
+    console.warn('[PUSH_TOKEN_SYNC_ERROR]', err?.message || err);
+    return null;
   }
 }
 
@@ -197,3 +223,15 @@ export async function notifySystemBanner(title: string, body: string): Promise<v
     /* tests / no permission */
   }
 }
+
+export async function updateAppBadgeCount(count: number): Promise<void> {
+  try {
+    const Notifications = require('expo-notifications');
+    if (typeof Notifications.setBadgeCountAsync === 'function') {
+      await Notifications.setBadgeCountAsync(Math.max(0, count));
+    }
+  } catch {
+    /* best effort */
+  }
+}
+

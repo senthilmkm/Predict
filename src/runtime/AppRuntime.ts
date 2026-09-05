@@ -275,6 +275,13 @@ export class AppRuntime {
     return removed;
   }
 
+  /** Mark all alerts as read and persist to storage immediately. */
+  async markAllRead(): Promise<void> {
+    this.alerts.markAllRead();
+    await this.persistHistory();
+    this.onChange?.();
+  }
+
   start(intervalMs = 20000): void {
     if (this.timer) {
       clearInterval(this.timer);
@@ -827,7 +834,10 @@ export class AppRuntime {
       read: false,
       source: source || 'local',
     };
-    this.alerts.insert(row);
+    const inserted = this.alerts.insert(row);
+    if (!inserted) return;
+    void this.persistHistory();
+    this.onChange?.();
   }
 
   private pushAlert(cfg: AppConfig, kind: any, title: string, body: string) {

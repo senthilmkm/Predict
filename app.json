@@ -14,7 +14,7 @@
       "infoPlist": {
         "NSFaceIDUsageDescription": "Predict uses Face ID to unlock Kalshi credentials and enable auto-trading.",
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["fetch", "remote-notification"]
       },
       "entitlements": {
         "aps-environment": "production"

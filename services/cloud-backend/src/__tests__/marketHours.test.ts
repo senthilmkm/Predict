@@ -1,16 +1,17 @@
 import { isMarketOpen } from '../services/marketHours';
 
 describe('GCP Cloud Backend Market Hours', () => {
-  it('allows BTC and ETH 24/7', () => {
+  it('allows all 24/7 crypto assets', () => {
     const sat = new Date('2026-09-05T16:00:00Z');
-    expect(isMarketOpen('BTC', sat).open).toBe(true);
-    expect(isMarketOpen('ETH', sat).open).toBe(true);
+    for (const a of ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'SUI', 'LINK']) {
+      expect(isMarketOpen(a, sat).open).toBe(true);
+    }
   });
 
-  it('skips WTI, Gold, Silver on weekends in GCP worker', () => {
+  it('skips Commodities, Stocks, and Forex on Saturday', () => {
     const sat = new Date('2026-09-05T18:00:00Z');
-    expect(isMarketOpen('WTI', sat).open).toBe(false);
-    expect(isMarketOpen('Gold', sat).open).toBe(false);
-    expect(isMarketOpen('Silver', sat).open).toBe(false);
+    for (const a of ['WTI', 'Gold', 'Silver', 'NG', 'COPPER', 'SPX', 'NDX', 'EURUSD', 'GBPUSD', 'USDJPY']) {
+      expect(isMarketOpen(a, sat).open).toBe(false);
+    }
   });
 });

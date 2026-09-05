@@ -67,7 +67,25 @@ export function isMarketOpen(asset: AssetKey, date: Date = new Date()): MarketHo
     return { open: true };
   }
 
-  const { weekday, hour, monthDay } = getETParts(date);
+  const { weekday, hour, minute, monthDay } = getETParts(date);
+
+  if (scheduleType === 'US_STOCK_HOURS') {
+    if (['Sat', 'Sun'].includes(weekday)) {
+      return { open: false, reason: 'Weekend halt', reopensAt: 'Mon 9:30 AM ET' };
+    }
+    const mins = hour * 60 + minute;
+    if (mins < 570 || mins >= 960) {
+      return { open: false, reason: 'Outside US stock hours (9:30 AM - 4:00 PM ET)', reopensAt: '9:30 AM ET' };
+    }
+    return { open: true };
+  }
+
+  if (scheduleType === 'FOREX_HOURS') {
+    if (weekday === 'Sat' || (weekday === 'Fri' && hour >= 17) || (weekday === 'Sun' && hour < 17)) {
+      return { open: false, reason: 'Forex weekend halt', reopensAt: 'Sun 5:00 PM ET' };
+    }
+    return { open: true };
+  }
 
   // CME Holidays
   if (CME_HOLIDAYS.has(monthDay)) {
@@ -125,7 +143,7 @@ export function getMarketScheduleNotice(date: Date = new Date()): string | null 
   const { weekday, hour, monthDay } = getETParts(date);
 
   if (CME_HOLIDAYS.has(monthDay)) {
-    return 'WTI, Gold & Silver markets are closed for the holiday. Kalshi polling paused for commodity assets — reopens next business day 6:00 PM ET. (BTC & ETH trade 24/7).';
+    return 'Commodity, Stock & Forex markets are closed for the holiday. Polling active for 24/7 Crypto (BTC, ETH, SOL, DOGE, XRP, BNB, AVAX, SUI, LINK). Non-crypto assets reopen next business day.';
   }
 
   const isWeekend =
@@ -134,7 +152,7 @@ export function getMarketScheduleNotice(date: Date = new Date()): string | null 
     (weekday === 'Sun' && hour < 18);
 
   if (isWeekend) {
-    return 'WTI, Gold & Silver markets are closed for the weekend. Kalshi polling paused for commodity assets — reopens Sunday 6:00 PM ET. (BTC & ETH trade 24/7).';
+    return 'Commodity, Stock & Forex markets are closed for the weekend. Polling active for 24/7 Crypto (BTC, ETH, SOL, DOGE, XRP, BNB, AVAX, SUI, LINK). Forex reopens Sun 5:00 PM ET; Commodities Sun 6:00 PM ET; Stock Indices Mon 9:30 AM ET.';
   }
 
   return null;

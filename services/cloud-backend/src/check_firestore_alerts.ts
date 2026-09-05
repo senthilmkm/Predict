@@ -2,40 +2,37 @@ import { Firestore } from '@google-cloud/firestore';
 
 async function main() {
   const db = new Firestore({ projectId: 'predict-trading-0904' });
-  console.log('=== FIRESTORE USERS COLLECTION ===');
-  const usersSnapshot = await db.collection('users').get();
-  console.log(`Found ${usersSnapshot.docs.length} user document(s):\n`);
+  const userId = 'usr_q9ux0gtmtnhl8w5';
 
-  for (const doc of usersSnapshot.docs) {
-    console.log(`User ID: ${doc.id}`);
-    console.log('Doc Data:', JSON.stringify(doc.data(), null, 2));
+  console.log('=== CHECKING ALERTS FOR USER ===', userId);
 
-    // Check trades subcollection
-    const tradesSnap = await db.collection('users').doc(doc.id).collection('trades').get();
-    console.log(`  Trades count: ${tradesSnap.docs.length}`);
-    tradesSnap.docs.forEach(t => {
-      console.log(`    Trade (${t.id}):`, JSON.stringify(t.data()));
-    });
+  // 1. Subcollection users/{userId}/alerts
+  const userAlertsSnap = await db.collection('users').doc(userId).collection('alerts').get();
+  console.log(`Subcollection users/${userId}/alerts count:`, userAlertsSnap.size);
+  userAlertsSnap.forEach((doc) => {
+    console.log(`Alert [${doc.id}]:`, JSON.stringify(doc.data(), null, 2));
+  });
 
-    // Check audit subcollection
-    const auditSnap = await db.collection('users').doc(doc.id).collection('audit').get();
-    console.log(`  Audit logs count: ${auditSnap.docs.length}`);
-    auditSnap.docs.forEach(a => {
-      console.log(`    Audit (${a.id}):`, JSON.stringify(a.data()));
-    });
+  // 2. Subcollection users/{userId}/audit_logs
+  const auditSnap = await db.collection('users').doc(userId).collection('audit_logs').orderBy('timestamp', 'desc').limit(10).get();
+  console.log(`Subcollection users/${userId}/audit_logs count:`, auditSnap.size);
+  auditSnap.forEach((doc) => {
+    console.log(`Audit [${doc.id}]:`, JSON.stringify(doc.data(), null, 2));
+  });
 
-    // Check all subcollections
-    const collections = await db.collection('users').doc(doc.id).listCollections();
-    console.log(`  Subcollections for user ${doc.id}: ${collections.map(c => c.id).join(', ')}`);
-  }
+  // 3. Subcollection users/{userId}/trades
+  const tradesSnap = await db.collection('users').doc(userId).collection('trades').orderBy('createdAt', 'desc').limit(10).get();
+  console.log(`Subcollection users/${userId}/trades count:`, tradesSnap.size);
+  tradesSnap.forEach((doc) => {
+    console.log(`Trade [${doc.id}]:`, JSON.stringify(doc.data(), null, 2));
+  });
 
-  // Also check top-level collections
-  const topCollections = await db.listCollections();
-  console.log('\n=== TOP-LEVEL COLLECTIONS ===');
-  console.log(topCollections.map(c => c.id).join(', '));
+  // 4. Root collections if any
+  const rootAlertsSnap = await db.collection('alerts').get();
+  console.log(`Root collection /alerts count:`, rootAlertsSnap.size);
+  rootAlertsSnap.forEach((doc) => {
+    console.log(`Root Alert [${doc.id}]:`, JSON.stringify(doc.data(), null, 2));
+  });
 }
 
-main().catch(err => {
-  console.error('Error querying Firestore:', err);
-  process.exit(1);
-});
+main().catch(console.error);

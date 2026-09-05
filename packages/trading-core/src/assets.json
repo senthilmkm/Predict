@@ -1,37 +1,8 @@
 [
   {
-    "key": "WTI",
-    "name": "Crude Oil 15m",
-    "seriesTicker": "KXWTI15M",
-    "pythFeedId": "925ca92ff005ae943c158e3563f59698ce7e75c5a8c8dd43303a0a154887b3e6",
-    "defaultCushion": 0.3,
-    "cushionBounds": { "min": 0.05, "max": 2.0, "step": 0.01 },
-    "scheduleType": "CME_COMMODITY",
-    "enabled": true
-  },
-  {
-    "key": "Gold",
-    "name": "Gold 15m",
-    "seriesTicker": "KXGOLD15M",
-    "pythFeedId": "765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2",
-    "defaultCushion": 7.0,
-    "cushionBounds": { "min": 1.0, "max": 30.0, "step": 0.25 },
-    "scheduleType": "CME_COMMODITY",
-    "enabled": true
-  },
-  {
-    "key": "Silver",
-    "name": "Silver 15m",
-    "seriesTicker": "KXSILVER15M",
-    "pythFeedId": "f2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e",
-    "defaultCushion": 0.23,
-    "cushionBounds": { "min": 0.05, "max": 2.0, "step": 0.01 },
-    "scheduleType": "CME_COMMODITY",
-    "enabled": true
-  },
-  {
     "key": "BTC",
     "name": "Bitcoin 15m",
+    "category": "Crypto 24/7",
     "seriesTicker": "KXBTC15M",
     "pythFeedId": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
     "defaultCushion": 175.0,
@@ -42,11 +13,199 @@
   {
     "key": "ETH",
     "name": "Ethereum 15m",
+    "category": "Crypto 24/7",
     "seriesTicker": "KXETH15M",
     "pythFeedId": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
     "defaultCushion": 9.0,
     "cushionBounds": { "min": 1.0, "max": 50.0, "step": 0.5 },
     "scheduleType": "CRYPTO_24_7",
+    "enabled": true
+  },
+  {
+    "key": "SOL",
+    "name": "Solana 15m",
+    "category": "Crypto 24/7",
+    "seriesTicker": "KXSOL15M",
+    "pythFeedId": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+    "defaultCushion": 0.5,
+    "cushionBounds": { "min": 0.05, "max": 10.0, "step": 0.05 },
+    "scheduleType": "CRYPTO_24_7",
+    "enabled": true
+  },
+  {
+    "key": "DOGE",
+    "name": "Dogecoin 15m",
+    "category": "Crypto 24/7",
+    "seriesTicker": "KXDOGE15M",
+    "pythFeedId": "dcef507438096b304533e69920e259c1f62b2be720a221f7ee69e6b49045b854",
+    "defaultCushion": 0.005,
+    "cushionBounds": { "min": 0.001, "max": 0.05, "step": 0.001 },
+    "scheduleType": "CRYPTO_24_7",
+    "enabled": true
+  },
+  {
+    "key": "XRP",
+    "name": "Ripple 15m",
+    "category": "Crypto 24/7",
+    "seriesTicker": "KXXRP15M",
+    "pythFeedId": "ec5d2022a3fc168e69f6aee963d04214ab613133a64cca36967726488d929007",
+    "defaultCushion": 0.01,
+    "cushionBounds": { "min": 0.002, "max": 0.2, "step": 0.002 },
+    "scheduleType": "CRYPTO_24_7",
+    "enabled": true
+  },
+  {
+    "key": "BNB",
+    "name": "Binance Coin 15m",
+    "category": "Crypto 24/7",
+    "seriesTicker": "KXBNB15M",
+    "pythFeedId": "2f958183921b57828675a4d31d42087de3198601e0ad408158b734e007156d11",
+    "defaultCushion": 2.5,
+    "cushionBounds": { "min": 0.25, "max": 20.0, "step": 0.25 },
+    "scheduleType": "CRYPTO_24_7",
+    "enabled": true
+  },
+  {
+    "key": "AVAX",
+    "name": "Avalanche 15m",
+    "category": "Crypto 24/7",
+    "seriesTicker": "KXAVAX15M",
+    "pythFeedId": "93be826fa71493c1ea087ebd4e60183060599a0ed35728a2a096c4b22c7eb16a",
+    "defaultCushion": 0.2,
+    "cushionBounds": { "min": 0.02, "max": 5.0, "step": 0.02 },
+    "scheduleType": "CRYPTO_24_7",
+    "enabled": true
+  },
+  {
+    "key": "SUI",
+    "name": "Sui 15m",
+    "category": "Crypto 24/7",
+    "seriesTicker": "KXSUI15M",
+    "pythFeedId": "23d73229b47e68d06b3299d2b0444f4112c290144f81c953531b7c126ec0707a",
+    "defaultCushion": 0.02,
+    "cushionBounds": { "min": 0.005, "max": 0.5, "step": 0.005 },
+    "scheduleType": "CRYPTO_24_7",
+    "enabled": true
+  },
+  {
+    "key": "LINK",
+    "name": "Chainlink 15m",
+    "category": "Crypto 24/7",
+    "seriesTicker": "KXLINK15M",
+    "pythFeedId": "86615825a5857211d29367140e69ff9f041ff9196b0266fb8d89e4722510b643",
+    "defaultCushion": 0.1,
+    "cushionBounds": { "min": 0.01, "max": 2.0, "step": 0.01 },
+    "scheduleType": "CRYPTO_24_7",
+    "enabled": true
+  },
+  {
+    "key": "WTI",
+    "name": "Crude Oil 15m",
+    "category": "CME Commodities",
+    "seriesTicker": "KXWTI15M",
+    "pythFeedId": "925ca92ff005ae943c158e3563f59698ce7e75c5a8c8dd43303a0a154887b3e6",
+    "defaultCushion": 0.3,
+    "cushionBounds": { "min": 0.05, "max": 2.0, "step": 0.01 },
+    "scheduleType": "CME_COMMODITY",
+    "enabled": true
+  },
+  {
+    "key": "Gold",
+    "name": "Gold 15m",
+    "category": "CME Commodities",
+    "seriesTicker": "KXGOLD15M",
+    "pythFeedId": "765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2",
+    "defaultCushion": 7.0,
+    "cushionBounds": { "min": 1.0, "max": 30.0, "step": 0.25 },
+    "scheduleType": "CME_COMMODITY",
+    "enabled": true
+  },
+  {
+    "key": "Silver",
+    "name": "Silver 15m",
+    "category": "CME Commodities",
+    "seriesTicker": "KXSILVER15M",
+    "pythFeedId": "f2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e",
+    "defaultCushion": 0.23,
+    "cushionBounds": { "min": 0.05, "max": 2.0, "step": 0.01 },
+    "scheduleType": "CME_COMMODITY",
+    "enabled": true
+  },
+  {
+    "key": "NG",
+    "name": "Natural Gas 15m",
+    "category": "CME Commodities",
+    "seriesTicker": "KXNG15M",
+    "pythFeedId": "f9f60f6432b4923e2fb72506e877abdb847ef1f6305a4ecb3f6bb99d63ab2153",
+    "defaultCushion": 0.02,
+    "cushionBounds": { "min": 0.005, "max": 0.2, "step": 0.005 },
+    "scheduleType": "CME_COMMODITY",
+    "enabled": true
+  },
+  {
+    "key": "COPPER",
+    "name": "Copper 15m",
+    "category": "CME Commodities",
+    "seriesTicker": "KXCOPPER15M",
+    "pythFeedId": "67d934bb04c6643666d9876798b3c66f5f3e9c56fa763c467a57a4e9b97a2245",
+    "defaultCushion": 0.01,
+    "cushionBounds": { "min": 0.002, "max": 0.1, "step": 0.002 },
+    "scheduleType": "CME_COMMODITY",
+    "enabled": true
+  },
+  {
+    "key": "SPX",
+    "name": "S&P 500 15m",
+    "category": "Stock Indices",
+    "seriesTicker": "KXINX15M",
+    "pythFeedId": "61168926955a153f3e1074e27f9850117498c801b6585149c48833989c488339",
+    "defaultCushion": 3.5,
+    "cushionBounds": { "min": 0.5, "max": 30.0, "step": 0.25 },
+    "scheduleType": "US_STOCK_HOURS",
+    "enabled": true
+  },
+  {
+    "key": "NDX",
+    "name": "Nasdaq 100 15m",
+    "category": "Stock Indices",
+    "seriesTicker": "KXNASDAQ15M",
+    "pythFeedId": "95ca28114f6b158097b37084534f595f9c403328574d32a933f0011234567890",
+    "defaultCushion": 15.0,
+    "cushionBounds": { "min": 2.0, "max": 100.0, "step": 1.0 },
+    "scheduleType": "US_STOCK_HOURS",
+    "enabled": true
+  },
+  {
+    "key": "EURUSD",
+    "name": "EUR/USD 15m",
+    "category": "Forex",
+    "seriesTicker": "KXEURUSD15M",
+    "pythFeedId": "a995d00bb36a63cef7fd2c287dc105fc8f3d937797e7807a353c907a97262078",
+    "defaultCushion": 0.0005,
+    "cushionBounds": { "min": 0.0001, "max": 0.005, "step": 0.0001 },
+    "scheduleType": "FOREX_HOURS",
+    "enabled": true
+  },
+  {
+    "key": "GBPUSD",
+    "name": "GBP/USD 15m",
+    "category": "Forex",
+    "seriesTicker": "KXGBPUSD15M",
+    "pythFeedId": "84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52b9725f46cedd4251ce72ab",
+    "defaultCushion": 0.0008,
+    "cushionBounds": { "min": 0.0001, "max": 0.008, "step": 0.0001 },
+    "scheduleType": "FOREX_HOURS",
+    "enabled": true
+  },
+  {
+    "key": "USDJPY",
+    "name": "USD/JPY 15m",
+    "category": "Forex",
+    "seriesTicker": "KXUSDJPY15M",
+    "pythFeedId": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+    "defaultCushion": 0.15,
+    "cushionBounds": { "min": 0.02, "max": 2.0, "step": 0.02 },
+    "scheduleType": "FOREX_HOURS",
     "enabled": true
   }
 ]

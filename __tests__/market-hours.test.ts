@@ -1,11 +1,13 @@
 import { isMarketOpen, getMarketScheduleNotice } from '../src/services/marketHours';
 
 describe('Market Hours Schedule', () => {
-  it('allows BTC and ETH 24/7 at all times', () => {
+  it('allows all 24/7 crypto assets at all times', () => {
     // Saturday afternoon
     const sat = new Date('2026-09-05T16:00:00Z');
-    expect(isMarketOpen('BTC', sat).open).toBe(true);
-    expect(isMarketOpen('ETH', sat).open).toBe(true);
+    const cryptoAssets = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'SUI', 'LINK'];
+    for (const a of cryptoAssets) {
+      expect(isMarketOpen(a, sat).open).toBe(true);
+    }
   });
 
   it('closes WTI, Gold, Silver on Saturdays', () => {
@@ -56,7 +58,7 @@ describe('Market Hours Schedule', () => {
   it('generates schedule notice banner for full-day closures', () => {
     const sat = new Date('2026-09-05T18:00:00Z');
     const notice = getMarketScheduleNotice(sat);
-    expect(notice).toContain('WTI, Gold & Silver markets are closed for the weekend');
-    expect(notice).toContain('reopens Sunday 6:00 PM ET');
+    expect(notice).toContain('Commodity, Stock & Forex markets are closed for the weekend');
+    expect(notice).toContain('Polling active for 24/7 Crypto');
   });
 });

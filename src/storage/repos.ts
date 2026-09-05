@@ -156,8 +156,50 @@ export function statsFromCloudTrades(cloudTrades: any[], now = new Date()): Dash
 export class MemoryAlertRepo {
   private alerts: AlertRecord[] = [];
 
-  insert(row: AlertRecord): void {
+  insert(row: AlertRecord): boolean {
+    const rowTime = new Date(row.at).getTime();
+
+    const isDup = this.alerts.some((existing) => {
+      const existingTime = new Date(existing.at).getTime();
+      const diffMs = Math.abs(rowTime - existingTime);
+      if (Number.isFinite(diffMs) && diffMs > 120_000) return false;
+
+      const norm = (s: string) =>
+        (s || '')
+          .replace(/\[.*?\]/g, '')
+          .replace(/🚨/g, '')
+          .replace(/unique gcp alert sent at.*?\u00b7/gi, '')
+          .trim()
+          .toLowerCase();
+
+      const t1 = norm(existing.title);
+      const t2 = norm(row.title);
+      const b1 = norm(existing.body);
+      const b2 = norm(row.body);
+
+      if (t1 === t2 && b1 === b2) return true;
+      if (b1.length > 5 && b1 === b2) return true;
+
+      const matchAssetSide = (s: string) => {
+        const m = s.match(/\b(btc|eth|sol|wti|spx|ixic)\s+(yes|no)\b/i);
+        return m ? m[0].toLowerCase() : null;
+      };
+
+      const as1 = matchAssetSide(existing.title) || matchAssetSide(existing.body);
+      const as2 = matchAssetSide(row.title) || matchAssetSide(row.body);
+      if (as1 && as2 && as1 === as2) {
+        return true;
+      }
+
+      return false;
+    });
+
+    if (isDup) {
+      return false;
+    }
+
     this.alerts.unshift(row);
+    return true;
   }
 
   unreadCount(): number {

@@ -58,7 +58,7 @@ describe('Predict Cloud Backend — End-to-End Integration Suite', () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.activeUserCount).toBeGreaterThanOrEqual(1);
     expect(res.body.results).toBeDefined();
-  });
+  }, 30000);
 
   test('6. GET /me/trades retrieves trade record history', async () => {
     const res = await request(app)

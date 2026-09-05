@@ -4,7 +4,7 @@ import { useConfigStore } from './configStore';
 import { DashboardStats, TradeRecord, AlertRecord, statsFromCloudTrades } from '../storage/repos';
 import { PredictCloudClient } from '../services/cloud/cloudClient';
 import { LeanResult } from '../services/lean/lean';
-import { AssetKey } from '../config/types';
+import { updateAppBadgeCount } from '../services/notifications';
 
 const EMPTY_STATS: DashboardStats = {
   wins: 0,
@@ -90,6 +90,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       });
       return;
     }
+    const unreadCount = rt.alerts.unreadCount();
+    void updateAppBadgeCount(unreadCount);
     set({
       bump: get().bump + 1,
       status: {
@@ -102,7 +104,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       stats: rt.trades.statsToday(),
       trades: rt.trades.list(100),
       alerts: rt.alerts.list(500),
-      unread: rt.alerts.unreadCount(),
+      unread: unreadCount,
       leans: { ...rt.status.lastLeans },
       leanAt: { ...rt.status.lastLeanAt },
       tradeActions: { ...rt.status.lastTradeAction },
@@ -139,8 +141,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     await get().ensure().refreshCashBalance();
     get().syncFromRuntime();
   },
-  markAllRead: () => {
-    get().runtime?.alerts.markAllRead();
+  markAllRead: async () => {
+    const rt = get().ensure();
+    await rt.markAllRead();
     get().syncFromRuntime();
   },
   pruneAlerts: () => {

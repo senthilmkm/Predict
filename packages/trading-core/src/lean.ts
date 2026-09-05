@@ -230,7 +230,7 @@ export function decideLean(
   strike: number,
   cushion: number
 ): { decision: 'YES' | 'NO' | 'SKIP'; abs_gap: number } {
-  const abs_gap = Math.abs(live - strike);
+  const abs_gap = Number(Math.abs(live - strike).toFixed(6));
   if (phase === 'ended' || phase === 'upcoming') {
     return { decision: 'SKIP', abs_gap };
   }

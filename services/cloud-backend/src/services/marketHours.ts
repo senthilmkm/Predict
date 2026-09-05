@@ -61,11 +61,20 @@ import { AssetRegistry } from 'trading-core';
 
 function getSchedule(asset: string): string {
   try {
-    if (AssetRegistry && typeof AssetRegistry.getScheduleType === 'function') {
-      return AssetRegistry.getScheduleType(asset);
+    if (typeof AssetRegistry?.getScheduleType === 'function') {
+      const st = AssetRegistry.getScheduleType(asset);
+      if (st) return st;
     }
-  } catch {}
-  if (asset === 'BTC' || asset === 'ETH') return 'CRYPTO_24_7';
+  } catch { }
+  try {
+    if (typeof AssetRegistry?.get === 'function') {
+      const def = AssetRegistry.get(asset);
+      if (def?.scheduleType) return def.scheduleType;
+    }
+  } catch { }
+  if (['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'SUI', 'LINK'].includes(asset)) return 'CRYPTO_24_7';
+  if (['SPX', 'NDX'].includes(asset)) return 'US_STOCK_HOURS';
+  if (['EURUSD', 'GBPUSD', 'USDJPY'].includes(asset)) return 'FOREX_HOURS';
   return 'CME_COMMODITY';
 }
 
@@ -75,7 +84,25 @@ export function isMarketOpen(asset: string, date: Date = new Date()): MarketHour
     return { open: true };
   }
 
-  const { weekday, hour, monthDay } = getETParts(date);
+  const { weekday, hour, minute, monthDay } = getETParts(date);
+
+  if (scheduleType === 'US_STOCK_HOURS') {
+    if (['Sat', 'Sun'].includes(weekday)) {
+      return { open: false, reason: 'Weekend halt', reopensAt: 'Mon 9:30 AM ET' };
+    }
+    const mins = hour * 60 + minute;
+    if (mins < 570 || mins >= 960) {
+      return { open: false, reason: 'Outside US stock hours (9:30 AM - 4:00 PM ET)', reopensAt: '9:30 AM ET' };
+    }
+    return { open: true };
+  }
+
+  if (scheduleType === 'FOREX_HOURS') {
+    if (weekday === 'Sat' || (weekday === 'Fri' && hour >= 17) || (weekday === 'Sun' && hour < 17)) {
+      return { open: false, reason: 'Forex weekend halt', reopensAt: 'Sun 5:00 PM ET' };
+    }
+    return { open: true };
+  }
 
   // CME Holidays
   if (CME_HOLIDAYS.has(monthDay)) {

@@ -2,9 +2,26 @@ import assetsData from './assets.json';
 
 export type AssetKey = string;
 
+export type AssetCategory = 'Crypto 24/7' | 'CME Commodities' | 'Stock Indices' | 'Forex';
+
+export const ALL_ASSET_CATEGORIES: AssetCategory[] = [
+  'Crypto 24/7',
+  'CME Commodities',
+  'Stock Indices',
+  'Forex',
+];
+
+export const CATEGORY_ICONS: Record<AssetCategory, string> = {
+  'Crypto 24/7': '🪙',
+  'CME Commodities': '🛢️',
+  'Stock Indices': '📈',
+  Forex: '💱',
+};
+
 export interface AssetDefinition {
   key: string;
   name: string;
+  category: AssetCategory;
   seriesTicker: string;
   pythFeedId: string;
   defaultCushion: number;
@@ -23,6 +40,30 @@ export class AssetRegistry {
   }
   static get keys(): string[] {
     return ASSETS_CATALOG.map((a) => a.key);
+  }
+  static get categories(): AssetCategory[] {
+    return ALL_ASSET_CATEGORIES;
+  }
+  static getCategoryIcon(category: AssetCategory | string | undefined): string {
+    if (!category) return '🪙';
+    return CATEGORY_ICONS[category as AssetCategory] || '🪙';
+  }
+  static getByCategory(category: AssetCategory): AssetDefinition[] {
+    return ASSETS_CATALOG.filter((a) => a.category === category);
+  }
+  static get byCategoryMap(): Record<AssetCategory, AssetDefinition[]> {
+    const map: Record<AssetCategory, AssetDefinition[]> = {
+      'Crypto 24/7': [],
+      'CME Commodities': [],
+      'Stock Indices': [],
+      Forex: [],
+    };
+    for (const asset of ASSETS_CATALOG) {
+      const cat = asset.category || 'Crypto 24/7';
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(asset);
+    }
+    return map;
   }
   static get(key: string): AssetDefinition | undefined {
     return ASSETS_CATALOG.find((a) => a.key === key);
