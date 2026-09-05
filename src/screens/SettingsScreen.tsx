@@ -217,6 +217,9 @@ export function SettingsScreen() {
       await withBusy('alerts', () => {
         const next = !config.alerts_enabled;
         setConfig({ alerts_enabled: next });
+        if (next && !status?.running) {
+          start();
+        }
         note(next ? 'Alerts turned on' : 'Alerts turned off');
       });
     } catch {

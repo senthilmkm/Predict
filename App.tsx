@@ -59,8 +59,9 @@ export default function App() {
       }
       return;
     }
-    // Cold start: if Auto-trade was left on, resume lean polling
-    if (ready && onboardingDone && useConfigStore.getState().config.auto_trade_enabled) {
+    // Cold start: if Auto-trade or Alerts were left on, resume lean polling
+    const cfg = useConfigStore.getState().config;
+    if (ready && onboardingDone && (cfg.auto_trade_enabled || cfg.alerts_enabled)) {
       const running = Boolean(useRuntimeStore.getState().status?.running);
       if (!running) useRuntimeStore.getState().start();
     }

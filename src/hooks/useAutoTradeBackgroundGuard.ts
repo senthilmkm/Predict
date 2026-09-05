@@ -26,9 +26,11 @@ export function useAutoTradeBackgroundGuard() {
       const returning = prev === 'background' && next === 'active';
 
       const autoOn = useConfigStore.getState().config.auto_trade_enabled;
+      const alertsOn = useConfigStore.getState().config.alerts_enabled;
+      const pollingEnabled = autoOn || alertsOn;
       const running = Boolean(useRuntimeStore.getState().status?.running);
 
-      if (leaving && autoOn) {
+      if (leaving && pollingEnabled) {
         if (running) {
           useRuntimeStore.getState().stop();
           pausedForBackground.current = true;
@@ -37,7 +39,9 @@ export function useAutoTradeBackgroundGuard() {
           notifiedThisBackground.current = true;
           void notifySystemBanner(
             'Predict — polling paused',
-            'Auto-trade is on, but the app is in the background. No new leans or trades until you reopen Predict.'
+            autoOn
+              ? 'Auto-trade is on, but the app is in the background. No new leans or trades until you reopen Predict.'
+              : 'Alerts are on, but the app is in the background. Polling paused until you reopen Predict.'
           );
         }
       }
@@ -47,16 +51,18 @@ export function useAutoTradeBackgroundGuard() {
         if (pausedForBackground.current) {
           pausedForBackground.current = false;
           const stillAuto = useConfigStore.getState().config.auto_trade_enabled;
+          const stillAlerts = useConfigStore.getState().config.alerts_enabled;
+          const stillPolling = stillAuto || stillAlerts;
           Alert.alert(
             'Polling was paused',
-            stillAuto
-              ? 'While Predict was in the background, lean polling and new auto-trades were stopped. Polling will resume now. Keep the app open for Auto-trade.'
-              : 'While Predict was in the background, lean polling was stopped. Auto-trade is currently off.',
+            stillPolling
+              ? 'While Predict was in the background, lean polling was stopped. Polling will resume now.'
+              : 'While Predict was in the background, lean polling was stopped.',
             [
               {
                 text: 'OK',
                 onPress: () => {
-                  if (stillAuto) {
+                  if (stillPolling) {
                     useRuntimeStore.getState().start();
                   }
                 },
