@@ -132,6 +132,7 @@ export function HomeScreen() {
     const open = isMarketOpen(asset, new Date(nowMs)).open;
     const rawErr = assetErrors[asset];
     const err = open ? rawErr : undefined;
+    const noMarket = open && (lean?.message === 'no_market' || lean?.message === 'strike_tbd' || (!lean && !rawErr));
     return {
       asset,
       decision: !open ? 'SKIP' : (lean?.decision ?? '—'),
@@ -141,6 +142,7 @@ export function HomeScreen() {
       trade: open ? (tradeActions[asset] as LastTradeAction | undefined) : undefined,
       priceSource: lean?.price_source,
       isOpen: open,
+      noMarket,
     };
   });
 
@@ -325,7 +327,13 @@ export function HomeScreen() {
                 ) : null}
               </View>
               <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
-                {!row.isOpen ? '(Market closed)' : row.at ? `(${formatSignalTime(row.at)} · ${relativeAge(row.at, nowMs)})` : '(—)'}
+                {!row.isOpen
+                  ? '(Market closed)'
+                  : row.noMarket
+                    ? '(No Kalshi 15m contract)'
+                    : row.at
+                      ? `(${formatSignalTime(row.at)} · ${relativeAge(row.at, nowMs)})`
+                      : '(No Kalshi 15m contract)'}
               </Text>
             </View>
           ))
