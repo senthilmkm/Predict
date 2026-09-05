@@ -20,15 +20,15 @@
     "productId": "predict_pro_monthly",
     "displayName": "Predict Pro",
     "billingPeriod": "month",
-    "priceUsd": 19.99,
-    "priceLabel": "$19.99",
+    "priceUsd": 29.99,
+    "priceLabel": "$29.99",
     "periodLabel": "/ month",
     "currencyCode": "USD",
     "freeTrial": {
       "enabled": true,
       "days": 7,
       "label": "7-day free trial",
-      "detail": "Then $19.99/month. Cancel anytime in Apple Subscriptions."
+      "detail": "Then $29.99/month. Cancel anytime in Apple Subscriptions."
     },
     "features": [
       "Kalshi 15m lean signals",
@@ -40,7 +40,7 @@
       "headline": "Trade predictions with a buffer",
       "subheadline": "Unlock live lean signals and auto-trade on Kalshi 15-minute markets.",
       "ctaTrial": "Start 7-day free trial",
-      "ctaSubscribe": "Subscribe — $19.99/mo",
+      "ctaSubscribe": "Subscribe — $29.99/mo",
       "ctaLoading": "Contacting App Store…",
       "footnote": "Payment is charged to your Apple ID. Subscription renews monthly unless canceled at least 24 hours before the period ends. Trading involves risk of loss. Predict does not guarantee profits or successful trades."
     }
@@ -51,7 +51,7 @@
       "enabled": true,
       "badge": "Launch offer",
       "title": "Try Predict free for 7 days",
-      "subtitle": "Full Pro access. Then $19.99/month.",
+      "subtitle": "Full Pro access. Then $29.99/month.",
       "accent": "gold"
     }
   ],
