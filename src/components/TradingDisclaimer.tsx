@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/tokens';
 import {
@@ -13,6 +13,8 @@ type Props = {
   variant?: 'short' | 'long';
   showTitle?: boolean;
   showTermsLink?: boolean;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
   testID?: string;
 };
 
@@ -21,36 +23,55 @@ export function TradingDisclaimer({
   variant = 'short',
   showTitle = true,
   showTermsLink = true,
+  collapsible = false,
+  defaultCollapsed = false,
   testID = 'trading-disclaimer',
 }: Props) {
+  const [collapsed, setCollapsed] = useState(collapsible ? defaultCollapsed : false);
   const pricing = getPricingConfig();
   const termsUrl = pricing.urls.terms;
   const disclaimerUrl = pricing.urls.disclaimer || termsUrl;
 
   return (
     <View style={styles.wrap} testID={testID}>
-      {showTitle ? <Text style={styles.title}>{DISCLAIMER_TITLE}</Text> : null}
-      <Text style={styles.body} testID={`${testID}-body`}>
-        {variant === 'long' ? DISCLAIMER_LONG : DISCLAIMER_SHORT}
-      </Text>
-      {showTermsLink ? (
-        <View style={styles.links}>
-          <Pressable
-            testID={`${testID}-terms`}
-            onPress={() => void Linking.openURL(termsUrl)}
-            hitSlop={8}
-          >
-            <Text style={styles.link}>Terms of Use</Text>
-          </Pressable>
-          <Text style={styles.dot}>·</Text>
-          <Pressable
-            testID={`${testID}-full`}
-            onPress={() => void Linking.openURL(disclaimerUrl)}
-            hitSlop={8}
-          >
-            <Text style={styles.link}>Full disclaimer</Text>
-          </Pressable>
-        </View>
+      {collapsible ? (
+        <Pressable
+          style={styles.headerPressable}
+          onPress={() => setCollapsed((c) => !c)}
+          testID={`${testID}-toggle`}
+        >
+          <Text style={styles.title}>{DISCLAIMER_TITLE}</Text>
+          <Text style={styles.chevron}>{collapsed ? '▼ Show' : '▲ Hide'}</Text>
+        </Pressable>
+      ) : showTitle ? (
+        <Text style={styles.title}>{DISCLAIMER_TITLE}</Text>
+      ) : null}
+
+      {!collapsed ? (
+        <>
+          <Text style={styles.body} testID={`${testID}-body`}>
+            {variant === 'long' ? DISCLAIMER_LONG : DISCLAIMER_SHORT}
+          </Text>
+          {showTermsLink ? (
+            <View style={styles.links}>
+              <Pressable
+                testID={`${testID}-terms`}
+                onPress={() => void Linking.openURL(termsUrl)}
+                hitSlop={8}
+              >
+                <Text style={styles.link}>Terms of Use</Text>
+              </Pressable>
+              <Text style={styles.dot}>·</Text>
+              <Pressable
+                testID={`${testID}-full`}
+                onPress={() => void Linking.openURL(disclaimerUrl)}
+                hitSlop={8}
+              >
+                <Text style={styles.link}>Full disclaimer</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </>
       ) : null}
     </View>
   );
@@ -65,6 +86,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     gap: 8,
+  },
+  headerPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chevron: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: '700',
   },
   title: {
     color: colors.gold,

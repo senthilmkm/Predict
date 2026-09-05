@@ -366,7 +366,13 @@ export function HomeScreen() {
       <Text style={styles.hint}>
         24/7 background trading runs securely on GCP Cloud Run. Your phone does not need to stay open.
       </Text>
-      <TradingDisclaimer variant="short" showTitle testID="home-disclaimer" />
+      <TradingDisclaimer
+        variant="short"
+        showTitle
+        collapsible
+        defaultCollapsed
+        testID="home-disclaimer"
+      />
       <SupportContactFooter />
     </ScrollView>
   );
