@@ -194,7 +194,7 @@ export function AlertsHubScreen() {
                 <Text style={styles.kind} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Text style={styles.time}>{formatAlertTime(item.at)}</Text>
+                <Text style={styles.time}>{formatAlertTime(item.at, item.source)}</Text>
               </View>
               <Text style={styles.body} numberOfLines={4}>
                 {item.body}
@@ -242,16 +242,17 @@ export function AlertsHubScreen() {
   );
 }
 
-function formatAlertTime(iso: string): string {
+function formatAlertTime(iso: string, source?: string): string {
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    const formatted = new Date(iso).toLocaleString(undefined, {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
     });
+    return source === 'gcp' ? `${formatted} •` : formatted;
   } catch {
-    return iso;
+    return source === 'gcp' ? `${iso} •` : iso;
   }
 }
 

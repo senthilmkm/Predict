@@ -17,14 +17,26 @@ export function isForbiddenError(message: string): boolean {
   return /http[_\s-]?403|\bforbidden\b/i.test(String(message || ''));
 }
 
+export function isCanceledNetworkError(message: string): boolean {
+  return /FetchRequestCanceledException|canceled|cancelled|abort|network.*failed|socket.*closed/i.test(
+    String(message || '')
+  );
+}
+
 /** Errors that belong on Home / Alerts Hub, but must not fire Expo OS pushes. */
 export function isQuietIntegrationError(message: string): boolean {
   return (
-    isRateLimitError(message) || isAuthError(message) || isForbiddenError(message)
+    isRateLimitError(message) ||
+    isAuthError(message) ||
+    isForbiddenError(message) ||
+    isCanceledNetworkError(message)
   );
 }
 
 export function humanizeQuietError(message: string): string {
+  if (isCanceledNetworkError(message)) {
+    return 'Network request paused (app backgrounded)';
+  }
   if (isRateLimitError(message)) {
     return 'Kalshi rate limit — pausing requests briefly';
   }

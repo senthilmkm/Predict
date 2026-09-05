@@ -79,6 +79,15 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
             return;
           }
 
+          // Fetch user trade history for window deduplication & risk gate limits
+          const userTrades = await getTradeRecords(userId);
+          const existingTickers = new Set(userTrades.map((t) => t.ticker));
+
+          const todayKey = new Date().toISOString().slice(0, 10);
+          const tradesTodayList = userTrades.filter((t) => (t.executedAt || '').slice(0, 10) === todayKey);
+          const openPositions = userTrades.filter((t) => t.status === 'SUBMITTED' || t.status === 'FILLED').length;
+          const tradesToday = tradesTodayList.length;
+
           const cfg = user.config || defaultAppConfig();
           const isLive = cfg.execution_mode === 'live' && user.state === 'ARMED';
           let tradesCount = 0;
@@ -109,8 +118,8 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
             const marketTicker = rawLean.market_ticker;
             const windowKey = `${userId}:${marketTicker}`;
 
-            // RACE CONDITION GUARD: Ensure no duplicate order placement in the same 15-minute window
-            if (userClaimedWindows.has(windowKey)) {
+            // RACE CONDITION GUARD: Prevent duplicate orders in the same 15-minute market window
+            if (existingTickers.has(marketTicker) || userClaimedWindows.has(windowKey)) {
               continue;
             }
 
@@ -118,6 +127,8 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
               ...rawLean,
               decision,
             };
+
+            const assetTradesToday = tradesTodayList.filter((t) => t.asset === asset).length;
 
             // Evaluate static risk gates (time left, ask price, max open positions, daily loss stop)
             const gate = evaluateStaticGate(
@@ -134,7 +145,12 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
                 yes_ask: lean.yes_ask ?? undefined,
                 no_ask: lean.no_ask ?? undefined,
               },
-              cfg
+              cfg,
+              {
+                openPositions,
+                tradesToday,
+                assetTradesToday,
+              }
             );
 
             // Signal Push Notification Dispatch (when user requested Signal Alerts)
@@ -145,6 +161,7 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
                 asset,
                 ticker: marketTicker,
                 type: 'lean_signal',
+                source: 'gcp',
               });
             }
 
@@ -203,6 +220,7 @@ workerRouter.post('/tick', async (_req: Request, res: Response) => {
                   tradeId,
                   asset: lean.asset,
                   type: 'order_filled',
+                  source: 'gcp',
                 });
               }
             }

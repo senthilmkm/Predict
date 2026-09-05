@@ -7,6 +7,7 @@ import {
   getTradeRecords,
   getAuditLogs,
   writeAuditLog,
+  getSystemConfig,
 } from '../services/firestore';
 
 export const apiRouter = Router();
@@ -141,7 +142,11 @@ apiRouter.post('/me/disclaimer', async (req: Request, res: Response) => {
 // Get User Status & Config
 apiRouter.get('/me/status', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
-  const userDoc = (await getUserDoc(userId)) || {
+  const [userDoc, systemConfig] = await Promise.all([
+    getUserDoc(userId),
+    getSystemConfig(),
+  ]);
+  const finalUserDoc = userDoc || {
     userId,
     cloudTradingEnabled: false,
     kalshiConfigured: false,
@@ -152,7 +157,8 @@ apiRouter.get('/me/status', async (req: Request, res: Response) => {
 
   res.json({
     ok: true,
-    userDoc,
+    userDoc: finalUserDoc,
+    systemConfig,
   });
 });
 

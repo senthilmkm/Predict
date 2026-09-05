@@ -19,6 +19,7 @@ import { withSupportContact } from '../config/appMeta';
 import {
   humanizeQuietError,
   isAuthError,
+  isCanceledNetworkError,
   isQuietIntegrationError,
   isRateLimitError,
 } from '../util/httpErrors';
@@ -317,7 +318,7 @@ export class AppRuntime {
    * 401 / 403 / 429 stay on-device (Home banner + history) — never Expo push spam.
    */
   private async maybeAlertIntegrationError(cfg: AppConfig, message: string) {
-    if (!message) return;
+    if (!message || isCanceledNetworkError(message)) return;
     const quiet = isQuietIntegrationError(message);
     const display = quiet ? humanizeQuietError(message) : message;
     if (this.lastErrorAlertKey === display) return;
@@ -335,6 +336,7 @@ export class AppRuntime {
     title: string,
     detail: string
   ): Promise<void> {
+    if (!detail || isCanceledNetworkError(detail)) return;
     const quiet = isQuietIntegrationError(detail);
     const display = quiet ? humanizeQuietError(detail) : detail;
     const body = quiet ? display : withSupportContact(display);
@@ -419,6 +421,11 @@ export class AppRuntime {
             this.rateLimitUntilMs = Date.now() + 30_000;
             this.noteAssetError(asset, 'rate limited · backing off 30s', tickErrors);
             break;
+          }
+          if (isCanceledNetworkError(raw)) {
+            // Screen locked / app backgrounded — iOS canceled in-flight HTTP request. Ignore quietly.
+            this.pulseHeartbeat();
+            continue;
           }
           if (isQuietIntegrationError(raw)) {
             // Public lean/spot 401 must NOT block signed Kalshi trading for 5m.
@@ -800,7 +807,7 @@ export class AppRuntime {
     return details.length;
   }
 
-  private recordAlert(kind: string, title: string, body: string) {
+  recordAlert(kind: string, title: string, body: string, source?: string) {
     const row: AlertRecord = {
       id: rid(),
       at: new Date().toISOString(),
@@ -808,6 +815,7 @@ export class AppRuntime {
       title,
       body,
       read: false,
+      source: source || 'local',
     };
     this.alerts.insert(row);
   }

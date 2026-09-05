@@ -1,6 +1,7 @@
 import {
   humanizeQuietError,
   isAuthError,
+  isCanceledNetworkError,
   isQuietIntegrationError,
   isRateLimitError,
 } from '../src/util/httpErrors';
@@ -25,9 +26,16 @@ describe('httpErrors quiet classification', () => {
     expect(isQuietIntegrationError('order failed · HTTP 401')).toBe(true);
   });
 
+  test('detects iOS screen lock FetchRequestCanceledException', () => {
+    const err = 'ETH: price/lean failed · fetch failed: FetchRequestCanceledException: Fetch request has been canceled (at Expo/NativeResponse.swift:63)';
+    expect(isCanceledNetworkError(err)).toBe(true);
+    expect(isQuietIntegrationError(err)).toBe(true);
+  });
+
   test('humanize messages', () => {
     expect(humanizeQuietError('http_429')).toMatch(/rate limit/i);
     expect(humanizeQuietError('http_401')).toMatch(/auth failed/i);
+    expect(humanizeQuietError('FetchRequestCanceledException')).toMatch(/app backgrounded/i);
   });
 });
 

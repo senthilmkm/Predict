@@ -131,7 +131,7 @@ export function HomeScreen() {
     };
   });
 
-  const lastTick = status?.lastPulseAt ?? status?.lastTickAt;
+  const lastTick = status?.lastTickAt ?? status?.lastPulseAt;
   const integrationError = status?.lastError;
   const hasAssetErrors = signalRows.some((r) => r.err);
   const autoTradeOn = config.auto_trade_enabled;
@@ -175,7 +175,7 @@ export function HomeScreen() {
         <Chip label={modeLabel(config)} accent />
         <HeartbeatChip
           running={Boolean(status?.running)}
-          lastPulseAt={status?.lastPulseAt ?? status?.lastTickAt}
+          lastPulseAt={status?.lastTickAt ?? status?.lastPulseAt}
           intervalSec={config.poll_interval_seconds}
           nowMs={nowMs}
         />
@@ -374,7 +374,6 @@ function relativeAge(iso: string, nowMs: number): string {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return '';
   const sec = Math.max(0, Math.floor((nowMs - t) / 1000));
-  if (sec < 1) return 'just now';
   if (sec < 60) return `${sec}s ago`;
   const min = Math.floor(sec / 60);
   if (min < 60) return `${min}m ago`;
@@ -402,8 +401,7 @@ function HeartbeatChip({
   const pulseOn = running && !stale && nowMs % 1000 < 500;
   const dotColor = !running ? colors.mute : stale ? colors.warn : colors.win;
   const label = !running ? 'Idle' : stale ? 'Stale' : 'Live';
-  const ageLabel =
-    running && ageSec != null ? (ageSec < 1 ? 'now' : `${ageSec}s`) : running ? '…' : null;
+  const ageLabel = running && ageSec != null ? `${ageSec}s` : running ? '…' : null;
 
   return (
     <View style={styles.chip} testID="home-heartbeat">

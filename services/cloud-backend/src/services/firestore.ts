@@ -26,7 +26,24 @@ export interface AuditLogDoc {
   timestamp: string;
 }
 
-// In-memory simulator for local tests
+export interface SystemConfig {
+  tick_interval_seconds: number;
+  stale_timeout_seconds: number;
+  batch_size: number;
+}
+
+const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
+  tick_interval_seconds: 20,
+  stale_timeout_seconds: 120,
+  batch_size: 50,
+};
+
+// In-memory simulator & cache for system config
+let localSystemConfig: SystemConfig = { ...DEFAULT_SYSTEM_CONFIG };
+let cachedSystemConfig: SystemConfig | null = null;
+let systemConfigLastFetched = 0;
+const CACHE_TTL_MS = 60000;
+
 const localUserStore = new Map<string, UserStatusDoc & { config?: any }>();
 const localTradeStore = new Map<string, TradeRecordDoc[]>();
 const localAuditStore = new Map<string, AuditLogDoc[]>();
@@ -194,4 +211,61 @@ export async function getAuditLogs(userId: string): Promise<AuditLogDoc[]> {
   } catch {
     return localAuditStore.get(userId) || [];
   }
+}
+
+export async function getSystemConfig(): Promise<SystemConfig> {
+  const now = Date.now();
+  if (cachedSystemConfig && now - systemConfigLastFetched < CACHE_TTL_MS) {
+    return cachedSystemConfig;
+  }
+  const f = getDb();
+  if (!f) {
+    cachedSystemConfig = localSystemConfig || DEFAULT_SYSTEM_CONFIG;
+    systemConfigLastFetched = now;
+    return cachedSystemConfig;
+  }
+  try {
+    const doc = await f.collection('system').doc('config').get();
+    if (doc.exists && doc.data()) {
+      cachedSystemConfig = {
+        ...DEFAULT_SYSTEM_CONFIG,
+        ...doc.data(),
+      };
+    } else {
+      cachedSystemConfig = DEFAULT_SYSTEM_CONFIG;
+    }
+  } catch {
+    cachedSystemConfig = localSystemConfig || DEFAULT_SYSTEM_CONFIG;
+  }
+  systemConfigLastFetched = now;
+  return cachedSystemConfig;
+}
+
+export async function setSystemConfig(
+  config: Partial<SystemConfig>
+): Promise<SystemConfig> {
+  const existing = await getSystemConfig();
+  const updated: SystemConfig = {
+    ...existing,
+    ...config,
+  };
+  localSystemConfig = updated;
+  cachedSystemConfig = updated;
+  systemConfigLastFetched = Date.now();
+
+  const f = getDb();
+  if (f) {
+    try {
+      await f.collection('system').doc('config').set(updated, { merge: true });
+    } catch {
+      /* fallback to local memory store */
+    }
+  }
+  return updated;
+}
+
+export function resetSystemConfigCacheForTests(): void {
+  cachedSystemConfig = null;
+  systemConfigLastFetched = 0;
+  localSystemConfig = { ...DEFAULT_SYSTEM_CONFIG };
 }

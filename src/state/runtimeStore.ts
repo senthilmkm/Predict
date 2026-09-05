@@ -158,10 +158,22 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   refreshCloudSnapshot: async () => {
     try {
       const client = new PredictCloudClient(async () => null);
-      const res = await client.getTrades();
-      if (res.ok && Array.isArray(res.trades)) {
-        const stats = statsFromCloudTrades(res.trades);
+      const [tradesRes, statusRes] = await Promise.all([
+        client.getTrades(),
+        client.getStatus(),
+      ]);
+      if (tradesRes.ok && Array.isArray(tradesRes.trades)) {
+        const stats = statsFromCloudTrades(tradesRes.trades);
         set({ stats });
+      }
+      if (statusRes.ok && statusRes.systemConfig?.tick_interval_seconds) {
+        const seconds = statusRes.systemConfig.tick_interval_seconds;
+        useConfigStore.setState((s) => ({
+          config: {
+            ...s.config,
+            poll_interval_seconds: seconds,
+          },
+        }));
       }
     } catch {
       /* Keep local stats on network error */

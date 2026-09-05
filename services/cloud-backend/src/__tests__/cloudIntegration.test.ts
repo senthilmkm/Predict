@@ -134,4 +134,17 @@ describe('Predict Cloud Backend — End-to-End Integration Suite', () => {
     const eventTypes = auditRes.body.auditLogs.map((l: any) => l.eventType);
     expect(eventTypes).toContain('KEY_WIPE');
   });
+
+  test('10. GET /me/status returns userDoc and systemConfig', async () => {
+    const res = await request(app)
+      .get('/me/status')
+      .set('Authorization', `Bearer ${userId}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.userDoc).toBeDefined();
+    expect(res.body.systemConfig).toBeDefined();
+    expect(res.body.systemConfig.tick_interval_seconds).toBe(20);
+    expect(res.body.systemConfig.batch_size).toBe(50);
+  });
 });

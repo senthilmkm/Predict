@@ -27,6 +27,7 @@ export interface AlertRecord {
   title: string;
   body: string;
   read: boolean;
+  source?: string;
 }
 
 export interface DashboardStats {

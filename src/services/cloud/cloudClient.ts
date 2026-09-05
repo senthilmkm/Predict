@@ -7,9 +7,16 @@ export interface KalshiUploadInput {
   privateKeyPem: string;
 }
 
+export interface SystemConfig {
+  tick_interval_seconds: number;
+  stale_timeout_seconds: number;
+  batch_size: number;
+}
+
 export interface CloudStatusResult {
   ok: boolean;
   userDoc?: UserStatusDoc & { config?: any };
+  systemConfig?: SystemConfig;
   error?: string;
 }
 
@@ -77,7 +84,7 @@ export class PredictCloudClient {
       const res = await this.fetchWithAuth('/me/status', { method: 'GET' });
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error || 'status_failed' };
-      return { ok: true, userDoc: data.userDoc };
+      return { ok: true, userDoc: data.userDoc, systemConfig: data.systemConfig };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
     }
