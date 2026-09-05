@@ -1,11 +1,11 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { AssetKey, CUSHION_BOUNDS } from '../config/types';
+import { AssetKey, AssetRegistry, CUSHION_BOUNDS } from '../config/types';
 import { colors, spacing } from '../theme/tokens';
 import { useConfigStore } from '../state/configStore';
 
-const ASSETS: AssetKey[] = ['WTI', 'Gold', 'Silver', 'BTC', 'ETH'];
+const ASSETS: AssetKey[] = AssetRegistry.keys;
 
 export function CushionsScreen() {
   const cushions = useConfigStore((s) => s.config.cushions);

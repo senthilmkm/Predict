@@ -57,8 +57,11 @@ export function getETParts(date: Date = new Date()) {
  *   - Mon-Thu 5:00 PM ET -> 6:00 PM ET: CLOSED (Daily CME Halt)
  *   - Holidays: CLOSED
  */
+import { AssetRegistry } from 'trading-core';
+
 export function isMarketOpen(asset: string, date: Date = new Date()): MarketHoursResult {
-  if (asset === 'BTC' || asset === 'ETH') {
+  const scheduleType = AssetRegistry.getScheduleType(asset);
+  if (scheduleType === 'CRYPTO_24_7') {
     return { open: true };
   }
 

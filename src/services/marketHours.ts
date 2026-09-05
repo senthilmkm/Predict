@@ -1,4 +1,4 @@
-import { AssetKey } from '../config/types';
+import { AssetKey, AssetRegistry } from '../config/types';
 
 export interface MarketHoursResult {
   open: boolean;
@@ -62,7 +62,8 @@ export function getETParts(date: Date = new Date()) {
  *   - Holidays: CLOSED
  */
 export function isMarketOpen(asset: AssetKey, date: Date = new Date()): MarketHoursResult {
-  if (asset === 'BTC' || asset === 'ETH') {
+  const scheduleType = AssetRegistry.getScheduleType(asset);
+  if (scheduleType === 'CRYPTO_24_7') {
     return { open: true };
   }
 

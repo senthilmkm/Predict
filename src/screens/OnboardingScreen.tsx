@@ -14,7 +14,7 @@ import { colors, spacing } from '../theme/tokens';
 import { PaywallBody } from './PaywallScreen';
 import { KalshiApiKeyHelpContent } from '../components/KalshiApiKeyHelpContent';
 import { DISCLAIMER_LONG, DISCLAIMER_SHORT, DISCLAIMER_TITLE } from '../config/disclaimers';
-import { AssetKey } from '../config/types';
+import { AssetKey, AssetRegistry } from '../config/types';
 import { useConfigStore } from '../state/configStore';
 import { hasPredictAccess, useSubscriptionStore } from '../state/subscriptionStore';
 import {
@@ -44,7 +44,7 @@ const STEPS = [
   'Trial',
 ] as const;
 
-const ALL_ASSETS: AssetKey[] = ['Gold', 'BTC', 'ETH', 'WTI', 'Silver'];
+const ALL_ASSETS: AssetKey[] = AssetRegistry.keys;
 
 type Props = {
   onFinished: () => void;

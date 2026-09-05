@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
-import { AssetKey, modeLabel } from '../config/types';
+import { AssetKey, AssetRegistry, modeLabel } from '../config/types';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { LastTradeAction } from '../runtime/AppRuntime';
@@ -20,7 +20,7 @@ import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 
-const ASSET_ORDER: AssetKey[] = ['WTI', 'Gold', 'Silver', 'BTC', 'ETH'];
+const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
 export function HomeScreen() {
   const config = useConfigStore((s) => s.config);

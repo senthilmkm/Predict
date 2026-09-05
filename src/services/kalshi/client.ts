@@ -267,10 +267,8 @@ function cryptoRandomId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export const SERIES_BY_ASSET: Record<string, string> = {
-  WTI: 'KXWTI15M',
-  Gold: 'KXGOLD15M',
-  Silver: 'KXSILVER15M',
-  BTC: 'KXBTC15M',
-  ETH: 'KXETH15M',
-};
+import { AssetRegistry } from '../../config/types';
+
+export const SERIES_BY_ASSET: Record<string, string> = new Proxy({}, {
+  get: (_target, key: string) => AssetRegistry.getSeriesTicker(key) || `KX${key.toUpperCase()}15M`
+});

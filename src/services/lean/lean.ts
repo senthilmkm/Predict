@@ -1,16 +1,12 @@
-import { AssetKey } from '../../config/types';
+import { AssetKey, AssetRegistry } from '../../config/types';
 import { SERIES_BY_ASSET } from '../kalshi/client';
 import { isMarketOpen } from '../marketHours';
 
 const PUBLIC_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
-export const PYTH_IDS: Record<AssetKey, string> = {
-  WTI: '925ca92ff005ae943c158e3563f59698ce7e75c5a8c8dd43303a0a154887b3e6',
-  Gold: '765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2',
-  Silver: 'f2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e',
-  BTC: 'e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43',
-  ETH: 'ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace',
-};
+export const PYTH_IDS: Record<string, string> = new Proxy({}, {
+  get: (_target, key: string) => AssetRegistry.getPythFeedId(key) || ''
+});
 
 export type LeanPhase = 'live' | 'upcoming' | 'ended' | 'unknown';
 

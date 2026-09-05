@@ -9,12 +9,55 @@ export interface AssetDefinition {
   pythFeedId: string;
   defaultCushion: number;
   cushionBounds: { min: number; max: number; step: number };
+  scheduleType?: 'CME_COMMODITY' | 'CRYPTO_24_7' | string;
   enabled?: boolean;
 }
 
 const rawAssets = assetsData as AssetDefinition[];
 export const ALL_ASSETS_CATALOG: AssetDefinition[] = rawAssets;
 export const ASSETS_CATALOG: AssetDefinition[] = rawAssets.filter((asset) => asset.enabled !== false);
+
+export class AssetRegistry {
+  static get list(): AssetDefinition[] {
+    return ASSETS_CATALOG;
+  }
+  static get keys(): string[] {
+    return ASSETS_CATALOG.map((a) => a.key);
+  }
+  static get(key: string): AssetDefinition | undefined {
+    return ASSETS_CATALOG.find((a) => a.key === key);
+  }
+  static getPythFeedId(key: string): string | undefined {
+    return ASSETS_CATALOG.find((a) => a.key === key)?.pythFeedId;
+  }
+  static getSeriesTicker(key: string): string | undefined {
+    return ASSETS_CATALOG.find((a) => a.key === key)?.seriesTicker;
+  }
+  static getCushionBounds(key: string): { min: number; max: number; step: number } {
+    return (
+      ASSETS_CATALOG.find((a) => a.key === key)?.cushionBounds || {
+        min: 0.05,
+        max: 500.0,
+        step: 0.01,
+      }
+    );
+  }
+  static getScheduleType(key: string): 'CME_COMMODITY' | 'CRYPTO_24_7' | string {
+    return ASSETS_CATALOG.find((a) => a.key === key)?.scheduleType || 'CRYPTO_24_7';
+  }
+  static getDefaultCushions(): CushionConfig {
+    return ASSETS_CATALOG.reduce((acc, asset) => {
+      acc[asset.key] = asset.defaultCushion;
+      return acc;
+    }, {} as Record<string, number>);
+  }
+  static getDefaultEnabled(): Record<string, boolean> {
+    return ASSETS_CATALOG.reduce((acc, asset) => {
+      acc[asset.key] = true;
+      return acc;
+    }, {} as Record<string, boolean>);
+  }
+}
 
 export type ExecutionMode = 'off' | 'live';
 

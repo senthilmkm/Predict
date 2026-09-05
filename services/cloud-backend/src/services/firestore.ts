@@ -269,3 +269,22 @@ export function resetSystemConfigCacheForTests(): void {
   systemConfigLastFetched = 0;
   localSystemConfig = { ...DEFAULT_SYSTEM_CONFIG };
 }
+
+export async function syncAssetCatalogToFirestore(): Promise<any[]> {
+  const { ASSETS_CATALOG } = require('trading-core');
+  const f = getDb();
+  if (f) {
+    try {
+      await f.collection('system').doc('catalog').set(
+        {
+          assets: ASSETS_CATALOG,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch {
+      /* fallback to local memory store */
+    }
+  }
+  return ASSETS_CATALOG;
+}

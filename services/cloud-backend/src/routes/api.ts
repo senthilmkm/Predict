@@ -8,6 +8,7 @@ import {
   getAuditLogs,
   writeAuditLog,
   getSystemConfig,
+  syncAssetCatalogToFirestore,
 } from '../services/firestore';
 
 export const apiRouter = Router();
@@ -142,9 +143,10 @@ apiRouter.post('/me/disclaimer', async (req: Request, res: Response) => {
 // Get User Status & Config
 apiRouter.get('/me/status', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
-  const [userDoc, systemConfig] = await Promise.all([
+  const [userDoc, systemConfig, assetsCatalog] = await Promise.all([
     getUserDoc(userId),
     getSystemConfig(),
+    syncAssetCatalogToFirestore(),
   ]);
   const finalUserDoc = userDoc || {
     userId,
@@ -159,6 +161,7 @@ apiRouter.get('/me/status', async (req: Request, res: Response) => {
     ok: true,
     userDoc: finalUserDoc,
     systemConfig,
+    assetsCatalog,
   });
 });
 

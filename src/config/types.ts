@@ -1,4 +1,61 @@
-export type AssetKey = 'WTI' | 'Gold' | 'Silver' | 'BTC' | 'ETH';
+import assetsData from '../../packages/trading-core/src/assets.json';
+
+export type AssetKey = string;
+
+export interface AssetDefinition {
+  key: string;
+  name: string;
+  seriesTicker: string;
+  pythFeedId: string;
+  defaultCushion: number;
+  cushionBounds: { min: number; max: number; step: number };
+  scheduleType?: 'CME_COMMODITY' | 'CRYPTO_24_7' | string;
+  enabled?: boolean;
+}
+
+export const ASSETS_CATALOG: AssetDefinition[] = (assetsData as AssetDefinition[]).filter((a) => a.enabled !== false);
+
+export class AssetRegistry {
+  static get list(): AssetDefinition[] {
+    return ASSETS_CATALOG;
+  }
+  static get keys(): string[] {
+    return ASSETS_CATALOG.map((a) => a.key);
+  }
+  static get(key: string): AssetDefinition | undefined {
+    return ASSETS_CATALOG.find((a) => a.key === key);
+  }
+  static getPythFeedId(key: string): string | undefined {
+    return ASSETS_CATALOG.find((a) => a.key === key)?.pythFeedId;
+  }
+  static getSeriesTicker(key: string): string | undefined {
+    return ASSETS_CATALOG.find((a) => a.key === key)?.seriesTicker;
+  }
+  static getCushionBounds(key: string): { min: number; max: number; step: number } {
+    return (
+      ASSETS_CATALOG.find((a) => a.key === key)?.cushionBounds || {
+        min: 0.05,
+        max: 500.0,
+        step: 0.01,
+      }
+    );
+  }
+  static getScheduleType(key: string): 'CME_COMMODITY' | 'CRYPTO_24_7' | string {
+    return ASSETS_CATALOG.find((a) => a.key === key)?.scheduleType || 'CRYPTO_24_7';
+  }
+  static getDefaultCushions(): Record<string, number> {
+    return ASSETS_CATALOG.reduce((acc, asset) => {
+      acc[asset.key] = asset.defaultCushion;
+      return acc;
+    }, {} as Record<string, number>);
+  }
+  static getDefaultEnabled(): Record<string, boolean> {
+    return ASSETS_CATALOG.reduce((acc, asset) => {
+      acc[asset.key] = true;
+      return acc;
+    }, {} as Record<string, boolean>);
+  }
+}
 
 /** @deprecated dry_run removed from product — persisted values migrate to off */
 export type ExecutionMode = 'off' | 'live';
@@ -15,21 +72,9 @@ export type AlertKind =
   | 'daily_loss_stop'
   | 'error';
 
-export interface CushionConfig {
-  WTI: number;
-  Gold: number;
-  Silver: number;
-  BTC: number;
-  ETH: number;
-}
+export type CushionConfig = Record<string, number>;
 
-export interface AssetEnabled {
-  WTI: boolean;
-  Gold: boolean;
-  Silver: boolean;
-  BTC: boolean;
-  ETH: boolean;
-}
+export type AssetEnabled = Record<string, boolean>;
 
 export interface RiskConfig {
   fixed_dollars_per_trade: number;
@@ -97,24 +142,14 @@ export interface AppConfig {
   alert_prefs: Record<AlertKind, AlertPref>;
 }
 
-export const DEFAULT_CUSHIONS: CushionConfig = {
-  WTI: 0.3,
-  Gold: 7,
-  Silver: 0.23,
-  BTC: 175,
-  ETH: 9,
-};
+export const DEFAULT_CUSHIONS: CushionConfig = AssetRegistry.getDefaultCushions();
 
 export const CUSHION_BOUNDS: Record<
-  AssetKey,
+  string,
   { min: number; max: number; step: number }
-> = {
-  WTI: { min: 0.05, max: 2, step: 0.01 },
-  Gold: { min: 1, max: 30, step: 0.25 },
-  Silver: { min: 0.05, max: 2, step: 0.01 },
-  BTC: { min: 25, max: 500, step: 5 },
-  ETH: { min: 1, max: 50, step: 0.5 },
-};
+> = new Proxy({}, {
+  get: (_target, key: string) => AssetRegistry.getCushionBounds(key)
+});
 
 export const ALL_ALERT_KINDS: AlertKind[] = [
   'lean_signal',
@@ -145,13 +180,7 @@ export function defaultAppConfig(): AppConfig {
     poll_interval_seconds: POLL_INTERVAL_DEFAULT_SEC,
     alert_retention_days: ALERT_RETENTION_DEFAULT_DAYS,
     cushions: { ...DEFAULT_CUSHIONS },
-    assets_enabled: {
-      WTI: true,
-      Gold: true,
-      Silver: true,
-      BTC: true,
-      ETH: true,
-    },
+    assets_enabled: AssetRegistry.getDefaultEnabled(),
     // Keep in sync with riskDefaults.ts DEFAULT_RISK_CONFIG (Predict Tab)
     risk: {
       fixed_dollars_per_trade: 5,
