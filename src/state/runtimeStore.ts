@@ -5,6 +5,7 @@ import { DashboardStats, TradeRecord, AlertRecord, statsFromCloudTrades } from '
 import { PredictCloudClient } from '../services/cloud/cloudClient';
 import { LeanResult } from '../services/lean/lean';
 import { updateAppBadgeCount } from '../services/notifications';
+import { AssetKey } from '../config/types';
 
 const EMPTY_STATS: DashboardStats = {
   wins: 0,
