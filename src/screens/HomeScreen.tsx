@@ -131,7 +131,7 @@ export function HomeScreen() {
     };
   });
 
-  const lastTick = status?.lastTickAt;
+  const lastTick = status?.lastPulseAt ?? status?.lastTickAt;
   const integrationError = status?.lastError;
   const hasAssetErrors = signalRows.some((r) => r.err);
   const autoTradeOn = config.auto_trade_enabled;
@@ -218,9 +218,7 @@ export function HomeScreen() {
           <>
             <Text style={styles.value}>No app fills today</Text>
             <Text style={styles.snapHint}>
-              This card only counts trades Predict placed on this phone (America/New_York). It does
-              not pull Kalshi account history or desktop Command Center trades. Turn on Auto-trade
-              and keep the app open to record fills here.
+              Counts today’s trades executed by Predict on GCP Cloud Run (America/New_York). Fills and P&L update automatically as trades resolve.
             </Text>
           </>
         ) : (
