@@ -55,7 +55,7 @@ function getDb(): Firestore | null {
   }
   if (!db) {
     try {
-      db = new Firestore();
+      db = new Firestore({ projectId: process.env.GCP_PROJECT || 'predict-trading-0904' });
     } catch {
       db = null;
     }
