@@ -11,6 +11,8 @@ export async function sendPushNotification(
   const messages = tokens.map((token) => ({
     to: token,
     sound: 'default',
+    priority: 'high',
+    badge: 1,
     title,
     body,
     data: { source: 'gcp', ...(data || {}) },

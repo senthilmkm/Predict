@@ -71,8 +71,39 @@ export async function bindNativeNotifications(): Promise<void> {
         if (!content) return;
         const title = content.title || 'Alert';
         const body = content.body || '';
-        const kind = content.data?.kind || 'lean_signal';
-        const source = content.data?.source || 'local';
+        const kind = content.data?.kind || content.data?.type || 'lean_signal';
+        const source = content.data?.source || 'gcp';
+        useRuntimeStore.getState().runtime?.recordAlert(kind, title, body, source);
+      } catch {
+        /* best effort */
+      }
+    });
+
+    Notifications.addNotificationResponseReceivedListener((response: any) => {
+      try {
+        const { useRuntimeStore } = require('../state/runtimeStore');
+        const content = response?.notification?.request?.content;
+        if (!content) return;
+        const title = content.title || 'Alert';
+        const body = content.body || '';
+        const kind = content.data?.kind || content.data?.type || 'lean_signal';
+        const source = content.data?.source || 'gcp';
+        useRuntimeStore.getState().runtime?.recordAlert(kind, title, body, source);
+      } catch {
+        /* best effort */
+      }
+    });
+
+    Notifications.getLastNotificationResponseAsync().then((response: any) => {
+      if (!response) return;
+      try {
+        const { useRuntimeStore } = require('../state/runtimeStore');
+        const content = response?.notification?.request?.content;
+        if (!content) return;
+        const title = content.title || 'Alert';
+        const body = content.body || '';
+        const kind = content.data?.kind || content.data?.type || 'lean_signal';
+        const source = content.data?.source || 'gcp';
         useRuntimeStore.getState().runtime?.recordAlert(kind, title, body, source);
       } catch {
         /* best effort */
