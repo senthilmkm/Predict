@@ -122,14 +122,14 @@ export function HomeScreen() {
     const at = leanAt[asset];
     const open = isMarketOpen(asset, new Date(nowMs)).open;
     const rawErr = assetErrors[asset];
-    const err = open && rawErr && !rawErr.includes('no market ticker') && !rawErr.includes('Market closed') ? rawErr : undefined;
+    const err = open ? rawErr : undefined;
     return {
       asset,
       decision: !open ? 'SKIP' : (lean?.decision ?? '—'),
       gap: open ? lean?.abs_gap : undefined,
       at,
       err,
-      trade: tradeActions[asset] as LastTradeAction | undefined,
+      trade: open ? (tradeActions[asset] as LastTradeAction | undefined) : undefined,
       priceSource: lean?.price_source,
       isOpen: open,
     };
@@ -137,13 +137,16 @@ export function HomeScreen() {
 
   const lastTick = status?.lastTickAt ?? status?.lastPulseAt;
   const rawIntegrationError = status?.lastError;
-  const integrationError =
-    rawIntegrationError &&
-    !rawIntegrationError.includes('no market ticker') &&
-    !rawIntegrationError.includes('Market closed') &&
-    !rawIntegrationError.includes('no_market')
-      ? rawIntegrationError
-      : null;
+  let integrationError: string | null = null;
+  if (rawIntegrationError) {
+    const isClosedMarketErr = ASSET_ORDER.some((asset) => {
+      const isClosed = !isMarketOpen(asset, new Date(nowMs)).open;
+      return isClosed && rawIntegrationError.includes(asset);
+    });
+    if (!isClosedMarketErr && !rawIntegrationError.includes('Market closed') && !rawIntegrationError.includes('no_market')) {
+      integrationError = rawIntegrationError;
+    }
+  }
   const hasAssetErrors = signalRows.some((r) => r.isOpen && r.err);
   const autoTradeOn = config.auto_trade_enabled;
   const killDisarmed = !autoTradeOn || Boolean(status?.killSwitch);

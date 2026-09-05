@@ -81,8 +81,34 @@ export async function bindNativeNotifications(): Promise<void> {
 
     const settings = await Notifications.getPermissionsAsync();
     wireNotifyImpl(Notifications, settings.status);
+    if (settings.status === 'granted') {
+      void syncPushTokenWithCloud();
+    }
   } catch {
     /* node / tests — or Expo Go without native entitlements */
+  }
+}
+
+export async function syncPushTokenWithCloud(): Promise<void> {
+  try {
+    const Notifications = require('expo-notifications');
+    const settings = await Notifications.getPermissionsAsync();
+    if (settings.status !== 'granted') return;
+
+    let projectId = 'a03a8787-9892-4b03-b817-802af17715cf';
+    try {
+      const Constants = require('expo-constants').default;
+      projectId = Constants?.expoConfig?.extra?.eas?.projectId || projectId;
+    } catch {}
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    const pushToken = tokenData?.data;
+    if (pushToken) {
+      const { cloudClient } = require('./cloud/cloudClient');
+      await cloudClient.registerPushToken(pushToken);
+    }
+  } catch {
+    /* node / tests fallback */
   }
 }
 
@@ -105,6 +131,9 @@ export async function requestNotificationPermission(): Promise<
       status = req.status;
     }
     wireNotifyImpl(Notifications, status);
+    if (status === 'granted') {
+      void syncPushTokenWithCloud();
+    }
     return status === 'granted' ? 'granted' : 'denied';
   } catch {
     return 'unavailable';
