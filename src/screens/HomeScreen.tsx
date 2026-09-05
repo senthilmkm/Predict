@@ -135,7 +135,7 @@ export function HomeScreen() {
     const noMarket = open && (lean?.message === 'no_market' || lean?.message === 'strike_tbd' || (!lean && !rawErr));
     return {
       asset,
-      decision: !open ? 'SKIP' : (lean?.decision ?? '—'),
+      decision: !open || noMarket ? 'SKIP' : (lean?.decision ?? '—'),
       gap: open ? lean?.abs_gap : undefined,
       at,
       err,
