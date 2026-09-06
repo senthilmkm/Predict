@@ -1,7 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
+import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
+import { AssetKey } from '../config/types';
+import { LeanResult } from '../services/lean/lean';
+import { TradeRecord } from '../storage/repos';
 import {
   ALERT_FILTERS,
   TRADE_FILTERS,
@@ -12,11 +16,55 @@ import {
   filterTrades,
 } from '../history/filters';
 
+export function computeTradeStatusDot(
+  trade: TradeRecord,
+  lean?: LeanResult | null,
+  cushionUsd?: number
+): { color: string; statusLabel: string; testIDColor: string } {
+  // Settled Trades
+  if (trade.outcome === 'win') {
+    return { color: '#22c55e', statusLabel: 'Favorable (Settled Win)', testIDColor: 'green' };
+  }
+  if (trade.outcome === 'loss') {
+    return { color: '#ef4444', statusLabel: 'Unfavorable (Settled Loss)', testIDColor: 'red' };
+  }
+  if (trade.outcome === 'miss') {
+    return { color: '#6b7280', statusLabel: 'IOC Miss (No fill)', testIDColor: 'gray' };
+  }
+
+  // Active / Pending Trades
+  if (
+    !lean ||
+    lean.live == null ||
+    lean.strike == null ||
+    !Number.isFinite(lean.live) ||
+    !Number.isFinite(lean.strike)
+  ) {
+    return { color: '#eab308', statusLabel: 'Pending (Live check…)', testIDColor: 'yellow' };
+  }
+
+  const live = Number(lean.live);
+  const strike = Number(lean.strike);
+  const cushion = Math.max(0, Number(cushionUsd) || 0);
+
+  const diff = trade.side === 'YES' ? live - strike : strike - live;
+
+  if (diff >= cushion - 1e-9) {
+    return { color: '#22c55e', statusLabel: 'Favorable (ITM ≥ Cushion)', testIDColor: 'green' };
+  }
+  if (diff >= -1e-9) {
+    return { color: '#eab308', statusLabel: 'At Border (ITM < Cushion)', testIDColor: 'yellow' };
+  }
+  return { color: '#ef4444', statusLabel: 'Unfavorable (OTM)', testIDColor: 'red' };
+}
+
 export function HistoryScreen() {
   const [tab, setTab] = useState<'trades' | 'alerts'>('trades');
   const [alertFilter, setAlertFilter] = useState<AlertFilter>('all');
   const [tradeFilter, setTradeFilter] = useState<TradeFilter>('all');
+  const cushions = useConfigStore((s) => s.config.cushions);
   const trades = useRuntimeStore((s) => s.trades);
+  const leans = useRuntimeStore((s) => s.leans);
   const alerts = useRuntimeStore((s) => s.alerts);
 
   const filteredTrades = useMemo(
@@ -64,19 +112,32 @@ export function HistoryScreen() {
             <FlatList
               data={filteredTrades}
               keyExtractor={(i) => i.id}
-              renderItem={({ item }) => (
-                <View style={styles.row} testID={`trade-row-${item.id}`}>
-                  <Text style={styles.title}>
-                    {item.asset} {item.side} · {item.outcome}
-                  </Text>
-                  <Text style={styles.sub}>
-                    {item.market_ticker} · cost ${item.notional_usd.toFixed(2)}
-                    {item.fill_count != null ? ` · ${item.fill_count} ctr` : ''}
-                    {item.pnl_usd != null ? ` · P&L $${item.pnl_usd.toFixed(2)}` : ''}
-                  </Text>
-                  <Text style={styles.time}>{new Date(item.at).toLocaleString()}</Text>
-                </View>
-              )}
+              renderItem={({ item }) => {
+                const lean = leans[item.asset as AssetKey];
+                const cushion = cushions[item.asset as AssetKey];
+                const statusInfo = computeTradeStatusDot(item, lean, cushion);
+
+                return (
+                  <View style={styles.row} testID={`trade-row-${item.id}`}>
+                    <View style={styles.tradeTitleGroup}>
+                      <View
+                        style={[styles.statusDot, { backgroundColor: statusInfo.color }]}
+                        testID={`trade-status-dot-${item.id}-${statusInfo.testIDColor}`}
+                        accessibilityLabel={statusInfo.statusLabel}
+                      />
+                      <Text style={styles.title}>
+                        {item.asset} {item.side} · {item.outcome}
+                      </Text>
+                    </View>
+                    <Text style={styles.sub}>
+                      {item.market_ticker} · cost ${item.notional_usd.toFixed(2)}
+                      {item.fill_count != null ? ` · ${item.fill_count} ctr` : ''}
+                      {item.pnl_usd != null ? ` · P&L $${item.pnl_usd.toFixed(2)}` : ''}
+                    </Text>
+                    <Text style={styles.time}>{new Date(item.at).toLocaleString()}</Text>
+                  </View>
+                );
+              }}
             />
           )}
         </>
@@ -216,6 +277,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   unread: { borderColor: colors.accent },
+  tradeTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
   title: { color: colors.textPrimary, fontWeight: '600' },
   sub: { color: colors.textSecondary, marginTop: 4, fontSize: 13 },
   time: { color: colors.mute, marginTop: 4, fontSize: 11 },

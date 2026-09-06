@@ -22,6 +22,50 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('History / Dashboard / AlertsHub', () => {
+  test('History trade status dot logic (favorable green, border yellow, unfavorable red)', async () => {
+    useRuntimeStore.setState({
+      trades: [
+        {
+          id: 't-win',
+          at: '2026-09-03T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-TEST',
+          side: 'YES',
+          notional_usd: 10,
+          outcome: 'win',
+          dry_run: false,
+        } as any,
+        {
+          id: 't-pending-green',
+          at: '2026-09-03T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-TEST',
+          side: 'YES',
+          notional_usd: 10,
+          outcome: 'pending',
+          dry_run: false,
+        } as any,
+      ],
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-TEST',
+          decision: 'YES',
+          live: 65200,
+          strike: 65000,
+          abs_gap: 200,
+          minutes_left: 10,
+          phase: 'live',
+          ok: true,
+        },
+      },
+    });
+
+    const s = await render(<HistoryScreen />);
+    expect(s.getByTestId('trade-status-dot-t-win-green')).toBeTruthy();
+    expect(s.getByTestId('trade-status-dot-t-pending-green-green')).toBeTruthy();
+  });
+
   test('History segments and filters', async () => {
     const s = await render(<HistoryScreen />);
     expect(s.getByTestId('screen-history')).toBeTruthy();
