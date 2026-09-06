@@ -353,10 +353,16 @@ export class AppRuntime {
     await maybeNotify(cfg, 'error', title, body);
   }
 
-  /** Keep Home heartbeat Live during long multi-asset ticks. */
-  private pulseHeartbeat(): void {
+  private lastOnChangeMs = 0;
+
+  /** Keep Home heartbeat Live during long multi-asset ticks without spamming UI re-renders. */
+  private pulseHeartbeat(forceNotify = false): void {
     this.status.lastPulseAt = new Date().toISOString();
-    this.onChange?.();
+    const now = Date.now();
+    if (forceNotify || now - this.lastOnChangeMs >= 1500) {
+      this.lastOnChangeMs = now;
+      this.onChange?.();
+    }
   }
 
   async tick(): Promise<void> {
@@ -709,7 +715,7 @@ export class AppRuntime {
       await this.persistHistory();
     } finally {
       this.tickInFlight = false;
-      this.pulseHeartbeat();
+      this.pulseHeartbeat(true);
     }
   }
 

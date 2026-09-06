@@ -93,6 +93,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
     const unreadCount = rt.alerts.unreadCount();
     void updateAppBadgeCount(unreadCount);
+
+    const localStats = rt.trades.statsToday();
+    const localTotal = localStats.wins + localStats.losses + localStats.pending + localStats.misses;
+    const currentStats = get().stats;
+    const currentTotal = currentStats.wins + currentStats.losses + currentStats.pending + currentStats.misses;
+    const statsToUse = localTotal > 0 ? localStats : currentTotal > 0 ? currentStats : localStats;
+
     set({
       bump: get().bump + 1,
       status: {
@@ -102,7 +109,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         lastTradeAction: { ...rt.status.lastTradeAction },
         assetErrors: { ...rt.status.assetErrors },
       },
-      stats: rt.trades.statsToday(),
+      stats: statsToUse,
       trades: rt.trades.list(100),
       alerts: rt.alerts.list(500),
       unread: unreadCount,

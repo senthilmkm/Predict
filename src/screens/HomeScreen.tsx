@@ -55,7 +55,7 @@ export function HomeScreen() {
   const [killBusy, setKillBusy] = useState(false);
 
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 500);
+    const id = setInterval(() => setNowMs(Date.now()), 5000);
     return () => clearInterval(id);
   }, []);
 
