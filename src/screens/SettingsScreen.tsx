@@ -946,7 +946,7 @@ export function SettingsScreen() {
         ) : null}
 
         <Text style={styles.warn}>
-          Paste your Kalshi API key ID and private key PEM. Keep the app open while auto-trading.
+          Paste your Kalshi API key ID and private key PEM. Saved credentials enable 24/7 cloud auto-trading on GCP.
         </Text>
 
         <Text style={styles.section}>Legal</Text>
@@ -1051,7 +1051,7 @@ function RiskHelpModal({
             </HelpItem>
             <HelpItem title="Auto-trade">
               When On, the app may place real Kalshi buy orders when cushions and Risk gates pass.
-              Turning this On requires Face ID / biometrics. Keep the app open while auto-trading.
+              Turning this On requires Face ID / biometrics. Auto-trading runs 24/7 securely on GCP Cloud Run.
               Independent from alerts — you can trade with alerts muted.
             </HelpItem>
             <HelpItem title="Keep alert history / Prune">

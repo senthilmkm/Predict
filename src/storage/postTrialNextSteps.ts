@@ -74,7 +74,7 @@ export function buildPostTrialNextStepsPlan(input: {
       title: autoTradeEnabled ? 'Auto-trade on' : 'Enable Auto-trade',
       detail: autoTradeEnabled
         ? 'Live orders allowed when cushions and risk gates pass.'
-        : 'In Settings — Face ID confirms; keep the app open while trading.',
+        : 'In Settings — Face ID confirms 24/7 GCP cloud auto-trading.',
       done: autoTradeEnabled,
     });
   }

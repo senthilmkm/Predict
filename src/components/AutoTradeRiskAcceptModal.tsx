@@ -51,7 +51,7 @@ export function AutoTradeRiskAcceptModal({ visible, onCancel, onAccept }: Props)
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             <Text style={styles.lead}>
               Auto-trade can place real Kalshi orders with your saved credentials when cushions and
-              risk gates pass. Keep the app open — iOS will not keep polling in the background.
+              risk gates pass. Runs 24/7 securely on GCP Cloud Run without needing to keep the app open.
             </Text>
             <Text style={styles.disclaimer}>{DISCLAIMER_SHORT}</Text>
             <Text style={styles.lead}>

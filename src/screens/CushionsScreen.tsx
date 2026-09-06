@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import {
   ALL_ASSET_CATEGORIES,
@@ -37,6 +37,31 @@ export function CushionsScreen() {
     );
   };
 
+  const handlePromptCushion = (assetDef: AssetDefinition, currentVal: number) => {
+    const a = assetDef.key;
+    const b = assetDef.cushionBounds;
+    if (typeof Alert.prompt === 'function') {
+      Alert.prompt(
+        `Set ${assetDef.name} Cushion`,
+        `Enter cushion value between $${b.min} and $${b.max} (step $${b.step}):`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Save',
+            onPress: (text?: string) => {
+              const num = parseFloat(text || '');
+              if (!isNaN(num)) {
+                setCushion(a, num);
+              }
+            },
+          },
+        ],
+        'plain-text',
+        String(currentVal)
+      );
+    }
+  };
+
   const categoriesToDisplay =
     selectedFilter === 'All'
       ? ALL_ASSET_CATEGORIES
@@ -54,8 +79,7 @@ export function CushionsScreen() {
       {/* Option A: Top Sub-Header with Reset Button */}
       <View style={styles.introHeader}>
         <Text style={styles.intro}>
-          Static $ cushions — trade only when gap clears the buffer. Drag to adjust; saves
-          automatically.
+          Static $ cushions — trade only when gap clears the buffer. Tap value, drag slider, or use nudge buttons to adjust; saves automatically.
         </Text>
         <Pressable
           testID="reset-cushions-top-btn"
@@ -148,9 +172,15 @@ export function CushionsScreen() {
                         <Text style={styles.asset}>
                           {assetDef.name} ({a})
                         </Text>
-                        <Text style={styles.cushion} testID={`cushion-value-${a}`}>
-                          ${val}
-                        </Text>
+                        <Pressable
+                          testID={`cushion-value-touch-${a}`}
+                          onPress={() => handlePromptCushion(assetDef, val)}
+                          hitSlop={8}
+                        >
+                          <Text style={styles.cushion} testID={`cushion-value-${a}`}>
+                            ${val}
+                          </Text>
+                        </Pressable>
                       </View>
                       <Switch
                         testID={`cushion-enable-${a}`}
@@ -165,7 +195,7 @@ export function CushionsScreen() {
                       maximumValue={b.max}
                       step={b.step}
                       value={val}
-                      onValueChange={(v) => setCushion(a, Math.round(v * 100) / 100)}
+                      onValueChange={(v) => setCushion(a, v)}
                       minimumTrackTintColor={colors.accent}
                       maximumTrackTintColor={colors.border}
                       thumbTintColor={colors.gold}
@@ -178,14 +208,16 @@ export function CushionsScreen() {
                       <Pressable
                         testID={`cushion-dec-${a}`}
                         style={styles.chip}
-                        onPress={() => setCushion(a, Math.round((val - b.step) * 100) / 100)}
+                        onPress={() => setCushion(a, val - b.step)}
+                        hitSlop={8}
                       >
                         <Text style={styles.chipText}>-{b.step}</Text>
                       </Pressable>
                       <Pressable
                         testID={`cushion-inc-${a}`}
                         style={styles.chip}
-                        onPress={() => setCushion(a, Math.round((val + b.step) * 100) / 100)}
+                        onPress={() => setCushion(a, val + b.step)}
+                        hitSlop={8}
                       >
                         <Text style={styles.chipText}>+{b.step}</Text>
                       </Pressable>
