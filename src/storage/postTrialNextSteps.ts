@@ -61,10 +61,10 @@ export function buildPostTrialNextStepsPlan(input: {
 
   steps.push({
     id: 'start_poller',
-    title: pollerRunning ? 'Poller running' : 'Start the poller',
+    title: pollerRunning ? 'Live feed active' : 'Activate live signal feed',
     detail: pollerRunning
-      ? 'Lean signals will refresh on this screen.'
-      : 'Turns on lean signal checks while the app stays open.',
+      ? 'Real-time lean signals are active on this phone.'
+      : 'Turns on live signal checks while the app stays open.',
     done: pollerRunning,
   });
 
@@ -87,8 +87,8 @@ export function buildPostTrialNextStepsPlan(input: {
     subhead: wantsAuto
       ? 'You chose alerts with Auto-trade later. Finish these steps when you are ready.'
       : hasCredentials
-        ? 'You chose alerts only. Start the poller to see lean signals.'
-        : 'You chose alerts only. Start the poller for lean signals — add Kalshi later in Settings if you want balances.',
+        ? 'You chose alerts only. Activate the live feed to see lean signals.'
+        : 'You chose alerts only. Activate the live feed for lean signals — add Kalshi later in Settings if you want balances.',
     steps,
     allDone,
   };

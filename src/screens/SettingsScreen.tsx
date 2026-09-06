@@ -644,10 +644,10 @@ export function SettingsScreen() {
 
         <Row
           testID="toggle-poller"
-          label="Poller"
-          value={status?.running ? 'Running' : 'Stopped'}
+          label="Live Feed Polling"
+          value={status?.running ? 'Active' : 'Paused'}
           busy={busyKey === 'poller'}
-          busyLabel={status?.running ? 'Stopping…' : 'Starting…'}
+          busyLabel={status?.running ? 'Pausing…' : 'Activating…'}
           disabled={anyBusy}
           onPress={() => void togglePoller()}
         />

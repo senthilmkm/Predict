@@ -155,7 +155,7 @@ export function PostTrialNextStepsModal({ onOpenSettings }: Props) {
             >
               <Text style={styles.ctaText}>
                 {nextIncomplete.id === 'start_poller'
-                  ? 'Start poller now'
+                  ? 'Activate live feed'
                   : nextIncomplete.id === 'add_kalshi'
                     ? 'Open Settings · Kalshi'
                     : 'Open Settings · Auto-trade'}

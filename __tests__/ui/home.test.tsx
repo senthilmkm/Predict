@@ -35,6 +35,7 @@ describe('HomeScreen', () => {
     expect(s.getByText('Cash')).toBeTruthy();
     expect(s.getByTestId('home-heartbeat')).toBeTruthy();
     expect(s.getByTestId('btn-kill-switch')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('btn-toggle-dev-tools'));
     expect(s.getByTestId('btn-toggle-poller')).toBeTruthy();
     expect(s.getByTestId('btn-tick-once')).toBeTruthy();
     expect(s.getByTestId('support-contact')).toBeTruthy();
