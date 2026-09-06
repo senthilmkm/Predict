@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import {
   ALL_ASSET_CATEGORIES,
@@ -7,6 +7,7 @@ import {
   AssetDefinition,
   AssetRegistry,
   CATEGORY_ICONS,
+  DEFAULT_CUSHIONS,
 } from '../config/types';
 import { colors, spacing } from '../theme/tokens';
 import { useConfigStore } from '../state/configStore';
@@ -15,8 +16,26 @@ export function CushionsScreen() {
   const cushions = useConfigStore((s) => s.config.cushions);
   const enabled = useConfigStore((s) => s.config.assets_enabled);
   const setCushion = useConfigStore((s) => s.setCushion);
+  const setConfig = useConfigStore((s) => s.setConfig);
   const setAssetEnabled = useConfigStore((s) => s.setAssetEnabled);
   const [selectedFilter, setSelectedFilter] = useState<AssetCategory | 'All'>('All');
+
+  const handleResetCushions = () => {
+    Alert.alert(
+      'Restore Default Cushions',
+      'Are you sure you want to reset all asset cushions back to default values?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore Defaults',
+          style: 'destructive',
+          onPress: () => {
+            setConfig({ cushions: { ...DEFAULT_CUSHIONS } });
+          },
+        },
+      ]
+    );
+  };
 
   const categoriesToDisplay =
     selectedFilter === 'All'
@@ -32,10 +51,21 @@ export function CushionsScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} testID="screen-cushions">
-      <Text style={styles.intro}>
-        Static $ cushions — trade only when gap clears the buffer. Drag to adjust; saves
-        automatically.
-      </Text>
+      {/* Option A: Top Sub-Header with Reset Button */}
+      <View style={styles.introHeader}>
+        <Text style={styles.intro}>
+          Static $ cushions — trade only when gap clears the buffer. Drag to adjust; saves
+          automatically.
+        </Text>
+        <Pressable
+          testID="reset-cushions-top-btn"
+          style={styles.resetTopBtn}
+          onPress={handleResetCushions}
+          hitSlop={8}
+        >
+          <Text style={styles.resetTopBtnText}>↺ Reset</Text>
+        </Pressable>
+      </View>
 
       {/* Category Filter Chips */}
       <ScrollView
@@ -167,6 +197,17 @@ export function CushionsScreen() {
           </View>
         );
       })}
+
+      {/* Option C: Bottom Footer Reset Button */}
+      <View style={styles.footerContainer}>
+        <Pressable
+          testID="reset-cushions-bottom-btn"
+          style={styles.footerResetBtn}
+          onPress={handleResetCushions}
+        >
+          <Text style={styles.footerResetBtnText}>↺ Restore Default Cushions</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -174,7 +215,23 @@ export function CushionsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: 40 },
-  intro: { color: colors.textSecondary, marginBottom: spacing.xs, fontSize: 13 },
+  introHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  intro: { flex: 1, color: colors.textSecondary, fontSize: 13 },
+  resetTopBtn: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  resetTopBtnText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
   filterScroll: { marginBottom: spacing.xs },
   filterContainer: { gap: spacing.xs, paddingRight: spacing.md },
   filterChip: {
@@ -234,5 +291,26 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   chipText: { color: colors.textPrimary, fontSize: 12 },
+  footerContainer: {
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  footerResetBtn: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+    width: '100%',
+  },
+  footerResetBtnText: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });
+
 

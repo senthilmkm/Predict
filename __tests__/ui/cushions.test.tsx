@@ -27,6 +27,8 @@ describe('CushionsScreen', () => {
   test('all assets + nudge + toggle', async () => {
     const s = await render(<CushionsScreen />);
     expect(s.getByTestId('screen-cushions')).toBeTruthy();
+    expect(s.getByTestId('reset-cushions-top-btn')).toBeTruthy();
+    expect(s.getByTestId('reset-cushions-bottom-btn')).toBeTruthy();
     for (const a of ['WTI', 'Gold', 'Silver', 'BTC', 'ETH']) {
       expect(s.getByTestId(`cushion-card-${a}`)).toBeTruthy();
       expect(s.getByTestId(`cushion-inc-${a}`)).toBeTruthy();
@@ -39,3 +41,4 @@ describe('CushionsScreen', () => {
     expect(useConfigStore.getState().config.assets_enabled.WTI).toBe(false);
   });
 });
+
