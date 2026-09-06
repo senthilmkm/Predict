@@ -86,6 +86,21 @@ describe('Settings toggles', () => {
     expect(useConfigStore.getState().config.risk.chase_above_ask_usd).toBe(0.02);
     expect(useConfigStore.getState().config.risk.time_in_force).toBe('immediate_or_cancel');
   });
+
+  test('5-tap version text unlocks Developer Diagnostics', async () => {
+    const s = await render(<SettingsScreen />);
+    expect(s.queryByTestId('toggle-poller')).toBeNull();
+    expect(s.queryByTestId('btn-tick-once')).toBeNull();
+
+    const ver = s.getByTestId('settings-version-text');
+    for (let i = 0; i < 5; i++) {
+      await fireEvent.press(ver);
+    }
+
+    await waitFor(() => expect(s.getByTestId('toggle-poller')).toBeTruthy());
+    expect(s.getByTestId('btn-tick-once')).toBeTruthy();
+    expect(String(s.getByTestId('settings-message').props.children)).toMatch(/unlocked/i);
+  });
 });
 
 describe('Settings credentials', () => {

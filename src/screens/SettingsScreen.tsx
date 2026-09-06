@@ -95,6 +95,7 @@ export function SettingsScreen() {
   const restoreRiskDefaults = useConfigStore((s) => s.restoreRiskDefaults);
   const start = useRuntimeStore((s) => s.start);
   const stop = useRuntimeStore((s) => s.stop);
+  const tickOnce = useRuntimeStore((s) => s.tickOnce);
   const status = useRuntimeStore((s) => s.status);
   const alertCount = useRuntimeStore((s) => s.alerts.length);
   const pricing = getPricingConfig();
@@ -110,11 +111,23 @@ export function SettingsScreen() {
   const [lastRiskAcceptance, setLastRiskAcceptance] =
     useState<AutoTradeRiskAcceptance | null>(null);
 
+  const [devTaps, setDevTaps] = useState(0);
+  const [devUnlocked, setDevUnlocked] = useState(false);
   const [hasCreds, setHasCreds] = useState(false);
   const [keyId, setKeyId] = useState('');
   const [pem, setPem] = useState('');
   const [showSecrets, setShowSecrets] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  const handleVersionPress = () => {
+    if (devUnlocked) return;
+    const next = devTaps + 1;
+    setDevTaps(next);
+    if (next >= 5) {
+      setDevUnlocked(true);
+      setFeedback('Developer diagnostics unlocked');
+    }
+  };
   /** Shown under Test connection so success/fail is visible without scrolling up. */
   const [connectionTest, setConnectionTest] = useState<{
     ok: boolean;
@@ -642,15 +655,29 @@ export function SettingsScreen() {
           )}
         </View>
 
-        <Row
-          testID="toggle-poller"
-          label="Live Feed Polling"
-          value={status?.running ? 'Active' : 'Paused'}
-          busy={busyKey === 'poller'}
-          busyLabel={status?.running ? 'Pausing…' : 'Activating…'}
-          disabled={anyBusy}
-          onPress={() => void togglePoller()}
-        />
+        {devUnlocked ? (
+          <View style={styles.controlCard} testID="dev-diagnostics-card">
+            <Text style={styles.sectionNoTop}>Developer Diagnostics</Text>
+            <Row
+              testID="toggle-poller"
+              label="Live Feed Polling"
+              value={status?.running ? 'Active' : 'Paused'}
+              busy={busyKey === 'poller'}
+              busyLabel={status?.running ? 'Pausing…' : 'Activating…'}
+              disabled={anyBusy}
+              onPress={() => void togglePoller()}
+            />
+            <ActionButton
+              testID="btn-tick-once"
+              variant="slim"
+              label="Tick once"
+              busyLabel="Ticking once…"
+              busy={false}
+              disabled={anyBusy}
+              onPress={() => void tickOnce()}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.collapseHeader}>
           <View style={styles.sectionTitleRow}>
@@ -945,6 +972,16 @@ export function SettingsScreen() {
 
         <Text style={styles.section}>Support</Text>
         <SupportContactFooter />
+        <Pressable
+          testID="settings-version-text"
+          onPress={handleVersionPress}
+          style={styles.versionWrap}
+          hitSlop={8}
+        >
+          <Text style={styles.versionText}>
+            Predict v1.0.0 (57.0){devUnlocked ? ' · Dev Mode' : ''}
+          </Text>
+        </Pressable>
       </ScrollView>
 
       <KalshiCredsHelpModal visible={credsHelpOpen} onClose={() => setCredsHelpOpen(false)} />
@@ -1690,4 +1727,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalDoneText: { color: colors.bg, fontWeight: '800', fontSize: 14 },
+  versionWrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+  },
+  versionText: {
+    color: colors.mute,
+    fontSize: 11,
+    fontWeight: '600',
+  },
 });

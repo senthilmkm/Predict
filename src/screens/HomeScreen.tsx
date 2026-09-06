@@ -41,9 +41,6 @@ export function HomeScreen() {
   const assetErrors = useRuntimeStore((s) => s.assetErrors);
   const bump = useRuntimeStore((s) => s.bump);
   const kill = useRuntimeStore((s) => s.kill);
-  const start = useRuntimeStore((s) => s.start);
-  const stop = useRuntimeStore((s) => s.stop);
-  const tickOnce = useRuntimeStore((s) => s.tickOnce);
   const predictionsBalanceUsd = useRuntimeStore((s) => s.predictionsBalanceUsd);
   const cashBalanceUsd = useRuntimeStore((s) => s.cashBalanceUsd);
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
@@ -53,7 +50,6 @@ export function HomeScreen() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
   const [killBusy, setKillBusy] = useState(false);
-  const [devOpen, setDevOpen] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 5000);
@@ -347,37 +343,6 @@ export function HomeScreen() {
         ) : null}
       </View>
 
-      <View style={styles.devSection}>
-        <Pressable
-          style={styles.devToggleRow}
-          onPress={() => setDevOpen((v) => !v)}
-          testID="btn-toggle-dev-tools"
-        >
-          <Text style={styles.devToggleText}>Developer Diagnostics</Text>
-          <Text style={styles.devToggleHint}>{devOpen ? 'Hide ▴' : 'Show ▾'}</Text>
-        </Pressable>
-        {devOpen ? (
-          <View style={styles.actions}>
-            <Pressable
-              style={styles.btn}
-              testID="btn-toggle-poller"
-              onPress={() => (status?.running ? stop() : start())}
-            >
-              <Text style={styles.btnText}>
-                {status?.running ? 'Pause phone feed' : 'Resume phone feed'}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.btn, styles.btnAlt]}
-              testID="btn-tick-once"
-              onPress={() => void tickOnce()}
-            >
-              <Text style={styles.btnText}>Tick once</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
-
       <Text style={styles.hint}>
         24/7 background trading runs securely on GCP Cloud Run. Your phone does not need to stay open.
       </Text>
@@ -642,24 +607,5 @@ const styles = StyleSheet.create({
   },
   tradeHint: { color: colors.mute, fontSize: 11, lineHeight: 15, marginTop: 2 },
   signalTime: { color: colors.mute, fontSize: 11, textAlign: 'right', maxWidth: '42%' },
-  actions: { flexDirection: 'row', gap: 10 },
-  btn: {
-    flex: 1,
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  btnAlt: { backgroundColor: colors.surfaceElevated },
-  btnText: { color: colors.textPrimary, fontWeight: '700' },
   hint: { color: colors.mute, fontSize: 12, lineHeight: 18 },
-  devSection: { marginTop: spacing.sm, gap: spacing.xs },
-  devToggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.xs,
-  },
-  devToggleText: { color: colors.mute, fontSize: 12, fontWeight: '600' },
-  devToggleHint: { color: colors.mute, fontSize: 11 },
 });
