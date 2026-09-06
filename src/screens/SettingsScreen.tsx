@@ -908,15 +908,31 @@ export function SettingsScreen() {
           </View>
         )}
 
-        <ActionButton
-          testID="btn-test-connection"
-          variant="primary"
-          label="Test connection"
-          busyLabel="Testing Kalshi connection…"
-          busy={busyKey === 'test'}
-          disabled={anyBusy && busyKey !== 'test'}
-          onPress={() => void testConnection()}
-        />
+        <View style={styles.actionRow2Col}>
+          <View style={styles.flex1}>
+            <ActionButton
+              testID="btn-test-connection"
+              variant="secondary"
+              label="Test connection"
+              busyLabel="Testing…"
+              busy={busyKey === 'test'}
+              disabled={anyBusy && busyKey !== 'test'}
+              onPress={() => void testConnection()}
+            />
+          </View>
+          <View style={styles.flex1}>
+            <ActionButton
+              testID="btn-wipe-creds"
+              variant="danger"
+              label="Wipe credentials"
+              busyLabel="Wiping…"
+              busy={busyKey === 'wipe'}
+              disabled={anyBusy && busyKey !== 'wipe'}
+              onPress={requestWipeCreds}
+            />
+          </View>
+        </View>
+
         {connectionTest ? (
           <Text
             style={[
@@ -928,16 +944,6 @@ export function SettingsScreen() {
             {connectionTest.text}
           </Text>
         ) : null}
-
-        <ActionButton
-          testID="btn-wipe-creds"
-          variant="danger"
-          label="Wipe credentials"
-          busyLabel="Wiping credentials…"
-          busy={busyKey === 'wipe'}
-          disabled={anyBusy && busyKey !== 'wipe'}
-          onPress={requestWipeCreds}
-        />
 
         <Text style={styles.warn}>
           Paste your Kalshi API key ID and private key PEM. Keep the app open while auto-trading.
@@ -1743,5 +1749,13 @@ const styles = StyleSheet.create({
     color: colors.mute,
     fontSize: 11,
     fontWeight: '600',
+  },
+  flex1: {
+    flex: 1,
+  },
+  actionRow2Col: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
 });
