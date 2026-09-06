@@ -171,7 +171,7 @@ export function AlertsHubScreen() {
           ))
         : null}
 
-      <View style={[styles.sectionRow, { marginTop: spacing.xs }]}>
+      <View style={[styles.sectionRow, { marginTop: spacing.md }]}>
         <Text style={styles.section}>Recent ({alerts.length})</Text>
         {alerts.length > 0 ? (
           <Pressable
