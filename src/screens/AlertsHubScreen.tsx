@@ -132,10 +132,14 @@ export function AlertsHubScreen() {
           testID="btn-toggle-mute-matrix"
         >
           <Text style={styles.section}>Mute matrix (push)</Text>
-          <Text style={styles.collapseHint}>
-            {muteOpen ? 'Hide' : 'Show'}
-            {mutedCount > 0 ? ` · ${mutedCount} muted` : ''}
-          </Text>
+          <View style={styles.collapseBadgeGroup}>
+            {mutedCount > 0 ? (
+              <Text style={styles.mutedBadgeText}>{mutedCount} muted</Text>
+            ) : null}
+            <View style={styles.collapseChipPill}>
+              <Text style={styles.collapseChipText}>{muteOpen ? 'Hide ▴' : 'Show ▾'}</Text>
+            </View>
+          </View>
         </Pressable>
         <Pressable
           testID="btn-toggle-mute-all"
@@ -327,7 +331,29 @@ const styles = StyleSheet.create({
   iconMuteAllText: {
     fontSize: 14,
   },
-  collapseHint: { color: colors.mute, fontSize: 11, fontWeight: '600' },
+  collapseBadgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mutedBadgeText: {
+    color: colors.mute,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  collapseChipPill: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  collapseChipText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   muteRow: {
     flexDirection: 'row',
     alignItems: 'center',
