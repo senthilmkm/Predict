@@ -1144,6 +1144,7 @@ function RiskHelpModal({
               After the wait-after-fill, this can fire at any remaining time in the 15‑minute window
               — not only in the last minutes.{'\n\n'}
               When Off (default), open trades ride until settlement.{'\n\n'}
+              Notice: Early exits are not guaranteed to save capital or prevent loss. Orders may fail, delay, partial-fill, or fill at worse-than-expected prices due to network traffic, exchange latency, order book illiquidity, wide spreads, rapid price gaps, or time decay (theta) near expiry.{'\n\n'}
               Works whenever this switch is On and Kalshi credentials are saved — even if Auto-trade
               (new buys) is Off. Requires the trading loop to be running (app open / poller on).
             </HelpItem>
