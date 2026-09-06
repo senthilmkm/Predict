@@ -96,10 +96,22 @@ describe('History / Dashboard / AlertsHub', () => {
     expect(s.getByText(/Latest trade: BTC pending/i)).toBeTruthy();
   });
 
-  test('AlertsHub mute matrix collapsible + recent list', async () => {
+  test('AlertsHub mute matrix collapsible + mute all icon toggle + recent list', async () => {
     const s = await render(<AlertsHubScreen />);
     expect(s.getByTestId('screen-alerts-hub')).toBeTruthy();
     expect(s.getByTestId('alerts-recent-list')).toBeTruthy();
+    expect(s.getByTestId('btn-toggle-mute-all')).toBeTruthy();
+
+    // Test mute all icon button
+    await fireEvent.press(s.getByTestId('btn-toggle-mute-all'));
+    expect(useConfigStore.getState().config.alert_prefs.lean_signal.push).toBe(false);
+    expect(useConfigStore.getState().config.alert_prefs.order_placed.push).toBe(false);
+
+    // Test unmute all icon button
+    await fireEvent.press(s.getByTestId('btn-toggle-mute-all'));
+    expect(useConfigStore.getState().config.alert_prefs.lean_signal.push).toBe(true);
+    expect(useConfigStore.getState().config.alert_prefs.order_placed.push).toBe(true);
+
     expect(s.queryByTestId('alert-push-lean_signal')).toBeNull();
     await fireEvent.press(s.getByTestId('btn-toggle-mute-matrix'));
     await fireEvent(s.getByTestId('alert-push-lean_signal'), 'valueChange', false);

@@ -40,6 +40,14 @@ export function AlertsHubScreen() {
   const [markingRead, setMarkingRead] = useState(false);
 
   const mutedCount = ALL_ALERT_KINDS.filter((k) => !(prefs[k].enabled && prefs[k].push)).length;
+  const allMuted = ALL_ALERT_KINDS.every((k) => !(prefs[k].enabled && prefs[k].push));
+
+  const toggleMuteAll = () => {
+    const nextPush = allMuted;
+    for (const k of ALL_ALERT_KINDS) {
+      setAlertPref(k, { enabled: true, push: nextPush });
+    }
+  };
 
   const selectedCount = selectedIds.size;
   const allIds = useMemo(() => alerts.map((a) => a.id), [alerts]);
@@ -117,17 +125,28 @@ export function AlertsHubScreen() {
         </Pressable>
       </View>
 
-      <Pressable
-        style={styles.collapseHeader}
-        onPress={() => setMuteOpen((v) => !v)}
-        testID="btn-toggle-mute-matrix"
-      >
-        <Text style={styles.section}>Mute matrix (push)</Text>
-        <Text style={styles.collapseHint}>
-          {muteOpen ? 'Hide' : 'Show'}
-          {mutedCount > 0 ? ` · ${mutedCount} muted` : ''}
-        </Text>
-      </Pressable>
+      <View style={styles.collapseHeaderRow}>
+        <Pressable
+          style={styles.collapseHeader}
+          onPress={() => setMuteOpen((v) => !v)}
+          testID="btn-toggle-mute-matrix"
+        >
+          <Text style={styles.section}>Mute matrix (push)</Text>
+          <Text style={styles.collapseHint}>
+            {muteOpen ? 'Hide' : 'Show'}
+            {mutedCount > 0 ? ` · ${mutedCount} muted` : ''}
+          </Text>
+        </Pressable>
+        <Pressable
+          testID="btn-toggle-mute-all"
+          style={styles.iconMuteAllBtn}
+          onPress={toggleMuteAll}
+          hitSlop={8}
+          accessibilityLabel={allMuted ? 'Unmute all push notifications' : 'Mute all push notifications'}
+        >
+          <Text style={styles.iconMuteAllText}>{allMuted ? '🔔' : '🔕'}</Text>
+        </Pressable>
+      </View>
 
       {muteOpen
         ? ALL_ALERT_KINDS.map((k) => (
@@ -283,12 +302,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   deleteSelectedText: { color: colors.bg, fontWeight: '800', fontSize: 13 },
+  collapseHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+  },
   collapseHeader: {
+    flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 2,
-    marginTop: spacing.sm,
+    marginRight: spacing.xs,
+  },
+  iconMuteAllBtn: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  iconMuteAllText: {
+    fontSize: 14,
   },
   collapseHint: { color: colors.mute, fontSize: 11, fontWeight: '600' },
   muteRow: {
