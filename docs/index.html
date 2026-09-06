@@ -2,105 +2,667 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Predict — Prediction trades, with a buffer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Predict — Prediction Trades, With a Buffer</title>
+  <meta name="description" content="Kalshi 15-minute market lean signals, custom cushion buffers, and automated risk-managed trading." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0F1419;
-      --surface: #1A222C;
-      --text: #F2F5F7;
-      --muted: #8B98A5;
+      --bg: #0B0E14;
+      --bg-card: rgba(22, 29, 39, 0.75);
+      --bg-card-hover: rgba(30, 40, 54, 0.85);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(61, 184, 160, 0.3);
+      --border-gold: rgba(198, 167, 94, 0.35);
+      --text-primary: #F2F5F7;
+      --text-secondary: #94A3B8;
+      --text-mute: #64748B;
       --accent: #3DB8A0;
+      --accent-glow: rgba(61, 184, 160, 0.25);
       --gold: #C6A75E;
+      --gold-glow: rgba(198, 167, 94, 0.2);
+      --win: #3DB8A0;
+      --loss: #F07178;
+      --warn: #FFAB00;
     }
-    * { box-sizing: border-box; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      margin: 0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      background: radial-gradient(1200px 600px at 50% -10%, rgba(61,184,160,0.18), transparent), var(--bg);
-      color: var(--text);
-      line-height: 1.55;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
-    main { max-width: 720px; margin: 0 auto; padding: 48px 20px 64px; }
-    .brand { color: var(--gold); letter-spacing: 0.18em; text-transform: uppercase; font-weight: 800; font-size: 13px; }
-    h1 { font-size: clamp(2rem, 5vw, 2.8rem); line-height: 1.1; margin: 12px 0 10px; }
-    .lead { color: var(--muted); font-size: 1.1rem; }
-    .card {
-      margin-top: 28px;
-      background: var(--surface);
-      border: 1px solid #2E3A48;
-      border-radius: 18px;
-      padding: 22px;
+
+    /* Ambient Background Glows */
+    .glow-top {
+      position: absolute;
+      top: -150px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1000px;
+      height: 600px;
+      background: radial-gradient(ellipse at center, rgba(61, 184, 160, 0.15) 0%, rgba(198, 167, 94, 0.08) 40%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
     }
-    .callout {
-      margin-top: 22px;
-      padding: 16px 18px;
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Navigation */
+    header {
+      padding: 28px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-wrap {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--gold), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #0B0E14;
+      font-size: 18px;
+    }
+    .brand-text {
+      color: var(--gold);
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .nav-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: color 0.2s ease;
+    }
+    .nav-link:hover {
+      color: var(--text-primary);
+    }
+    .btn-nav-cta {
+      background: rgba(61, 184, 160, 0.12);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 8px 18px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .btn-nav-cta:hover {
+      background: var(--accent);
+      color: #0B0E14;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    /* Hero Section */
+    .hero-section {
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(198, 167, 94, 0.1);
+      border: 1px solid var(--border-gold);
+      border-radius: 99px;
+      padding: 6px 16px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 24px;
+    }
+    .hero-badge-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--gold);
+      box-shadow: 0 0 10px var(--gold);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .hero-title {
+      font-size: clamp(2.4rem, 6vw, 4.2rem);
+      font-weight: 800;
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+      margin-bottom: 20px;
+      background: linear-gradient(180deg, #FFFFFF 0%, #CBD5E1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-title span {
+      background: linear-gradient(135deg, var(--gold) 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-lead {
+      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      color: var(--text-secondary);
+      max-width: 680px;
+      margin: 0 auto 36px;
+      line-height: 1.6;
+    }
+    .hero-cta-group {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #3DB8A0, #2DA38C);
+      color: #0B0E14;
+      font-weight: 800;
+      font-size: 15px;
+      padding: 14px 32px;
       border-radius: 14px;
-      border: 1px solid var(--gold);
-      background: rgba(198,167,94,0.1);
-      color: var(--muted);
-      font-size: 0.95rem;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      box-shadow: 0 8px 24px var(--accent-glow);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
     }
-    .callout strong { color: var(--gold); }
-    .price { font-size: 2.2rem; font-weight: 800; }
-    .accent { color: var(--accent); }
-    a { color: var(--accent); }
-    ul { padding-left: 1.1rem; }
-    footer { margin-top: 36px; color: var(--muted); font-size: 0.92rem; }
-    nav a { margin-right: 14px; }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(61, 184, 160, 0.4);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 28px;
+      border-radius: 14px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Live Feed Mockup Card */
+    .mockup-wrap {
+      margin: 50px auto 70px;
+      max-width: 840px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-accent);
+      border-radius: 24px;
+      padding: 24px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(61, 184, 160, 0.1);
+    }
+    .mockup-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .mockup-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--gold);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .mockup-live-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--win);
+      font-weight: 700;
+    }
+    .mockup-live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--win);
+      box-shadow: 0 0 8px var(--win);
+    }
+
+    .signal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .signal-card {
+      background: rgba(11, 14, 20, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .signal-asset {
+      font-weight: 800;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .signal-pill-yes {
+      background: rgba(61, 184, 160, 0.15);
+      border: 1px solid var(--win);
+      color: var(--win);
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .signal-pill-skip {
+      background: rgba(255, 171, 0, 0.15);
+      border: 1px solid var(--warn);
+      color: var(--warn);
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .signal-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      text-align: right;
+    }
+
+    /* Features Section */
+    .features-section {
+      padding: 40px 0 80px;
+    }
+    .section-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .section-eyebrow {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 4vw, 2.5rem);
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 24px;
+      transition: all 0.25s ease;
+    }
+    .feature-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-accent);
+      transform: translateY(-4px);
+    }
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(61, 184, 160, 0.12);
+      border: 1px solid var(--border-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 18px;
+    }
+    .feature-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* Pricing Section */
+    .pricing-section {
+      padding: 40px 0 80px;
+    }
+    .pricing-card {
+      max-width: 520px;
+      margin: 0 auto;
+      background: linear-gradient(180deg, rgba(22, 29, 39, 0.95) 0%, rgba(15, 20, 25, 0.95) 100%);
+      border: 1px solid var(--border-gold);
+      border-radius: 24px;
+      padding: 36px 32px;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 30px var(--gold-glow);
+      position: relative;
+    }
+    .pricing-badge {
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--gold);
+      color: #0B0E14;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 16px;
+      border-radius: 99px;
+    }
+    .pricing-price {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin: 16px 0 4px;
+    }
+    .pricing-period {
+      font-size: 16px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+    .pricing-trial {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .pricing-list {
+      list-style: none;
+      text-align: left;
+      margin: 24px 0 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .pricing-list li {
+      font-size: 14px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pricing-list li::before {
+      content: "✓";
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    /* Risk Disclaimer Callout Box */
+    .risk-box {
+      margin: 40px 0;
+      background: rgba(198, 167, 94, 0.08);
+      border: 1px solid var(--border-gold);
+      border-radius: 18px;
+      padding: 24px;
+    }
+    .risk-title {
+      color: var(--gold);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .risk-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+    .risk-link {
+      color: var(--accent);
+      font-weight: 700;
+      text-decoration: underline;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 48px 0 64px;
+      text-align: center;
+    }
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .footer-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: color 0.2s ease;
+    }
+    .footer-link:hover {
+      color: var(--accent);
+    }
+    .footer-support {
+      font-size: 13px;
+      color: var(--text-mute);
+    }
+    .footer-support a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    @media (max-width: 640px) {
+      .hero-section { padding: 50px 0 40px; }
+      .mockup-wrap { padding: 16px; }
+      .hero-title { font-size: 2.2rem; }
+      .hero-cta-group { flex-direction: column; }
+      .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <div class="brand">Predict</div>
-    <h1>Prediction trades,<br/>with a buffer.</h1>
-    <p class="lead">Kalshi 15‑minute lean signals, cushions, and optional auto-trade — built for careful prediction markets.</p>
+  <div class="glow-top"></div>
 
-    <div class="callout">
-      <p style="margin:0;">
-        <strong>Risk disclaimer:</strong>
-        Trading involves risk of loss. Predict does <em>not</em> guarantee profits or successful trades —
-        whether you use alerts only, auto-trade, or both. You alone are responsible for any trades you place,
-        including trades you place yourself outside this app based on Predict alerts, and trades placed when
-        you enable Auto-trade. The app owner is not liable for your losses.
-        <a href="./disclaimer.html">Full disclaimer</a> ·
-        <a href="./terms.html">Terms</a>
-      </p>
-    </div>
-
-    <div class="card">
-      <div class="accent" style="font-weight:800; margin-bottom:6px;">Predict Pro</div>
-      <div class="price">$29.99 <span style="font-size:1rem;color:var(--muted);font-weight:600;">/ month</span></div>
-      <p>Includes a <strong>7‑day free trial</strong>. Cancel anytime in Apple Subscriptions. A subscription does not guarantee trading profits.</p>
-      <ul>
-        <li>Live lean YES/NO with static cushions</li>
-        <li>Auto-trade risk gates &amp; protect-sell</li>
-        <li>Alerts, history export, dashboard</li>
-      </ul>
-    </div>
-
-    <footer>
-      <div class="card" style="margin-top:0;margin-bottom:24px;">
-        <p style="margin:0 0 10px;color:var(--muted);font-size:0.95rem;">
-          <strong style="color:var(--gold);">Before you trade:</strong>
-          Review every alert yourself before placing any order outside Predict. Turn on Auto-trade only if you
-          accept that the app may place real Kalshi orders under your settings — still with no promise of profit
-          or successful fills. You remain fully responsible for all activity on your Kalshi account.
-        </p>
-        <p style="margin:0;color:var(--muted);font-size:0.95rem;">
-          <strong style="color:var(--gold);">No liability / no profit guarantee:</strong>
-          The Predict owner and author are not responsible for losses incurred while using this app.
-          <a href="./disclaimer.html">Read the full Risk Disclaimer</a>.
-        </p>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="nav-wrap">
+        <a href="#" class="brand-logo">
+          <div class="brand-icon">P</div>
+          <div class="brand-text">Predict</div>
+        </a>
+        <nav class="nav-links">
+          <a href="#features" class="nav-link">Features</a>
+          <a href="#pricing" class="nav-link">Pricing</a>
+          <a href="./disclaimer.html" class="nav-link">Risk</a>
+          <a href="#pricing" class="btn-nav-cta">Get App</a>
+        </nav>
       </div>
-      <nav>
-        <a href="./privacy.html">Privacy Policy</a>
-        <a href="./terms.html">Terms of Use</a>
-        <a href="./disclaimer.html">Risk Disclaimer</a>
-        <a href="./support.html">Support</a>
-      </nav>
-      <p>Support: <a href="mailto:senthil930@gmail.com">senthil930@gmail.com</a></p>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <div class="hero-badge">
+        <div class="hero-badge-pulse"></div>
+        15-Minute Market Intelligence
+      </div>
+      <h1 class="hero-title">
+        Prediction Trades,<br /><span>With a Buffer.</span>
+      </h1>
+      <p class="lead hero-lead">
+        Real-time lean signals, custom safety cushions, and risk-gated automated order placement for Kalshi 15-minute prediction markets.
+      </p>
+      <div class="hero-cta-group">
+        <a href="#pricing" class="btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.54c.67-.82 1.13-1.96.99-3.1-.98.04-2.19.66-2.88 1.47-.61.71-1.15 1.88-.99 3 1.1.09 2.23-.55 2.88-1.37z"/></svg>
+          Get Predict Pro
+        </a>
+        <a href="#features" class="btn-secondary">Explore Features</a>
+      </div>
+
+      <!-- Interactive Mockup Visual -->
+      <div class="mockup-wrap">
+        <div class="mockup-header">
+          <div class="mockup-title">Live Signal Feed</div>
+          <div class="mockup-live-status">
+            <div class="mockup-live-dot"></div> Live Engine · 20s scan
+          </div>
+        </div>
+        <div class="signal-grid">
+          <div class="signal-card">
+            <div>
+              <div class="signal-asset">Gold 🪙</div>
+              <div style="font-size: 11px; color: var(--text-mute); margin-top: 2px;">Cushion $3.50</div>
+            </div>
+            <div>
+              <span class="signal-pill-yes">YES</span>
+              <div class="signal-meta" style="margin-top: 4px;">gap $4.80</div>
+            </div>
+          </div>
+          <div class="signal-card">
+            <div>
+              <div class="signal-asset">BTC ₿</div>
+              <div style="font-size: 11px; color: var(--text-mute); margin-top: 2px;">Cushion $175.00</div>
+            </div>
+            <div>
+              <span class="signal-pill-yes">YES</span>
+              <div class="signal-meta" style="margin-top: 4px;">gap $210.50</div>
+            </div>
+          </div>
+          <div class="signal-card">
+            <div>
+              <div class="signal-asset">Silver 🥈</div>
+              <div style="font-size: 11px; color: var(--text-mute); margin-top: 2px;">Cushion $0.25</div>
+            </div>
+            <div>
+              <span class="signal-pill-skip">SKIP</span>
+              <div class="signal-meta" style="margin-top: 4px;">gap $0.12</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features-section">
+      <div class="section-header">
+        <div class="section-eyebrow">Built for Discipline</div>
+        <h2 class="section-title">Designed to Eliminate Noise & Emotion</h2>
+      </div>
+      <div class="grid-4">
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3 class="feature-title">Custom Cushion Buffers</h3>
+          <p class="feature-desc">Wait until market price passes your minimum cushion distance past the strike before triggering YES/NO leans.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <div class="feature-title">Real-Time Feed & Alerts</div>
+          <p class="feature-desc">On-device push notifications when actionable lean signals emerge across Gold, Silver, Crude Oil, BTC, and ETH.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <div class="feature-title">Strict Risk Gates</div>
+          <p class="feature-desc">Cap maximum open positions, daily dollar spend, and enforce strict minimum/maximum trade window entry timings.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🚨</div>
+          <div class="feature-title">Protect-Money Early Sell</div>
+          <p class="feature-desc">Optional automated exit trigger to sell IOC early if a live lean flips against your open position after fill.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing-section">
+      <div class="section-header">
+        <div class="section-eyebrow">Simple Pricing</div>
+        <h2 class="section-title">One Plan. Complete Access.</h2>
+      </div>
+      <div class="pricing-card">
+        <div class="pricing-badge">7-Day Free Trial</div>
+        <div class="pricing-price">$29.99 <span class="pricing-period">/ month</span></div>
+        <div class="pricing-trial">Try 7 days free. Cancel anytime in Apple Subscriptions.</div>
+        <ul class="pricing-list">
+          <li>Live 15-minute Kalshi market lean signals</li>
+          <li>Custom cushion rules for Gold, Oil, Silver, BTC, ETH</li>
+          <li>Optional Auto-trade with biometrics &amp; Risk gates</li>
+          <li>Protect-sell early exit safeguards</li>
+          <li>Trade history export &amp; daily P&amp;L dashboard</li>
+        </ul>
+        <a href="https://apps.apple.com/account/subscriptions" class="btn-primary" style="width: 100%; justify-content: center;">
+          Download on the App Store
+        </a>
+      </div>
+    </section>
+
+    <!-- Risk Disclaimer Callout Box -->
+    <div class="risk-box">
+      <div class="risk-title">Important Risk &amp; Non-Affiliation Disclaimer</div>
+      <div class="risk-text">
+        <strong>Trading involves risk of loss.</strong> Predict does not guarantee profits or successful trades — whether you use alerts only, auto-trade, or both. Predict is an independent software application and is not affiliated with, endorsed by, sponsored by, or associated with Kalshi, Inc. You alone are responsible for any trades you place. <a href="./disclaimer.html" class="risk-link">Read full Risk Disclaimer</a> &amp; <a href="./terms.html" class="risk-link">Terms of Use</a>.
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <div class="footer-links">
+        <a href="./privacy.html" class="footer-link">Privacy Policy</a>
+        <a href="./terms.html" class="footer-link">Terms of Use</a>
+        <a href="./disclaimer.html" class="footer-link">Risk Disclaimer</a>
+        <a href="./support.html" class="footer-link">Support</a>
+      </div>
+      <div class="footer-support">
+        Predict App · Support: <a href="mailto:senthil930@gmail.com">senthil930@gmail.com</a>
+      </div>
     </footer>
-  </main>
+  </div>
 </body>
 </html>
