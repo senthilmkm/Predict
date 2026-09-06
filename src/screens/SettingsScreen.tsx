@@ -1104,12 +1104,12 @@ function RiskHelpModal({
             </HelpItem>
 
             <Text style={styles.modalSection}>Risk — entry timing & price</Text>
-            <HelpItem title="Min minutes left">
+            <HelpItem title="Min minutes left (Buy only)">
               Only enter if the 15‑minute window still has at least this many minutes left. Example:
               2 means “don’t enter in the last 2 minutes.” If you see “too little time left,” the
-              clock is under this number.
+              clock is under this number. (Applies to new Buy entries only; does not block Protect Sell exits).
             </HelpItem>
-            <HelpItem title="Min minutes elapsed">
+            <HelpItem title="Min minutes elapsed (Buy only)">
               Only enter after this many whole minutes have already passed in the 15‑minute window.
               Skips the noisy open when price/lean can flip quickly.{'\n\n'}
               • 0 = allow buys from the window open{'\n'}
@@ -1117,23 +1117,23 @@ function RiskHelpModal({
               • 3–5 = stricter — fewer early entries{'\n\n'}
               Works together with Min minutes left. Example: elapsed ≥ 2 and left ≥ 2 → roughly the
               middle of the window only.{'\n\n'}
-              If you see “too early in window,” the clock has not reached this number yet.
+              If you see “too early in window,” the clock has not reached this number yet. (Applies to new Buy entries only).
             </HelpItem>
-            <HelpItem title="Max entry ask ($)">
+            <HelpItem title="Max entry ask ($) (Buy limit)">
               Do not buy if the contract ask is above this (example: $0.90). Protects you from paying
-              too much for a low-edge ticket.
+              too much for a low-edge ticket. (Applies to new Buy entries only).
             </HelpItem>
-            <HelpItem title="Time in force">
+            <HelpItem title="Time in force (Auto-trade buys)">
               How long the order stays live on Kalshi:{'\n'}
               • IOC — try to fill now; cancel anything not filled{'\n'}
               • FOK — fill all of it now, or cancel everything{'\n'}
               • GTC — leave the order open until filled or you cancel{'\n\n'}
-              Most people use IOC for these short windows.
+              Most people use IOC for these short windows. (Applies to new Auto-trade buys. Protect Sell exits always use IOC).
             </HelpItem>
-            <HelpItem title="Chase above ask ($)">
+            <HelpItem title="Chase above ask ($) (Buy & Sell)">
               Tiny extra you’re willing to pay above the current ask to help a buy fill (example:
               $0.02). Still limited by Max entry ask. The same idea is used as slippage when
-              protect-selling.
+              protect-selling. (Applies to both Buy entries and Protect Sell exit slippage).
             </HelpItem>
 
             <Text style={styles.modalSection}>Risk — protect money (early sell)</Text>
