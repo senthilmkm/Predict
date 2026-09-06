@@ -174,17 +174,28 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         client.getStatus(),
       ]);
       if (tradesRes.ok && Array.isArray(tradesRes.trades)) {
-        const stats = statsFromCloudTrades(tradesRes.trades);
-        set({ stats });
+        const newStats = statsFromCloudTrades(tradesRes.trades);
+        const curStats = get().stats;
+        if (
+          curStats.wins !== newStats.wins ||
+          curStats.losses !== newStats.losses ||
+          curStats.pending !== newStats.pending ||
+          curStats.misses !== newStats.misses ||
+          curStats.realized_pnl_usd !== newStats.realized_pnl_usd
+        ) {
+          set({ stats: newStats });
+        }
       }
       if (statusRes.ok && statusRes.systemConfig?.tick_interval_seconds) {
         const seconds = statusRes.systemConfig.tick_interval_seconds;
-        useConfigStore.setState((s) => ({
-          config: {
-            ...s.config,
-            poll_interval_seconds: seconds,
-          },
-        }));
+        if (useConfigStore.getState().config.poll_interval_seconds !== seconds) {
+          useConfigStore.setState((s) => ({
+            config: {
+              ...s.config,
+              poll_interval_seconds: seconds,
+            },
+          }));
+        }
       }
     } catch {
       /* Keep local stats on network error */

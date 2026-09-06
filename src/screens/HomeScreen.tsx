@@ -52,7 +52,7 @@ export function HomeScreen() {
   const [killBusy, setKillBusy] = useState(false);
 
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 5000);
+    const id = setInterval(() => setNowMs(Date.now()), 10000);
     return () => clearInterval(id);
   }, []);
 
@@ -73,12 +73,13 @@ export function HomeScreen() {
   }, [refreshCloudSnapshot]);
 
   // 3. On `trade_result` Alert Received
+  const latestAlertId = alerts[0]?.id;
+  const latestAlertKind = alerts[0]?.kind;
   useEffect(() => {
-    const latestAlert = alerts[0];
-    if (latestAlert && latestAlert.kind === 'trade_result') {
+    if (latestAlertKind === 'trade_result') {
       void refreshCloudSnapshot();
     }
-  }, [alerts, refreshCloudSnapshot]);
+  }, [latestAlertId, latestAlertKind, refreshCloudSnapshot]);
 
   // 4. On Manual Pull-to-Refresh
   const onPullToRefresh = useCallback(async () => {
@@ -431,7 +432,6 @@ function HeartbeatChip({
   // Poller pulses during each asset; allow 2+ slow cycles before Stale
   const staleAfter = Math.max(120, intervalSec * 4 + 60);
   const stale = running && ageSec != null && ageSec > staleAfter;
-  const pulseOn = running && !stale && nowMs % 1000 < 500;
   const dotColor = !running ? colors.mute : stale ? colors.warn : colors.win;
   const label = !running ? 'Idle' : stale ? 'Stale' : 'Live';
   const ageLabel = running && ageSec != null ? `${ageSec}s` : running ? '…' : null;
@@ -443,7 +443,7 @@ function HeartbeatChip({
           styles.heartDot,
           {
             backgroundColor: dotColor,
-            opacity: running ? (pulseOn ? 1 : 0.35) : 0.45,
+            opacity: running ? 1 : 0.45,
           },
         ]}
         testID="home-heartbeat-dot"
