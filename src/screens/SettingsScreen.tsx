@@ -944,7 +944,13 @@ export function SettingsScreen() {
         </Text>
 
         <Text style={styles.section}>Legal</Text>
-        <TradingDisclaimer variant="long" testID="settings-disclaimer" />
+        <TradingDisclaimer
+          variant="long"
+          showTitle
+          collapsible
+          defaultCollapsed
+          testID="settings-disclaimer"
+        />
         <View style={styles.subCard} testID="risk-acceptance-local">
           <Text style={styles.slimLabel}>Risk disclaimer acceptance (this device)</Text>
           {lastRiskAcceptance ? (
