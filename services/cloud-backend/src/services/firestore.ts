@@ -119,7 +119,7 @@ export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { confi
   } else {
     try {
       const snapshot = await f.collection('users').get();
-      users = snapshot.docs.map((doc: any) => doc.data() as any);
+      users = snapshot.docs.map((doc: any) => ({ userId: doc.id, ...doc.data() }));
     } catch {
       users = Array.from(localUserStore.values());
     }
@@ -300,7 +300,7 @@ export async function getAllUsers(): Promise<(UserStatusDoc & { config?: any; pu
   }
   try {
     const snapshot = await f.collection('users').get();
-    return snapshot.docs.map((doc: any) => doc.data() as any);
+    return snapshot.docs.map((doc: any) => ({ userId: doc.id, ...doc.data() }));
   } catch {
     return Array.from(localUserStore.values());
   }

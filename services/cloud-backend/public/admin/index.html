@@ -535,15 +535,16 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
           const lastTick = u.lastTickAt ? new Date(u.lastTickAt).toLocaleTimeString() : 'Never';
           const lastErr = u.lastError ? `<span class="text-rose-400">${u.lastError}</span>` : `<span class="text-slate-500">Clean</span>`;
 
+          const uid = u.userId || u.id || 'User';
           return `
             <tr class="hover:bg-slate-800/40 transition">
-              <td class="py-3 px-4 font-bold text-white">${u.userId}</td>
+              <td class="py-3 px-4 font-bold text-white">${uid}</td>
               <td class="py-3 px-4">${statusBadge}</td>
               <td class="py-3 px-4 text-slate-300 font-sans">${modeLabel}</td>
               <td class="py-3 px-4 text-slate-400">${lastTick}</td>
               <td class="py-3 px-4 font-sans text-xs">${lastErr}</td>
               <td class="py-3 px-4 text-right font-sans">
-                <button onclick="disarmUser('${u.userId}')" class="px-2.5 py-1 bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] rounded-lg transition">Disarm</button>
+                <button onclick="disarmUser('${uid}')" class="px-2.5 py-1 bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] rounded-lg transition">Disarm</button>
               </td>
             </tr>
           `;
