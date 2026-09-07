@@ -43,3 +43,32 @@ export async function setAppleUserId(appleUserId: string): Promise<void> {
     /* ignore */
   }
 }
+
+const DISPLAY_NAME_KEY = 'foresight.user_display_name.v1';
+let cachedDisplayName: string | null = null;
+
+export async function getUserDisplayName(): Promise<string | null> {
+  if (cachedDisplayName) return cachedDisplayName;
+  try {
+    const store = getSecureStore();
+    const name = await store.getItem(DISPLAY_NAME_KEY);
+    if (name && name.trim()) {
+      cachedDisplayName = name.trim();
+      return cachedDisplayName;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+export async function setUserDisplayName(name: string): Promise<void> {
+  if (!name || !name.trim()) return;
+  const store = getSecureStore();
+  cachedDisplayName = name.trim();
+  try {
+    await store.setItem(DISPLAY_NAME_KEY, name.trim());
+  } catch {
+    /* ignore */
+  }
+}

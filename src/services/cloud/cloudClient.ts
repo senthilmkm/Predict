@@ -93,12 +93,16 @@ export class PredictCloudClient {
   async updateStatus(
     cloudTradingEnabled: boolean,
     state: 'ARMED' | 'DISARMED',
-    config?: any
+    config?: any,
+    displayName?: string
   ): Promise<CloudStatusResult> {
     try {
+      const { getUserDisplayName } = require('../userId');
+      const name = displayName || (await getUserDisplayName()) || undefined;
+      const deviceName = `${require('react-native').Platform.OS} Device`;
       const res = await this.fetchWithAuth('/me/status', {
         method: 'POST',
-        body: JSON.stringify({ cloudTradingEnabled, state, config }),
+        body: JSON.stringify({ cloudTradingEnabled, state, config, displayName: name, deviceName }),
       });
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error || 'update_failed' };
