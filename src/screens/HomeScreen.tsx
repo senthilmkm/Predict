@@ -433,8 +433,8 @@ function HeartbeatChip({
   const staleAfter = Math.max(120, intervalSec * 4 + 60);
   const stale = running && ageSec != null && ageSec > staleAfter;
   const dotColor = !running ? colors.mute : stale ? colors.warn : colors.win;
-  const label = !running ? 'Idle' : stale ? 'Stale' : 'Live';
-  const ageLabel = running && ageSec != null ? `${ageSec}s` : running ? '…' : null;
+  const label = !running ? 'Idle' : stale ? `Stale (${intervalSec}s)` : `Live (${intervalSec}s)`;
+  const ageLabel = running && ageSec != null ? `${ageSec}s ago` : running ? '…' : null;
 
   return (
     <View style={styles.chip} testID="home-heartbeat">
