@@ -68,7 +68,7 @@
         <!-- Worker Heartbeat Indicator -->
         <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-slate-300 font-medium">Worker Active (20s Tick)</span>
+          <span id="headerWorkerStatus" class="text-slate-300 font-medium">Worker Active (20s Tick)</span>
         </div>
 
         <!-- Emergency Kill-Switch Button -->
@@ -548,6 +548,10 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
           const subTickEl = document.getElementById('metricSubTicksDisplay');
           if (subTickEl) {
             subTickEl.innerText = `${subTicks} sub-ticks / min (${sec}s)`;
+          }
+          const headerStatusEl = document.getElementById('headerWorkerStatus');
+          if (headerStatusEl) {
+            headerStatusEl.innerText = `Worker Active (${sec}s Tick)`;
           }
           [10, 15, 20, 30, 60].forEach(val => {
             const btn = document.getElementById(`btnTick${val}`);
