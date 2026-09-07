@@ -156,4 +156,21 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('PREDICT ADMIN');
     expect(res.text).toContain('GCP Cloud');
   });
+
+  test('11. POST /admin/api/config updates tick_interval_seconds dynamically', async () => {
+    const res = await request(app)
+      .post('/admin/api/config')
+      .set('x-admin-key', ADMIN_SECRET)
+      .send({ tick_interval_seconds: 15 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.systemConfig.tick_interval_seconds).toBe(15);
+
+    const overviewRes = await request(app)
+      .get('/admin/api/overview')
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(overviewRes.body.worker.tickIntervalSeconds).toBe(15);
+    expect(overviewRes.body.worker.subTicksPerMinute).toBe(4);
+  });
 });

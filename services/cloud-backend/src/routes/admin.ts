@@ -7,6 +7,8 @@ import {
   getAllSystemAuditLogs,
   disarmAllUsers,
   writeAuditLog,
+  getSystemConfig,
+  setSystemConfig,
 } from '../services/firestore';
 import { AssetRegistry, defaultAppConfig } from 'trading-core';
 
@@ -43,8 +45,11 @@ adminRouter.use(adminAuthMiddleware);
 // 2. System Overview & Key Metrics
 adminRouter.get('/overview', async (req: Request, res: Response) => {
   try {
-    const users = await getAllUsers();
-    const trades = await getAllGlobalTrades(500);
+    const [users, trades, systemConfig] = await Promise.all([
+      getAllUsers(),
+      getAllGlobalTrades(500),
+      getSystemConfig(),
+    ]);
 
     const now = Date.now();
     const last24h = now - 24 * 60 * 60 * 1000;
@@ -60,9 +65,13 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
       return t > latest ? t : latest;
     }, 0);
 
+    const tickSec = systemConfig?.tick_interval_seconds || 20;
+    const subTicks = Math.max(1, Math.floor(60 / tickSec));
+
     res.json({
       ok: true,
       timestamp: new Date().toISOString(),
+      systemConfig,
       metrics: {
         totalUsers: users.length,
         activeTraders,
@@ -73,14 +82,36 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
       },
       worker: {
         status: 'ACTIVE',
-        tickIntervalSeconds: 20,
-        subTicksPerMinute: 3,
+        tickIntervalSeconds: tickSec,
+        subTicksPerMinute: subTicks,
         gcpRegion: process.env.GCP_REGION || 'us-east1',
         gcpProject: process.env.GCP_PROJECT || 'predict-cloud-api-428463178740',
       },
     });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err?.message || 'Overview error' });
+  }
+});
+
+// Update System Configuration (e.g. tick_interval_seconds)
+adminRouter.post('/config', async (req: Request, res: Response) => {
+  try {
+    const { tick_interval_seconds, stale_timeout_seconds, batch_size } = req.body || {};
+    const updateData: any = {};
+    if (typeof tick_interval_seconds === 'number' && tick_interval_seconds >= 5 && tick_interval_seconds <= 60) {
+      updateData.tick_interval_seconds = Math.round(tick_interval_seconds);
+    }
+    if (typeof stale_timeout_seconds === 'number' && stale_timeout_seconds >= 10) {
+      updateData.stale_timeout_seconds = Math.round(stale_timeout_seconds);
+    }
+    if (typeof batch_size === 'number' && batch_size >= 1) {
+      updateData.batch_size = Math.round(batch_size);
+    }
+    const updated = await setSystemConfig(updateData);
+    await writeAuditLog('system', 'CONFIG_CHANGE', { updated, changedBy: 'admin_portal' });
+    res.json({ ok: true, systemConfig: updated });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err?.message || 'Config update error' });
   }
 });
 

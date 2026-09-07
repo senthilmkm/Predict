@@ -14,6 +14,7 @@ import {
   saveTradeRecord,
   getTradeRecords,
   writeAuditLog,
+  getSystemConfig,
   TradeRecordDoc,
 } from '../services/firestore';
 import { sendPushNotification } from '../services/notifications';
@@ -252,16 +253,19 @@ async function runOneTick() {
   return { timestamp: now.toISOString(), activeUserCount: activeUsers.length, results };
 }
 
-// Endpoint triggered every minute by Cloud Scheduler (executes 3 x 20s sub-ticks per invocation in production)
+// Endpoint triggered every minute by Cloud Scheduler (executes N sub-ticks per minute based on systemConfig)
 workerRouter.post('/tick', async (req: Request, res: Response) => {
   const isTest = process.env.NODE_ENV === 'test' || req.query.single === 'true';
-  const tickCount = isTest ? 1 : 3;
+  const sysConfig = await getSystemConfig();
+  const intervalSec = sysConfig?.tick_interval_seconds || 20;
+  const tickCount = isTest ? 1 : Math.max(1, Math.floor(60 / intervalSec));
+  const delayMs = intervalSec * 1000;
   let lastResult: any = { activeUserCount: 0, results: [] };
 
   for (let i = 0; i < tickCount; i++) {
     lastResult = await runOneTick();
     if (i < tickCount - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 20000));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
 
@@ -272,5 +276,7 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
     activeUsersCount: lastResult.activeUserCount,
     activeUserCount: lastResult.activeUserCount,
     results: lastResult.results,
+    tickIntervalSeconds: intervalSec,
+    subTicksExecuted: tickCount,
   });
 });

@@ -21,7 +21,7 @@ export interface TradeRecordDoc {
 export interface AuditLogDoc {
   logId: string;
   userId: string;
-  eventType: 'KEY_UPLOAD' | 'KEY_WIPE' | 'CLOUD_ARMED' | 'CLOUD_DISARMED' | 'KILL_SWITCH' | 'TRADE_TRIGGERED' | 'DISCLAIMER_ACCEPTED' | 'ERROR';
+  eventType: 'KEY_UPLOAD' | 'KEY_WIPE' | 'CLOUD_ARMED' | 'CLOUD_DISARMED' | 'KILL_SWITCH' | 'TRADE_TRIGGERED' | 'DISCLAIMER_ACCEPTED' | 'CONFIG_CHANGE' | 'ERROR';
   details: Record<string, any>;
   timestamp: string;
 }
