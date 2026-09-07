@@ -1,13 +1,21 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import { apiRouter } from './routes/api';
 import { workerRouter } from './routes/worker';
+import { adminRouter } from './routes/admin';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8080;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static Admin Portal UI at /admin
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Admin API endpoints
+app.use('/admin/api', adminRouter);
 
 // API routes for client control
 app.use('/', apiRouter);
@@ -22,3 +30,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export { app };
+

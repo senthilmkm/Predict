@@ -291,3 +291,80 @@ export async function syncAssetCatalogToFirestore(): Promise<any[]> {
   }
   return ASSETS_CATALOG;
 }
+
+export async function getAllUsers(): Promise<(UserStatusDoc & { config?: any; pushTokens?: string[] })[]> {
+  const f = getDb();
+  if (!f) {
+    return Array.from(localUserStore.values());
+  }
+  try {
+    const snapshot = await f.collection('users').get();
+    return snapshot.docs.map((doc: any) => doc.data() as any);
+  } catch {
+    return Array.from(localUserStore.values());
+  }
+}
+
+export async function getAllGlobalTrades(limit = 100): Promise<TradeRecordDoc[]> {
+  const f = getDb();
+  if (!f) {
+    const allTrades: TradeRecordDoc[] = [];
+    for (const trades of localTradeStore.values()) {
+      allTrades.push(...trades);
+    }
+    allTrades.sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());
+    return allTrades.slice(0, limit);
+  }
+  try {
+    const snapshot = await f.collectionGroup('trades').orderBy('executedAt', 'desc').limit(limit).get();
+    return snapshot.docs.map((doc: any) => doc.data() as TradeRecordDoc);
+  } catch {
+    const allTrades: TradeRecordDoc[] = [];
+    for (const trades of localTradeStore.values()) {
+      allTrades.push(...trades);
+    }
+    allTrades.sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());
+    return allTrades.slice(0, limit);
+  }
+}
+
+export async function getAllSystemAuditLogs(limit = 100): Promise<AuditLogDoc[]> {
+  const f = getDb();
+  if (!f) {
+    const allLogs: AuditLogDoc[] = [];
+    for (const logs of localAuditStore.values()) {
+      allLogs.push(...logs);
+    }
+    allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return allLogs.slice(0, limit);
+  }
+  try {
+    const snapshot = await f.collectionGroup('audit').orderBy('timestamp', 'desc').limit(limit).get();
+    return snapshot.docs.map((doc: any) => doc.data() as AuditLogDoc);
+  } catch {
+    const allLogs: AuditLogDoc[] = [];
+    for (const logs of localAuditStore.values()) {
+      allLogs.push(...logs);
+    }
+    allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return allLogs.slice(0, limit);
+  }
+}
+
+export async function disarmAllUsers(reason = 'admin_kill_switch'): Promise<{ disarmedCount: number }> {
+  const users = await getAllUsers();
+  let disarmedCount = 0;
+  for (const u of users) {
+    if (u.state === 'ARMED' || u.cloudTradingEnabled) {
+      await upsertUserDoc(u.userId, {
+        state: 'DISARMED',
+        cloudTradingEnabled: false,
+        lastError: `Disarmed: ${reason}`,
+      });
+      await writeAuditLog(u.userId, 'KILL_SWITCH', { reason, disarmedAt: new Date().toISOString() });
+      disarmedCount++;
+    }
+  }
+  return { disarmedCount };
+}
+
