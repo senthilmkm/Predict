@@ -202,7 +202,7 @@
           </div>
         </h3>
         <p class="text-xs text-slate-400 mb-6">
-          Predict Cloud Engine automatically evaluates 15m Pyth index feeds against Kalshi prediction market strikes every 20 seconds.
+          Predict Cloud Engine automatically evaluates 15m Pyth index feeds against Kalshi prediction market strikes <span id="systemTickDescription" class="text-sky-400 font-semibold">every 20 seconds</span>.
         </p>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -549,6 +549,10 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
           const subTickEl = document.getElementById('metricSubTicksDisplay');
           if (subTickEl) {
             subTickEl.innerText = `${subTicks} sub-ticks / min (${sec}s)`;
+          }
+          const descEl = document.getElementById('systemTickDescription');
+          if (descEl) {
+            descEl.innerText = `every ${sec} seconds`;
           }
           const headerStatusEl = document.getElementById('headerWorkerStatus');
           if (headerStatusEl) {
