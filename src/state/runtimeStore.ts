@@ -206,6 +206,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
               poll_interval_seconds: seconds,
             },
           }));
+          if (get().status?.running) {
+            get().start();
+          }
         }
       }
     } catch {

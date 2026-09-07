@@ -94,6 +94,15 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     });
     set({ config });
     schedulePersistConfig(config);
+    try {
+      const { useRuntimeStore } = require('./runtimeStore');
+      const rt = useRuntimeStore.getState();
+      if (rt.status?.running) {
+        rt.start();
+      }
+    } catch {
+      /* ignore circular import in tests */
+    }
   },
   setAlertRetentionDays: (days) => {
     const config = normalizeAppConfig({
