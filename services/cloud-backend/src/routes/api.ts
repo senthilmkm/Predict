@@ -171,10 +171,16 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
   const { cloudTradingEnabled, state, config, onboardingRecord, displayName, deviceName } = req.body || {};
 
   try {
+    const systemConfig = await getSystemConfig();
     const updateData: any = {};
     if (typeof cloudTradingEnabled === 'boolean') updateData.cloudTradingEnabled = cloudTradingEnabled;
     if (state === 'ARMED' || state === 'DISARMED') updateData.state = state;
-    if (config) updateData.config = config;
+    if (config) {
+      updateData.config = {
+        ...config,
+        poll_interval_seconds: systemConfig.tick_interval_seconds,
+      };
+    }
     if (onboardingRecord) updateData.onboardingRecord = onboardingRecord;
     if (displayName) updateData.displayName = displayName;
     if (deviceName) updateData.deviceName = deviceName;
@@ -186,7 +192,7 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
       { cloudTradingEnabled: userDoc.cloudTradingEnabled, state: userDoc.state }
     );
 
-    res.json({ ok: true, userDoc });
+    res.json({ ok: true, userDoc, systemConfig });
   } catch (err: any) {
     res.status(500).json({ error: 'update_failed', message: err?.message || 'Failed to update user status' });
   }
