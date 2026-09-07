@@ -37,10 +37,11 @@
     .tooltip-wrapper { position: relative; display: inline-flex; align-items: center; }
     .tooltip-content {
       visibility: hidden; opacity: 0; transition: opacity 0.2s ease, visibility 0.2s ease;
-      position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%);
-      width: 260px; padding: 10px 12px; background-color: #0284C7; color: #FFFFFF;
-      font-size: 11px; font-weight: 500; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-      z-index: 50; pointer-events: none; text-align: left; line-height: 1.4;
+      position: absolute; top: calc(100% + 6px); right: 0; left: auto;
+      width: 270px; padding: 10px 14px; background-color: #0F172A; color: #F8FAFC;
+      border: 1px solid #0284C7; font-size: 11px; font-weight: 500; border-radius: 10px;
+      box-shadow: 0 15px 30px rgba(0,0,0,0.8);
+      z-index: 9999; pointer-events: none; text-align: left; line-height: 1.4;
     }
     .tooltip-wrapper:hover .tooltip-content { visibility: visible; opacity: 1; }
   </style>
@@ -90,11 +91,11 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
       <!-- Total Enrolled Users Card -->
-      <div class="glass-card rounded-2xl p-5 relative overflow-hidden">
+      <div class="glass-card rounded-2xl p-5 relative">
         <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
           <span>Total Users</span>
           <div class="tooltip-wrapper">
-            <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+            <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
             <div class="tooltip-content">
               <strong>Total Registered Users:</strong> Count of all users with cloud identity. Active traders are users with Face ID armed and Kalshi keys verified.
             </div>
@@ -107,11 +108,11 @@
       </div>
 
       <!-- 24h Volume Card -->
-      <div class="glass-card rounded-2xl p-5 relative overflow-hidden">
+      <div class="glass-card rounded-2xl p-5 relative">
         <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
           <span>24h Traded Volume</span>
           <div class="tooltip-wrapper">
-            <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+            <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
             <div class="tooltip-content">
               <strong>24h Volume ($):</strong> Total cumulative dollar value of live orders placed by GCP Cloud Run worker across all accounts in the last 24 hours.
             </div>
@@ -124,11 +125,11 @@
       </div>
 
       <!-- 24h Orders Card -->
-      <div class="glass-card rounded-2xl p-5 relative overflow-hidden">
+      <div class="glass-card rounded-2xl p-5 relative">
         <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
           <span>24h Orders Placed</span>
           <div class="tooltip-wrapper">
-            <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+            <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
             <div class="tooltip-content">
               <strong>24h Orders Placed:</strong> Number of automated orders submitted to Kalshi by GCP backend in the last 24 hours.
             </div>
@@ -141,11 +142,11 @@
       </div>
 
       <!-- System Health Card -->
-      <div class="glass-card rounded-2xl p-5 relative overflow-hidden">
+      <div class="glass-card rounded-2xl p-5 relative">
         <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
           <span>GCP Worker Health</span>
           <div class="tooltip-wrapper">
-            <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+            <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
             <div class="tooltip-content">
               <strong>GCP Worker Status:</strong> State of Cloud Scheduler + Cloud Run 20s tick loop. Shows timestamp of most recent server execution.
             </div>
@@ -194,7 +195,7 @@
         <h3 class="text-base font-bold text-white mb-2 flex items-center gap-2">
           <span>🔮 Predict Operational Status</span>
           <div class="tooltip-wrapper">
-            <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+            <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
             <div class="tooltip-content">
               Shows real-time platform execution mode, Cloud Scheduler heartbeat, and GCP region details.
             </div>
@@ -229,7 +230,7 @@
             <h3 class="text-base font-bold text-white flex items-center gap-2">
               <span>👥 Enrolled Users & Configurations</span>
               <div class="tooltip-wrapper">
-                <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+                <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
                 <div class="tooltip-content">
                   List of all registered Predict accounts. Manage user arming state, execution mode ($ per trade), and asset cushions.
                 </div>
@@ -269,7 +270,7 @@
           <h3 class="text-base font-bold text-white flex items-center gap-2">
             <span>🎯 Default Asset Cushions Matrix</span>
             <div class="tooltip-wrapper">
-              <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+              <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
               <div class="tooltip-content">
                 <strong>Cushion ($):</strong> The required buffer distance price must clear the strike before a YES or NO lean triggers an order. Adjust default values per asset.
               </div>
@@ -292,7 +293,7 @@
             <h3 class="text-base font-bold text-white flex items-center gap-2">
               <span>📈 Live Kalshi Trade Stream</span>
               <div class="tooltip-wrapper">
-                <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+                <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
                 <div class="tooltip-content">
                   Real-time execution log of orders submitted to Kalshi by GCP backend across all users.
                 </div>
@@ -332,7 +333,7 @@
           <h3 class="text-base font-bold text-white flex items-center gap-2">
             <span>📜 System Audit & Error Trail</span>
             <div class="tooltip-wrapper">
-              <span class="cursor-pointer text-slate-400 hover:text-sky-400">ℹ️</span>
+              <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
               <div class="tooltip-content">
                 Complete audit trail of system events, security key uploads, kill-switch activations, and error tracebacks.
               </div>
