@@ -612,14 +612,17 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
             <tr class="hover:bg-slate-800/40 transition">
               <td class="py-3 px-4">
                 <div class="font-bold text-white text-xs font-sans">${nameLabel}</div>
-                <div class="text-[10px] text-slate-400 font-mono">${uid}</div>
+                <div class="text-[10px] text-sky-400 font-mono font-bold">${uid}</div>
               </td>
               <td class="py-3 px-4">${statusBadge}${keyBadge}</td>
               <td class="py-3 px-4 text-slate-300 font-sans">${modeLabel}</td>
               <td class="py-3 px-4 text-slate-400">${lastTick}</td>
               <td class="py-3 px-4 font-sans text-xs">${lastErr}</td>
               <td class="py-3 px-4 text-right font-sans">
-                ${actionBtn}
+                <div class="flex items-center justify-end gap-1.5">
+                  ${actionBtn}
+                  <button onclick="deleteUser('${uid}')" class="px-2 py-1 bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-200 border border-slate-700 font-bold text-[10px] rounded-lg transition" title="Delete stale test user from database">Delete</button>
+                </div>
               </td>
             </tr>
           `;
@@ -748,6 +751,25 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
         }
       } catch (e) {
         alert(`Arm error: ${e.message}`);
+      }
+    }
+
+    async function deleteUser(userId) {
+      if (!confirm(`Are you sure you want to PERMANENTLY DELETE user document ${userId} from Firestore?`)) return;
+      try {
+        const res = await fetch(`${API_BASE}/users/${userId}`, {
+          method: 'DELETE',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`User ${userId} deleted successfully.`);
+          refreshData();
+        } else {
+          alert(`Delete failed: ${data.error}`);
+        }
+      } catch (e) {
+        alert(`Delete error: ${e.message}`);
       }
     }
 

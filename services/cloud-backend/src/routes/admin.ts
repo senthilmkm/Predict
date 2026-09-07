@@ -3,6 +3,7 @@ import {
   getAllUsers,
   getUserDoc,
   upsertUserDoc,
+  deleteUserDoc,
   getAllGlobalTrades,
   getAllSystemAuditLogs,
   disarmAllUsers,
@@ -221,6 +222,22 @@ adminRouter.post('/users/:userId/arm', async (req: Request, res: Response) => {
     res.json({ ok: true, user: updatedUser });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err?.message || 'User arm error' });
+  }
+});
+
+// 6c. Delete Specific Stale User Account
+adminRouter.delete('/users/:userId', async (req: Request, res: Response) => {
+  try {
+    const userId = String(req.params.userId || '');
+    await deleteUserDoc(userId);
+    await writeAuditLog(userId, 'KILL_SWITCH', {
+      source: 'admin_portal',
+      reason: 'Admin deleted user document',
+      deletedAt: new Date().toISOString(),
+    });
+    res.json({ ok: true, message: `User ${userId} deleted from Firestore DB` });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err?.message || 'User delete error' });
   }
 });
 

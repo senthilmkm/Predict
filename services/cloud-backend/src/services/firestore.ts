@@ -111,6 +111,19 @@ export async function upsertUserDoc(
   return updated;
 }
 
+export async function deleteUserDoc(userId: string): Promise<boolean> {
+  localUserStore.delete(userId);
+  const f = getDb();
+  if (f) {
+    try {
+      await f.collection('users').doc(userId).delete();
+    } catch {
+      /* ignore */
+    }
+  }
+  return true;
+}
+
 export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { config?: any; pushTokens?: string[]; fcmTokens?: string[] })[]> {
   const f = getDb();
   let users: any[] = [];

@@ -169,24 +169,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
   refreshCloudSnapshot: async () => {
     try {
-      const client = new PredictCloudClient(async () => null);
       const [tradesRes, statusRes] = await Promise.all([
-        client.getTrades(),
-        client.getStatus(),
+        cloudClient.getTrades(),
+        cloudClient.getStatus(),
       ]);
 
       if (statusRes.ok && statusRes.systemConfig?.tick_interval_seconds) {
         const seconds = statusRes.systemConfig.tick_interval_seconds;
         if (useConfigStore.getState().config.poll_interval_seconds !== seconds) {
-          useConfigStore.setState((s) => ({
-            config: {
-              ...s.config,
-              poll_interval_seconds: seconds,
-            },
-          }));
-          if (get().status?.running) {
-            get().start();
-          }
+          useConfigStore.getState().setPollIntervalSeconds(seconds);
         }
       }
 
@@ -196,7 +187,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       void cloudClient.updateStatus(
         localConfig.auto_trade_enabled,
         localConfig.auto_trade_enabled ? 'ARMED' : 'DISARMED',
-        localConfig
+        localConfig,
+        displayName
       );
 
       if (tradesRes.ok && Array.isArray(tradesRes.trades)) {
