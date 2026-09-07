@@ -148,13 +148,21 @@ apiRouter.get('/me/status', async (req: Request, res: Response) => {
     getSystemConfig(),
     syncAssetCatalogToFirestore(),
   ]);
-  const finalUserDoc = userDoc || {
+  const baseDoc = userDoc || {
     userId,
     cloudTradingEnabled: false,
     kalshiConfigured: false,
     state: 'DISARMED',
     updatedAt: new Date().toISOString(),
     config: defaultAppConfig(),
+  };
+
+  const finalUserDoc = {
+    ...baseDoc,
+    config: {
+      ...(baseDoc.config || defaultAppConfig()),
+      poll_interval_seconds: systemConfig.tick_interval_seconds,
+    },
   };
 
   res.json({
