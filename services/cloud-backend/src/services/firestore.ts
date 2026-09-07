@@ -318,7 +318,14 @@ export async function getAllGlobalTrades(limit = 100): Promise<TradeRecordDoc[]>
   }
   try {
     const snapshot = await f.collectionGroup('trades').orderBy('executedAt', 'desc').limit(limit).get();
-    return snapshot.docs.map((doc: any) => doc.data() as TradeRecordDoc);
+    return snapshot.docs.map((doc: any) => {
+      const parentUser = doc.ref.parent.parent?.id;
+      return {
+        tradeId: doc.id,
+        userId: parentUser || doc.data().userId || 'system',
+        ...doc.data(),
+      } as TradeRecordDoc;
+    });
   } catch {
     const allTrades: TradeRecordDoc[] = [];
     for (const trades of localTradeStore.values()) {
@@ -341,7 +348,14 @@ export async function getAllSystemAuditLogs(limit = 100): Promise<AuditLogDoc[]>
   }
   try {
     const snapshot = await f.collectionGroup('audit').orderBy('timestamp', 'desc').limit(limit).get();
-    return snapshot.docs.map((doc: any) => doc.data() as AuditLogDoc);
+    return snapshot.docs.map((doc: any) => {
+      const parentUser = doc.ref.parent.parent?.id;
+      return {
+        logId: doc.id,
+        userId: parentUser || doc.data().userId || 'system',
+        ...doc.data(),
+      } as AuditLogDoc;
+    });
   } catch {
     const allLogs: AuditLogDoc[] = [];
     for (const logs of localAuditStore.values()) {

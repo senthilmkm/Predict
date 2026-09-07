@@ -565,17 +565,22 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
         }
 
         tbody.innerHTML = data.trades.map(t => {
+          const tradeId = t.tradeId || t.id || 'trade';
+          const userId = t.userId || 'system';
+          const asset = t.asset || 'ASSET';
+          const ticker = t.ticker || 'TICKER';
           const badgeClass = t.status === 'FILLED' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-sky-500/20 text-sky-400 border-sky-500/30';
           const sideColor = t.decision === 'YES' ? 'text-emerald-400' : 'text-rose-400';
+          const execTime = t.executedAt ? new Date(t.executedAt).toLocaleString() : 'N/A';
           return `
             <tr class="hover:bg-slate-800/40 transition">
-              <td class="py-3 px-4"><div class="font-bold text-white">${t.tradeId}</div><div class="text-[10px] text-slate-400">${t.userId}</div></td>
-              <td class="py-3 px-4"><div class="font-bold text-amber-400">${t.asset}</div><div class="text-[10px] text-slate-400">${t.ticker}</div></td>
-              <td class="py-3 px-4 font-bold ${sideColor}">${t.decision}</td>
-              <td class="py-3 px-4">${t.count} ctr @ $${t.price}</td>
+              <td class="py-3 px-4"><div class="font-bold text-white">${tradeId}</div><div class="text-[10px] text-slate-400">${userId}</div></td>
+              <td class="py-3 px-4"><div class="font-bold text-amber-400">${asset}</div><div class="text-[10px] text-slate-400">${ticker}</div></td>
+              <td class="py-3 px-4 font-bold ${sideColor}">${t.decision || 'N/A'}</td>
+              <td class="py-3 px-4">${t.count || 0} ctr @ $${t.price || 0}</td>
               <td class="py-3 px-4 font-bold text-white">$${(t.notionalUsd || 0).toFixed(2)}</td>
-              <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass}">${t.status}</span></td>
-              <td class="py-3 px-4 text-slate-400">${new Date(t.executedAt).toLocaleString()}</td>
+              <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass}">${t.status || 'PENDING'}</span></td>
+              <td class="py-3 px-4 text-slate-400">${execTime}</td>
             </tr>
           `;
         }).join('');
@@ -594,14 +599,19 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
           return;
         }
 
-        tbody.innerHTML = data.logs.map(l => `
-          <tr class="hover:bg-slate-800/40 transition">
-            <td class="py-3 px-4 font-bold text-sky-400">${l.eventType}</td>
-            <td class="py-3 px-4 text-white">${l.userId}</td>
-            <td class="py-3 px-4 text-slate-300 font-sans text-xs">${JSON.stringify(l.details || {})}</td>
-            <td class="py-3 px-4 text-slate-400">${new Date(l.timestamp).toLocaleString()}</td>
-          </tr>
-        `).join('');
+        tbody.innerHTML = data.logs.map(l => {
+          const eventType = l.eventType || 'EVENT';
+          const userId = l.userId || 'system';
+          const timeStr = l.timestamp ? new Date(l.timestamp).toLocaleString() : 'N/A';
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-3 px-4 font-bold text-sky-400">${eventType}</td>
+              <td class="py-3 px-4 text-white">${userId}</td>
+              <td class="py-3 px-4 text-slate-300 font-sans text-xs">${JSON.stringify(l.details || {})}</td>
+              <td class="py-3 px-4 text-slate-400">${timeStr}</td>
+            </tr>
+          `;
+        }).join('');
       } catch (e) {
         console.warn('Audit fetch error:', e);
       }
