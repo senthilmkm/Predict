@@ -538,6 +538,10 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
 
           const uid = u.userId || u.id || 'User';
           const nameLabel = u.displayName || u.name || u.deviceName || (uid.startsWith('usr_') ? 'Device Account' : 'Apple User');
+          const actionBtn = isArmed
+            ? `<button onclick="disarmUser('${uid}')" class="px-2.5 py-1 bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] rounded-lg transition">Disarm</button>`
+            : `<button onclick="armUser('${uid}')" class="px-2.5 py-1 bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg transition">Arm User</button>`;
+
           return `
             <tr class="hover:bg-slate-800/40 transition">
               <td class="py-3 px-4">
@@ -549,7 +553,7 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
               <td class="py-3 px-4 text-slate-400">${lastTick}</td>
               <td class="py-3 px-4 font-sans text-xs">${lastErr}</td>
               <td class="py-3 px-4 text-right font-sans">
-                <button onclick="disarmUser('${uid}')" class="px-2.5 py-1 bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] rounded-lg transition">Disarm</button>
+                ${actionBtn}
               </td>
             </tr>
           `;
@@ -658,6 +662,25 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
         }
       } catch (e) {
         alert(`Disarm error: ${e.message}`);
+      }
+    }
+
+    async function armUser(userId) {
+      if (!confirm(`Are you sure you want to ARM user ${userId}?`)) return;
+      try {
+        const res = await fetch(`${API_BASE}/users/${userId}/arm`, {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`User ${userId} armed successfully.`);
+          refreshData();
+        } else {
+          alert(`Arm failed: ${data.error}`);
+        }
+      } catch (e) {
+        alert(`Arm error: ${e.message}`);
       }
     }
 

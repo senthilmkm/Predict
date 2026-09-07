@@ -171,6 +171,28 @@ adminRouter.post('/users/:userId/disarm', async (req: Request, res: Response) =>
   }
 });
 
+// 6b. Arm Specific User
+adminRouter.post('/users/:userId/arm', async (req: Request, res: Response) => {
+  try {
+    const userId = String(req.params.userId || '');
+    const updatedUser = await upsertUserDoc(userId, {
+      state: 'ARMED',
+      cloudTradingEnabled: true,
+      lastError: null,
+    });
+
+    await writeAuditLog(userId, 'CLOUD_ARMED', {
+      source: 'admin_portal',
+      reason: 'Admin re-arm request',
+      armedAt: new Date().toISOString(),
+    });
+
+    res.json({ ok: true, user: updatedUser });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err?.message || 'User arm error' });
+  }
+});
+
 // 7. Get Global Trade Stream
 adminRouter.get('/trades', async (req: Request, res: Response) => {
   try {
