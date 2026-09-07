@@ -537,9 +537,13 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
           const lastErr = u.lastError ? `<span class="text-rose-400">${u.lastError}</span>` : `<span class="text-slate-500">Clean</span>`;
 
           const uid = u.userId || u.id || 'User';
+          const nameLabel = u.displayName || u.name || u.deviceName || (uid.startsWith('usr_') ? 'Device Account' : 'Apple User');
           return `
             <tr class="hover:bg-slate-800/40 transition">
-              <td class="py-3 px-4 font-bold text-white">${uid}</td>
+              <td class="py-3 px-4">
+                <div class="font-bold text-white text-xs font-sans">${nameLabel}</div>
+                <div class="text-[10px] text-slate-400 font-mono">${uid}</div>
+              </td>
               <td class="py-3 px-4">${statusBadge}</td>
               <td class="py-3 px-4 text-slate-300 font-sans">${modeLabel}</td>
               <td class="py-3 px-4 text-slate-400">${lastTick}</td>

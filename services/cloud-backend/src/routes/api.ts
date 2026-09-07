@@ -168,7 +168,7 @@ apiRouter.get('/me/status', async (req: Request, res: Response) => {
 // Update User Status & Config
 apiRouter.post('/me/status', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
-  const { cloudTradingEnabled, state, config, onboardingRecord } = req.body || {};
+  const { cloudTradingEnabled, state, config, onboardingRecord, displayName, deviceName } = req.body || {};
 
   try {
     const updateData: any = {};
@@ -176,6 +176,8 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
     if (state === 'ARMED' || state === 'DISARMED') updateData.state = state;
     if (config) updateData.config = config;
     if (onboardingRecord) updateData.onboardingRecord = onboardingRecord;
+    if (displayName) updateData.displayName = displayName;
+    if (deviceName) updateData.deviceName = deviceName;
 
     const userDoc = await upsertUserDoc(userId, updateData);
     await writeAuditLog(
