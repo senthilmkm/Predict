@@ -52,9 +52,12 @@ export function HomeScreen() {
   const [killBusy, setKillBusy] = useState(false);
 
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 10000);
+    const id = setInterval(() => {
+      setNowMs(Date.now());
+      void refreshCloudSnapshot();
+    }, 10000);
     return () => clearInterval(id);
-  }, []);
+  }, [refreshCloudSnapshot]);
 
   // 1. On Mount: Fetch Cloud Snapshot & Balances
   useEffect(() => {
@@ -201,6 +204,7 @@ export function HomeScreen() {
           lastPulseAt={status?.lastTickAt ?? status?.lastPulseAt}
           intervalSec={config.poll_interval_seconds}
           nowMs={nowMs}
+          onPress={() => void refreshCloudSnapshot()}
         />
       </View>
 
@@ -419,11 +423,13 @@ function HeartbeatChip({
   lastPulseAt,
   intervalSec,
   nowMs,
+  onPress,
 }: {
   running: boolean;
   lastPulseAt: string | null | undefined;
   intervalSec: number;
   nowMs: number;
+  onPress?: () => void;
 }) {
   const ageSec =
     lastPulseAt && Number.isFinite(new Date(lastPulseAt).getTime())
@@ -437,7 +443,7 @@ function HeartbeatChip({
   const ageLabel = running && ageSec != null ? `${ageSec}s ago` : running ? '…' : null;
 
   return (
-    <View style={styles.chip} testID="home-heartbeat">
+    <Pressable style={styles.chip} testID="home-heartbeat" onPress={onPress} hitSlop={6}>
       <View
         style={[
           styles.heartDot,
@@ -458,7 +464,7 @@ function HeartbeatChip({
         {label}
         {ageLabel ? ` · ${ageLabel}` : ''}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
