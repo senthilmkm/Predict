@@ -11,11 +11,19 @@ const PORT = Number(process.env.PORT) || 8080;
 app.use(cors());
 app.use(express.json());
 
-// Serve static Admin Portal UI at /admin
-app.use(express.static(path.join(__dirname, '../public')));
+const publicDir = path.join(process.cwd(), 'public');
 
-// Admin API endpoints
+// Admin API endpoints (must be before static route)
 app.use('/admin/api', adminRouter);
+
+// Serve static Admin Portal UI at /admin
+app.use('/admin', express.static(path.join(publicDir, 'admin')));
+app.use(express.static(publicDir));
+
+// Fallback for SPA routing under /admin
+app.get(['/admin', '/admin/*'], (req, res) => {
+  res.sendFile(path.join(publicDir, 'admin/index.html'));
+});
 
 // API routes for client control
 app.use('/', apiRouter);
