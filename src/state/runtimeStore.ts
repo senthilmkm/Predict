@@ -175,6 +175,21 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         client.getStatus(),
       ]);
 
+      if (statusRes.ok && statusRes.systemConfig?.tick_interval_seconds) {
+        const seconds = statusRes.systemConfig.tick_interval_seconds;
+        if (useConfigStore.getState().config.poll_interval_seconds !== seconds) {
+          useConfigStore.setState((s) => ({
+            config: {
+              ...s.config,
+              poll_interval_seconds: seconds,
+            },
+          }));
+          if (get().status?.running) {
+            get().start();
+          }
+        }
+      }
+
       // Proactively sync local config & device name to Cloud backend on app startup/refresh
       const localConfig = useConfigStore.getState().config;
       const displayName = await getUserDisplayName();
@@ -195,20 +210,6 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           curStats.realized_pnl_usd !== newStats.realized_pnl_usd
         ) {
           set({ stats: newStats });
-        }
-      }
-      if (statusRes.ok && statusRes.systemConfig?.tick_interval_seconds) {
-        const seconds = statusRes.systemConfig.tick_interval_seconds;
-        if (useConfigStore.getState().config.poll_interval_seconds !== seconds) {
-          useConfigStore.setState((s) => ({
-            config: {
-              ...s.config,
-              poll_interval_seconds: seconds,
-            },
-          }));
-          if (get().status?.running) {
-            get().start();
-          }
         }
       }
     } catch {

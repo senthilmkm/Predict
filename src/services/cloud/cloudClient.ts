@@ -106,7 +106,7 @@ export class PredictCloudClient {
       });
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error || 'update_failed' };
-      return { ok: true, userDoc: data.userDoc };
+      return { ok: true, userDoc: data.userDoc, systemConfig: data.systemConfig };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
     }
