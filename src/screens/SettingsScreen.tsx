@@ -49,6 +49,7 @@ import {
   loadCredentials,
   saveCredentials,
 } from '../services/credentials';
+import { getPersistentUserId, getUserDisplayName } from '../services/userId';
 import { KalshiClient } from '../services/kalshi/client';
 import { assertPemLooksValid } from '../services/kalshi/sign';
 
@@ -139,8 +140,13 @@ export function SettingsScreen() {
   const [riskHelpOpen, setRiskHelpOpen] = useState(false);
   const [credsHelpOpen, setCredsHelpOpen] = useState(false);
 
+  const [cloudUserId, setCloudUserId] = useState<string>('');
+  const [displayNameState, setDisplayNameState] = useState<string>('');
+
   useEffect(() => {
     void hasCredentials().then(setHasCreds);
+    void getPersistentUserId().then(setCloudUserId);
+    void getUserDisplayName().then(setDisplayNameState);
   }, []);
 
   useEffect(() => {
@@ -811,6 +817,17 @@ export function SettingsScreen() {
             </Text>
           </>
         ) : null}
+
+        <Text style={styles.section}>Account & Cloud Identity</Text>
+        <View style={styles.subCard} testID="account-cloud-identity-card">
+          <Text style={styles.slimLabel}>{displayNameState || 'Apple User'}</Text>
+          <Text style={styles.slimMeta} testID="cloud-user-id">
+            User ID: {cloudUserId || 'Loading...'}
+          </Text>
+          <Text style={styles.hint}>
+            This persistent User ID matches your account in the Admin Portal for cloud synchronization and automated trade execution.
+          </Text>
+        </View>
 
         <View style={styles.sectionRow}>
           <Text style={[styles.section, styles.sectionNoTop]}>Kalshi credentials</Text>
