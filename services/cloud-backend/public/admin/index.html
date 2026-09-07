@@ -316,7 +316,8 @@
           <table class="w-full text-left text-xs text-slate-300">
             <thead class="bg-slate-900/80 text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-800">
               <tr>
-                <th class="py-3 px-4">Trade ID / User</th>
+                <th class="py-3 px-4">Trade ID</th>
+                <th class="py-3 px-4">User ID</th>
                 <th class="py-3 px-4">Asset & Ticker</th>
                 <th class="py-3 px-4">Decision</th>
                 <th class="py-3 px-4">Price & Count</th>
@@ -327,7 +328,7 @@
             </thead>
             <tbody id="tradeTableBody" class="divide-y divide-slate-800/60 font-mono">
               <tr>
-                <td colspan="7" class="py-6 text-center text-slate-500 font-sans">Loading trade stream...</td>
+                <td colspan="8" class="py-6 text-center text-slate-500 font-sans">Loading trade stream...</td>
               </tr>
             </tbody>
           </table>
@@ -634,7 +635,7 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
         const data = await res.json();
         const tbody = document.getElementById('tradeTableBody');
         if (!data.ok || !data.trades || data.trades.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-500 font-sans">No execution trades recorded yet.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-slate-500 font-sans">No execution trades recorded yet.</td></tr>`;
           return;
         }
 
@@ -648,7 +649,8 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
           const execTime = t.executedAt ? new Date(t.executedAt).toLocaleString() : 'N/A';
           return `
             <tr class="hover:bg-slate-800/40 transition">
-              <td class="py-3 px-4"><div class="font-bold text-white">${tradeId}</div><div class="text-[10px] text-slate-400">${userId}</div></td>
+              <td class="py-3 px-4 font-bold text-white font-mono text-xs">${tradeId}</td>
+              <td class="py-3 px-4 text-slate-300 font-mono text-[11px]">${userId}</td>
               <td class="py-3 px-4"><div class="font-bold text-amber-400">${asset}</div><div class="text-[10px] text-slate-400">${ticker}</div></td>
               <td class="py-3 px-4 font-bold ${sideColor}">${t.decision || 'N/A'}</td>
               <td class="py-3 px-4">${t.count || 0} ctr @ $${t.price || 0}</td>
