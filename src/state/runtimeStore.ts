@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { AppRuntime, getAppRuntime, resetAppRuntimeForTests, LastTradeAction } from '../runtime/AppRuntime';
 import { useConfigStore } from './configStore';
 import { DashboardStats, TradeRecord, AlertRecord, statsFromCloudTrades } from '../storage/repos';
-import { PredictCloudClient } from '../services/cloud/cloudClient';
+import { PredictCloudClient, cloudClient } from '../services/cloud/cloudClient';
+import { getUserDisplayName } from '../services/userId';
 import { LeanResult } from '../services/lean/lean';
 import { updateAppBadgeCount } from '../services/notifications';
 import { AssetKey } from '../config/types';
@@ -173,6 +174,16 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         client.getTrades(),
         client.getStatus(),
       ]);
+
+      // Proactively sync local config & device name to Cloud backend on app startup/refresh
+      const localConfig = useConfigStore.getState().config;
+      const displayName = await getUserDisplayName();
+      void cloudClient.updateStatus(
+        localConfig.auto_trade_enabled,
+        localConfig.auto_trade_enabled ? 'ARMED' : 'DISARMED',
+        localConfig
+      );
+
       if (tradesRes.ok && Array.isArray(tradesRes.trades)) {
         const newStats = statsFromCloudTrades(tradesRes.trades);
         const curStats = get().stats;
