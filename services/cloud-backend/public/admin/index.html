@@ -514,6 +514,11 @@ gcloud run deploy predict-cloud-api --source . --region us-east1 --allow-unauthe
           headers: getHeaders(),
           body: JSON.stringify({ tick_interval_seconds: sec }),
         });
+        if (!res.ok) {
+          const text = await res.text();
+          alert(`Server error (${res.status}): ${text.slice(0, 150)}`);
+          return;
+        }
         const data = await res.json();
         if (data.ok) {
           await refreshData();
