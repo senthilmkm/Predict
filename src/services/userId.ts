@@ -47,7 +47,7 @@ export async function setAppleUserId(appleUserId: string): Promise<void> {
 const DISPLAY_NAME_KEY = 'foresight.user_display_name.v1';
 let cachedDisplayName: string | null = null;
 
-export async function getUserDisplayName(): Promise<string | null> {
+export async function getUserDisplayName(): Promise<string> {
   if (cachedDisplayName) return cachedDisplayName;
   try {
     const store = getSecureStore();
@@ -59,7 +59,21 @@ export async function getUserDisplayName(): Promise<string | null> {
   } catch {
     /* ignore */
   }
-  return null;
+
+  // Hybrid Automatic Detection: Check Device Name (e.g. "User's iPhone")
+  try {
+    const Device = require('expo-device');
+    if (Device?.deviceName && String(Device.deviceName).trim()) {
+      cachedDisplayName = String(Device.deviceName).trim();
+      return cachedDisplayName;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const { Platform } = require('react-native');
+  cachedDisplayName = `${Platform.OS === 'ios' ? 'iOS' : 'Android'} Device`;
+  return cachedDisplayName;
 }
 
 export async function setUserDisplayName(name: string): Promise<void> {
