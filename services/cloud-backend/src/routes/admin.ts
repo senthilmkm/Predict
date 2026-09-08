@@ -12,6 +12,7 @@ import {
   setSystemConfig,
 } from '../services/firestore';
 import { AssetRegistry, defaultAppConfig } from 'trading-core';
+import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 
 export const adminRouter = Router();
 
@@ -55,8 +56,13 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
     const now = Date.now();
     const last24h = now - 24 * 60 * 60 * 1000;
 
-    const trades24h = trades.filter((t) => new Date(t.executedAt).getTime() >= last24h);
-    const filled24h = trades24h.filter((t) => t.status === 'FILLED' || t.status === 'SUBMITTED');
+    const trades24h = trades.filter((t) => {
+      const at = new Date(t.executedAt || 0).getTime();
+      return Number.isFinite(at) && at >= last24h;
+    });
+    const filled24h = trades24h.filter(
+      (t) => t.status === 'FILLED' || t.status === 'SUBMITTED' || t.status === 'SETTLED'
+    );
     const volumeUsd24h = filled24h.reduce((acc, t) => acc + (t.notionalUsd || 0), 0);
 
     const activeTraders = users.filter((u) => u.state === 'ARMED' && u.cloudTradingEnabled).length;
@@ -99,8 +105,9 @@ adminRouter.post('/config', async (req: Request, res: Response) => {
   try {
     const { tick_interval_seconds, stale_timeout_seconds, batch_size } = req.body || {};
     const updateData: any = {};
-    if (typeof tick_interval_seconds === 'number' && tick_interval_seconds >= 5 && tick_interval_seconds <= 60) {
-      updateData.tick_interval_seconds = Math.round(tick_interval_seconds);
+    const tickSec = Number(tick_interval_seconds);
+    if (Number.isFinite(tickSec) && tickSec >= 5 && tickSec <= 60) {
+      updateData.tick_interval_seconds = Math.round(tickSec);
     }
     if (typeof stale_timeout_seconds === 'number' && stale_timeout_seconds >= 10) {
       updateData.stale_timeout_seconds = Math.round(stale_timeout_seconds);
@@ -119,8 +126,25 @@ adminRouter.post('/config', async (req: Request, res: Response) => {
 // 3. Get All Users
 adminRouter.get('/users', async (req: Request, res: Response) => {
   try {
-    const users = await getAllUsers();
-    res.json({ ok: true, count: users.length, users });
+    const [users, trades] = await Promise.all([getAllUsers(), getAllGlobalTrades(2000)]);
+    const tradesByUser = new Map<string, typeof trades>();
+    for (const trade of trades) {
+      const uid = trade.userId || 'unknown';
+      const list = tradesByUser.get(uid) || [];
+      list.push(trade);
+      tradesByUser.set(uid, list);
+    }
+    const usersWithPnl = users.map((u) => {
+      const uid = u.userId || '';
+      const userTrades = tradesByUser.get(uid) || [];
+      const liveTrades = userTrades.filter((t) => !t.dryRun);
+      return {
+        ...u,
+        pnlTodayUsd: cloudDailyRealizedPnl(liveCloudTradesToday(liveTrades)),
+        pnlLifetimeUsd: cloudDailyRealizedPnl(liveTrades),
+      };
+    });
+    res.json({ ok: true, count: usersWithPnl.length, users: usersWithPnl });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err?.message || 'Fetch users error' });
   }

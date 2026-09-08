@@ -1,22 +1,55 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
+import { formatChange24h } from '../util/moneyFormat';
 
 export function DashboardScreen({ navigation }: { navigation?: any }) {
   const stats = useRuntimeStore((s) => s.stats);
+  const change24hUsd = useRuntimeStore((s) => s.change24hUsd);
+  const change24hPct = useRuntimeStore((s) => s.change24hPct);
   const unread = useRuntimeStore((s) => s.unread);
   const trades = useRuntimeStore((s) => s.trades);
   const alerts = useRuntimeStore((s) => s.alerts);
   const tickOnce = useRuntimeStore((s) => s.tickOnce);
+  const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
+  const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refreshCloudSnapshot(), refreshPredictionsBalance()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshCloudSnapshot, refreshPredictionsBalance]);
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content} testID="screen-dashboard">
-      <Text style={styles.heading}>Today (ET)</Text>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.content}
+      testID="screen-dashboard"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void onRefresh()}
+          tintColor={colors.accent}
+          colors={[colors.accent]}
+        />
+      }
+    >
+      <Text style={styles.heading}>Kalshi account</Text>
+      <Card
+        label={change24hUsd == null ? 'Change (24h) · collecting' : 'Change (24h)'}
+        value={formatChange24h(change24hUsd, change24hPct)}
+        color={change24hUsd == null ? undefined : change24hUsd >= 0 ? colors.win : colors.loss}
+      />
+      <Text style={[styles.heading, { marginTop: 10 }]}>Predict trades today (ET)</Text>
       <Card label="Win rate" value={stats.win_rate == null ? '—' : `${(stats.win_rate * 100).toFixed(0)}%`} />
       <Card
-        label="Realized P&L"
+        label="Closed P&L (Predict orders)"
         value={`$${stats.realized_pnl_usd.toFixed(2)}`}
         color={stats.realized_pnl_usd >= 0 ? colors.win : colors.loss}
       />
@@ -38,7 +71,8 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
         {trades[0]?.notional_usd != null ? ` · $${trades[0].notional_usd.toFixed(2)}` : ''}
       </Text>
       <Text style={styles.note}>
-        Snapshot = today America/New_York only. History tab has full lists + filters.
+        Change (24h) is your Kalshi Predictions total vs yesterday’s saved value. Closed P&L
+        is only Predict orders that filled today (ET). History has every fill.
       </Text>
       <SupportContactFooter compact />
     </ScrollView>

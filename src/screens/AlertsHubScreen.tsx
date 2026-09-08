@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Switch,
   Text,
@@ -33,6 +34,22 @@ export function AlertsHubScreen() {
   const unread = useRuntimeStore((s) => s.unread);
   const markAllRead = useRuntimeStore((s) => s.markAllRead);
   const deleteAlertsByIds = useRuntimeStore((s) => s.deleteAlertsByIds);
+  const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    void refreshCloudSnapshot();
+  }, [refreshCloudSnapshot]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshCloudSnapshot();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshCloudSnapshot]);
+
   const [muteOpen, setMuteOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -197,6 +214,14 @@ export function AlertsHubScreen() {
         style={styles.list}
         data={alerts}
         keyExtractor={(a) => a.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
         contentContainerStyle={alerts.length === 0 ? styles.emptyPad : { paddingBottom: 24 }}
         ListEmptyComponent={
           <Text style={styles.empty}>No alerts yet — lean signals and orders appear here.</Text>

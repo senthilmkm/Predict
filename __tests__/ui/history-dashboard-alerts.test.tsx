@@ -94,6 +94,8 @@ describe('History / Dashboard / AlertsHub', () => {
         realized_pnl_usd: 5.25,
         win_rate: 0.5,
       },
+      change24hUsd: 1.18,
+      change24hPct: 0.84,
       alerts: [
         {
           id: 'al1',
@@ -129,9 +131,12 @@ describe('History / Dashboard / AlertsHub', () => {
 
     const s = await render(<DashboardScreen />);
 
-    expect(s.getByText('Today (ET)')).toBeTruthy();
+    expect(s.getByText('Predict trades today (ET)')).toBeTruthy();
     expect(s.getByText('50%')).toBeTruthy();
     expect(s.getByText('$5.25')).toBeTruthy();
+    expect(s.getByText('+$1.18 (+0.84%)')).toBeTruthy();
+    expect(s.getByText('Change (24h)')).toBeTruthy();
+    expect(s.queryByText(/collecting/i)).toBeNull();
     expect(s.getByText('1W / 2L')).toBeTruthy();
     expect(s.getByText('3')).toBeTruthy(); // pending fills
     expect(s.getByText('4')).toBeTruthy(); // IOC misses

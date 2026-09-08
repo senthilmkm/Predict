@@ -35,6 +35,21 @@ describe('Predict Admin Web Portal API Suite', () => {
       status: 'FILLED',
       executedAt: new Date().toISOString(),
     });
+    await saveTradeRecord(testUserId, {
+      tradeId: 'trade_admin_test_002',
+      userId: testUserId,
+      ticker: 'KXBTC15M-TEST',
+      asset: 'BTC',
+      decision: 'NO',
+      count: '5',
+      price: '0.13',
+      notionalUsd: 4.35,
+      dryRun: false,
+      status: 'SETTLED',
+      pnlUsd: 4.35,
+      outcome: 'win',
+      executedAt: new Date().toISOString(),
+    });
   });
 
   test('1. Admin endpoints reject requests without admin secret key (401)', async () => {
@@ -68,6 +83,9 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.metrics).toBeDefined();
     expect(res.body.metrics.totalUsers).toBeGreaterThanOrEqual(1);
     expect(res.body.metrics.activeTraders).toBeGreaterThanOrEqual(1);
+    expect(res.body.metrics.trades24hCount).toBeGreaterThanOrEqual(2);
+    expect(res.body.metrics.filled24hCount).toBeGreaterThanOrEqual(2);
+    expect(res.body.metrics.volumeUsd24h).toBeGreaterThanOrEqual(6.6);
     expect(res.body.worker).toBeDefined();
     expect(res.body.worker.status).toBe('ACTIVE');
     expect(res.body.worker.tickIntervalSeconds).toBe(20);
@@ -83,6 +101,11 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(Array.isArray(res.body.users)).toBe(true);
     const userIds = res.body.users.map((u: any) => u.userId);
     expect(userIds).toContain(testUserId);
+    const testUser = res.body.users.find((u: any) => u.userId === testUserId);
+    expect(typeof testUser.createdAt).toBe('string');
+    expect(Number.isNaN(Date.parse(testUser.createdAt))).toBe(false);
+    expect(testUser.pnlTodayUsd).toBe(4.35);
+    expect(testUser.pnlLifetimeUsd).toBe(4.35);
   });
 
   test('5. POST /admin/api/users/:userId/config updates asset cushions & risk limits', async () => {
@@ -155,6 +178,8 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.status).toBe(200);
     expect(res.text).toContain('PREDICT ADMIN');
     expect(res.text).toContain('GCP Cloud');
+    expect(res.text).toContain('Created');
+    expect(res.text).toContain('Closed P&amp;L');
   });
 
   test('11. POST /admin/api/config updates tick_interval_seconds dynamically', async () => {

@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
@@ -66,6 +66,21 @@ export function HistoryScreen() {
   const trades = useRuntimeStore((s) => s.trades);
   const leans = useRuntimeStore((s) => s.leans);
   const alerts = useRuntimeStore((s) => s.alerts);
+  const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    void refreshCloudSnapshot();
+  }, [refreshCloudSnapshot]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshCloudSnapshot();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshCloudSnapshot]);
 
   const filteredTrades = useMemo(
     () => filterTrades(trades, tradeFilter),
@@ -112,6 +127,14 @@ export function HistoryScreen() {
             <FlatList
               data={filteredTrades}
               keyExtractor={(i) => i.id}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={() => void onRefresh()}
+                  tintColor={colors.accent}
+                  colors={[colors.accent]}
+                />
+              }
               renderItem={({ item }) => {
                 const lean = leans[item.asset as AssetKey];
                 const cushion = cushions[item.asset as AssetKey];
@@ -160,6 +183,14 @@ export function HistoryScreen() {
             <FlatList
               data={filteredAlerts}
               keyExtractor={(i) => i.id}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={() => void onRefresh()}
+                  tintColor={colors.accent}
+                  colors={[colors.accent]}
+                />
+              }
               renderItem={({ item }) => (
                 <View style={[styles.row, !item.read && styles.unread]} testID={`alert-row-${item.id}`}>
                   <Text style={styles.title}>{item.title}</Text>

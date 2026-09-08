@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -107,6 +108,9 @@ export function SettingsScreen() {
   const subExpirationAt = useSubscriptionStore((s) => s.expirationAt);
   const subWillRenew = useSubscriptionStore((s) => s.willRenew);
   const refreshSub = useSubscriptionStore((s) => s.refresh);
+  const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
+  const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
+  const [refreshing, setRefreshing] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [autoTradeRiskOpen, setAutoTradeRiskOpen] = useState(false);
   const [lastRiskAcceptance, setLastRiskAcceptance] =
@@ -119,6 +123,20 @@ export function SettingsScreen() {
   const [pem, setPem] = useState('');
   const [showSecrets, setShowSecrets] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshCloudSnapshot(),
+        refreshPredictionsBalance(),
+        refreshSub(),
+        hasCredentials().then(setHasCreds),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshCloudSnapshot, refreshPredictionsBalance, refreshSub]);
 
   const handleVersionPress = () => {
     if (devUnlocked) return;
@@ -491,7 +509,17 @@ export function SettingsScreen() {
 
   return (
     <View style={styles.root} testID="screen-settings">
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
         <View style={styles.statusCard} testID="settings-mode">
           <Text style={styles.statusEyebrow}>Current mode</Text>
           <Text style={styles.statusTitle}>{modeLabel(config)}</Text>

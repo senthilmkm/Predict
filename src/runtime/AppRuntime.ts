@@ -7,9 +7,15 @@ import { loadCredentials } from '../services/credentials';
 import { computeLean, LeanResult } from '../services/lean/lean';
 import { isMarketOpen } from '../services/marketHours';
 import { maybeNotify } from '../services/notifications';
-import { MemoryAlertRepo, MemoryTradeRepo, TradeRecord, AlertRecord } from '../storage/repos';
+import { MemoryAlertRepo, MemoryTradeRepo, TradeRecord, AlertRecord, cloudTradesToRecords } from '../storage/repos';
 import { hydrateRepos, persistRepos } from '../storage/historyPersistence';
-import { settlePendingTrades, inferFillCount } from '../services/settlement';
+import { loadPortfolioSamples, persistPortfolioSamples } from '../storage/portfolioPersistence';
+import { settlePendingTrades, inferFillCount, computeTradePnlUsd } from '../services/settlement';
+import {
+  PortfolioSample,
+  computeChange24h,
+  recordPortfolioSample,
+} from '../services/portfolioChange';
 import {
   buildProtectSellOrder,
   computeProtectSellPnlUsd,
@@ -60,6 +66,9 @@ export interface RuntimeStatus {
   predictionsBalanceUsd: number | null;
   /** Kalshi available cash (USD). */
   cashBalanceUsd: number | null;
+  /** Predictions total now minus a stored sample from ~24h ago. Null until enough history. */
+  change24hUsd: number | null;
+  change24hPct: number | null;
 }
 
 export function formatSkipReason(reason: string | undefined): string {
@@ -118,7 +127,11 @@ export class AppRuntime {
     killSwitch: false,
     predictionsBalanceUsd: null,
     cashBalanceUsd: null,
+    change24hUsd: null,
+    change24hPct: null,
   };
+
+  private portfolioSamples: PortfolioSample[] = [];
 
   private timer: ReturnType<typeof setInterval> | null = null;
   private getConfig: () => AppConfig;
@@ -175,8 +188,8 @@ export class AppRuntime {
   /** Single Kalshi /portfolio/balance fetch → updates Cash + Predictions cards. */
   private async refreshKalshiBalances(opts?: { force?: boolean }): Promise<void> {
     const now = Date.now();
-    if (now < this.rateLimitUntilMs) return;
-    if (now < this.authBlockedUntilMs) return;
+    if (!opts?.force && now < this.rateLimitUntilMs) return;
+    if (!opts?.force && now < this.authBlockedUntilMs) return;
     if (this.balanceInFlight) return this.balanceInFlight;
     // Coalesce frequent pull/settle/fill refreshes (still allow force within ~3s via in-flight share)
     if (!opts?.force && now - this.lastBalanceFetchMs < 8_000 && this.status.cashBalanceUsd != null) {
@@ -188,6 +201,8 @@ export class AppRuntime {
       if (!hasClient) {
         this.status.predictionsBalanceUsd = null;
         this.status.cashBalanceUsd = null;
+        this.status.change24hUsd = null;
+        this.status.change24hPct = null;
         this.onChange?.();
         return;
       }
@@ -209,6 +224,15 @@ export class AppRuntime {
             cash != null ? Math.round((cash + positions) * 100) / 100 : null;
           this.lastBalanceFetchMs = Date.now();
           this.authBlockedUntilMs = 0;
+          if (this.status.predictionsBalanceUsd != null) {
+            this.portfolioSamples = recordPortfolioSample(this.portfolioSamples, {
+              at: new Date().toISOString(),
+              predictionsUsd: this.status.predictionsBalanceUsd,
+              cashUsd: cash,
+            });
+            void persistPortfolioSamples(this.portfolioSamples);
+          }
+          this.applyChange24h();
         } else if (bal.http_status === 429) {
           this.rateLimitUntilMs = Date.now() + 30_000;
           this.status.lastError = humanizeQuietError('http_429');
@@ -239,9 +263,44 @@ export class AppRuntime {
     return true;
   }
 
+  syncCloudTrades(cloudTrades: any[]): void {
+    if (!Array.isArray(cloudTrades) || cloudTrades.length === 0) return;
+    const records = cloudTradesToRecords(cloudTrades);
+    for (const r of records) {
+      this.trades.upsert(r);
+    }
+    void this.persistHistory();
+    this.onChange?.();
+  }
+
   async hydrateHistory(): Promise<void> {
     const days = this.getConfig().alert_retention_days ?? 30;
     await hydrateRepos(this.trades, this.alerts, days);
+    // Recalculate/normalize fill prices and pnl_usd for existing hydrated trades
+    for (const t of this.trades.list(200)) {
+      if (t.fill_price != null && Number.isFinite(t.fill_price)) {
+        const normPay = t.fill_price > 1 ? t.fill_price / 100 : t.fill_price;
+        if (normPay > 0 && (t.outcome === 'win' || t.outcome === 'loss')) {
+          const fillCount = inferFillCount(t);
+          const correctPnl = computeTradePnlUsd({
+            side: t.side,
+            payPrice: normPay,
+            fillCount,
+            marketResult:
+              t.outcome === 'win'
+                ? t.side === 'YES'
+                  ? 'yes'
+                  : 'no'
+                : t.side === 'YES'
+                  ? 'no'
+                  : 'yes',
+          });
+          if (t.pnl_usd !== correctPnl || t.fill_price !== normPay) {
+            this.trades.update(t.id, { pnl_usd: correctPnl, fill_price: normPay });
+          }
+        }
+      }
+    }
     // Prevent double-entry on the same 15m window after restart
     for (const t of this.trades.pendingFilled()) {
       this.engine.windows.claimExisting(
@@ -249,7 +308,15 @@ export class AppRuntime {
         t.order_id || t.id || 'hydrated'
       );
     }
+    this.portfolioSamples = await loadPortfolioSamples();
+    this.applyChange24h();
     this.onChange?.();
+  }
+
+  private applyChange24h(): void {
+    const ch = computeChange24h(this.portfolioSamples, this.status.predictionsBalanceUsd);
+    this.status.change24hUsd = ch?.usd ?? null;
+    this.status.change24hPct = ch?.pct ?? null;
   }
 
   private async persistHistory(): Promise<void> {
@@ -412,7 +479,7 @@ export class AppRuntime {
         }
       }
 
-      const dailyPnl = this.trades.stats().realized_pnl_usd;
+      const dailyPnl = this.trades.statsToday().realized_pnl_usd;
       const dayCounts = this.tradesTodayCounts();
       const tickAt = new Date().toISOString();
       let openPositions = this.trades.pendingFilled().length;
@@ -624,15 +691,24 @@ export class AppRuntime {
         if (result.ok && result.placed) {
           const fillCount = Number(result.placed.fill_count ?? 0);
           const isMiss = !(fillCount > 0);
-          const avgFillPrice =
+          let avgFillPrice =
             result.placed.average_fill_price != null
               ? Number(result.placed.average_fill_price)
               : null;
+          if (avgFillPrice != null && Number.isFinite(avgFillPrice) && avgFillPrice > 1) {
+            avgFillPrice = Math.round((avgFillPrice / 100) * 10000) / 10000;
+          }
           // Record actual average fill pricing (matches Kalshi UI cost); fall back to planned gate pay price.
+          const side = (result.gate.decision as 'YES' | 'NO') || 'YES';
+          const plannedPay = result.gate.pay_price ?? null;
+          // Settlement math uses economic pay (YES cost / NO cost). For NO we sell YES,
+          // so Kalshi average_fill_price is the YES quote — do not use it as pay.
           const recordedFillPrice =
-            avgFillPrice != null && Number.isFinite(avgFillPrice) && avgFillPrice > 0
-              ? avgFillPrice
-              : (result.gate.pay_price ?? null);
+            side === 'NO' && plannedPay != null && plannedPay > 0
+              ? plannedPay
+              : avgFillPrice != null && Number.isFinite(avgFillPrice) && avgFillPrice > 0
+                ? avgFillPrice
+                : plannedPay;
           const recordedNotionalUsd = isMiss
             ? 0
             : Math.round(fillCount * (recordedFillPrice ?? 0) * 100) / 100;

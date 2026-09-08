@@ -6,7 +6,8 @@
     "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --outfile=dist/bundle.js",
     "start": "node dist/bundle.js",
     "dev": "tsx watch src/index.ts",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "deploy": "npm run build && gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --region us-east1 --allow-unauthenticated"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.11.0",

@@ -16,6 +16,14 @@ export interface TradeRecordDoc {
   liveSpot?: number;
   strike?: number;
   executedAt: string;
+  /** Kalshi order id — used to dedupe phone vs cloud copies of the same fill. */
+  orderId?: string | null;
+  /** Economic entry price in dollars (YES ask / NO cost), not the raw YES-contract quote. */
+  payPrice?: number | null;
+  fillCount?: number | null;
+  pnlUsd?: number | null;
+  outcome?: 'win' | 'loss' | 'pending' | 'miss' | 'exited';
+  settledAt?: string | null;
 }
 
 export interface AuditLogDoc {
@@ -42,13 +50,32 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
 let localSystemConfig: SystemConfig = { ...DEFAULT_SYSTEM_CONFIG };
 let cachedSystemConfig: SystemConfig | null = null;
 let systemConfigLastFetched = 0;
-const CACHE_TTL_MS = 60000;
+const CACHE_TTL_MS = 5000;
 
 const localUserStore = new Map<string, UserStatusDoc & { config?: any }>();
 const localTradeStore = new Map<string, TradeRecordDoc[]>();
 const localAuditStore = new Map<string, AuditLogDoc[]>();
 
 let db: Firestore | null = null;
+function isoFromFirestoreTime(ts: any): string | undefined {
+  if (!ts) return undefined;
+  if (typeof ts.toDate === 'function') return ts.toDate().toISOString();
+  if (typeof ts === 'string' && ts.trim()) return ts;
+  return undefined;
+}
+
+function userFromSnapshot(doc: { id: string; createTime?: any; data: () => any }): UserStatusDoc & {
+  config?: any;
+  createdAt?: string;
+} {
+  const data = doc.data() || {};
+  return {
+    userId: doc.id,
+    ...data,
+    createdAt: isoFromFirestoreTime(doc.createTime) || data.createdAt,
+  };
+}
+
 function getDb(): Firestore | null {
   if (process.env.NODE_ENV === 'test' || process.env.USE_LOCAL_FIRESTORE === 'true') {
     return null;
@@ -72,7 +99,7 @@ export async function getUserDoc(userId: string): Promise<(UserStatusDoc & { con
   try {
     const doc = await f.collection('users').doc(userId).get();
     if (!doc.exists) return null;
-    return doc.data() as UserStatusDoc & { config?: any };
+    return userFromSnapshot(doc);
   } catch {
     return localUserStore.get(userId) || null;
   }
@@ -90,11 +117,15 @@ export async function upsertUserDoc(
     updatedAt: new Date().toISOString(),
   };
 
+  const nowIso = new Date().toISOString();
+  const existingCreatedAt = (existing as { createdAt?: string }).createdAt;
+  const incomingCreatedAt = (data as { createdAt?: string }).createdAt;
   const updated = {
     ...existing,
     ...data,
     userId,
-    updatedAt: new Date().toISOString(),
+    createdAt: existingCreatedAt || incomingCreatedAt || nowIso,
+    updatedAt: nowIso,
   };
 
   localUserStore.set(userId, updated);
@@ -132,7 +163,7 @@ export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { confi
   } else {
     try {
       const snapshot = await f.collection('users').get();
-      users = snapshot.docs.map((doc: any) => ({ userId: doc.id, ...doc.data() }));
+      users = snapshot.docs.map((doc: any) => userFromSnapshot(doc));
     } catch {
       users = Array.from(localUserStore.values());
     }
@@ -164,6 +195,27 @@ export async function saveTradeRecord(userId: string, trade: TradeRecordDoc): Pr
   }
 }
 
+export async function updateTradeRecord(
+  userId: string,
+  tradeId: string,
+  patch: Partial<TradeRecordDoc>
+): Promise<void> {
+  const userTrades = localTradeStore.get(userId) || [];
+  const i = userTrades.findIndex((t) => t.tradeId === tradeId);
+  if (i >= 0) {
+    userTrades[i] = { ...userTrades[i], ...patch };
+    localTradeStore.set(userId, userTrades);
+  }
+  const f = getDb();
+  if (f) {
+    try {
+      await f.collection('users').doc(userId).collection('trades').doc(tradeId).set(patch, { merge: true });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export async function getTradeRecords(userId: string): Promise<TradeRecordDoc[]> {
   const f = getDb();
   if (!f) {
@@ -175,7 +227,7 @@ export async function getTradeRecords(userId: string): Promise<TradeRecordDoc[]>
       .doc(userId)
       .collection('trades')
       .orderBy('executedAt', 'desc')
-      .limit(50)
+      .limit(200)
       .get();
     return snapshot.docs.map((doc: any) => doc.data() as TradeRecordDoc);
   } catch {
@@ -272,10 +324,11 @@ export async function setSystemConfig(
 
   const f = getDb();
   if (f) {
-    try {
-      await f.collection('system').doc('config').set(updated, { merge: true });
-    } catch {
-      /* fallback to local memory store */
+    await f.collection('system').doc('config').set(updated, { merge: true });
+    const verify = await f.collection('system').doc('config').get();
+    const written = Number(verify.data()?.tick_interval_seconds);
+    if (verify.exists && Number.isFinite(written) && written !== updated.tick_interval_seconds) {
+      throw new Error('system_config_persist_mismatch');
     }
   }
   return updated;
@@ -313,21 +366,52 @@ export async function getAllUsers(): Promise<(UserStatusDoc & { config?: any; pu
   }
   try {
     const snapshot = await f.collection('users').get();
-    return snapshot.docs.map((doc: any) => ({ userId: doc.id, ...doc.data() }));
+    return snapshot.docs.map((doc: any) => userFromSnapshot(doc));
   } catch {
     return Array.from(localUserStore.values());
+  }
+}
+
+function sortTradesNewestFirst(trades: TradeRecordDoc[]): TradeRecordDoc[] {
+  return [...trades].sort(
+    (a, b) => new Date(b.executedAt || 0).getTime() - new Date(a.executedAt || 0).getTime()
+  );
+}
+
+async function listTradesFromUserCollections(limit: number): Promise<TradeRecordDoc[]> {
+  const local: TradeRecordDoc[] = [];
+  for (const trades of localTradeStore.values()) {
+    local.push(...trades);
+  }
+
+  const f = getDb();
+  if (!f) {
+    return sortTradesNewestFirst(local).slice(0, limit);
+  }
+
+  try {
+    const users = await f.collection('users').get();
+    const all: TradeRecordDoc[] = [];
+    for (const userDoc of users.docs) {
+      const snap = await userDoc.ref.collection('trades').get();
+      for (const doc of snap.docs) {
+        all.push({
+          tradeId: doc.id,
+          userId: userDoc.id,
+          ...doc.data(),
+        } as TradeRecordDoc);
+      }
+    }
+    return sortTradesNewestFirst(all).slice(0, limit);
+  } catch {
+    return sortTradesNewestFirst(local).slice(0, limit);
   }
 }
 
 export async function getAllGlobalTrades(limit = 100): Promise<TradeRecordDoc[]> {
   const f = getDb();
   if (!f) {
-    const allTrades: TradeRecordDoc[] = [];
-    for (const trades of localTradeStore.values()) {
-      allTrades.push(...trades);
-    }
-    allTrades.sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());
-    return allTrades.slice(0, limit);
+    return listTradesFromUserCollections(limit);
   }
   try {
     const snapshot = await f.collectionGroup('trades').orderBy('executedAt', 'desc').limit(limit).get();
@@ -340,12 +424,8 @@ export async function getAllGlobalTrades(limit = 100): Promise<TradeRecordDoc[]>
       } as TradeRecordDoc;
     });
   } catch {
-    const allTrades: TradeRecordDoc[] = [];
-    for (const trades of localTradeStore.values()) {
-      allTrades.push(...trades);
-    }
-    allTrades.sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());
-    return allTrades.slice(0, limit);
+    // Collection-group + orderBy needs a composite index; fall back to per-user reads.
+    return listTradesFromUserCollections(limit);
   }
 }
 

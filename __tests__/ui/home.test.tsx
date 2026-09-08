@@ -32,6 +32,10 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('home-predictions-card')).toBeTruthy();
     expect(s.getByTestId('home-cash-block')).toBeTruthy();
     expect(s.getByText('PREDICTIONS')).toBeTruthy();
+    expect(s.getByTestId('home-change-24h-label').props.children).toMatch(/Change \(24h\)/);
+    expect(s.getByTestId('home-change-24h')).toBeTruthy();
+    expect(s.getByTestId('home-today-trades')).toBeTruthy();
+    expect(s.getByText('Predict trades today')).toBeTruthy();
     expect(s.getByText('Cash')).toBeTruthy();
     expect(s.getByTestId('home-heartbeat')).toBeTruthy();
     expect(s.getByTestId('btn-kill-switch')).toBeTruthy();

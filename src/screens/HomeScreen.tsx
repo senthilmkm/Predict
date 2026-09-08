@@ -19,6 +19,7 @@ import { getMarketScheduleNotice, isMarketOpen } from '../services/marketHours';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
+import { formatChange24h, formatUsd } from '../util/moneyFormat';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -43,6 +44,8 @@ export function HomeScreen() {
   const kill = useRuntimeStore((s) => s.kill);
   const predictionsBalanceUsd = useRuntimeStore((s) => s.predictionsBalanceUsd);
   const cashBalanceUsd = useRuntimeStore((s) => s.cashBalanceUsd);
+  const change24hUsd = useRuntimeStore((s) => s.change24hUsd);
+  const change24hPct = useRuntimeStore((s) => s.change24hPct);
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const alerts = useRuntimeStore((s) => s.alerts);
@@ -193,6 +196,8 @@ export function HomeScreen() {
           <PortfolioSummary
             predictionsUsd={predictionsBalanceUsd}
             cashUsd={cashBalanceUsd}
+            change24hUsd={change24hUsd}
+            change24hPct={change24hPct}
           />
         </View>
       </View>
@@ -248,25 +253,31 @@ export function HomeScreen() {
         <Text style={styles.killText}>{killLabel}</Text>
       </Pressable>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Today snapshot (ET)</Text>
+      <View style={styles.card} testID="home-today-trades">
+        <Text style={styles.label}>Predict trades today</Text>
         {stats.wins + stats.losses + stats.pending + stats.misses === 0 ? (
           <>
-            <Text style={styles.value}>No app fills today</Text>
+            <Text style={styles.value}>No Predict fills today</Text>
             <Text style={styles.snapHint}>
-              Counts today’s trades executed by Predict on GCP Cloud Run (America/New_York). Fills and P&L update automatically as trades resolve.
+              Closed P&L from Predict orders today (ET). Change (24h) on Predictions is your full
+              Kalshi account — a different number.
             </Text>
           </>
         ) : (
           <>
-            <Text style={styles.value}>
-              P&L ${stats.realized_pnl_usd.toFixed(2)} · {stats.wins}W / {stats.losses}L · pending{' '}
-              {stats.pending}
+            <Text
+              style={[
+                styles.value,
+                { color: stats.realized_pnl_usd >= 0 ? colors.win : colors.loss },
+              ]}
+              testID="home-today-trade-pnl"
+            >
+              Closed P&L ${stats.realized_pnl_usd.toFixed(2)} · {stats.wins}W / {stats.losses}L ·
+              pending {stats.pending}
               {stats.misses > 0 ? ` · miss ${stats.misses}` : ''}
             </Text>
             <Text style={styles.snapHint}>
-              Today’s fills only (America/New_York). Pending = filled, not settled yet. Wins/losses
-              update after the 15m market resolves.
+              Predict orders only, America/New_York day. Pending = filled, not settled yet.
             </Text>
           </>
         )}
@@ -363,23 +374,30 @@ export function HomeScreen() {
   );
 }
 
-function formatUsd(valueUsd: number | null): string {
-  if (valueUsd == null || !Number.isFinite(valueUsd)) return '—';
-  return `$${valueUsd.toFixed(2)}`;
-}
-
 function PortfolioSummary({
   predictionsUsd,
   cashUsd,
+  change24hUsd,
+  change24hPct,
 }: {
   predictionsUsd: number | null;
   cashUsd: number | null;
+  change24hUsd: number | null;
+  change24hPct: number | null;
 }) {
+  const changeColor =
+    change24hUsd == null ? colors.mute : change24hUsd >= 0 ? colors.win : colors.loss;
   return (
     <View style={styles.portfolioSummary} testID="home-portfolio-summary">
       <View style={styles.predCard} testID="home-predictions-card">
         <Text style={styles.predLabel}>PREDICTIONS</Text>
         <Text style={styles.predValue}>{formatUsd(predictionsUsd)}</Text>
+        <Text style={[styles.predChange, { color: changeColor }]} testID="home-change-24h">
+          {formatChange24h(change24hUsd, change24hPct)}
+        </Text>
+        <Text style={styles.predChangeLabel} testID="home-change-24h-label">
+          {change24hUsd == null ? 'Change (24h) · collecting' : 'Change (24h)'}
+        </Text>
       </View>
       <View style={styles.cashCard} testID="home-cash-block">
         <Text style={styles.cashValue}>{formatUsd(cashUsd)}</Text>
@@ -439,7 +457,7 @@ function HeartbeatChip({
   const staleAfter = Math.max(120, intervalSec * 4 + 60);
   const stale = running && ageSec != null && ageSec > staleAfter;
   const dotColor = !running ? colors.mute : stale ? colors.warn : colors.win;
-  const label = !running ? 'Idle' : stale ? `Stale (${intervalSec}s)` : `Live (${intervalSec}s)`;
+  const label = !running ? 'Idle' : stale ? `Stale · cloud ${intervalSec}s` : `Live · cloud ${intervalSec}s`;
   const ageLabel = running && ageSec != null ? `${ageSec}s ago` : running ? '…' : null;
 
   return (
@@ -502,6 +520,13 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   predValue: { color: colors.textPrimary, fontSize: 15, fontWeight: '800' },
+  predChange: { fontSize: 11, fontWeight: '700', marginTop: 3 },
+  predChangeLabel: {
+    color: colors.mute,
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 1,
+  },
   cashCard: {
     borderWidth: 1,
     borderColor: colors.border,

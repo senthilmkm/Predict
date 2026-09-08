@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { AppRuntime, getAppRuntime, resetAppRuntimeForTests, LastTradeAction } from '../runtime/AppRuntime';
 import { useConfigStore } from './configStore';
-import { DashboardStats, TradeRecord, AlertRecord, statsFromCloudTrades } from '../storage/repos';
+import { DashboardStats, TradeRecord, AlertRecord } from '../storage/repos';
 import { PredictCloudClient, cloudClient } from '../services/cloud/cloudClient';
 import { getUserDisplayName } from '../services/userId';
 import { LeanResult } from '../services/lean/lean';
@@ -32,6 +32,8 @@ interface RuntimeState {
   assetErrors: Partial<Record<AssetKey, string>>;
   predictionsBalanceUsd: number | null;
   cashBalanceUsd: number | null;
+  change24hUsd: number | null;
+  change24hPct: number | null;
   ensure: () => AppRuntime;
   syncFromRuntime: () => void;
   start: () => void;
@@ -61,6 +63,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   assetErrors: {},
   predictionsBalanceUsd: null,
   cashBalanceUsd: null,
+  change24hUsd: null,
+  change24hPct: null,
   ensure: () => {
     let rt = get().runtime;
     if (!rt) {
@@ -89,6 +93,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         assetErrors: {},
         predictionsBalanceUsd: null,
         cashBalanceUsd: null,
+        change24hUsd: null,
+        change24hPct: null,
       });
       return;
     }
@@ -96,10 +102,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     void updateAppBadgeCount(unreadCount);
 
     const localStats = rt.trades.statsToday();
-    const localTotal = localStats.wins + localStats.losses + localStats.pending + localStats.misses;
+    const hasHydratedTrades = rt.trades.list(1).length > 0;
     const currentStats = get().stats;
     const currentTotal = currentStats.wins + currentStats.losses + currentStats.pending + currentStats.misses;
-    const statsToUse = localTotal > 0 ? localStats : currentTotal > 0 ? currentStats : localStats;
+    // Never keep yesterday's snapshot after hydrate — empty today must show zeros.
+    const statsToUse = hasHydratedTrades || currentTotal === 0 ? localStats : currentStats;
 
     set({
       bump: get().bump + 1,
@@ -120,6 +127,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       assetErrors: { ...rt.status.assetErrors },
       predictionsBalanceUsd: rt.status.predictionsBalanceUsd,
       cashBalanceUsd: rt.status.cashBalanceUsd,
+      change24hUsd: rt.status.change24hUsd,
+      change24hPct: rt.status.change24hPct,
     });
   },
   start: () => {
@@ -191,18 +200,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         displayName
       );
 
-      if (tradesRes.ok && Array.isArray(tradesRes.trades)) {
-        const newStats = statsFromCloudTrades(tradesRes.trades);
-        const curStats = get().stats;
-        if (
-          curStats.wins !== newStats.wins ||
-          curStats.losses !== newStats.losses ||
-          curStats.pending !== newStats.pending ||
-          curStats.misses !== newStats.misses ||
-          curStats.realized_pnl_usd !== newStats.realized_pnl_usd
-        ) {
-          set({ stats: newStats });
-        }
+      if (tradesRes.ok && Array.isArray(tradesRes.trades) && tradesRes.trades.length > 0) {
+        get().ensure().syncCloudTrades(tradesRes.trades);
+        get().syncFromRuntime();
       }
     } catch {
       /* Keep local stats on network error */
@@ -226,5 +226,7 @@ export function resetRuntimeStoreForTests() {
     assetErrors: {},
     predictionsBalanceUsd: null,
     cashBalanceUsd: null,
+    change24hUsd: null,
+    change24hPct: null,
   });
 }
