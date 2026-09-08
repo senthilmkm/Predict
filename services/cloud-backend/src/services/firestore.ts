@@ -377,7 +377,7 @@ export async function saveAlertRecord(userId: string, alert: CloudAlertDoc): Pro
   }
 }
 
-export async function getAlertRecords(userId: string, limit = 200): Promise<CloudAlertDoc[]> {
+export async function getAlertRecords(userId: string, limit = 400): Promise<CloudAlertDoc[]> {
   const cap = Math.max(1, Math.min(400, Math.round(Number(limit) || 200)));
   const f = getDb();
   if (!f) {

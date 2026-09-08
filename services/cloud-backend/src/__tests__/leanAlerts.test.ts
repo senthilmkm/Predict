@@ -3,6 +3,7 @@ import {
   fillCollapseId,
   fillPushEnabled,
   leanAlertKey,
+  leanAlertPushTokens,
   leanCollapseId,
   leanPushEnabled,
   pruneLeanAlertsSent,
@@ -62,6 +63,13 @@ describe('leanAlerts — one ding per contract per side', () => {
     const pruned = pruneLeanAlertsSent(stale, now);
     expect(pruned).toEqual({});
     expect(claimLeanAlert(stale, ticker, 'YES', now).send).toBe(true);
+  });
+
+  test('below-cushion leans get no push tokens', () => {
+    const tokens = ['ExponentPushToken[a]'];
+    expect(leanAlertPushTokens(6.99, 7, tokens)).toEqual([]);
+    expect(leanAlertPushTokens(7, 7, tokens)).toEqual(tokens);
+    expect(leanAlertPushTokens(10, 7, tokens)).toEqual(tokens);
   });
 
   test('lean push respects alerts_enabled and mute prefs', () => {

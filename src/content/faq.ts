@@ -392,6 +392,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is History vs Dashboard vs the bell?',
           a:
             'History = every Predict fill and alert on this phone, with filters (pending, win, loss, miss). Status dots: green settled win / still favorable, yellow checking, red unfavorable or settled loss, gray IOC miss.\n\n' +
+            'Home pulls Cloud alerts after each poll so a lean can show in History without opening this tab.\n\n' +
             'Dashboard = today’s Predict stats (ET): win rate, closed P&L from Predict fills today, W/L, pending, IOC misses, alerts logged, unread. Closed P&L is not the same as Change (24h).\n\n' +
             'Bell (top right) = Alerts hub: recent alerts, mute by type, delete. That count is the same family as Dashboard “Alerts logged.”',
         },
@@ -407,7 +408,8 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'How long are alerts kept? Why is there no “stored alerts” number in Settings?',
           a:
             'Settings → Signal alerts → Keep alert history (default 30 days, 1–365). Older rows auto-delete. “Prune older alerts now” deletes anything past that window; today’s stay.\n\n' +
-            'The count lives on Dashboard as Alerts logged (and in the Alerts hub). Settings does not repeat that number.',
+            'The count lives on Dashboard as Alerts logged (and in the Alerts hub). Settings does not repeat that number.\n\n' +
+            'A new install receives up to the 400 most recent Cloud alerts.',
         },
         {
           id: 'mute-sounds',
@@ -415,7 +417,8 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Master switch: Settings → Notify on lean signals.\n\n' +
             'Per type: open the bell → expand mute options. You can mute lean signals, orders placed, fills, IOC misses, trade results, protect-sells, daily loss stop, and errors.\n\n' +
-            'Lean, fill, protect-sell, trade result, IOC miss, and daily loss stop sounds are sent from Cloud Run so the phone does not play the same event twice.',
+            'Lean, fill, protect-sell, trade result, IOC miss, and daily loss stop sounds are sent from Cloud Run so the phone does not play the same event twice.\n\n' +
+            'A lean below your cushion is stored in History without a sound.',
         },
       ],
     },

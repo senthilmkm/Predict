@@ -1,5 +1,13 @@
 import { CloudAlertDoc, TradeRecordDoc, saveAlertRecord, updateTradeRecord } from './firestore';
-import { fillPushEnabled, leanPushEnabled } from './leanAlerts';
+import {
+  claimLeanAlert,
+  fillPushEnabled,
+  leanAlertKey,
+  leanAlertPushTokens,
+  leanCollapseId,
+  leanPushEnabled,
+  type LeanAlertsSent,
+} from './leanAlerts';
 import { protectPushEnabled } from './cloudProtectSell';
 import { sendPushNotification } from './notifications';
 
@@ -202,4 +210,56 @@ export async function emitCloudAlert(opts: {
   }
 
   return { persisted, pushed: false };
+}
+
+/**
+ * Persist a lean even when the window cap or cushion would skip a buy.
+ * Below-cushion rows are History-only (no push tokens).
+ */
+export async function maybeEmitLeanAlert(opts: {
+  userId: string;
+  cfg: any;
+  tokens: string[];
+  asset: string;
+  ticker: string;
+  decision: string;
+  absGap: number;
+  cushion: number;
+  minutesLeft: number | string;
+  leanAlertsSent: LeanAlertsSent;
+  now: Date;
+  sendPush?: typeof sendPushNotification;
+}): Promise<{ next: LeanAlertsSent; dirty: boolean; persisted: boolean; pushed: boolean }> {
+  const ticker = String(opts.ticker || '').trim();
+  const decision = String(opts.decision || '').toUpperCase();
+  const key = leanAlertKey(ticker, decision);
+  const persist = alertPersistEnabled(opts.cfg, 'lean_signal');
+  const pushOk = leanPushEnabled(opts.cfg) && Array.isArray(opts.tokens) && opts.tokens.length > 0;
+  if ((!persist && !pushOk) || opts.leanAlertsSent[key]) {
+    return { next: opts.leanAlertsSent, dirty: false, persisted: false, pushed: false };
+  }
+
+  const pushTokens = leanAlertPushTokens(opts.absGap, opts.cushion, opts.tokens);
+  const title = `Signal · ${opts.asset} ${decision}`;
+  const body = `Gap $${Number(opts.absGap).toFixed(2)} · Cushion $${opts.cushion} · ${opts.minutesLeft ?? '?'}m left`;
+  const emitted = await emitCloudAlert({
+    userId: opts.userId,
+    alertId: leanAlertId(ticker, decision),
+    kind: 'lean_signal',
+    title,
+    body,
+    cfg: opts.cfg,
+    tokens: pushTokens,
+    collapseId: leanCollapseId(opts.userId, key),
+    asset: opts.asset,
+    ticker,
+    decision,
+    at: opts.now.toISOString(),
+    sendPush: opts.sendPush,
+  });
+  if (emitted.persisted || emitted.pushed) {
+    const claim = claimLeanAlert(opts.leanAlertsSent, ticker, decision, opts.now);
+    return { next: claim.next, dirty: true, persisted: emitted.persisted, pushed: emitted.pushed };
+  }
+  return { next: opts.leanAlertsSent, dirty: false, persisted: false, pushed: false };
 }

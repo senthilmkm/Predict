@@ -39,6 +39,8 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/7-day/);
     expect(blob).toMatch(/kill switch/i);
     expect(blob).toMatch(/settlements continue after Auto-trade Off/i);
+    expect(blob).toMatch(/lean below your cushion is stored in History without a sound/i);
+    expect(blob).toMatch(/400 most recent Cloud alerts/);
     expect(blob).toMatch(/Secure Store/);
     expect(blob).toContain(supportContactEmail());
     expect(categories.some((c) => c.id === 'disclaimer')).toBe(true);

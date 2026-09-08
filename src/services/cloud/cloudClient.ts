@@ -169,7 +169,7 @@ export class PredictCloudClient {
 
   async getAlerts(): Promise<{ ok: boolean; alerts?: any[]; error?: string }> {
     try {
-      const res = await this.fetchWithAuth('/me/alerts', { method: 'GET' });
+      const res = await this.fetchWithAuth('/me/alerts?limit=400', { method: 'GET' });
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error || 'alerts_fetch_failed' };
       return { ok: true, alerts: Array.isArray(data.alerts) ? data.alerts : [] };

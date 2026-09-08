@@ -44,6 +44,12 @@ export function claimLeanAlert(
   return { send: true, next, key };
 }
 
+/** Below-cushion leans persist in History but must not ding. */
+export function leanAlertPushTokens(absGap: number, cushion: number, tokens: string[]): string[] {
+  if (!(Number(absGap) >= Number(cushion))) return [];
+  return Array.isArray(tokens) ? tokens.filter(Boolean) : [];
+}
+
 export function leanPushEnabled(cfg: any): boolean {
   if (!cfg || cfg.alerts_enabled === false) return false;
   const pref = cfg.alert_prefs?.lean_signal;

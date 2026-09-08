@@ -24,11 +24,7 @@ import {
   TradeRecordDoc,
 } from '../services/firestore';
 import {
-  claimLeanAlert,
   fillCollapseId,
-  leanAlertKey,
-  leanCollapseId,
-  leanPushEnabled,
   pruneLeanAlertsSent,
   type LeanAlertsSent,
 } from '../services/leanAlerts';
@@ -38,11 +34,10 @@ import {
   runCloudProtectSells,
 } from '../services/cloudProtectSell';
 import {
-  alertPersistEnabled,
   emitCloudAlert,
   fillAlertId,
-  leanAlertId,
   missAlertId,
+  maybeEmitLeanAlert,
   protectAlertId,
   dailyLossAlertFromPnl,
   persistSettlementAlertIfNeeded,
@@ -294,13 +289,30 @@ async function runOneTick() {
               }
             }
 
+            const leanEmit = await maybeEmitLeanAlert({
+              userId,
+              cfg,
+              tokens: userTokens,
+              asset,
+              ticker: marketTicker,
+              decision: lean.decision,
+              absGap,
+              cushion: userCushion,
+              minutesLeft: lean.minutes_left ?? '?',
+              leanAlertsSent,
+              now,
+            });
+            if (leanEmit.dirty) {
+              leanAlertsSent = leanEmit.next;
+              leanAlertsDirty = true;
+              leanAlertMemory.set(userId, leanAlertsSent);
+            }
+
             if (absGap < userCushion) continue;
             const windowCap = windowBuyCap(cfg.risk);
             const buysOnTicker =
               countWindowBuysForTicker(userTrades, marketTicker) + (windowClaims.get(marketTicker) || 0);
             if (buysOnTicker >= windowCap) continue;
-
-            const assetTradesInWindow = buysOnTicker;
 
             const gate = evaluateStaticGate(
               {
@@ -320,38 +332,10 @@ async function runOneTick() {
               {
                 openPositions,
                 tradesToday,
-                assetTradesInWindow,
+                assetTradesInWindow: buysOnTicker,
                 dailyPnlUsd,
               }
             );
-
-            const wantLean =
-              alertPersistEnabled(cfg, 'lean_signal') ||
-              (leanPushEnabled(cfg) && userTokens.length > 0);
-            if (wantLean && !leanAlertsSent[leanAlertKey(marketTicker, lean.decision)]) {
-              const title = `Signal · ${asset} ${lean.decision}`;
-              const body = `Gap $${absGap.toFixed(2)} · Cushion $${userCushion} · ${lean.minutes_left ?? '?'}m left`;
-              const emitted = await emitCloudAlert({
-                userId,
-                alertId: leanAlertId(marketTicker, lean.decision),
-                kind: 'lean_signal',
-                title,
-                body,
-                cfg,
-                tokens: userTokens,
-                collapseId: leanCollapseId(userId, leanAlertKey(marketTicker, lean.decision)),
-                asset,
-                ticker: marketTicker,
-                decision: lean.decision,
-                at: now.toISOString(),
-              });
-              if (emitted.persisted || emitted.pushed) {
-                const claim = claimLeanAlert(leanAlertsSent, marketTicker, lean.decision, now);
-                leanAlertsSent = claim.next;
-                leanAlertsDirty = true;
-                leanAlertMemory.set(userId, leanAlertsSent);
-              }
-            }
 
             if (!cfg.auto_trade_enabled || user.state !== 'ARMED' || !gate.ok || !gate.price || !gate.count) continue;
 

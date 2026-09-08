@@ -13,6 +13,7 @@ import { AppRuntime } from '../src/runtime/AppRuntime';
 import { TradingEngine } from '../src/engine/TradingEngine';
 import { setNotifyImpl } from '../src/services/notifications';
 import { shouldPushAlert } from '../src/config/normalize';
+import { cloudClient } from '../src/services/cloud/cloudClient';
 
 function loadDotEnv(filePath: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -441,6 +442,34 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
     expect(src).not.toMatch(/recordAlert\(\s*['"]ioc_miss['"]/);
     expect(src).not.toMatch(/recordAlert\(\s*['"]daily_loss_stop['"]/);
     expect(src).not.toMatch(/recordAlert\(\s*['"]lean_signal['"]/);
+    expect(src).toContain('pullCloudAlerts');
+  });
+
+  test('Home tick pulls Cloud alerts into History', async () => {
+    const cfg = normalizeAppConfig(defaultAppConfig());
+    const spy = jest.spyOn(cloudClient, 'getAlerts').mockResolvedValue({
+      ok: true,
+      alerts: [
+        {
+          alertId: 'lean:KXGOLD15M-TEST:YES',
+          kind: 'lean_signal',
+          title: 'Signal · Gold YES',
+          body: 'Gap $10.00 · Cushion $7 · 12m left',
+          at: '2026-09-08T22:00:00.000Z',
+          source: 'gcp',
+        },
+      ],
+    });
+    const rt = new AppRuntime({ getConfig: () => cfg });
+    try {
+      await rt.tick();
+      expect(spy).toHaveBeenCalled();
+      expect(rt.alerts.list().find((a) => a.id === 'lean:KXGOLD15M-TEST:YES')?.kind).toBe(
+        'lean_signal'
+      );
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

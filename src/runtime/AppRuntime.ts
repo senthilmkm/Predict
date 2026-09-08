@@ -7,6 +7,7 @@ import { loadCredentials } from '../services/credentials';
 import { computeLean, LeanResult } from '../services/lean/lean';
 import { isMarketOpen } from '../services/marketHours';
 import { maybeNotify } from '../services/notifications';
+import { cloudClient } from '../services/cloud/cloudClient';
 import { MemoryAlertRepo, MemoryTradeRepo, TradeRecord, AlertRecord, cloudTradesToRecords, cloudAlertsToRecords } from '../storage/repos';
 import { hydrateRepos, persistRepos } from '../storage/historyPersistence';
 import { loadPortfolioSamples, persistPortfolioSamples } from '../storage/portfolioPersistence';
@@ -615,6 +616,7 @@ export class AppRuntime {
         this.lastErrorAlertKey = null;
       }
       await this.persistHistory();
+      await this.pullCloudAlerts();
     } catch (e: any) {
       this.status.lastError = String(e?.message || e);
       const cfg = this.getConfig();
@@ -623,6 +625,18 @@ export class AppRuntime {
     } finally {
       this.tickInFlight = false;
       this.pulseHeartbeat(true);
+    }
+  }
+
+  /** Pull Cloud History after a Home tick so leans appear without opening History. */
+  private async pullCloudAlerts(): Promise<void> {
+    try {
+      const res = await cloudClient.getAlerts();
+      if (res.ok && Array.isArray(res.alerts) && res.alerts.length > 0) {
+        this.syncCloudAlerts(res.alerts);
+      }
+    } catch {
+      /* keep local History */
     }
   }
 

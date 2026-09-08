@@ -9,6 +9,7 @@ import {
   fillAlertId,
   leanAlertId,
   missAlertId,
+  maybeEmitLeanAlert,
   persistSettlementAlertIfNeeded,
   protectAlertId,
   settleAlertId,
@@ -166,6 +167,8 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(src).toContain("orderBy('at', 'desc')");
     expect(src).toContain('col.limit(400).get()');
     expect(src).not.toMatch(/catch \{\s*return sortAlertsDesc\(localAlertStore/);
+    const api = require('fs').readFileSync(require('path').join(__dirname, '../routes/api.ts'), 'utf8');
+    expect(api).toContain('Number.isFinite(raw) ? raw : 400');
   });
 
   test('this-tick settlement produces Trade won with exact phone wording and cents', async () => {
@@ -285,6 +288,75 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(src).toContain('persistSettlementAlertIfNeeded');
     expect(src).toMatch(/user\.state !== 'KILL_SWITCH'/);
     expect(src).not.toContain('SETTLEMENT_ALERT_LOOKBACK');
+    const leanAt = src.indexOf('maybeEmitLeanAlert');
+    const cushionAt = src.indexOf('absGap < userCushion');
+    const capAt = src.indexOf('buysOnTicker >= windowCap');
+    expect(leanAt).toBeGreaterThan(0);
+    expect(leanAt).toBeLessThan(cushionAt);
+    expect(cushionAt).toBeLessThan(capAt);
+  });
+
+  test('lean persist retries after a fill and below-cushion rows do not push', async () => {
+    const uid = 'user_lean_edges';
+    const now = new Date('2026-09-08T22:00:00.000Z');
+    const cfg = { alerts_enabled: true };
+    let pushes = 0;
+    const send = async () => {
+      pushes += 1;
+      return { successCount: 1, failureCount: 0 };
+    };
+    const below = await maybeEmitLeanAlert({
+      userId: uid,
+      cfg,
+      tokens: ['ExponentPushToken[test]'],
+      asset: 'Gold',
+      ticker: 'KXGOLD15M-A',
+      decision: 'YES',
+      absGap: 3,
+      cushion: 7,
+      minutesLeft: 10,
+      leanAlertsSent: {},
+      now,
+      sendPush: send,
+    });
+    expect(below.persisted).toBe(true);
+    expect(below.pushed).toBe(false);
+    expect(pushes).toBe(0);
+
+    const afterFill = await maybeEmitLeanAlert({
+      userId: uid + '_fill',
+      cfg,
+      tokens: ['ExponentPushToken[test]'],
+      asset: 'Gold',
+      ticker: 'KXGOLD15M-B',
+      decision: 'YES',
+      absGap: 10,
+      cushion: 7,
+      minutesLeft: 8,
+      leanAlertsSent: {},
+      now,
+      sendPush: send,
+    });
+    expect(afterFill.persisted).toBe(true);
+    expect(afterFill.pushed).toBe(true);
+    expect(pushes).toBe(1);
+    const retry = await maybeEmitLeanAlert({
+      userId: uid + '_fill',
+      cfg,
+      tokens: ['ExponentPushToken[test]'],
+      asset: 'Gold',
+      ticker: 'KXGOLD15M-B',
+      decision: 'YES',
+      absGap: 10,
+      cushion: 7,
+      minutesLeft: 7,
+      leanAlertsSent: afterFill.next,
+      now,
+      sendPush: send,
+    });
+    expect(retry.dirty).toBe(false);
+    expect(pushes).toBe(1);
+    expect((await getAlertRecords(uid)).map((a) => a.alertId)).toEqual(['lean:KXGOLD15M-A:YES']);
   });
 
   test('daily loss stop matches the buy gate and does not re-push', async () => {

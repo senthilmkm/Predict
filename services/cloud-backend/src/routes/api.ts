@@ -283,7 +283,7 @@ apiRouter.get('/me/trades', async (req: Request, res: Response) => {
 apiRouter.get('/me/alerts', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
   const raw = Number(req.query.limit);
-  const limit = Number.isFinite(raw) ? raw : 200;
+  const limit = Number.isFinite(raw) ? raw : 400;
   const alerts = await getAlertRecords(userId, limit);
   res.json({ ok: true, alerts });
 });
