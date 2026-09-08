@@ -9,6 +9,7 @@ import {
   fillAlertId,
   leanAlertId,
   missAlertId,
+  persistSettlementAlertIfNeeded,
   protectAlertId,
   settleAlertId,
   settlementAlertFromTrade,
@@ -202,7 +203,11 @@ describe('cloud alerts persist + mute + settlement', () => {
       pnlUsd: 4,
     });
     expect(settlementAlertFromTrade(won!, new Date('2026-09-08T22:00:01.000Z'))).not.toBeNull();
-    expect(settlementAlertFromTrade(won!, new Date('2026-09-09T01:00:00.000Z'))).toBeNull();
+    // Failed alert write is still eligible days later until stamped.
+    expect(settlementAlertFromTrade(won!, new Date('2026-09-09T01:00:00.000Z'))).not.toBeNull();
+    expect(
+      settlementAlertFromTrade({ ...won!, settlementAlertAt: nowIso } as any, new Date('2026-09-09T01:00:00.000Z'))
+    ).toBeNull();
 
     const emitted = await emitCloudAlert({
       userId: uid,
@@ -217,6 +222,69 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(emitted).toEqual({ persisted: true, pushed: false });
     const listed = await request(app).get('/me/alerts').set('Authorization', `Bearer ${uid}`);
     expect(listed.body.alerts.some((a: any) => a.alertId === 'settle:t_win')).toBe(true);
+  });
+
+  test('Trade won persists then stamps so a later tick does not re-push', async () => {
+    const now = new Date('2026-09-08T22:00:00.000Z');
+    const later = new Date('2026-09-09T12:00:00.000Z');
+    const uid = 'user_alert_stamp';
+    const trade = {
+      tradeId: 't_stamp',
+      userId: uid,
+      ticker: 'KXBTC15M-DONE',
+      asset: 'BTC',
+      decision: 'YES' as const,
+      count: '10',
+      price: '0.60',
+      notionalUsd: 6,
+      dryRun: false,
+      status: 'SETTLED' as const,
+      executedAt: new Date(now.getTime() - 5 * 60_000).toISOString(),
+      settledAt: now.toISOString(),
+      payPrice: 0.6,
+      fillCount: 10,
+      outcome: 'win' as const,
+      pnlUsd: 4,
+      settlementAlertAt: null as string | null,
+    };
+    await saveTradeRecord(uid, trade);
+    let pushes = 0;
+    const send = async () => {
+      pushes += 1;
+      return { successCount: 1, failureCount: 0 };
+    };
+    const cfg = { alerts_enabled: true };
+    const first = await persistSettlementAlertIfNeeded({
+      userId: uid,
+      trade,
+      now,
+      cfg,
+      tokens: ['ExponentPushToken[test]'],
+      sendPush: send,
+    });
+    const stored = (await getTradeRecords(uid)).find((t) => t.tradeId === 't_stamp');
+    expect(first).toEqual({ persisted: true, pushed: true });
+    expect(stored?.settlementAlertAt).toBe(now.toISOString());
+    expect(trade.settlementAlertAt).toBe(now.toISOString());
+
+    const second = await persistSettlementAlertIfNeeded({
+      userId: uid,
+      trade: stored!,
+      now: later,
+      cfg,
+      tokens: ['ExponentPushToken[test]'],
+      sendPush: send,
+    });
+    expect(second).toEqual({ persisted: false, pushed: false });
+    expect(pushes).toBe(1);
+    expect((await getAlertRecords(uid)).map((a) => a.alertId)).toEqual(['settle:t_stamp']);
+  });
+
+  test('worker stamps Trade won and still skips Protect on KILL_SWITCH', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../routes/worker.ts'), 'utf8');
+    expect(src).toContain('persistSettlementAlertIfNeeded');
+    expect(src).toMatch(/user\.state !== 'KILL_SWITCH'/);
+    expect(src).not.toContain('SETTLEMENT_ALERT_LOOKBACK');
   });
 
   test('daily loss stop matches the buy gate and does not re-push', async () => {

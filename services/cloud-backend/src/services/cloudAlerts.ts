@@ -1,4 +1,4 @@
-import { CloudAlertDoc, TradeRecordDoc, saveAlertRecord } from './firestore';
+import { CloudAlertDoc, TradeRecordDoc, saveAlertRecord, updateTradeRecord } from './firestore';
 import { fillPushEnabled, leanPushEnabled } from './leanAlerts';
 import { protectPushEnabled } from './cloudProtectSell';
 import { sendPushNotification } from './notifications';
@@ -57,26 +57,57 @@ export function dailyLossAlertFromPnl(opts: {
   };
 }
 
-/** Retry window so a failed alert write after settlement is not lost forever. */
-export const SETTLEMENT_ALERT_LOOKBACK_MS = 2 * 60 * 60 * 1000;
-
-/** Same title/body as a phone Trade won/lost row. alertId is idempotent. */
+/** Same title/body as a phone Trade won/lost row. Retry until settlementAlertAt is stamped. */
 export function settlementAlertFromTrade(
   trade: TradeRecordDoc,
   now: Date
 ): { alertId: string; title: string; body: string; pnlUsd: number } | null {
   if (!trade || trade.dryRun) return null;
   if (trade.outcome !== 'win' && trade.outcome !== 'loss') return null;
+  if (String(trade.settlementAlertAt || '').trim()) return null;
   const settledAt = new Date(String(trade.settledAt || '')).getTime();
   const nowMs = now.getTime();
   if (!Number.isFinite(settledAt) || !Number.isFinite(nowMs)) return null;
-  if (nowMs - settledAt > SETTLEMENT_ALERT_LOOKBACK_MS) return null;
   if (settledAt > nowMs + 60_000) return null;
   const pnlUsd = Math.round(Number(trade.pnlUsd || 0) * 100) / 100;
   if (!Number.isFinite(pnlUsd)) return null;
   const title = trade.outcome === 'win' ? 'Trade won' : 'Trade lost';
   const body = `${trade.asset} ${trade.decision} · P&L $${pnlUsd.toFixed(2)} · ${trade.ticker}`;
   return { alertId: settleAlertId(trade.tradeId), title, body, pnlUsd };
+}
+
+/** Persist Trade won/lost, then stamp the trade so later ticks do not re-emit. */
+export async function persistSettlementAlertIfNeeded(opts: {
+  userId: string;
+  trade: TradeRecordDoc;
+  now: Date;
+  cfg: any;
+  tokens: string[];
+  sendPush?: typeof sendPushNotification;
+}): Promise<{ persisted: boolean; pushed: boolean }> {
+  const settled = settlementAlertFromTrade(opts.trade, opts.now);
+  if (!settled) return { persisted: false, pushed: false };
+  const emitted = await emitCloudAlert({
+    userId: opts.userId,
+    alertId: settled.alertId,
+    kind: 'trade_result',
+    title: settled.title,
+    body: settled.body,
+    cfg: opts.cfg,
+    tokens: opts.tokens,
+    asset: opts.trade.asset,
+    ticker: opts.trade.ticker,
+    tradeId: opts.trade.tradeId,
+    decision: opts.trade.decision,
+    at: opts.now.toISOString(),
+    sendPush: opts.sendPush,
+  });
+  if (emitted.persisted) {
+    const stamped = opts.now.toISOString();
+    opts.trade.settlementAlertAt = stamped;
+    await updateTradeRecord(opts.userId, opts.trade.tradeId, { settlementAlertAt: stamped });
+  }
+  return emitted;
 }
 
 export function alertKindEnabled(cfg: any, kind: string): boolean {

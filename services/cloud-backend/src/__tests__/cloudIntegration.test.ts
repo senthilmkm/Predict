@@ -122,10 +122,13 @@ describe('Predict Cloud Backend — End-to-End Integration Suite', () => {
     expect(killRes.body.state).toBe('KILL_SWITCH');
     expect(killRes.body.cloudTradingEnabled).toBe(false);
 
-    // Verify worker tick skips user on next tick
+    // Keys stay on the tick so open fills can still settle; no new buys.
     const tickRes = await request(app).post('/tick');
     expect(tickRes.status).toBe(200);
-    expect(tickRes.body.activeUserCount).toBe(0);
+    expect(tickRes.body.activeUserCount).toBeGreaterThanOrEqual(1);
+    const mine = (tickRes.body.results || []).find((r: any) => r.userId === userId);
+    expect(mine).toBeTruthy();
+    expect(mine.tradesPlaced).toBe(0);
   });
 
   test('9. DELETE /me/kalshi/credentials permanently wipes Secret Manager keys', async () => {

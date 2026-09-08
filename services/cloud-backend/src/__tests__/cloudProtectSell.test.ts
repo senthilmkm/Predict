@@ -345,11 +345,12 @@ describe('cloud protect-sell', () => {
     expect((await getTradeRecords(userId)).find((t) => t.tradeId === 't_boom')?.outcome).toBe('pending');
   });
 
-  test('disarmed Kalshi users stay on the worker for settlement; kill-switch does not', async () => {
+  test('disarmed and kill-switched Kalshi users stay on the worker for settlement', async () => {
     expect(shouldLoadCloudTradeBook({ kalshiConfigured: true, state: 'DISARMED' })).toBe(true);
     expect(shouldLoadCloudTradeBook({ kalshiConfigured: true, state: 'ARMED' })).toBe(true);
-    expect(shouldLoadCloudTradeBook({ kalshiConfigured: true, state: 'KILL_SWITCH' })).toBe(false);
+    expect(shouldLoadCloudTradeBook({ kalshiConfigured: true, state: 'KILL_SWITCH' })).toBe(true);
     expect(shouldLoadCloudTradeBook({ kalshiConfigured: false, state: 'DISARMED' })).toBe(false);
+    expect(shouldLoadCloudTradeBook({ kalshiConfigured: false, state: 'KILL_SWITCH' })).toBe(false);
 
     await upsertUserDoc('user_prot_only', {
       userId: 'user_prot_only',
@@ -372,10 +373,18 @@ describe('cloud protect-sell', () => {
       state: 'KILL_SWITCH',
       config: { alerts_enabled: false, risk: { protect_sell_enabled: true } },
     } as any);
+    await upsertUserDoc('user_kill_nokeys', {
+      userId: 'user_kill_nokeys',
+      cloudTradingEnabled: false,
+      kalshiConfigured: false,
+      state: 'KILL_SWITCH',
+      config: { alerts_enabled: false },
+    } as any);
     const users = await getEnrolledActiveUsers();
     expect(users.some((u) => u.userId === 'user_prot_only')).toBe(true);
     expect(users.some((u) => u.userId === 'user_disarmed_settle')).toBe(true);
-    expect(users.some((u) => u.userId === 'user_prot_kill')).toBe(false);
+    expect(users.some((u) => u.userId === 'user_prot_kill')).toBe(true);
+    expect(users.some((u) => u.userId === 'user_kill_nokeys')).toBe(false);
   });
 
   test('push is one collapse id per trade and respects mute', () => {

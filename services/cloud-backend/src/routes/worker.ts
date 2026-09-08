@@ -45,7 +45,7 @@ import {
   missAlertId,
   protectAlertId,
   dailyLossAlertFromPnl,
-  settlementAlertFromTrade,
+  persistSettlementAlertIfNeeded,
 } from '../services/cloudAlerts';
 import { isMarketOpen } from '../services/marketHours';
 import { etDateKey } from '../util/time';
@@ -173,21 +173,12 @@ async function runOneTick() {
 
           const tickIso = now.toISOString();
           for (const t of userTrades) {
-            const settled = settlementAlertFromTrade(t, now);
-            if (!settled) continue;
-            await emitCloudAlert({
+            await persistSettlementAlertIfNeeded({
               userId,
-              alertId: settled.alertId,
-              kind: 'trade_result',
-              title: settled.title,
-              body: settled.body,
+              trade: t,
+              now,
               cfg,
               tokens: userTokens,
-              asset: t.asset,
-              ticker: t.ticker,
-              tradeId: t.tradeId,
-              decision: t.decision,
-              at: tickIso,
             });
           }
 

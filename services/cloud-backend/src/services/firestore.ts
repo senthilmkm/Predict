@@ -24,6 +24,8 @@ export interface TradeRecordDoc {
   pnlUsd?: number | null;
   outcome?: 'win' | 'loss' | 'pending' | 'miss' | 'exited' | 'exiting';
   settledAt?: string | null;
+  /** Set after Trade won/lost is persisted. Missing means retry until written. */
+  settlementAlertAt?: string | null;
   /** Set while an IOC protect-sell is in flight; stale claims can retry. */
   protectClaimedAt?: string | null;
   /** Kalshi order id of the IOC exit — never overwrite the entry `orderId`. */
@@ -177,12 +179,12 @@ export async function deleteUserDoc(userId: string): Promise<boolean> {
   return true;
 }
 
-/** Keys saved and not kill-switched: settle open fills even if Auto-trade / Protect are Off. */
+/** Keys saved: settle open fills even if Auto-trade / Protect / KILL_SWITCH. Buys still need ARMED. */
 export function shouldLoadCloudTradeBook(user: {
   kalshiConfigured?: boolean;
   state?: string;
 }): boolean {
-  return Boolean(user?.kalshiConfigured && user.state !== 'KILL_SWITCH');
+  return Boolean(user?.kalshiConfigured);
 }
 
 export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { config?: any; pushTokens?: string[]; fcmTokens?: string[] })[]> {
@@ -200,12 +202,12 @@ export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { confi
   }
 
   return users.filter((u) => {
-    if (u.state === 'KILL_SWITCH') return false;
     const hasTokens =
       (Array.isArray(u.pushTokens) && u.pushTokens.length > 0) ||
       (Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0);
     const isAlertSubscriber = u.config?.alerts_enabled !== false && hasTokens;
-    // Kalshi keys keep the user on the tick for settlement / Trade won after Auto-trade Off.
+    // KILL_SWITCH + keys: settle / Trade won only. No keys: stay off the tick.
+    if (u.state === 'KILL_SWITCH') return shouldLoadCloudTradeBook(u);
     return shouldLoadCloudTradeBook(u) || isAlertSubscriber;
   });
 }
