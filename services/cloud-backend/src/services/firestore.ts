@@ -42,6 +42,8 @@ export interface SystemConfig {
   tick_interval_seconds: number;
   stale_timeout_seconds: number;
   batch_size: number;
+  /** ISO time of the last completed Cloud Scheduler /tick (worker heartbeat). */
+  last_worker_tick_at?: string;
 }
 
 const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
@@ -456,8 +458,10 @@ function sortTradesNewestFirst(trades: TradeRecordDoc[]): TradeRecordDoc[] {
 
 async function listTradesFromUserCollections(limit: number): Promise<TradeRecordDoc[]> {
   const local: TradeRecordDoc[] = [];
-  for (const trades of localTradeStore.values()) {
-    local.push(...trades);
+  for (const [ownerId, trades] of localTradeStore.entries()) {
+    for (const trade of trades) {
+      local.push({ ...trade, userId: trade.userId || ownerId });
+    }
   }
 
   const f = getDb();
@@ -471,16 +475,39 @@ async function listTradesFromUserCollections(limit: number): Promise<TradeRecord
     for (const userDoc of users.docs) {
       const snap = await userDoc.ref.collection('trades').get();
       for (const doc of snap.docs) {
+        const data = doc.data() || {};
         all.push({
+          ...data,
           tradeId: doc.id,
           userId: userDoc.id,
-          ...doc.data(),
         } as TradeRecordDoc);
       }
     }
     return sortTradesNewestFirst(all).slice(0, limit);
   } catch {
     return sortTradesNewestFirst(local).slice(0, limit);
+  }
+}
+
+/** Every trade across all users — used for admin KPIs / P&L (no silent cap). */
+export async function getAllTradesForAdmin(): Promise<TradeRecordDoc[]> {
+  const f = getDb();
+  if (!f) {
+    return listTradesFromUserCollections(1_000_000);
+  }
+  try {
+    const snapshot = await f.collectionGroup('trades').get();
+    return snapshot.docs.map((doc: any) => {
+      const parentUser = doc.ref.parent.parent?.id;
+      const data = doc.data() || {};
+      return {
+        ...data,
+        tradeId: doc.id,
+        userId: parentUser || data.userId || 'system',
+      } as TradeRecordDoc;
+    });
+  } catch {
+    return listTradesFromUserCollections(1_000_000);
   }
 }
 
@@ -493,10 +520,11 @@ export async function getAllGlobalTrades(limit = 100): Promise<TradeRecordDoc[]>
     const snapshot = await f.collectionGroup('trades').orderBy('executedAt', 'desc').limit(limit).get();
     return snapshot.docs.map((doc: any) => {
       const parentUser = doc.ref.parent.parent?.id;
+      const data = doc.data() || {};
       return {
+        ...data,
         tradeId: doc.id,
-        userId: parentUser || doc.data().userId || 'system',
-        ...doc.data(),
+        userId: parentUser || data.userId || 'system',
       } as TradeRecordDoc;
     });
   } catch {
@@ -519,10 +547,11 @@ export async function getAllSystemAuditLogs(limit = 100): Promise<AuditLogDoc[]>
     const snapshot = await f.collectionGroup('audit').orderBy('timestamp', 'desc').limit(limit).get();
     return snapshot.docs.map((doc: any) => {
       const parentUser = doc.ref.parent.parent?.id;
+      const data = doc.data() || {};
       return {
+        ...data,
         logId: doc.id,
-        userId: parentUser || doc.data().userId || 'system',
-        ...doc.data(),
+        userId: parentUser || data.userId || 'system',
       } as AuditLogDoc;
     });
   } catch {

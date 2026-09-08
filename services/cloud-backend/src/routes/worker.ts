@@ -19,6 +19,7 @@ import {
   getTradeRecords,
   writeAuditLog,
   getSystemConfig,
+  setSystemConfig,
   TradeRecordDoc,
 } from '../services/firestore';
 import { sendPushNotification } from '../services/notifications';
@@ -447,6 +448,8 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
+
+  await setSystemConfig({ last_worker_tick_at: lastResult.timestamp });
 
   res.json({
     ok: true,

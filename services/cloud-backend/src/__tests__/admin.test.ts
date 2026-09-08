@@ -1,18 +1,21 @@
 import request from 'supertest';
 import { app } from '../index';
-import { upsertUserDoc, saveTradeRecord } from '../services/firestore';
+import { upsertUserDoc, saveTradeRecord, setSystemConfig } from '../services/firestore';
 
 describe('Predict Admin Web Portal API Suite', () => {
   const ADMIN_SECRET = process.env.ADMIN_SECRET_KEY || 'predict-admin-secret-2026';
   const testUserId = 'user_admin_test_101';
 
   beforeAll(async () => {
+    await setSystemConfig({ last_worker_tick_at: new Date().toISOString() });
+
     // Setup test user doc & trade records
     await upsertUserDoc(testUserId, {
       userId: testUserId,
       cloudTradingEnabled: true,
       kalshiConfigured: true,
       state: 'ARMED',
+      lastTickAt: new Date().toISOString(),
       config: {
         version: 1,
         alerts_enabled: true,
@@ -33,21 +36,38 @@ describe('Predict Admin Web Portal API Suite', () => {
       notionalUsd: 2.25,
       dryRun: false,
       status: 'FILLED',
+      fillCount: 5,
       executedAt: new Date().toISOString(),
     });
     await saveTradeRecord(testUserId, {
       tradeId: 'trade_admin_test_002',
       userId: testUserId,
-      ticker: 'KXBTC15M-TEST',
+      ticker: 'KXBTC15M-WIN',
       asset: 'BTC',
-      decision: 'NO',
-      count: '5',
-      price: '0.13',
+      decision: 'YES',
+      count: '10',
+      price: '0.55',
       notionalUsd: 4.35,
       dryRun: false,
       status: 'SETTLED',
-      pnlUsd: 4.35,
+      fillCount: 10,
       outcome: 'win',
+      pnlUsd: 4.35,
+      executedAt: new Date().toISOString(),
+    });
+    await saveTradeRecord(testUserId, {
+      tradeId: 'trade_admin_test_003',
+      userId: testUserId,
+      ticker: 'KXBTC15M-MISS',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '5',
+      price: '0.50',
+      notionalUsd: 2.5,
+      dryRun: false,
+      status: 'CANCELLED',
+      fillCount: 0,
+      outcome: 'miss',
       executedAt: new Date().toISOString(),
     });
   });
@@ -83,12 +103,17 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.metrics).toBeDefined();
     expect(res.body.metrics.totalUsers).toBeGreaterThanOrEqual(1);
     expect(res.body.metrics.activeTraders).toBeGreaterThanOrEqual(1);
-    expect(res.body.metrics.trades24hCount).toBeGreaterThanOrEqual(2);
+    expect(res.body.metrics.trades24hCount).toBeGreaterThanOrEqual(3);
     expect(res.body.metrics.filled24hCount).toBeGreaterThanOrEqual(2);
     expect(res.body.metrics.volumeUsd24h).toBeGreaterThanOrEqual(6.6);
+    expect(res.body.metrics.volumeUsd24h).toBeLessThan(6.6 + 2.5);
+    expect(res.body.metrics.assetCount).toBe(19);
+    expect(Array.isArray(res.body.assets)).toBe(true);
+    expect(res.body.assets.length).toBe(19);
     expect(res.body.worker).toBeDefined();
     expect(res.body.worker.status).toBe('ACTIVE');
     expect(res.body.worker.tickIntervalSeconds).toBe(20);
+    expect(res.body.worker.gcpProject).toBe('predict-trading-0904');
   });
 
   test('4. GET /admin/api/users retrieves list of all enrolled users', async () => {
@@ -179,7 +204,10 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('PREDICT ADMIN');
     expect(res.text).toContain('GCP Cloud');
     expect(res.text).toContain('Created');
+    expect(res.text).toContain('predict-trading-0904');
     expect(res.text).toContain('Closed P&amp;L');
+    expect(res.text).toContain('Search user ID');
+    expect(res.text).toContain('Filtered realized P&amp;L');
   });
 
   test('11. POST /admin/api/config updates tick_interval_seconds dynamically', async () => {
@@ -197,5 +225,55 @@ describe('Predict Admin Web Portal API Suite', () => {
       .set('x-admin-key', ADMIN_SECRET);
     expect(overviewRes.body.worker.tickIntervalSeconds).toBe(15);
     expect(overviewRes.body.worker.subTicksPerMinute).toBe(4);
+  });
+
+  test('12. GET /admin/api/trades filters by asset, status, user, and reports realized P&L', async () => {
+    const gold = await request(app)
+      .get('/admin/api/trades')
+      .query({ asset: 'Gold', userId: testUserId })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(gold.status).toBe(200);
+    expect(gold.body.matchedCount).toBe(1);
+    expect(gold.body.trades.every((t: any) => t.asset === 'Gold')).toBe(true);
+    expect(gold.body.totalPnlUsd).toBe(0);
+
+    const settled = await request(app)
+      .get('/admin/api/trades')
+      .query({ status: 'SETTLED', userId: testUserId })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(settled.body.trades.every((t: any) => t.status === 'SETTLED')).toBe(true);
+    expect(settled.body.matchedCount).toBe(1);
+    expect(settled.body.totalPnlUsd).toBe(4.35);
+    expect(settled.body.trades[0].pnlUsd).toBe(4.35);
+
+    const user = await request(app)
+      .get('/admin/api/trades')
+      .query({ userId: 'admin_test' })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(user.body.matchedCount).toBeGreaterThanOrEqual(3);
+    expect(user.body.totalPnlUsd).toBe(4.35);
+
+    const none = await request(app)
+      .get('/admin/api/trades')
+      .query({ userId: 'no-such-user-xyz' })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(none.body.matchedCount).toBe(0);
+    expect(none.body.totalPnlUsd).toBe(0);
+    expect(none.body.trades).toEqual([]);
+
+    const truncated = await request(app)
+      .get('/admin/api/trades')
+      .query({ limit: 1, userId: testUserId })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(truncated.body.displayedCount).toBe(1);
+    expect(truncated.body.matchedCount).toBeGreaterThan(1);
+    expect(truncated.body.truncated).toBe(true);
+    expect(truncated.body.totalPnlUsd).toBe(4.35);
+
+    const future = await request(app)
+      .get('/admin/api/trades')
+      .query({ from: '2099-01-01T00:00:00.000Z', userId: testUserId })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(future.body.matchedCount).toBe(0);
   });
 });

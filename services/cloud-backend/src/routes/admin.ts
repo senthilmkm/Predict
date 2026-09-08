@@ -4,16 +4,22 @@ import {
   getUserDoc,
   upsertUserDoc,
   deleteUserDoc,
-  getAllGlobalTrades,
+  getAllTradesForAdmin,
   getAllSystemAuditLogs,
   disarmAllUsers,
   writeAuditLog,
   getSystemConfig,
   setSystemConfig,
 } from '../services/firestore';
-import { AssetRegistry, defaultAppConfig } from 'trading-core';
+import { AssetRegistry, defaultAppConfig } from '../../../../packages/trading-core/src/types';
 import { windowBuyCap } from '../../../../packages/trading-core/src/gates';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
+import {
+  computeOverviewTradeMetrics,
+  workerHealthStatus,
+  parseTradeStreamQuery,
+  buildTradeStreamResult,
+} from '../services/adminMetrics';
 
 export const adminRouter = Router();
 
@@ -50,31 +56,25 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
   try {
     const [users, trades, systemConfig] = await Promise.all([
       getAllUsers(),
-      getAllGlobalTrades(500),
+      getAllTradesForAdmin(),
       getSystemConfig(),
     ]);
 
-    const now = Date.now();
-    const last24h = now - 24 * 60 * 60 * 1000;
-
-    const trades24h = trades.filter((t) => {
-      const at = new Date(t.executedAt || 0).getTime();
-      return Number.isFinite(at) && at >= last24h;
-    });
-    const filled24h = trades24h.filter(
-      (t) => t.status === 'FILLED' || t.status === 'SUBMITTED' || t.status === 'SETTLED'
-    );
-    const volumeUsd24h = filled24h.reduce((acc, t) => acc + (t.notionalUsd || 0), 0);
-
+    const tradeMetrics = computeOverviewTradeMetrics(trades);
     const activeTraders = users.filter((u) => u.state === 'ARMED' && u.cloudTradingEnabled).length;
-    const latestUserTick = users.reduce((latest, u) => {
-      if (!u.lastTickAt) return latest;
-      const t = new Date(u.lastTickAt).getTime();
-      return t > latest ? t : latest;
-    }, 0);
+    const lastTickAt = systemConfig?.last_worker_tick_at || null;
 
     const tickSec = systemConfig?.tick_interval_seconds || 20;
+    const staleSec = systemConfig?.stale_timeout_seconds || 120;
     const subTicks = Math.max(1, Math.floor(60 / tickSec));
+    const workerStatus = workerHealthStatus(lastTickAt, staleSec);
+    const assets = AssetRegistry.list.map((a) => ({
+      key: a.key,
+      name: a.name,
+      category: a.category,
+      defaultCushion: a.defaultCushion,
+      cushionBounds: a.cushionBounds,
+    }));
 
     res.json({
       ok: true,
@@ -83,20 +83,23 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
       metrics: {
         totalUsers: users.length,
         activeTraders,
-        trades24hCount: trades24h.length,
-        filled24hCount: filled24h.length,
-        volumeUsd24h: Math.round(volumeUsd24h * 100) / 100,
-        lastTickAt: latestUserTick ? new Date(latestUserTick).toISOString() : null,
+        trades24hCount: tradeMetrics.trades24hCount,
+        filled24hCount: tradeMetrics.filled24hCount,
+        volumeUsd24h: tradeMetrics.volumeUsd24h,
+        lastTickAt,
+        assetCount: assets.length,
       },
+      assets,
       worker: {
-        status: 'ACTIVE',
+        status: workerStatus,
         tickIntervalSeconds: tickSec,
         subTicksPerMinute: subTicks,
         gcpRegion: process.env.GCP_REGION || 'us-east1',
-        gcpProject: process.env.GCP_PROJECT || 'predict-cloud-api-428463178740',
+        gcpProject: process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-trading-0904',
       },
     });
   } catch (err: any) {
+    console.error('admin overview error', err?.message || err);
     res.status(500).json({ ok: false, error: err?.message || 'Overview error' });
   }
 });
@@ -127,7 +130,7 @@ adminRouter.post('/config', async (req: Request, res: Response) => {
 // 3. Get All Users
 adminRouter.get('/users', async (req: Request, res: Response) => {
   try {
-    const [users, trades] = await Promise.all([getAllUsers(), getAllGlobalTrades(2000)]);
+    const [users, trades] = await Promise.all([getAllUsers(), getAllTradesForAdmin()]);
     const tradesByUser = new Map<string, typeof trades>();
     for (const trade of trades) {
       const uid = trade.userId || 'unknown';
@@ -271,12 +274,21 @@ adminRouter.delete('/users/:userId', async (req: Request, res: Response) => {
   }
 });
 
-// 7. Get Global Trade Stream
+// 7. Get Global Trade Stream (filter + realized P&L on the full match set)
 adminRouter.get('/trades', async (req: Request, res: Response) => {
   try {
-    const limit = Number(req.query.limit) || 100;
-    const trades = await getAllGlobalTrades(limit);
-    res.json({ ok: true, count: trades.length, trades });
+    const parsed = parseTradeStreamQuery(req.query as Record<string, unknown>);
+    const all = await getAllTradesForAdmin();
+    const result = buildTradeStreamResult(all, parsed, parsed.limit);
+    res.json({
+      ok: true,
+      count: result.displayedCount,
+      matchedCount: result.matchedCount,
+      displayedCount: result.displayedCount,
+      truncated: result.truncated,
+      totalPnlUsd: result.totalPnlUsd,
+      trades: result.trades,
+    });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err?.message || 'Fetch trades error' });
   }
