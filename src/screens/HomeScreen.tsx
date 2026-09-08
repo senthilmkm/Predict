@@ -19,6 +19,7 @@ import { getMarketScheduleNotice, isMarketOpen } from '../services/marketHours';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
+import { PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF } from '../config/disclaimers';
 import { formatChange24h, formatUsd } from '../util/moneyFormat';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
@@ -114,11 +115,15 @@ export function HomeScreen() {
     if (!config.auto_trade_enabled) {
       Alert.alert(
         'Already disarmed',
-        'Auto-trade is off on this phone. To turn it back on, open the Settings tab and enable Auto-trade (you may need Face ID).'
+        'Auto-trade is off on this phone. To turn it back on, open the Settings tab and enable Auto-trade (you may need Face ID).\n\n' +
+          PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF
       );
       return;
     }
-    Alert.alert('Turn off Auto-trade now?', 'This stops new auto-trades on this phone right away.', [
+    Alert.alert(
+      'Turn off Auto-trade now?',
+      'This stops new auto-trades right away.\n\n' + PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF,
+      [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Disarm',

@@ -78,6 +78,8 @@ describe('HomeScreen', () => {
       await fireEvent.press(s.getByTestId('btn-kill-switch'));
       expect(spy).toHaveBeenCalled();
       expect(String(spy.mock.calls[0][0])).toMatch(/Turn off Auto-trade/i);
+      expect(String(spy.mock.calls[0][1])).toMatch(/Protect money works whenever that switch is On/i);
+      expect(String(spy.mock.calls[0][1])).toMatch(/even if Auto-trade \(new buys\) is Off/i);
       await waitFor(() => expect(s.getByTestId('kill-switch-spinner')).toBeTruthy());
       await waitFor(() => expect(useConfigStore.getState().config.auto_trade_enabled).toBe(false));
       await waitFor(() => expect(s.getByText('Disarmed — Auto-trade off')).toBeTruthy());
@@ -98,6 +100,7 @@ describe('HomeScreen', () => {
         'Already disarmed',
         expect.stringMatching(/Settings tab.*enable Auto-trade/i)
       );
+      expect(String(spy.mock.calls[0][1])).toMatch(/Protect money works whenever that switch is On/i);
     } finally {
       spy.mockRestore();
     }

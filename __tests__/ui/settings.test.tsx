@@ -195,8 +195,8 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-field-max_trades_per_asset_per_window')).toBeTruthy();
     expect(s.getByTestId('risk-value-max_trades_per_asset_per_window').props.children).toBe('1');
     expect(s.queryByTestId('risk-field-max_trades_per_asset_per_day')).toBeNull();
-    expect(s.getByTestId('risk-hint-protect-sell-auto-off').props.children).toMatch(
-      /Auto-trade is Off/
+    expect(s.getByTestId('risk-hint-protect-sell-auto-off').props.children).toBe(
+      'Still runs 24/7 on Cloud Run if Auto-trade is Off.'
     );
     expect(s.getByTestId('risk-value-protect_sell_gap_ratio').props.children).toMatch(/1\.00×/);
     expect(s.getByTestId('risk-value-protect_sell_grace_seconds').props.children).toMatch(/45s/);

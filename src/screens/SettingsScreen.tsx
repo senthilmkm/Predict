@@ -773,7 +773,7 @@ export function SettingsScreen() {
                         : 'Off — holds until the window settles (win or loss)'}
                     </Text>
                     <Text style={styles.riskHint} testID="risk-hint-protect-sell-auto-off">
-                      Still runs 24/7 on Cloud Run if Auto-trade is Off. The phone does not sell.
+                      Still runs 24/7 on Cloud Run if Auto-trade is Off.
                     </Text>
                   </View>
                 );
@@ -1214,7 +1214,7 @@ function RiskHelpModal({
               When Off (default), open trades ride until settlement.{'\n\n'}
               Notice: Early exits are not guaranteed to save capital or prevent loss. Orders may fail, delay, partial-fill, or fill at worse-than-expected prices due to network traffic, exchange latency, order book illiquidity, wide spreads, rapid price gaps, or time decay (theta) near expiry.{'\n\n'}
               Works whenever this switch is On and Kalshi credentials are saved — even if Auto-trade
-              (new buys) is Off. Exits run 24/7 on Cloud Run. The phone does not place sell orders.
+              (new buys) is Off. Exits run 24/7 on Cloud Run.
             </HelpItem>
             <HelpItem title="Sell when gap ≥ cushion ×">
               How strong the opposite lean must be before selling.{'\n\n'}

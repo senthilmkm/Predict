@@ -10,7 +10,7 @@ import {
   listAutoTradeRiskAcceptances,
   recordOnboardingRiskAcceptance,
 } from '../src/storage/riskAcceptance';
-import { DISCLAIMER_VERSION } from '../src/config/disclaimers';
+import { DISCLAIMER_LONG, DISCLAIMER_VERSION, PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF } from '../src/config/disclaimers';
 import { MemoryKeyValueStore, getKeyValueStore, setKeyValueStore } from '../src/platform/storage';
 
 describe('onboarding + disclaimer acceptance', () => {
@@ -38,6 +38,7 @@ describe('onboarding + disclaimer acceptance', () => {
     expect(log[0].source).toBe('onboarding');
     expect(log[0].autoTradeEnabled).toBe(false);
     expect(log[0].disclaimerVersion).toBe(DISCLAIMER_VERSION);
+    expect(DISCLAIMER_LONG).toContain(PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF);
 
     await markOnboardingCompleted(withRisk);
     expect(await isOnboardingCompleted()).toBe(true);
