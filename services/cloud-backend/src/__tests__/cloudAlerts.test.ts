@@ -160,6 +160,11 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.alerts.map((a: any) => a.alertId)).toEqual(['fill:mine']);
+
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../services/firestore.ts'), 'utf8');
+    expect(src).toContain("orderBy('at', 'desc')");
+    expect(src).toContain('col.limit(400).get()');
+    expect(src).not.toMatch(/catch \{\s*return sortAlertsDesc\(localAlertStore/);
   });
 
   test('this-tick settlement produces Trade won with exact phone wording and cents', async () => {

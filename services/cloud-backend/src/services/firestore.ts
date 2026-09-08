@@ -381,17 +381,18 @@ export async function getAlertRecords(userId: string, limit = 200): Promise<Clou
   if (!f) {
     return sortAlertsDesc(localAlertStore.get(userId) || []).slice(0, cap);
   }
+  const col = f.collection('users').doc(userId).collection('alerts');
   try {
-    const snapshot = await f
-      .collection('users')
-      .doc(userId)
-      .collection('alerts')
-      .orderBy('at', 'desc')
-      .limit(cap)
-      .get();
+    const snapshot = await col.orderBy('at', 'desc').limit(cap).get();
     return snapshot.docs.map((d: any) => d.data() as CloudAlertDoc);
   } catch {
-    return sortAlertsDesc(localAlertStore.get(userId) || []).slice(0, cap);
+    // Missing `at` index (or any orderBy failure) must not wipe History.
+    try {
+      const snapshot = await col.limit(400).get();
+      return sortAlertsDesc(snapshot.docs.map((d: any) => d.data() as CloudAlertDoc)).slice(0, cap);
+    } catch {
+      return [];
+    }
   }
 }
 
