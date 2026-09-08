@@ -202,6 +202,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'It turns Auto-trade Off right away on this phone and syncs that Off state to Cloud Run, so new automatic buys should stop.\n\n' +
             'It does not turn Protect money Off. If Protect money is still On, Cloud Run may still try to sell open trades.\n\n' +
+            'Cloud Run still settles fills you already have and can still write Trade won / Trade lost.\n\n' +
             'To stop new buys and early sells: Auto-trade Off, and turn Protect money Off under Settings → Risk.',
         },
         {
@@ -223,17 +224,17 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Cloud Run doing?',
           a:
             'Google Cloud Run is Predict’s always-on server. On a short tick it can:\n' +
-            '• send lean / fill / protect-sell push sounds (so the phone does not ding twice)\n' +
+            '• send lean / fill / protect-sell / trade-result / IOC-miss / daily-loss push sounds (so the phone does not ding twice)\n' +
             '• place Auto-trade buys when Auto-trade is On\n' +
             '• place Protect money sells when that switch is On\n' +
-            '• record fills and settlements on your user in Firestore\n\n' +
+            '• record fills and settlements on your user in Firestore (settlements continue after Auto-trade Off if keys are saved)\n\n' +
             'Your Risk numbers and asset on/off flags are stored with your user so the server uses the same rules as Settings.',
         },
         {
           id: 'who-sells',
-          q: 'Does the phone ever sell?',
+          q: 'Does the phone ever buy or sell?',
           a:
-            'No. Protect money exits are placed by Cloud Run only. The phone does not send sell orders.\n\n' +
+            'No. Auto-trade buys and Protect money sells are placed by Cloud Run only. The phone does not send buy or sell orders.\n\n' +
             'Protect money still runs 24/7 on Cloud Run even if Auto-trade (new buys) is Off — as long as the Protect money switch is On and keys are saved.',
         },
         {
@@ -414,7 +415,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Master switch: Settings → Notify on lean signals.\n\n' +
             'Per type: open the bell → expand mute options. You can mute lean signals, orders placed, fills, IOC misses, trade results, protect-sells, daily loss stop, and errors.\n\n' +
-            'Lean, fill, and protect-sell sounds are sent from Cloud Run so the phone does not play the same event twice.',
+            'Lean, fill, protect-sell, trade result, IOC miss, and daily loss stop sounds are sent from Cloud Run so the phone does not play the same event twice.',
         },
       ],
     },

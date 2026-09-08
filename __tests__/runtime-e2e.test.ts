@@ -85,7 +85,7 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
     setSecureStore(new MemoryKeyValueStore());
   });
 
-  test('tick records lean alert + pending trade when gap clears cushion', async () => {
+  test('tick records lean signal only — phone never POSTs an order', async () => {
     const { generateKeyPairSync } = await import('crypto');
     const pem = generateKeyPairSync('rsa', {
       modulusLength: 2048,
@@ -95,13 +95,15 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
     await saveCredentials({ keyId: 'k', privateKeyPem: pem, env: 'production' });
 
     const now = new Date('2026-09-03T00:05:00.000Z');
+    let orderPosts = 0;
     const fetchImpl = jest.fn(async (url: string, init?: any) => {
       const u = String(url);
-      if (u.includes('/portfolio/orders') || (init?.method === 'POST' && u.includes('orders'))) {
+      if (String(init?.method || '').toUpperCase() === 'POST' && u.includes('orders')) {
+        orderPosts += 1;
         return {
           ok: true,
           status: 201,
-          json: async () => ({ order_id: 'ord-1', fill_count: '1.00' }),
+          json: async () => ({ order_id: 'ord-should-not-place', fill_count: '1.00' }),
           text: async () => '',
         };
       }
@@ -153,13 +155,9 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
       alerts_enabled: true,
       auto_trade_enabled: true,
       execution_mode: 'live',
-      assets_enabled: {
-        WTI: false,
-        Gold: true,
-        Silver: false,
-        BTC: false,
-        ETH: false,
-      },
+      assets_enabled: Object.fromEntries(
+        Object.keys(defaultAppConfig().assets_enabled).map((k) => [k, k === 'Gold'])
+      ) as any,
       cushions: { ...defaultAppConfig().cushions, Gold: 7 },
     });
 
@@ -179,22 +177,35 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
       notified.push(p.kind);
     });
 
+    const placeSpy = jest.spyOn(TradingEngine.prototype, 'tryPlaceFromLean');
+    const exitSpy = jest.spyOn(TradingEngine.prototype, 'tryProtectExit');
     const rt = new AppRuntime({
       getConfig: () => cfg,
       fetchImpl,
     });
 
-    await rt.tick();
+    try {
+      const overlapping = rt.tick();
+      await Promise.all([overlapping, rt.tick()]);
+      await rt.tick();
 
-    global.Date = RealDate;
-
-    expect(rt.status.lastLeans.Gold?.decision).toBe('YES');
-    expect(rt.alerts.list().length).toBeGreaterThan(0);
-    expect(rt.alerts.list().some((a) => a.kind === 'lean_signal')).toBe(true);
-    expect(rt.alerts.list().some((a) => a.kind === 'order_filled')).toBe(true);
-    expect(rt.trades.list().some((t) => t.outcome === 'pending' && !t.dry_run)).toBe(true);
-    expect(notified).not.toContain('lean_signal');
-    expect(notified).not.toContain('order_filled');
+      expect(rt.status.lastLeans.Gold?.decision).toBe('YES');
+      expect(rt.status.lastTradeAction.Gold?.status).toBe('idle');
+      expect(rt.status.lastTradeAction.Gold?.detail).toMatch(/Cloud Run places orders/);
+      expect(rt.alerts.list().filter((a) => a.kind === 'lean_signal')).toHaveLength(0);
+      expect(rt.alerts.list().some((a) => a.kind === 'order_filled')).toBe(false);
+      expect(rt.alerts.list().some((a) => a.kind === 'ioc_miss')).toBe(false);
+      expect(rt.trades.list()).toHaveLength(0);
+      expect(placeSpy).not.toHaveBeenCalled();
+      expect(exitSpy).not.toHaveBeenCalled();
+      expect(orderPosts).toBe(0);
+      expect(notified).not.toContain('lean_signal');
+      expect(notified).not.toContain('order_filled');
+    } finally {
+      global.Date = RealDate;
+      placeSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
   });
 
   test('phone never places protect-sell exits when lean flips against a hold', async () => {
@@ -210,7 +221,7 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
     let orderPosts = 0;
     const fetchImpl = jest.fn(async (url: string, init?: any) => {
       const u = String(url);
-      if (u.includes('/portfolio/orders') || (init?.method === 'POST' && u.includes('orders'))) {
+      if (String(init?.method || '').toUpperCase() === 'POST' && u.includes('orders')) {
         orderPosts += 1;
         return {
           ok: true,
@@ -268,13 +279,9 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
       alerts_enabled: true,
       auto_trade_enabled: false,
       execution_mode: 'off',
-      assets_enabled: {
-        WTI: false,
-        Gold: true,
-        Silver: false,
-        BTC: false,
-        ETH: false,
-      },
+      assets_enabled: Object.fromEntries(
+        Object.keys(defaultAppConfig().assets_enabled).map((k) => [k, k === 'Gold'])
+      ) as any,
       cushions: { ...defaultAppConfig().cushions, Gold: 7 },
       risk: {
         ...defaultAppConfig().risk,
@@ -295,6 +302,7 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
       }
     } as any;
 
+    const placeSpy = jest.spyOn(TradingEngine.prototype, 'tryPlaceFromLean');
     const exitSpy = jest.spyOn(TradingEngine.prototype, 'tryProtectExit');
     const rt = new AppRuntime({ getConfig: () => cfg, fetchImpl });
     rt.trades.insert({
@@ -311,15 +319,128 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
       order_id: 'ord-entry',
     });
 
-    await rt.tick();
-    global.Date = RealDate;
+    try {
+      await rt.tick();
 
-    expect(rt.status.lastLeans.Gold?.decision).toBe('NO');
-    expect(exitSpy).not.toHaveBeenCalled();
-    expect(orderPosts).toBe(0);
-    expect(rt.trades.list().find((t) => t.id === 'held-gold')?.outcome).toBe('pending');
-    expect(rt.alerts.list().some((a) => a.kind === 'protect_sell')).toBe(false);
-    exitSpy.mockRestore();
+      expect(rt.status.lastLeans.Gold?.decision).toBe('NO');
+      expect(placeSpy).not.toHaveBeenCalled();
+      expect(exitSpy).not.toHaveBeenCalled();
+      expect(orderPosts).toBe(0);
+      expect(rt.trades.list().find((t) => t.id === 'held-gold')?.outcome).toBe('pending');
+      expect(rt.alerts.list().some((a) => a.kind === 'protect_sell')).toBe(false);
+    } finally {
+      global.Date = RealDate;
+      placeSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
+
+  test('phone settlement updates P&L and never writes Trade won', async () => {
+    const { generateKeyPairSync } = await import('crypto');
+    const pem = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    }).privateKey;
+    await saveCredentials({ keyId: 'k', privateKeyPem: pem, env: 'production' });
+
+    const now = new Date('2026-09-03T00:10:00.000Z');
+    const fetchImpl = jest.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/markets/')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            market: {
+              result: 'yes',
+              status: 'finalized',
+              floor_strike: 2600,
+              yes_ask_dollars: '0.55',
+              no_ask_dollars: '0.48',
+            },
+          }),
+          text: async () => '',
+        };
+      }
+      if (u.includes('/events?')) {
+        return { ok: true, status: 200, json: async () => ({ events: [] }), text: async () => '' };
+      }
+      if (u.includes('/live_data/')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ live_data: { details: { timeseries: [] } } }),
+          text: async () => '',
+        };
+      }
+      if (u.includes('/portfolio/balance')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ balance_dollars: '100.00', portfolio_value: 0 }),
+          text: async () => '',
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+    }) as any;
+
+    const cfg = normalizeAppConfig({
+      ...defaultAppConfig(),
+      alerts_enabled: true,
+      auto_trade_enabled: false,
+      assets_enabled: Object.fromEntries(
+        Object.keys(defaultAppConfig().assets_enabled).map((k) => [k, false])
+      ) as any,
+    });
+
+    const RealDate = Date;
+    global.Date = class extends RealDate {
+      constructor(...args: any[]) {
+        if (args.length === 0) super(now.toISOString());
+        else super(...(args as [any]));
+      }
+      static now() {
+        return now.getTime();
+      }
+    } as any;
+
+    const rt = new AppRuntime({ getConfig: () => cfg, fetchImpl });
+    rt.trades.insert({
+      id: 'held-gold',
+      at: '2026-09-03T00:01:00.000Z',
+      asset: 'Gold',
+      market_ticker: 'KXGOLD15M-TEST',
+      side: 'YES',
+      notional_usd: 6,
+      fill_price: 0.6,
+      fill_count: 10,
+      outcome: 'pending',
+      dry_run: false,
+      order_id: 'ord-entry',
+    });
+
+    try {
+      await rt.tick();
+      const row = rt.trades.list().find((t) => t.id === 'held-gold');
+      expect(row?.outcome).toBe('win');
+      expect(row?.pnl_usd).toBe(4);
+      expect(rt.alerts.list().some((a) => a.kind === 'trade_result')).toBe(false);
+    } finally {
+      global.Date = RealDate;
+    }
+  });
+
+  test('AppRuntime source never calls place or protect-sell', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../src/runtime/AppRuntime.ts'), 'utf8');
+    expect(src).not.toMatch(/tryPlaceFromLean/);
+    expect(src).not.toMatch(/tryProtectExit/);
+    expect(src).not.toMatch(/placeOrder\s*\(/);
+    expect(src).not.toMatch(/recordAlert\(\s*['"]trade_result['"]/);
+    expect(src).not.toMatch(/maybeNotify\([^)]*['"]trade_result['"]/);
+    expect(src).not.toMatch(/recordAlert\(\s*['"]ioc_miss['"]/);
+    expect(src).not.toMatch(/recordAlert\(\s*['"]daily_loss_stop['"]/);
+    expect(src).not.toMatch(/recordAlert\(\s*['"]lean_signal['"]/);
   });
 });
 

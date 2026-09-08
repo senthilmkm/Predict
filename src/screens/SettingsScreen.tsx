@@ -309,7 +309,7 @@ export function SettingsScreen() {
         if (!status?.running) {
           start();
         }
-        note('Auto-trade on — keep app open');
+        note('Auto-trade on — Cloud Run places orders');
       });
     } catch {
       /* busy */

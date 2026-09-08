@@ -166,6 +166,17 @@ export class PredictCloudClient {
       return { ok: false, error: e?.message || 'network_error' };
     }
   }
+
+  async getAlerts(): Promise<{ ok: boolean; alerts?: any[]; error?: string }> {
+    try {
+      const res = await this.fetchWithAuth('/me/alerts', { method: 'GET' });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.error || 'alerts_fetch_failed' };
+      return { ok: true, alerts: Array.isArray(data.alerts) ? data.alerts : [] };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'network_error' };
+    }
+  }
 }
 
 import { getPersistentUserId } from '../userId';

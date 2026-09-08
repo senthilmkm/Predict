@@ -5,10 +5,10 @@ import { useRuntimeStore } from '../state/runtimeStore';
 import { notifySystemBanner } from '../services/notifications';
 
 /**
- * When Auto-trade is on and the app leaves the foreground:
- * 1) stop the poller (no silent “still trading” expectation)
+ * When Auto-trade or Alerts are on and the app leaves the foreground:
+ * 1) stop the phone poller (Home leans / local settlement pause)
  * 2) fire a local notification (once per background session)
- * On return: alert the user and restart the poller if Auto-trade is still enabled.
+ * Cloud Run keeps placing orders. On return: restart the poller if still enabled.
  */
 export function useAutoTradeBackgroundGuard() {
   const appState = useRef<AppStateStatus>(AppState.currentState);
@@ -40,8 +40,8 @@ export function useAutoTradeBackgroundGuard() {
           void notifySystemBanner(
             'Predict — polling paused',
             autoOn
-              ? 'Auto-trade is on, but the app is in the background. No new leans or trades until you reopen Predict.'
-              : 'Alerts are on, but the app is in the background. Polling paused until you reopen Predict.'
+              ? 'Home lean polling paused in the background. Cloud Run still places orders while Auto-trade is On.'
+              : 'Alerts are on, but the app is in the background. Home lean polling paused until you reopen Predict.'
           );
         }
       }
@@ -56,8 +56,8 @@ export function useAutoTradeBackgroundGuard() {
           Alert.alert(
             'Polling was paused',
             stillPolling
-              ? 'While Predict was in the background, lean polling was stopped. Polling will resume now.'
-              : 'While Predict was in the background, lean polling was stopped.',
+              ? 'While Predict was in the background, Home lean polling was stopped. Cloud Run kept trading. Polling will resume now.'
+              : 'While Predict was in the background, Home lean polling was stopped.',
             [
               {
                 text: 'OK',

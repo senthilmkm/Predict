@@ -79,9 +79,10 @@ export async function bindNativeNotifications(): Promise<void> {
       const body = content.body || '';
       const kind = content.data?.kind || content.data?.type || 'lean_signal';
       const source = content.data?.source || 'gcp';
+      const alertId = content.data?.alertId ? String(content.data.alertId) : undefined;
       const { useRuntimeStore } = require('../state/runtimeStore');
       const rt = useRuntimeStore.getState().ensure();
-      rt.recordAlert(kind, title, body, source);
+      rt.recordAlert(kind, title, body, source, alertId);
     };
 
     Notifications.addNotificationReceivedListener((n: any) => {

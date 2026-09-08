@@ -235,6 +235,30 @@ export function cloudTradesToRecords(cloudTrades: any[]): TradeRecord[] {
   });
 }
 
+export function cloudAlertsToRecords(cloudAlerts: any[]): AlertRecord[] {
+  return (cloudAlerts || [])
+    .filter((raw) => raw && typeof raw === 'object')
+    .map((raw) => {
+      const id = String(raw.alertId || raw.id || '').trim();
+      const kind = String(raw.kind || raw.type || '').trim();
+      const title = String(raw.title || '').trim();
+      if (!id || !kind || !title) return null;
+      const atRaw = raw.at || raw.createdAt || raw.timestamp;
+      const atDate = atRaw ? new Date(atRaw) : new Date();
+      const at = Number.isFinite(atDate.getTime()) ? atDate.toISOString() : new Date().toISOString();
+      return {
+        id,
+        at,
+        kind,
+        title,
+        body: String(raw.body || ''),
+        read: false,
+        source: 'gcp',
+      } as AlertRecord;
+    })
+    .filter((row): row is AlertRecord => row != null);
+}
+
 export function statsFromCloudTrades(cloudTrades: any[], now = new Date()): DashboardStats {
   const repo = new MemoryTradeRepo();
   for (const row of cloudTradesToRecords(cloudTrades)) {
@@ -243,49 +267,78 @@ export function statsFromCloudTrades(cloudTrades: any[], now = new Date()): Dash
   return repo.statsToday(now);
 }
 
+function normAlertText(s: string): string {
+  return (s || '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/🚨/g, '')
+    .replace(/unique gcp alert sent at.*?\u00b7/gi, '')
+    .trim()
+    .toLowerCase();
+}
+
+function matchAlertAssetSide(s: string): string | null {
+  const signal = s.match(/signal\s*[·•\-]\s*([a-z0-9]+)\s+(yes|no)/i);
+  if (signal) return `${signal[1]} ${signal[2]}`.toLowerCase();
+  const m = s.match(
+    /\b(btc|eth|sol|doge|xrp|bnb|avax|sui|link|wti|gold|silver|ng|copper|spx|ndx|eurusd|gbpusd|usdjpy|ixic)\s+(yes|no)\b/i
+  );
+  return m ? m[0].toLowerCase() : null;
+}
+
+function alertsWithin2m(a: AlertRecord, b: AlertRecord): boolean {
+  const ta = new Date(a.at).getTime();
+  const tb = new Date(b.at).getTime();
+  const diffMs = Math.abs(ta - tb);
+  return !Number.isFinite(diffMs) || diffMs <= 120_000;
+}
+
+/** Local ↔ local / local ↔ GCP lean collapse (title/body/asset-side). */
+function isFuzzyAlertDup(existing: AlertRecord, row: AlertRecord): boolean {
+  if (existing.kind && row.kind && existing.kind !== row.kind) return false;
+  if (!alertsWithin2m(existing, row)) return false;
+
+  const t1 = normAlertText(existing.title);
+  const t2 = normAlertText(row.title);
+  const b1 = normAlertText(existing.body);
+  const b2 = normAlertText(row.body);
+
+  if (t1 === t2 && b1 === b2) return true;
+  if (t1 === t2 && t1.length > 3) return true;
+  if (b1.length > 5 && b1 === b2) return true;
+
+  const as1 = matchAlertAssetSide(existing.title) || matchAlertAssetSide(existing.body);
+  const as2 = matchAlertAssetSide(row.title) || matchAlertAssetSide(row.body);
+  return Boolean(as1 && as2 && as1 === as2);
+}
+
+/** GCP ↔ GCP: same kind + exact title/body only (never collapse two fills by title). */
+function isExactGcpAlertDup(existing: AlertRecord, row: AlertRecord): boolean {
+  if ((existing.source || 'local') !== 'gcp') return false;
+  if (existing.kind && row.kind && existing.kind !== row.kind) return false;
+  if (!alertsWithin2m(existing, row)) return false;
+  return (
+    normAlertText(existing.title) === normAlertText(row.title) &&
+    normAlertText(existing.body) === normAlertText(row.body)
+  );
+}
+
 export class MemoryAlertRepo {
   private alerts: AlertRecord[] = [];
 
   insert(row: AlertRecord): boolean {
-    const rowTime = new Date(row.at).getTime();
-
-    const isDup = this.alerts.some((existing) => {
-      if (existing.kind && row.kind && existing.kind !== row.kind) return false;
-      const existingTime = new Date(existing.at).getTime();
-      const diffMs = Math.abs(rowTime - existingTime);
-      if (Number.isFinite(diffMs) && diffMs > 120_000) return false;
-
-      const norm = (s: string) =>
-        (s || '')
-          .replace(/\[.*?\]/g, '')
-          .replace(/🚨/g, '')
-          .replace(/unique gcp alert sent at.*?\u00b7/gi, '')
-          .trim()
-          .toLowerCase();
-
-      const t1 = norm(existing.title);
-      const t2 = norm(row.title);
-      const b1 = norm(existing.body);
-      const b2 = norm(row.body);
-
-      if (t1 === t2 && b1 === b2) return true;
-      if (t1 === t2 && t1.length > 3) return true;
-      if (b1.length > 5 && b1 === b2) return true;
-
-      const matchAssetSide = (s: string) => {
-        const signal = s.match(/signal\s*[·•\-]\s*([a-z0-9]+)\s+(yes|no)/i);
-        if (signal) return `${signal[1]} ${signal[2]}`.toLowerCase();
-        const m = s.match(/\b(btc|eth|sol|doge|xrp|bnb|avax|sui|link|wti|gold|silver|ng|copper|spx|ndx|eurusd|gbpusd|usdjpy|ixic)\s+(yes|no)\b/i);
-        return m ? m[0].toLowerCase() : null;
-      };
-
-      const as1 = matchAssetSide(existing.title) || matchAssetSide(existing.body);
-      const as2 = matchAssetSide(row.title) || matchAssetSide(row.body);
-      if (as1 && as2 && as1 === as2) {
-        return true;
-      }
-
+    const incomingId = String(row.id || '').trim();
+    if (incomingId && this.alerts.some((existing) => existing.id === incomingId)) {
       return false;
+    }
+
+    const incomingGcp = (row.source || '') === 'gcp';
+    const isDup = this.alerts.some((existing) => {
+      if (incomingId && existing.id === incomingId) return true;
+      if (incomingGcp) {
+        if ((existing.source || 'local') === 'gcp') return isExactGcpAlertDup(existing, row);
+        return isFuzzyAlertDup(existing, row);
+      }
+      return isFuzzyAlertDup(existing, row);
     });
 
     if (isDup) {

@@ -32,10 +32,13 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/Protect money/);
     expect(blob).toMatch(/Cloud Run/);
     expect(blob).toMatch(/phone does not/i);
+    expect(blob).toMatch(/does not send buy or sell orders/i);
+    expect(blob).toMatch(/daily loss stop sounds are sent from Cloud Run/i);
     expect(blob).toMatch(/Max trades \/ asset \/ 15m window/);
     expect(blob).toMatch(/\$29\.99/);
     expect(blob).toMatch(/7-day/);
     expect(blob).toMatch(/kill switch/i);
+    expect(blob).toMatch(/settlements continue after Auto-trade Off/i);
     expect(blob).toMatch(/Secure Store/);
     expect(blob).toContain(supportContactEmail());
     expect(categories.some((c) => c.id === 'disclaimer')).toBe(true);

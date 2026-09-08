@@ -1,14 +1,13 @@
 import { AppConfig, AssetKey } from '../config/types';
 import { snapshotConfig } from '../config/normalize';
 import { TradingEngine } from '../engine/TradingEngine';
-import { LeanSignal } from '../engine/gates';
-import { countWindowBuysForTicker, isCountableWindowBuy } from '../../packages/trading-core/src/gates';
+import { isCountableWindowBuy } from '../../packages/trading-core/src/gates';
 import { KalshiClient } from '../services/kalshi/client';
 import { loadCredentials } from '../services/credentials';
 import { computeLean, LeanResult } from '../services/lean/lean';
 import { isMarketOpen } from '../services/marketHours';
 import { maybeNotify } from '../services/notifications';
-import { MemoryAlertRepo, MemoryTradeRepo, TradeRecord, AlertRecord, cloudTradesToRecords } from '../storage/repos';
+import { MemoryAlertRepo, MemoryTradeRepo, TradeRecord, AlertRecord, cloudTradesToRecords, cloudAlertsToRecords } from '../storage/repos';
 import { hydrateRepos, persistRepos } from '../storage/historyPersistence';
 import { loadPortfolioSamples, persistPortfolioSamples } from '../storage/portfolioPersistence';
 import { settlePendingTrades, inferFillCount, computeTradePnlUsd } from '../services/settlement';
@@ -104,7 +103,8 @@ export function formatSkipReason(reason: string | undefined): string {
 }
 
 /**
- * Foreground trading/alert loop. UI never places orders — only this runtime does.
+ * Foreground lean/settlement/alert loop. This phone never places orders —
+ * Cloud Run owns Auto-trade buys and Protect money sells.
  */
 export class AppRuntime {
   readonly trades = new MemoryTradeRepo();
@@ -132,7 +132,6 @@ export class AppRuntime {
   private getConfig: () => AppConfig;
   private onChange?: () => void;
   private fetchImpl: typeof fetch;
-  private alertedWindows = new Set<string>();
   private lastErrorAlertKey: string | null = null;
   /** Prevents overlapping ticks (each lean pass can take longer than the poll interval). */
   private tickInFlight = false;
@@ -268,6 +267,18 @@ export class AppRuntime {
     this.onChange?.();
   }
 
+  syncCloudAlerts(cloudAlerts: any[]): void {
+    if (!Array.isArray(cloudAlerts) || cloudAlerts.length === 0) return;
+    const records = cloudAlertsToRecords(cloudAlerts);
+    let inserted = 0;
+    for (const r of records) {
+      if (this.alerts.insert(r)) inserted += 1;
+    }
+    if (inserted === 0) return;
+    void this.persistHistory();
+    this.onChange?.();
+  }
+
   async hydrateHistory(): Promise<void> {
     const days = this.getConfig().alert_retention_days ?? 30;
     await hydrateRepos(this.trades, this.alerts, days);
@@ -363,20 +374,6 @@ export class AppRuntime {
     this.onChange?.();
   }
 
-  private tradesTodayCounts(): { total: number; byAsset: Partial<Record<AssetKey, number>> } {
-    const today = etDateKey();
-    const byAsset: Partial<Record<AssetKey, number>> = {};
-    let total = 0;
-    for (const t of this.trades.list(500)) {
-      if (t.dry_run) continue;
-      if (etDateKey(new Date(t.at)) !== today) continue;
-      total += 1;
-      const a = t.asset as AssetKey;
-      byAsset[a] = (byAsset[a] || 0) + 1;
-    }
-    return { total, byAsset };
-  }
-
   private noteAssetError(asset: AssetKey, message: string, tickErrors: string[]) {
     this.status.assetErrors[asset] = message;
     tickErrors.push(`${asset}: ${message}`);
@@ -466,17 +463,14 @@ export class AppRuntime {
       // Settle first so max-open and History filters reflect Kalshi results this tick
       if (hasClient) {
         try {
-          await this.settleOpenTrades(cfg);
+          await this.settleOpenTrades();
           this.pulseHeartbeat();
         } catch {
           /* settlement best-effort */
         }
       }
 
-      const dailyPnl = this.trades.statsToday().realized_pnl_usd;
-      const dayCounts = this.tradesTodayCounts();
       const tickAt = new Date().toISOString();
-      let openPositions = this.trades.pendingFilled().length;
 
       for (let i = 0; i < assets.length; i++) {
         const asset = assets[i];
@@ -579,19 +573,8 @@ export class AppRuntime {
         // Clear prior asset error on success path for this asset
         delete this.status.assetErrors[asset];
 
-        // Protect-sell exits are owned by Cloud Run. The phone never places sells.
-
-        if (cfg.alerts_enabled && (lean.decision === 'YES' || lean.decision === 'NO')) {
-          const key = `${lean.market_ticker}:${lean.decision}`;
-          if (!this.alertedWindows.has(key)) {
-            this.alertedWindows.add(key);
-            const title = `Signal · ${asset} ${lean.decision}`;
-            const body = `Gap $${(lean.abs_gap ?? 0).toFixed(2)} · cushion $${cfg.cushions[asset]} · ${lean.minutes_left ?? '?'}m left · not an order`;
-            this.recordAlert('lean_signal', title, body);
-            // Re-snapshot config for mute-matrix changes mid-tick.
-            await maybeNotify(snapshotConfig(this.getConfig()), 'lean_signal', title, body);
-          }
-        }
+        // Buys, sells, and trading History are owned by Cloud Run.
+        // Home still shows lastLeans; lean_signal rows arrive via syncCloudAlerts.
 
         if (this.status.killSwitch) {
           this.status.lastTradeAction[asset] = {
@@ -601,149 +584,13 @@ export class AppRuntime {
           };
           continue;
         }
-        if (!cfg.auto_trade_enabled) continue;
 
-        const signal: LeanSignal = {
-          asset,
-          market_ticker: lean.market_ticker,
-          decision: lean.decision,
-          live: lean.live ?? 0,
-          strike: lean.strike ?? 0,
-          abs_gap: lean.abs_gap ?? 0,
-          minutes_left: lean.minutes_left ?? 0,
-          minutes_elapsed: lean.minutes_elapsed ?? 0,
-          phase: lean.phase === 'live' ? 'live' : 'ended',
-          yes_ask: lean.yes_ask ?? undefined,
-          no_ask: lean.no_ask ?? undefined,
-        };
-
-        let result: Awaited<ReturnType<TradingEngine['tryPlaceFromLean']>>;
-        try {
-          result = await this.engine.tryPlaceFromLean(signal, cfg, {
-            openPositions,
-            dailyPnlUsd: dailyPnl,
-            tradesToday: dayCounts.total,
-            assetTradesInWindow: countWindowBuysForTicker(
-              this.trades.list(200),
-              lean.market_ticker
-            ),
-          });
-        } catch (e: any) {
-          const msg = `place failed · ${String(e?.message || e)}`;
-          this.noteAssetError(asset, msg, tickErrors);
+        if (cfg.auto_trade_enabled) {
           this.status.lastTradeAction[asset] = {
-            status: 'failed',
-            detail: msg,
+            status: 'idle',
+            detail: 'Cloud Run places orders',
             at: tickAt,
           };
-          continue;
-        }
-
-        if (!result.ok) {
-          const reason = formatSkipReason(result.gate.skip_reason);
-          this.status.lastTradeAction[asset] = {
-            status: 'skipped',
-            detail: `no order · ${reason}`,
-            at: tickAt,
-          };
-          if (result.gate.skip_reason === 'no_client') {
-            this.noteAssetError(asset, 'no Kalshi client (add credentials)', tickErrors);
-          }
-          continue;
-        }
-
-        if (result.placed && !result.placed.ok) {
-          const detail =
-            result.placed.error ||
-            `HTTP ${result.placed.http_status}` ||
-            'order rejected';
-          this.noteAssetError(asset, `order failed · ${detail}`, tickErrors);
-          this.status.lastTradeAction[asset] = {
-            status: 'failed',
-            detail: `order failed · ${detail}`,
-            at: tickAt,
-          };
-          if (result.placed.http_status === 429) {
-            this.rateLimitUntilMs = Date.now() + 30_000;
-          } else if (result.placed.http_status === 401 || result.placed.http_status === 403) {
-            this.authBlockedUntilMs = Date.now() + 5 * 60_000;
-          }
-          await this.maybeAlertHardError(cfg, `${asset} order failed`, String(detail));
-          continue;
-        }
-
-        if (result.ok && result.placed) {
-          const fillCount = Number(result.placed.fill_count ?? 0);
-          const isMiss = !(fillCount > 0);
-          let avgFillPrice =
-            result.placed.average_fill_price != null
-              ? Number(result.placed.average_fill_price)
-              : null;
-          if (avgFillPrice != null && Number.isFinite(avgFillPrice) && avgFillPrice > 1) {
-            avgFillPrice = Math.round((avgFillPrice / 100) * 10000) / 10000;
-          }
-          // Record actual average fill pricing (matches Kalshi UI cost); fall back to planned gate pay price.
-          const side = (result.gate.decision as 'YES' | 'NO') || 'YES';
-          const plannedPay = result.gate.pay_price ?? null;
-          // Settlement math uses economic pay (YES cost / NO cost). For NO we sell YES,
-          // so Kalshi average_fill_price is the YES quote — do not use it as pay.
-          const recordedFillPrice =
-            side === 'NO' && plannedPay != null && plannedPay > 0
-              ? plannedPay
-              : avgFillPrice != null && Number.isFinite(avgFillPrice) && avgFillPrice > 0
-                ? avgFillPrice
-                : plannedPay;
-          const recordedNotionalUsd = isMiss
-            ? 0
-            : Math.round(fillCount * (recordedFillPrice ?? 0) * 100) / 100;
-          const trade: TradeRecord = {
-            id: rid(),
-            at: new Date().toISOString(),
-            asset,
-            market_ticker: lean.market_ticker,
-            side: (result.gate.decision as 'YES' | 'NO') || 'YES',
-            notional_usd: recordedNotionalUsd,
-            fill_price: recordedFillPrice,
-            fill_count: fillCount,
-            pnl_usd: null,
-            outcome: isMiss ? 'miss' : 'pending',
-            dry_run: false,
-            order_id: result.placed.order_id ?? null,
-            config_snapshot_json: JSON.stringify(result.gate.config_snapshot ?? {}),
-          };
-          this.trades.insert(trade);
-          if (!isMiss) {
-            dayCounts.total += 1;
-            dayCounts.byAsset[asset] = (dayCounts.byAsset[asset] || 0) + 1;
-            // Live count so later assets in this tick respect max_open_positions
-            openPositions += 1;
-          }
-          if (isMiss) {
-            const body = `${asset} ${trade.side} · IOC no fill`;
-            this.status.lastTradeAction[asset] = {
-              status: 'skipped',
-              detail: `no fill · IOC miss`,
-              at: tickAt,
-            };
-            this.recordAlert('ioc_miss', 'IOC miss', body);
-            await maybeNotify(cfg, 'ioc_miss', 'IOC miss', body);
-          } else {
-            const body = `${asset} ${trade.side} · ${fillCount} ctr @ $${Number(trade.fill_price ?? 0).toFixed(2)} · cost $${trade.notional_usd.toFixed(2)}`;
-            this.status.lastTradeAction[asset] = {
-              status: 'placed',
-              detail: `filled · ${trade.side} ${fillCount} ctr · $${trade.notional_usd.toFixed(2)}`,
-              at: tickAt,
-            };
-            this.recordAlert('order_filled', 'Order filled', body);
-            await maybeNotify(
-              snapshotConfig(this.getConfig()),
-              'order_filled',
-              'Order filled',
-              body
-            );
-            // Cash changes on fill
-            await this.refreshCashBalance();
-          }
         }
       }
 
@@ -779,19 +626,11 @@ export class AppRuntime {
     }
   }
 
-  private async settleOpenTrades(cfg: AppConfig): Promise<number> {
+  /** Update local fill outcomes from Kalshi. Trade won/lost History is Cloud-owned. */
+  private async settleOpenTrades(): Promise<number> {
     const client = this.engine.getClient();
     if (!client) return 0;
     const { details } = await settlePendingTrades(this.trades, client);
-    for (const d of details) {
-      const t = this.trades.list(200).find((x) => x.id === d.id);
-      const title = d.outcome === 'win' ? 'Trade won' : 'Trade lost';
-      const body = t
-        ? `${t.asset} ${t.side} · P&L $${d.pnl_usd.toFixed(2)} · ${t.market_ticker}`
-        : `P&L $${d.pnl_usd.toFixed(2)}`;
-      this.recordAlert('trade_result', title, body);
-      await maybeNotify(cfg, 'trade_result', title, body);
-    }
     if (details.length > 0) {
       // Today snapshot (wins/losses/P&L) + Predictions total after settlement
       this.onChange?.();
@@ -800,9 +639,9 @@ export class AppRuntime {
     return details.length;
   }
 
-  recordAlert(kind: string, title: string, body: string, source?: string) {
+  recordAlert(kind: string, title: string, body: string, source?: string, id?: string) {
     const row: AlertRecord = {
-      id: rid(),
+      id: String(id || '').trim() || rid(),
       at: new Date().toISOString(),
       kind,
       title,

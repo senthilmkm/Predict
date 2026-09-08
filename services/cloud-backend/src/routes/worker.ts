@@ -17,16 +17,16 @@ import {
   upsertUserDoc,
   saveTradeRecord,
   getTradeRecords,
+  shouldLoadCloudTradeBook,
   writeAuditLog,
   getSystemConfig,
   setSystemConfig,
   TradeRecordDoc,
 } from '../services/firestore';
-import { sendPushNotification } from '../services/notifications';
 import {
   claimLeanAlert,
   fillCollapseId,
-  fillPushEnabled,
+  leanAlertKey,
   leanCollapseId,
   leanPushEnabled,
   pruneLeanAlertsSent,
@@ -35,10 +35,20 @@ import {
 import {
   pendingProtectTradesForMarket,
   protectCollapseId,
-  protectPushEnabled,
   runCloudProtectSells,
 } from '../services/cloudProtectSell';
+import {
+  alertPersistEnabled,
+  emitCloudAlert,
+  fillAlertId,
+  leanAlertId,
+  missAlertId,
+  protectAlertId,
+  dailyLossAlertFromPnl,
+  settlementAlertFromTrade,
+} from '../services/cloudAlerts';
 import { isMarketOpen } from '../services/marketHours';
+import { etDateKey } from '../util/time';
 import {
   cloudDailyRealizedPnl,
   createQuoteCache,
@@ -139,16 +149,9 @@ async function runOneTick() {
 
         try {
           const cfg = user.config || defaultAppConfig();
-          const isArmedTrader = Boolean(
-            cfg.auto_trade_enabled && user.state === 'ARMED' && user.kalshiConfigured
-          );
           const protectEnabled = Boolean(cfg.risk?.protect_sell_enabled);
-          const loadTradeBook = Boolean(
-            user.kalshiConfigured &&
-              user.state !== 'KILL_SWITCH' &&
-              (isArmedTrader || protectEnabled)
-          );
-          // Alert-only users skip the trade book — avoids 1000 Firestore reads/tick.
+          // Alert-only (no keys) skip the trade book. Keys stay loaded after Auto-trade Off so fills settle.
+          const loadTradeBook = shouldLoadCloudTradeBook(user);
           const rawTrades = loadTradeBook ? await getTradeRecords(userId) : [];
           const userTrades = loadTradeBook
             ? await settlePendingCloudTrades(userId, rawTrades, now, quoteCache)
@@ -167,6 +170,47 @@ async function runOneTick() {
             ...(user.pushTokens || []),
             ...(user.fcmTokens || []),
           ].filter((t, i, arr) => t && arr.indexOf(t) === i);
+
+          const tickIso = now.toISOString();
+          for (const t of userTrades) {
+            const settled = settlementAlertFromTrade(t, now);
+            if (!settled) continue;
+            await emitCloudAlert({
+              userId,
+              alertId: settled.alertId,
+              kind: 'trade_result',
+              title: settled.title,
+              body: settled.body,
+              cfg,
+              tokens: userTokens,
+              asset: t.asset,
+              ticker: t.ticker,
+              tradeId: t.tradeId,
+              decision: t.decision,
+              at: tickIso,
+            });
+          }
+
+          if (loadTradeBook && cfg.auto_trade_enabled && user.state === 'ARMED') {
+            const loss = dailyLossAlertFromPnl({
+              dailyPnlUsd,
+              stopUsd: cfg.risk?.daily_loss_stop_usd,
+              etDay: etDateKey(now),
+            });
+            if (loss) {
+              await emitCloudAlert({
+                userId,
+                alertId: loss.alertId,
+                kind: 'daily_loss_stop',
+                title: loss.title,
+                body: loss.body,
+                cfg,
+                tokens: userTokens,
+                collapseId: `dl:${userId}:${etDateKey(now)}`.slice(0, 64),
+                at: tickIso,
+              });
+            }
+          }
 
           let leanAlertsSent = loadLeanAlertsSent(userId, user);
           let leanAlertsDirty = false;
@@ -240,22 +284,21 @@ async function runOneTick() {
                     exited: protectRes.exited,
                   });
                 }
-                if (protectPushEnabled(cfg) && userTokens.length > 0) {
-                  for (const alert of protectRes.alerts) {
-                    void sendPushNotification(
-                      userTokens,
-                      alert.title,
-                      alert.body,
-                      {
-                        tradeId: alert.tradeId,
-                        asset,
-                        type: 'protect_sell',
-                        kind: 'protect_sell',
-                        source: 'gcp',
-                      },
-                      { collapseId: protectCollapseId(userId, alert.tradeId) }
-                    );
-                  }
+                for (const alert of protectRes.alerts) {
+                  await emitCloudAlert({
+                    userId,
+                    alertId: protectAlertId(alert.tradeId),
+                    kind: 'protect_sell',
+                    title: alert.title,
+                    body: alert.body,
+                    cfg,
+                    tokens: userTokens,
+                    collapseId: protectCollapseId(userId, alert.tradeId),
+                    asset,
+                    ticker: marketTicker,
+                    tradeId: alert.tradeId,
+                    at: now.toISOString(),
+                  });
                 }
               }
             }
@@ -291,28 +334,31 @@ async function runOneTick() {
               }
             );
 
-            if (leanPushEnabled(cfg) && userTokens.length > 0) {
-              const claim = claimLeanAlert(leanAlertsSent, marketTicker, lean.decision, now);
-              leanAlertsSent = claim.next;
-              if (claim.send) {
+            const wantLean =
+              alertPersistEnabled(cfg, 'lean_signal') ||
+              (leanPushEnabled(cfg) && userTokens.length > 0);
+            if (wantLean && !leanAlertsSent[leanAlertKey(marketTicker, lean.decision)]) {
+              const title = `Signal · ${asset} ${lean.decision}`;
+              const body = `Gap $${absGap.toFixed(2)} · Cushion $${userCushion} · ${lean.minutes_left ?? '?'}m left`;
+              const emitted = await emitCloudAlert({
+                userId,
+                alertId: leanAlertId(marketTicker, lean.decision),
+                kind: 'lean_signal',
+                title,
+                body,
+                cfg,
+                tokens: userTokens,
+                collapseId: leanCollapseId(userId, leanAlertKey(marketTicker, lean.decision)),
+                asset,
+                ticker: marketTicker,
+                decision: lean.decision,
+                at: now.toISOString(),
+              });
+              if (emitted.persisted || emitted.pushed) {
+                const claim = claimLeanAlert(leanAlertsSent, marketTicker, lean.decision, now);
+                leanAlertsSent = claim.next;
                 leanAlertsDirty = true;
                 leanAlertMemory.set(userId, leanAlertsSent);
-                const title = `Signal · ${asset} ${lean.decision}`;
-                const body = `Gap $${absGap.toFixed(2)} · Cushion $${userCushion} · ${lean.minutes_left ?? '?'}m left`;
-                void sendPushNotification(
-                  userTokens,
-                  title,
-                  body,
-                  {
-                    asset,
-                    ticker: marketTicker,
-                    decision: lean.decision,
-                    type: 'lean_signal',
-                    kind: 'lean_signal',
-                    source: 'gcp',
-                  },
-                  { collapseId: leanCollapseId(userId, claim.key) }
-                );
               }
             }
 
@@ -385,23 +431,42 @@ async function runOneTick() {
                 mode: isLive ? 'live' : 'demo',
               });
 
-              if (fillPushEnabled(cfg) && userTokens.length > 0) {
-                const fillTitle = isLive ? `Order Placed · ${asset} ${lean.decision}` : `Dry-Run Order · ${asset} ${lean.decision}`;
-                const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
+              const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
+              if (filled) {
+                const fillTitle = isLive
+                  ? `Order Placed · ${asset} ${lean.decision}`
+                  : `Dry-Run Order · ${asset} ${lean.decision}`;
                 const fillBody = `${gate.count} ctr @ $${priceVal.toFixed(2)} · Cost $${(gate.notional_usd || 0).toFixed(2)}`;
-                void sendPushNotification(
-                  userTokens,
-                  fillTitle,
-                  fillBody,
-                  {
-                    tradeId,
-                    asset: lean.asset,
-                    type: 'order_filled',
-                    kind: 'order_filled',
-                    source: 'gcp',
-                  },
-                  { collapseId: fillCollapseId(userId, tradeId) }
-                );
+                await emitCloudAlert({
+                  userId,
+                  alertId: fillAlertId(tradeId),
+                  kind: 'order_filled',
+                  title: fillTitle,
+                  body: fillBody,
+                  cfg,
+                  tokens: userTokens,
+                  collapseId: fillCollapseId(userId, tradeId),
+                  asset: lean.asset,
+                  ticker: marketTicker,
+                  tradeId,
+                  decision: lean.decision,
+                  at: now.toISOString(),
+                });
+              } else {
+                await emitCloudAlert({
+                  userId,
+                  alertId: missAlertId(tradeId),
+                  kind: 'ioc_miss',
+                  title: 'IOC miss',
+                  body: `${asset} ${lean.decision} · IOC no fill`,
+                  cfg,
+                  tokens: userTokens,
+                  asset: lean.asset,
+                  ticker: marketTicker,
+                  tradeId,
+                  decision: lean.decision,
+                  at: now.toISOString(),
+                });
               }
             } else {
               windowClaims.set(marketTicker, Math.max(0, (windowClaims.get(marketTicker) || 1) - 1));

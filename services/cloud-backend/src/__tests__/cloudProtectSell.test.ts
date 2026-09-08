@@ -2,6 +2,7 @@ import {
   saveTradeRecord,
   getTradeRecords,
   getEnrolledActiveUsers,
+  shouldLoadCloudTradeBook,
   upsertUserDoc,
   PROTECT_CLAIM_STALE_MS,
 } from '../services/firestore';
@@ -344,13 +345,25 @@ describe('cloud protect-sell', () => {
     expect((await getTradeRecords(userId)).find((t) => t.tradeId === 't_boom')?.outcome).toBe('pending');
   });
 
-  test('disarmed protect-only users stay on the worker; kill-switch does not', async () => {
+  test('disarmed Kalshi users stay on the worker for settlement; kill-switch does not', async () => {
+    expect(shouldLoadCloudTradeBook({ kalshiConfigured: true, state: 'DISARMED' })).toBe(true);
+    expect(shouldLoadCloudTradeBook({ kalshiConfigured: true, state: 'ARMED' })).toBe(true);
+    expect(shouldLoadCloudTradeBook({ kalshiConfigured: true, state: 'KILL_SWITCH' })).toBe(false);
+    expect(shouldLoadCloudTradeBook({ kalshiConfigured: false, state: 'DISARMED' })).toBe(false);
+
     await upsertUserDoc('user_prot_only', {
       userId: 'user_prot_only',
       cloudTradingEnabled: false,
       kalshiConfigured: true,
       state: 'DISARMED',
       config: { alerts_enabled: false, risk: { protect_sell_enabled: true } },
+    } as any);
+    await upsertUserDoc('user_disarmed_settle', {
+      userId: 'user_disarmed_settle',
+      cloudTradingEnabled: false,
+      kalshiConfigured: true,
+      state: 'DISARMED',
+      config: { alerts_enabled: false, auto_trade_enabled: false, risk: { protect_sell_enabled: false } },
     } as any);
     await upsertUserDoc('user_prot_kill', {
       userId: 'user_prot_kill',
@@ -361,6 +374,7 @@ describe('cloud protect-sell', () => {
     } as any);
     const users = await getEnrolledActiveUsers();
     expect(users.some((u) => u.userId === 'user_prot_only')).toBe(true);
+    expect(users.some((u) => u.userId === 'user_disarmed_settle')).toBe(true);
     expect(users.some((u) => u.userId === 'user_prot_kill')).toBe(false);
   });
 

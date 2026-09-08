@@ -6,6 +6,7 @@ import {
   getUserDoc,
   upsertUserDoc,
   getTradeRecords,
+  getAlertRecords,
   getAuditLogs,
   writeAuditLog,
   getSystemConfig,
@@ -276,6 +277,15 @@ apiRouter.get('/me/trades', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
   const trades = await getTradeRecords(userId);
   res.json({ ok: true, trades });
+});
+
+// Trading alerts written by Cloud Run before Expo push
+apiRouter.get('/me/alerts', async (req: Request, res: Response) => {
+  const userId = extractUserId(req);
+  const raw = Number(req.query.limit);
+  const limit = Number.isFinite(raw) ? raw : 200;
+  const alerts = await getAlertRecords(userId, limit);
+  res.json({ ok: true, alerts });
 });
 
 // Get Security Audit Logs

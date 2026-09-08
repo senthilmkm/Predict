@@ -1,6 +1,6 @@
 import { AppRuntime } from '../src/runtime/AppRuntime';
 import { defaultAppConfig } from '../src/config/types';
-import { MemoryTradeRepo, cloudTradesToRecords } from '../src/storage/repos';
+import { MemoryTradeRepo, cloudAlertsToRecords, cloudTradesToRecords } from '../src/storage/repos';
 import { MemoryKeyValueStore, setKeyValueStore, setSecureStore } from '../src/platform/storage';
 import { persistPortfolioSamples } from '../src/storage/portfolioPersistence';
 import { PORTFOLIO_LOOKBACK_MS } from '../src/services/portfolioChange';
@@ -212,5 +212,59 @@ describe('iOS ↔ Cloud trade wiring', () => {
     expect(rt.status.predictionsBalanceUsd).toBe(140.48);
     expect(rt.status.change24hUsd).toBe(1.18);
     expect(rt.status.change24hPct).toBe(0.85);
+  });
+
+  test('GET /me/alerts payload maps alertId and skips malformed rows', () => {
+    const rows = cloudAlertsToRecords([
+      {
+        alertId: 'fill:t1',
+        kind: 'order_filled',
+        title: 'Order Placed · BTC YES',
+        body: '1 ctr @ $0.55 · Cost $0.55',
+        at: '2026-09-08T16:00:00.000Z',
+        source: 'gcp',
+      },
+      { title: 'no id' },
+      null,
+      { alertId: 'lean:x:YES', kind: 'lean_signal' },
+    ] as any);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('fill:t1');
+    expect(rows[0].source).toBe('gcp');
+    expect(rows[0].kind).toBe('order_filled');
+  });
+
+  test('syncCloudAlerts is idempotent and fuzzy-collapses a local lean of the same window', () => {
+    const rt = new AppRuntime({ getConfig: () => defaultAppConfig() });
+    rt.recordAlert(
+      'lean_signal',
+      'Signal · Gold YES',
+      'Gap $10.00 · cushion $7 · 12m left · not an order',
+      'local'
+    );
+    const payload = [
+      {
+        alertId: 'lean:KXGOLD15M-TEST:YES',
+        kind: 'lean_signal',
+        title: 'Signal · Gold YES',
+        body: 'Gap $10.00 · Cushion $7 · 12m left',
+        at: new Date().toISOString(),
+        source: 'gcp',
+      },
+      {
+        alertId: 'fill:t1',
+        kind: 'order_filled',
+        title: 'Order Placed · Gold YES',
+        body: '1 ctr @ $0.55 · Cost $0.55',
+        at: new Date().toISOString(),
+        source: 'gcp',
+      },
+    ];
+    rt.syncCloudAlerts(payload);
+    rt.syncCloudAlerts(payload);
+    expect(rt.alerts.list().some((a) => a.kind === 'lean_signal')).toBe(true);
+    expect(rt.alerts.list().filter((a) => a.kind === 'lean_signal')).toHaveLength(1);
+    expect(rt.alerts.list().filter((a) => a.id === 'fill:t1')).toHaveLength(1);
+    expect(rt.alerts.list().filter((a) => a.kind === 'order_filled')).toHaveLength(1);
   });
 });

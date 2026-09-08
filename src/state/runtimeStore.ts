@@ -8,6 +8,11 @@ import { LeanResult } from '../services/lean/lean';
 import { updateAppBadgeCount } from '../services/notifications';
 import { AssetKey } from '../config/types';
 
+/** Drop overlapping Home/History refreshes — last writer must not apply a stale response. */
+let cloudSnapshotGen = 0;
+let cloudSnapshotInFlight: Promise<void> | null = null;
+let cloudSnapshotQueued = false;
+
 const EMPTY_STATS: DashboardStats = {
   wins: 0,
   losses: 0,
@@ -177,40 +182,66 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     return removed;
   },
   refreshCloudSnapshot: async () => {
-    try {
-      const [tradesRes, statusRes] = await Promise.all([
-        cloudClient.getTrades(),
-        cloudClient.getStatus(),
-      ]);
-
-      if (statusRes.ok && statusRes.systemConfig?.tick_interval_seconds) {
-        const seconds = statusRes.systemConfig.tick_interval_seconds;
-        if (useConfigStore.getState().config.poll_interval_seconds !== seconds) {
-          useConfigStore.getState().setPollIntervalSeconds(seconds);
-        }
-      }
-
-      // Proactively sync local config & device name to Cloud backend on app startup/refresh
-      const localConfig = useConfigStore.getState().config;
-      const displayName = await getUserDisplayName();
-      void cloudClient.updateStatus(
-        localConfig.auto_trade_enabled,
-        localConfig.auto_trade_enabled ? 'ARMED' : 'DISARMED',
-        localConfig,
-        displayName
-      );
-
-      if (tradesRes.ok && Array.isArray(tradesRes.trades) && tradesRes.trades.length > 0) {
-        get().ensure().syncCloudTrades(tradesRes.trades);
-        get().syncFromRuntime();
-      }
-    } catch {
-      /* Keep local stats on network error */
+    if (cloudSnapshotInFlight) {
+      cloudSnapshotQueued = true;
+      return cloudSnapshotInFlight;
     }
+    const gen = ++cloudSnapshotGen;
+    cloudSnapshotInFlight = (async () => {
+      try {
+        const [tradesRes, statusRes, alertsRes] = await Promise.all([
+          cloudClient.getTrades(),
+          cloudClient.getStatus(),
+          cloudClient.getAlerts(),
+        ]);
+        if (gen !== cloudSnapshotGen) return;
+
+        if (statusRes.ok && statusRes.systemConfig?.tick_interval_seconds) {
+          const seconds = statusRes.systemConfig.tick_interval_seconds;
+          if (useConfigStore.getState().config.poll_interval_seconds !== seconds) {
+            useConfigStore.getState().setPollIntervalSeconds(seconds);
+          }
+        }
+
+        // Proactively sync local config & device name to Cloud backend on app startup/refresh
+        const localConfig = useConfigStore.getState().config;
+        const displayName = await getUserDisplayName();
+        void cloudClient.updateStatus(
+          localConfig.auto_trade_enabled,
+          localConfig.auto_trade_enabled ? 'ARMED' : 'DISARMED',
+          localConfig,
+          displayName
+        );
+
+        const cloudTrades = tradesRes.ok && Array.isArray(tradesRes.trades) ? tradesRes.trades : [];
+        const cloudAlerts = alertsRes.ok && Array.isArray(alertsRes.alerts) ? alertsRes.alerts : [];
+        if (cloudTrades.length === 0 && cloudAlerts.length === 0) return;
+        if (gen !== cloudSnapshotGen) return;
+
+        const rt = get().ensure();
+        if (cloudTrades.length > 0) rt.syncCloudTrades(cloudTrades);
+        if (cloudAlerts.length > 0) rt.syncCloudAlerts(cloudAlerts);
+        if (gen !== cloudSnapshotGen) return;
+        get().syncFromRuntime();
+      } catch {
+        /* Keep local stats on network error */
+      }
+    })().finally(() => {
+      if (gen !== cloudSnapshotGen) return;
+      cloudSnapshotInFlight = null;
+      if (cloudSnapshotQueued) {
+        cloudSnapshotQueued = false;
+        void get().refreshCloudSnapshot();
+      }
+    });
+    return cloudSnapshotInFlight;
   },
 }));
 
 export function resetRuntimeStoreForTests() {
+  cloudSnapshotGen += 1;
+  cloudSnapshotInFlight = null;
+  cloudSnapshotQueued = false;
   resetAppRuntimeForTests();
   useRuntimeStore.setState({
     runtime: null,

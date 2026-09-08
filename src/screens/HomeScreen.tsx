@@ -358,8 +358,8 @@ export function HomeScreen() {
         )}
         {autoTradeOn ? (
           <Text style={styles.tradeHint}>
-            Lean YES/NO alerts are signals only. A real order shows “order placed” here and as an
-            Order placed alert.
+            Lean YES/NO here is a signal only. Cloud Run places real orders. This phone never
+            sends buy or sell orders.
           </Text>
         ) : null}
       </View>

@@ -70,6 +70,16 @@ describe('Predict Cloud Backend — End-to-End Integration Suite', () => {
     expect(Array.isArray(res.body.trades)).toBe(true);
   });
 
+  test('6b. GET /me/alerts returns an array', async () => {
+    const res = await request(app)
+      .get('/me/alerts')
+      .set('Authorization', `Bearer ${userId}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(Array.isArray(res.body.alerts)).toBe(true);
+  });
+
   test('7. GET /me/audit retrieves security audit logs', async () => {
     const res = await request(app)
       .get('/me/audit')

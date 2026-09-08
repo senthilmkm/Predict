@@ -74,6 +74,8 @@ describe('HomeScreen', () => {
       });
       useRuntimeStore.getState().ensure();
       const s = await render(<HomeScreen />);
+      expect(s.getByText(/Cloud Run places real orders/i)).toBeTruthy();
+      expect(s.getByText(/This phone never/i)).toBeTruthy();
       expect(s.getByText('Kill switch — disarm now')).toBeTruthy();
       await fireEvent.press(s.getByTestId('btn-kill-switch'));
       expect(spy).toHaveBeenCalled();

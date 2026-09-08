@@ -170,9 +170,16 @@ export function snapshotConfig(cfg: AppConfig): AppConfig {
   return JSON.parse(JSON.stringify(cfg)) as AppConfig;
 }
 
-/** Lean + fill sounds come from GCP only — phone must not ding the same event. */
+/** Trading sounds come from GCP only — phone must not ding the same event. */
 export function isCloudOwnedAlertSound(kind: string): boolean {
-  return kind === 'lean_signal' || kind === 'order_filled' || kind === 'protect_sell';
+  return (
+    kind === 'lean_signal' ||
+    kind === 'order_filled' ||
+    kind === 'protect_sell' ||
+    kind === 'trade_result' ||
+    kind === 'ioc_miss' ||
+    kind === 'daily_loss_stop'
+  );
 }
 
 export function shouldPushAlert(cfg: AppConfig, kind: keyof AppConfig['alert_prefs']): boolean {

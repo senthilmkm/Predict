@@ -30,6 +30,20 @@ export interface TradeRecordDoc {
   protectExitOrderId?: string | null;
 }
 
+export interface CloudAlertDoc {
+  alertId: string;
+  userId: string;
+  kind: string;
+  title: string;
+  body: string;
+  at: string;
+  source: 'gcp';
+  asset?: string;
+  ticker?: string;
+  tradeId?: string;
+  decision?: string;
+}
+
 export interface AuditLogDoc {
   logId: string;
   userId: string;
@@ -61,6 +75,8 @@ const CACHE_TTL_MS = 5000;
 const localUserStore = new Map<string, UserStatusDoc & { config?: any }>();
 const localTradeStore = new Map<string, TradeRecordDoc[]>();
 const localAuditStore = new Map<string, AuditLogDoc[]>();
+const localAlertStore = new Map<string, CloudAlertDoc[]>();
+const ALERT_STORE_CAP = 400;
 
 let db: Firestore | null = null;
 function isoFromFirestoreTime(ts: any): string | undefined {
@@ -161,6 +177,14 @@ export async function deleteUserDoc(userId: string): Promise<boolean> {
   return true;
 }
 
+/** Keys saved and not kill-switched: settle open fills even if Auto-trade / Protect are Off. */
+export function shouldLoadCloudTradeBook(user: {
+  kalshiConfigured?: boolean;
+  state?: string;
+}): boolean {
+  return Boolean(user?.kalshiConfigured && user.state !== 'KILL_SWITCH');
+}
+
 export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { config?: any; pushTokens?: string[]; fcmTokens?: string[] })[]> {
   const f = getDb();
   let users: any[] = [];
@@ -180,12 +204,9 @@ export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { confi
     const hasTokens =
       (Array.isArray(u.pushTokens) && u.pushTokens.length > 0) ||
       (Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0);
-    const isArmedTrader = u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured;
     const isAlertSubscriber = u.config?.alerts_enabled !== false && hasTokens;
-    const isProtectUser = Boolean(
-      u.kalshiConfigured && u.config?.risk?.protect_sell_enabled
-    );
-    return isArmedTrader || isAlertSubscriber || isProtectUser;
+    // Kalshi keys keep the user on the tick for settlement / Trade won after Auto-trade Off.
+    return shouldLoadCloudTradeBook(u) || isAlertSubscriber;
   });
 }
 
@@ -291,6 +312,86 @@ export async function updateTradeRecord(
     } catch {
       /* ignore */
     }
+  }
+}
+
+function sortAlertsDesc(rows: CloudAlertDoc[]): CloudAlertDoc[] {
+  return [...rows].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+}
+
+export type SaveAlertResult = 'created' | 'exists' | false;
+
+function upsertLocalAlert(userId: string, alert: CloudAlertDoc): SaveAlertResult {
+  const rows = localAlertStore.get(userId) || [];
+  if (rows.some((r) => r.alertId === alert.alertId)) return 'exists';
+  rows.unshift(alert);
+  if (rows.length > ALERT_STORE_CAP) rows.length = ALERT_STORE_CAP;
+  localAlertStore.set(userId, rows);
+  return 'created';
+}
+
+function isAlreadyExistsError(err: any): boolean {
+  const code = String(err?.code ?? '');
+  const msg = String(err?.message || err?.details || '');
+  return code === '6' || msg.includes('ALREADY_EXISTS') || msg.toLowerCase().includes('already exists');
+}
+
+/**
+ * Idempotent create. Same alertId is a no-op so worker retries cannot duplicate History.
+ * `created` = first write (safe to push). `exists` = retry (do not push again).
+ * Local map is test-only — production writes Firestore only (no Cloud Run leak).
+ */
+export async function saveAlertRecord(userId: string, alert: CloudAlertDoc): Promise<SaveAlertResult> {
+  if (!userId || !alert?.alertId || !alert.kind || !alert.title) return false;
+  const doc: CloudAlertDoc = {
+    alertId: String(alert.alertId),
+    userId,
+    kind: String(alert.kind),
+    title: String(alert.title),
+    body: String(alert.body || ''),
+    at: alert.at && String(alert.at).trim() ? String(alert.at) : new Date().toISOString(),
+    source: 'gcp',
+    ...(alert.asset ? { asset: String(alert.asset) } : {}),
+    ...(alert.ticker ? { ticker: String(alert.ticker) } : {}),
+    ...(alert.tradeId ? { tradeId: String(alert.tradeId) } : {}),
+    ...(alert.decision ? { decision: String(alert.decision) } : {}),
+  };
+
+  const f = getDb();
+  if (!f) return upsertLocalAlert(userId, doc);
+
+  const ref = f.collection('users').doc(userId).collection('alerts').doc(doc.alertId);
+  try {
+    await ref.create(doc);
+    return 'created';
+  } catch (err: any) {
+    if (isAlreadyExistsError(err)) return 'exists';
+    try {
+      const snap = await ref.get();
+      return snap.exists ? 'exists' : false;
+    } catch {
+      return false;
+    }
+  }
+}
+
+export async function getAlertRecords(userId: string, limit = 200): Promise<CloudAlertDoc[]> {
+  const cap = Math.max(1, Math.min(400, Math.round(Number(limit) || 200)));
+  const f = getDb();
+  if (!f) {
+    return sortAlertsDesc(localAlertStore.get(userId) || []).slice(0, cap);
+  }
+  try {
+    const snapshot = await f
+      .collection('users')
+      .doc(userId)
+      .collection('alerts')
+      .orderBy('at', 'desc')
+      .limit(cap)
+      .get();
+    return snapshot.docs.map((d: any) => d.data() as CloudAlertDoc);
+  } catch {
+    return sortAlertsDesc(localAlertStore.get(userId) || []).slice(0, cap);
   }
 }
 
