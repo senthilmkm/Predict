@@ -1197,7 +1197,7 @@ function RiskHelpModal({
               When Off (default), open trades ride until settlement.{'\n\n'}
               Notice: Early exits are not guaranteed to save capital or prevent loss. Orders may fail, delay, partial-fill, or fill at worse-than-expected prices due to network traffic, exchange latency, order book illiquidity, wide spreads, rapid price gaps, or time decay (theta) near expiry.{'\n\n'}
               Works whenever this switch is On and Kalshi credentials are saved — even if Auto-trade
-              (new buys) is Off. Requires the trading loop to be running (app open / poller on).
+              (new buys) is Off. Exits run 24/7 on Cloud Run. The phone does not place sell orders.
             </HelpItem>
             <HelpItem title="Sell when gap ≥ cushion ×">
               How strong the opposite lean must be before selling.{'\n\n'}
@@ -1209,7 +1209,7 @@ function RiskHelpModal({
             </HelpItem>
             <HelpItem title="Wait after fill before sell">
               Short pause after your buy fills before a protect-sell can fire (default 45 seconds).
-              Stops the app from instantly selling on the first noisy tick.{'\n\n'}
+              Stops Cloud Run from instantly selling on the first noisy tick.{'\n\n'}
               • 0s = sell as soon as the opposite-lean rule hits{'\n'}
               • 45s (default) = recommended{'\n'}
               • Higher = wait longer after entry{'\n\n'}

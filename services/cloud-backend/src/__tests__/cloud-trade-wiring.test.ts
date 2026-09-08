@@ -96,6 +96,15 @@ describe('Cloud trade book ↔ /me/trades', () => {
     expect(row.pnlUsd).toBe(4);
   });
 
+  test('protect-sell exits are never overwritten by market settlement', () => {
+    const now = new Date();
+    expect(needsSettlement(filledTrade({ outcome: 'exited', pnlUsd: -1.5 }) as any, now)).toBe(false);
+    expect(needsSettlement(filledTrade({ outcome: 'exiting' }) as any, now)).toBe(false);
+    expect(applyMarketResult(filledTrade({ outcome: 'exited', pnlUsd: -1.5 }) as any, { result: 'yes' })).toBeNull();
+    expect(applyMarketResult(filledTrade({ outcome: 'exiting' }) as any, { result: 'no' })).toBeNull();
+    expect(cloudDailyRealizedPnl([filledTrade({ outcome: 'exited', pnlUsd: -1.5, status: 'SETTLED' }) as any])).toBe(-1.5);
+  });
+
   test('open markets stay pending; dry-run and young fills are skipped', () => {
     const now = new Date();
     expect(needsSettlement(filledTrade({ ticker: 'KXBTC15M-OPEN' }) as any, now)).toBe(true);

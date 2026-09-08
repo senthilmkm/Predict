@@ -22,8 +22,12 @@ export interface TradeRecordDoc {
   payPrice?: number | null;
   fillCount?: number | null;
   pnlUsd?: number | null;
-  outcome?: 'win' | 'loss' | 'pending' | 'miss' | 'exited';
+  outcome?: 'win' | 'loss' | 'pending' | 'miss' | 'exited' | 'exiting';
   settledAt?: string | null;
+  /** Set while an IOC protect-sell is in flight; stale claims can retry. */
+  protectClaimedAt?: string | null;
+  /** Kalshi order id of the IOC exit — never overwrite the entry `orderId`. */
+  protectExitOrderId?: string | null;
 }
 
 export interface AuditLogDoc {
@@ -176,7 +180,10 @@ export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { confi
       (Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0);
     const isArmedTrader = u.cloudTradingEnabled && u.state === 'ARMED' && u.kalshiConfigured;
     const isAlertSubscriber = u.config?.alerts_enabled !== false && hasTokens;
-    return isArmedTrader || isAlertSubscriber;
+    const isProtectUser = Boolean(
+      u.kalshiConfigured && u.config?.risk?.protect_sell_enabled
+    );
+    return isArmedTrader || isAlertSubscriber || isProtectUser;
   });
 }
 
@@ -193,6 +200,75 @@ export async function saveTradeRecord(userId: string, trade: TradeRecordDoc): Pr
       /* ignore */
     }
   }
+}
+
+export const PROTECT_CLAIM_STALE_MS = 20_000;
+
+export function isProtectClaimable(trade: TradeRecordDoc, now = new Date()): boolean {
+  if (trade.dryRun) return false;
+  if (!trade.ticker) return false;
+  if (trade.status !== 'FILLED' && trade.status !== 'SUBMITTED') return false;
+  const outcome = String(trade.outcome || 'pending');
+  if (outcome === 'exited' || outcome === 'win' || outcome === 'loss' || outcome === 'miss') {
+    return false;
+  }
+  if (outcome === 'exiting') {
+    const claimedAt = new Date(trade.protectClaimedAt || 0).getTime();
+    if (!Number.isFinite(claimedAt) || claimedAt <= 0) return true;
+    return now.getTime() - claimedAt >= PROTECT_CLAIM_STALE_MS;
+  }
+  return outcome === 'pending' || outcome === '';
+}
+
+function upsertLocalTrade(userId: string, trade: TradeRecordDoc): void {
+  const userTrades = localTradeStore.get(userId) || [];
+  const i = userTrades.findIndex((t) => t.tradeId === trade.tradeId);
+  if (i >= 0) userTrades[i] = trade;
+  else userTrades.unshift(trade);
+  localTradeStore.set(userId, userTrades);
+}
+
+/**
+ * One-writer claim so two Cloud Run instances cannot IOC-exit the same fill.
+ * Stale `exiting` claims (worker died mid-flight) can be retaken after 20s.
+ */
+export async function claimProtectSell(
+  userId: string,
+  trade: TradeRecordDoc,
+  now = new Date()
+): Promise<boolean> {
+  const claimedAt = now.toISOString();
+  const f = getDb();
+  if (f) {
+    const ref = f.collection('users').doc(userId).collection('trades').doc(trade.tradeId);
+    try {
+      const ok = await f.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const data = (snap.exists ? (snap.data() as TradeRecordDoc) : trade) || trade;
+        if (!isProtectClaimable(data, now)) return false;
+        tx.set(ref, { outcome: 'exiting', protectClaimedAt: claimedAt }, { merge: true });
+        return true;
+      });
+      if (ok) {
+        trade.outcome = 'exiting';
+        trade.protectClaimedAt = claimedAt;
+        upsertLocalTrade(userId, trade);
+      }
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  const userTrades = localTradeStore.get(userId) || [];
+  const existing = userTrades.find((t) => t.tradeId === trade.tradeId) || trade;
+  if (!isProtectClaimable(existing, now)) return false;
+  existing.outcome = 'exiting';
+  existing.protectClaimedAt = claimedAt;
+  trade.outcome = 'exiting';
+  trade.protectClaimedAt = claimedAt;
+  upsertLocalTrade(userId, existing);
+  return true;
 }
 
 export async function updateTradeRecord(

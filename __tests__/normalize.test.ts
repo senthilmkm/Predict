@@ -100,6 +100,7 @@ describe('normalize / cushions', () => {
     const cfg = defaultAppConfig();
     expect(isCloudOwnedAlertSound('lean_signal')).toBe(true);
     expect(isCloudOwnedAlertSound('order_filled')).toBe(true);
+    expect(isCloudOwnedAlertSound('protect_sell')).toBe(true);
     expect(isCloudOwnedAlertSound('trade_result')).toBe(false);
     expect(shouldPushAlert(cfg, 'lean_signal')).toBe(false);
     expect(shouldPushAlert(cfg, 'order_filled')).toBe(false);

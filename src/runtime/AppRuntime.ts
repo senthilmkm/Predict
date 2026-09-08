@@ -16,12 +16,6 @@ import {
   computeChange24h,
   recordPortfolioSample,
 } from '../services/portfolioChange';
-import {
-  buildProtectSellOrder,
-  computeProtectSellPnlUsd,
-  pendingTradesForMarket,
-  shouldProtectSell,
-} from '../services/protectSell';
 import { withSupportContact } from '../config/appMeta';
 import {
   humanizeQuietError,
@@ -585,20 +579,7 @@ export class AppRuntime {
         // Clear prior asset error on success path for this asset
         delete this.status.assetErrors[asset];
 
-        // Protect-sell can run even when auto-trade (new buys) is off
-        if (
-          cfg.risk.protect_sell_enabled &&
-          hasClient &&
-          !this.status.killSwitch &&
-          lean.market_ticker
-        ) {
-          try {
-            await this.tryProtectSellsForAsset(asset, lean, cfg, tickAt);
-          } catch (e: any) {
-            const msg = `protect sell failed · ${String(e?.message || e)}`;
-            this.noteAssetError(asset, msg, tickErrors);
-          }
-        }
+        // Protect-sell exits are owned by Cloud Run. The phone never places sells.
 
         if (cfg.alerts_enabled && (lean.decision === 'YES' || lean.decision === 'NO')) {
           const key = `${lean.market_ticker}:${lean.decision}`;
@@ -792,96 +773,6 @@ export class AppRuntime {
     } finally {
       this.tickInFlight = false;
       this.pulseHeartbeat(true);
-    }
-  }
-
-  private async tryProtectSellsForAsset(
-    asset: AssetKey,
-    lean: LeanResult,
-    cfg: AppConfig,
-    tickAt: string
-  ): Promise<void> {
-    const market = lean.market_ticker!;
-    const held = pendingTradesForMarket(this.trades.list(200), market);
-    if (!held.length) return;
-
-    for (const trade of held) {
-      const evalRes = shouldProtectSell({
-        enabled: cfg.risk.protect_sell_enabled,
-        heldSide: trade.side,
-        lean,
-        cushion: cfg.cushions[asset],
-        gapRatio: cfg.risk.protect_sell_gap_ratio,
-        filledAt: trade.at,
-        graceSeconds: cfg.risk.protect_sell_grace_seconds,
-      });
-      if (!evalRes.sell) {
-        if (evalRes.reason === 'grace_after_fill') {
-          this.status.lastTradeAction[asset] = {
-            status: 'skipped',
-            detail: `protect wait · ${cfg.risk.protect_sell_grace_seconds}s after fill`,
-            at: tickAt,
-          };
-        }
-        continue;
-      }
-
-      const order = buildProtectSellOrder({
-        heldSide: trade.side,
-        fillCount: inferFillCount(trade),
-        yesBid: lean.yes_bid,
-        yesAsk: lean.yes_ask,
-        slippageUsd: Math.min(0.05, Number(cfg.risk.chase_above_ask_usd) || 0.02),
-      });
-      if (!order.ok || !order.side || !order.price || !order.count) {
-        this.status.lastTradeAction[asset] = {
-          status: 'skipped',
-          detail: `no protect sell · ${order.reason || 'quote'}`,
-          at: tickAt,
-        };
-        continue;
-      }
-
-      const placed = await this.engine.tryProtectExit({
-        ticker: market,
-        side: order.side,
-        count: order.count,
-        price: order.price,
-        time_in_force: 'immediate_or_cancel',
-      });
-
-      const exitFills = Number(placed.fill_count ?? 0);
-      if (!placed.ok || !(exitFills > 0)) {
-        this.status.lastTradeAction[asset] = {
-          status: 'skipped',
-          detail: 'protect sell · no fill (will retry)',
-          at: tickAt,
-        };
-        continue;
-      }
-
-      const pnl = computeProtectSellPnlUsd({
-        heldSide: trade.side,
-        entryPay: Number(trade.fill_price || 0),
-        exitEconomic: Number(order.economicExit || 0),
-        fillCount: Math.min(inferFillCount(trade), exitFills),
-      });
-      this.trades.update(trade.id, {
-        outcome: 'exited',
-        pnl_usd: pnl,
-        order_id: placed.order_id ?? trade.order_id,
-      });
-
-      const body = `${asset} ${trade.side} · early sell · P&L $${pnl.toFixed(2)} · gap $${evalRes.leanGap.toFixed(2)} (need ≥$${evalRes.minGap.toFixed(2)})`;
-      this.status.lastTradeAction[asset] = {
-        status: 'placed',
-        detail: `protect sell · ${trade.side} exited · $${pnl.toFixed(2)}`,
-        at: tickAt,
-      };
-      this.recordAlert('protect_sell', 'Protect sell', body);
-      await maybeNotify(cfg, 'protect_sell', 'Protect sell', body);
-      // Exit fill returns cash → refresh Cash card
-      await this.refreshCashBalance();
     }
   }
 

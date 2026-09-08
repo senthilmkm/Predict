@@ -202,7 +202,9 @@ export function cloudTradesToRecords(cloudTrades: any[]): TradeRecord[] {
     const settled = ct.status === 'SETTLED' || ct.outcome === 'win' || ct.outcome === 'loss';
     const cancelled = ct.status === 'CANCELLED';
     let outcome: TradeOutcome;
-    if (ct.outcome) {
+    if (ct.outcome === 'exiting') {
+      outcome = 'pending';
+    } else if (ct.outcome) {
       outcome = ct.outcome;
     } else if (settled && pnl != null) {
       outcome = pnl >= 0 ? 'win' : 'loss';

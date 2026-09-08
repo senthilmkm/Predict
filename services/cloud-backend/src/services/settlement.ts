@@ -67,6 +67,9 @@ export function isReadyToSettle(trade: TradeRecordDoc, now = new Date()): boolea
 export function needsSettlement(trade: TradeRecordDoc, now = new Date()): boolean {
   if (trade.dryRun) return false;
   if (trade.status !== 'FILLED' && trade.status !== 'SUBMITTED') return false;
+  if (trade.outcome === 'exited' || trade.outcome === 'exiting' || trade.outcome === 'miss') {
+    return false;
+  }
   if (!(fillCountOf(trade) > 0)) return false;
   if (!trade.ticker) return false;
   return isReadyToSettle(trade, now);
@@ -77,6 +80,7 @@ export function applyMarketResult(
   market: { result?: string } | null,
   now = new Date()
 ): Pick<TradeRecordDoc, 'status' | 'pnlUsd' | 'outcome' | 'settledAt'> | null {
+  if (trade.outcome === 'exited' || trade.outcome === 'exiting') return null;
   const result = String(market?.result || '').toLowerCase();
   if (result !== 'yes' && result !== 'no') return null;
   const pay = economicPayPrice(trade);

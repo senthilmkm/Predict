@@ -27,6 +27,12 @@ import {
   pruneLeanAlertsSent,
   type LeanAlertsSent,
 } from '../services/leanAlerts';
+import {
+  pendingProtectTradesForMarket,
+  protectCollapseId,
+  protectPushEnabled,
+  runCloudProtectSells,
+} from '../services/cloudProtectSell';
 import { isMarketOpen } from '../services/marketHours';
 import {
   cloudDailyRealizedPnl,
@@ -131,9 +137,15 @@ async function runOneTick() {
           const isArmedTrader = Boolean(
             cfg.auto_trade_enabled && user.state === 'ARMED' && user.kalshiConfigured
           );
+          const protectEnabled = Boolean(cfg.risk?.protect_sell_enabled);
+          const loadTradeBook = Boolean(
+            user.kalshiConfigured &&
+              user.state !== 'KILL_SWITCH' &&
+              (isArmedTrader || protectEnabled)
+          );
           // Alert-only users skip the trade book — avoids 1000 Firestore reads/tick.
-          const rawTrades = isArmedTrader ? await getTradeRecords(userId) : [];
-          const userTrades = isArmedTrader
+          const rawTrades = loadTradeBook ? await getTradeRecords(userId) : [];
+          const userTrades = loadTradeBook
             ? await settlePendingCloudTrades(userId, rawTrades, now, quoteCache)
             : [];
           const existingTickers = new Set(userTrades.map((t) => t.ticker));
@@ -154,6 +166,7 @@ async function runOneTick() {
 
           let leanAlertsSent = loadLeanAlertsSent(userId, user);
           let leanAlertsDirty = false;
+          let cachedSecret: Awaited<ReturnType<typeof getUserSecret>> | undefined;
 
           for (const asset of assets) {
             if (!cfg.assets_enabled?.[asset]) continue;
@@ -163,11 +176,87 @@ async function runOneTick() {
             leansCount++;
 
             const userCushion = cfg.cushions?.[asset] ?? 25.0;
-            const absGap = Math.abs((lean.live || 0) - (lean.strike || 0));
+            const absGap = Number.isFinite(Number(lean.abs_gap))
+              ? Number(lean.abs_gap)
+              : Math.abs((lean.live || 0) - (lean.strike || 0));
+            const marketTicker = lean.market_ticker;
+
+            if (
+              protectEnabled &&
+              loadTradeBook &&
+              user.state !== 'KILL_SWITCH' &&
+              user.kalshiConfigured &&
+              pendingProtectTradesForMarket(userTrades, marketTicker, now).length > 0
+            ) {
+              if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
+              const secret = cachedSecret;
+              if (secret?.privateKeyPem && secret.keyId) {
+                const client = new KalshiClient(
+                  secret.keyId,
+                  secret.privateKeyPem,
+                  'production'
+                );
+                const protectRes = await runCloudProtectSells({
+                  userId,
+                  asset,
+                  ticker: marketTicker,
+                  lean: {
+                    decision: lean.decision,
+                    abs_gap: absGap,
+                    phase: lean.phase,
+                    yes_bid: lean.yes_bid,
+                    yes_ask: lean.yes_ask,
+                  },
+                  trades: userTrades,
+                  cushion: userCushion,
+                  gapRatio: Number(cfg.risk?.protect_sell_gap_ratio ?? 1),
+                  graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
+                  slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+                  enabled: true,
+                  dryRun: false,
+                  now,
+                  place: (input) =>
+                    client.placeOrder({
+                      ticker: input.ticker,
+                      side: input.side,
+                      count: input.count,
+                      price: input.price,
+                      time_in_force: input.time_in_force,
+                      dry_run: input.dry_run,
+                      client_order_id: input.client_order_id,
+                    }),
+                });
+                if (protectRes.exited > 0) {
+                  tradesCount += protectRes.exited;
+                  openPositions = Math.max(0, openPositions - protectRes.exited);
+                  await writeAuditLog(userId, 'TRADE_TRIGGERED', {
+                    protectSell: true,
+                    asset,
+                    ticker: marketTicker,
+                    exited: protectRes.exited,
+                  });
+                }
+                if (protectPushEnabled(cfg) && userTokens.length > 0) {
+                  for (const alert of protectRes.alerts) {
+                    void sendPushNotification(
+                      userTokens,
+                      alert.title,
+                      alert.body,
+                      {
+                        tradeId: alert.tradeId,
+                        asset,
+                        type: 'protect_sell',
+                        kind: 'protect_sell',
+                        source: 'gcp',
+                      },
+                      { collapseId: protectCollapseId(userId, alert.tradeId) }
+                    );
+                  }
+                }
+              }
+            }
 
             if (absGap < userCushion) continue;
-
-            const marketTicker = lean.market_ticker;
             const windowKey = `${marketTicker}_${lean.window_end || 'window'}`;
 
             if (existingTickers.has(marketTicker) || userClaimedWindows.has(windowKey)) continue;

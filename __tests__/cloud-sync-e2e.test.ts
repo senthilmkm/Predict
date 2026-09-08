@@ -57,6 +57,42 @@ describe('iOS ↔ Cloud trade wiring', () => {
     expect(rows[1].pnl_usd).toBeNull();
   });
 
+  test('cloud protect-sell maps exited P&L and keeps in-flight exiting as open', () => {
+    const rows = cloudTradesToRecords([
+      {
+        tradeId: 'trade_exit',
+        ticker: 'KXBTC15M-EXIT',
+        asset: 'BTC',
+        decision: 'YES',
+        payPrice: 0.6,
+        fillCount: 10,
+        status: 'SETTLED',
+        pnlUsd: -2,
+        outcome: 'exited',
+        orderId: 'ord-entry',
+        protectExitOrderId: 'ord-exit',
+        executedAt: new Date().toISOString(),
+      },
+      {
+        tradeId: 'trade_exiting',
+        ticker: 'KXETH15M-EXITING',
+        asset: 'ETH',
+        decision: 'NO',
+        payPrice: 0.4,
+        fillCount: 5,
+        status: 'FILLED',
+        outcome: 'exiting',
+        orderId: 'ord-entry-2',
+        executedAt: new Date().toISOString(),
+      },
+    ]);
+    expect(rows[0].outcome).toBe('exited');
+    expect(rows[0].pnl_usd).toBe(-2);
+    expect(rows[0].order_id).toBe('ord-entry');
+    expect(rows[1].outcome).toBe('pending');
+    expect(rows[1].order_id).toBe('ord-entry-2');
+  });
+
   test('cloud sync + local settle record merge to one today P&L', () => {
     const rt = new AppRuntime({ getConfig: () => defaultAppConfig() });
     const at = new Date().toISOString();

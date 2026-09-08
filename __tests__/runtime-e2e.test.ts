@@ -10,6 +10,7 @@ import { savePersistedConfig, loadPersistedConfig } from '../src/storage/configP
 import { defaultAppConfig } from '../src/config/types';
 import { normalizeAppConfig } from '../src/config/normalize';
 import { AppRuntime } from '../src/runtime/AppRuntime';
+import { TradingEngine } from '../src/engine/TradingEngine';
 import { setNotifyImpl } from '../src/services/notifications';
 import { shouldPushAlert } from '../src/config/normalize';
 
@@ -194,6 +195,131 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
     expect(rt.trades.list().some((t) => t.outcome === 'pending' && !t.dry_run)).toBe(true);
     expect(notified).not.toContain('lean_signal');
     expect(notified).not.toContain('order_filled');
+  });
+
+  test('phone never places protect-sell exits when lean flips against a hold', async () => {
+    const { generateKeyPairSync } = await import('crypto');
+    const pem = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    }).privateKey;
+    await saveCredentials({ keyId: 'k', privateKeyPem: pem, env: 'production' });
+
+    const now = new Date('2026-09-03T00:10:00.000Z');
+    let orderPosts = 0;
+    const fetchImpl = jest.fn(async (url: string, init?: any) => {
+      const u = String(url);
+      if (u.includes('/portfolio/orders') || (init?.method === 'POST' && u.includes('orders'))) {
+        orderPosts += 1;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ order_id: 'ord-should-not-exit', fill_count: '10.00' }),
+          text: async () => '',
+        };
+      }
+      if (u.includes('/events?')) {
+        return {
+          ok: true,
+          json: async () => ({
+            events: [
+              {
+                event_ticker: 'KXGOLD15M-EV',
+                markets: [
+                  {
+                    ticker: 'KXGOLD15M-TEST',
+                    open_time: '2026-09-03T00:00:00Z',
+                    close_time: '2026-09-03T00:15:00Z',
+                    floor_strike: 2600,
+                  },
+                ],
+              },
+            ],
+          }),
+        };
+      }
+      if (u.includes('/markets/')) {
+        return {
+          ok: true,
+          json: async () => ({
+            market: {
+              floor_strike: 2600,
+              yes_bid_dollars: '0.40',
+              yes_ask_dollars: '0.42',
+              no_ask_dollars: '0.60',
+            },
+          }),
+        };
+      }
+      if (u.includes('/live_data/')) {
+        return {
+          ok: true,
+          json: async () => ({
+            live_data: { details: { timeseries: [{ t: now.getTime(), v: 2400 }] } },
+          }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+    }) as any;
+
+    const cfg = normalizeAppConfig({
+      ...defaultAppConfig(),
+      alerts_enabled: true,
+      auto_trade_enabled: false,
+      execution_mode: 'off',
+      assets_enabled: {
+        WTI: false,
+        Gold: true,
+        Silver: false,
+        BTC: false,
+        ETH: false,
+      },
+      cushions: { ...defaultAppConfig().cushions, Gold: 7 },
+      risk: {
+        ...defaultAppConfig().risk,
+        protect_sell_enabled: true,
+        protect_sell_gap_ratio: 1,
+        protect_sell_grace_seconds: 0,
+      },
+    });
+
+    const RealDate = Date;
+    global.Date = class extends RealDate {
+      constructor(...args: any[]) {
+        if (args.length === 0) super(now.toISOString());
+        else super(...(args as [any]));
+      }
+      static now() {
+        return now.getTime();
+      }
+    } as any;
+
+    const exitSpy = jest.spyOn(TradingEngine.prototype, 'tryProtectExit');
+    const rt = new AppRuntime({ getConfig: () => cfg, fetchImpl });
+    rt.trades.insert({
+      id: 'held-gold',
+      at: '2026-09-03T00:01:00.000Z',
+      asset: 'Gold',
+      market_ticker: 'KXGOLD15M-TEST',
+      side: 'YES',
+      notional_usd: 6,
+      fill_price: 0.6,
+      fill_count: 10,
+      outcome: 'pending',
+      dry_run: false,
+      order_id: 'ord-entry',
+    });
+
+    await rt.tick();
+    global.Date = RealDate;
+
+    expect(rt.status.lastLeans.Gold?.decision).toBe('NO');
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(orderPosts).toBe(0);
+    expect(rt.trades.list().find((t) => t.id === 'held-gold')?.outcome).toBe('pending');
+    expect(rt.alerts.list().some((a) => a.kind === 'protect_sell')).toBe(false);
+    exitSpy.mockRestore();
   });
 });
 

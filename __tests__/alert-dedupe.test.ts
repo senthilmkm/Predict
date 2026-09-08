@@ -90,8 +90,10 @@ describe('alert History + phone sound ownership', () => {
     const cfg = defaultAppConfig();
     cfg.alerts_enabled = true;
     expect(shouldPushAlert(cfg, 'lean_signal')).toBe(false);
+    expect(shouldPushAlert(cfg, 'protect_sell')).toBe(false);
     expect(await maybeNotify(cfg, 'lean_signal', 'Signal · BTC YES', 'gap')).toBe(false);
     expect(await maybeNotify(cfg, 'order_filled', 'Order filled', 'btc')).toBe(false);
+    expect(await maybeNotify(cfg, 'protect_sell', 'Protect sell', 'btc')).toBe(false);
     expect(await maybeNotify(cfg, 'trade_result', 'Won', 'btc')).toBe(true);
     expect(calls).toEqual(['trade_result']);
   });

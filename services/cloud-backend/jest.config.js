@@ -5,5 +5,6 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts'],
   moduleNameMapper: {
     '^trading-core$': '<rootDir>/../../packages/trading-core/src/index.ts',
+    '^trading-core/(.*)$': '<rootDir>/../../packages/trading-core/src/$1',
   },
 };
