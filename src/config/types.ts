@@ -123,7 +123,11 @@ export interface RiskConfig {
   min_dollars_per_trade: number;
   max_open_positions: number;
   max_trades_per_day: number;
-  max_trades_per_asset_per_day: number;
+  /**
+   * New buys of this asset in the current 15-minute contract (same ticker).
+   * Protect-sells do not count. Default 1. Range 1–5.
+   */
+  max_trades_per_asset_per_window: number;
   daily_loss_stop_usd: number;
   min_minutes_left: number;
   /**
@@ -229,7 +233,7 @@ export function defaultAppConfig(): AppConfig {
       min_dollars_per_trade: 1,
       max_open_positions: 5,
       max_trades_per_day: 100,
-      max_trades_per_asset_per_day: 100,
+      max_trades_per_asset_per_window: 1,
       daily_loss_stop_usd: 50,
       min_minutes_left: 2,
       min_minutes_elapsed: 2,

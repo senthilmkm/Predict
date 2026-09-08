@@ -12,6 +12,7 @@ import {
   setSystemConfig,
 } from '../services/firestore';
 import { AssetRegistry, defaultAppConfig } from 'trading-core';
+import { windowBuyCap } from '../../../../packages/trading-core/src/gates';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 
 export const adminRouter = Router();
@@ -176,6 +177,11 @@ adminRouter.post('/users/:userId/config', async (req: Request, res: Response) =>
     }
 
     const currentConfig = existing.config || defaultAppConfig();
+    const mergedRisk = {
+      ...currentConfig.risk,
+      ...(req.body.risk || {}),
+    };
+    const { max_trades_per_asset_per_day: _removedPerDay, ...restRisk } = mergedRisk as any;
     const updatedConfig = {
       ...currentConfig,
       ...req.body,
@@ -184,8 +190,8 @@ adminRouter.post('/users/:userId/config', async (req: Request, res: Response) =>
         ...(req.body.cushions || {}),
       },
       risk: {
-        ...currentConfig.risk,
-        ...(req.body.risk || {}),
+        ...restRisk,
+        max_trades_per_asset_per_window: windowBuyCap(mergedRisk),
       },
     };
 

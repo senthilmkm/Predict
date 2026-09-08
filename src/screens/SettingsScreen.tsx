@@ -777,6 +777,9 @@ export function SettingsScreen() {
                         ? 'On — sell anytime lean flips against you (after the wait-after-fill)'
                         : 'Off — holds until the window settles (win or loss)'}
                     </Text>
+                    <Text style={styles.riskHint} testID="risk-hint-protect-sell-auto-off">
+                      Still runs 24/7 on Cloud Run if Auto-trade is Off. The phone does not sell.
+                    </Text>
                   </View>
                 );
               }
@@ -1145,9 +1148,20 @@ function RiskHelpModal({
               Total new trades allowed today across all assets. Stops new buys for the day once this
               number is reached.
             </HelpItem>
-            <HelpItem title="Max trades / asset / day">
-              Same idea, but per asset (for example BTC). Stops that one asset for the day after this
-              many trades.
+            <HelpItem title="Max trades / asset / 15m window">
+              How many new buys of the same asset are allowed in one 15-minute contract.{'\n\n'}
+              Example: Gold has a new 15-minute market every quarter hour. This number is how many
+              Gold buys Cloud Run may place in that one market.{'\n\n'}
+              • 1 (default) — one Gold buy, then wait for the next 15-minute market{'\n'}
+              • 2 — a second Gold buy is allowed in the same 15-minute market if the lean, cushion,
+              time, and max-open rules still pass. Typical use: you already bought, protect-sell
+              closed it, and you want one more try{'\n'}
+              • 3–5 — more buys in the same 15-minute market. Easy to stack the same side; keep this
+              low{'\n\n'}
+              Only new buys count. A protect-sell (early exit) does not use a slot.{'\n'}
+              A missed IOC (no fill) does not use a slot.{'\n'}
+              The next 15-minute contract starts the count at 0 again.{'\n'}
+              This does not replace Max trades / day (that is still the daily cap across all assets).
             </HelpItem>
             <HelpItem title="Daily loss stop ($)">
               If today’s locked-in losses reach this dollar amount, the app stops placing new trades
@@ -1189,9 +1203,9 @@ function RiskHelpModal({
 
             <Text style={styles.modalSection}>Risk — protect money (early sell)</Text>
             <HelpItem title="Protect money (early sell)">
-              When On, if you already hold a trade and the live lean flips strongly against you, the
-              app places an IOC sell to exit early — aiming to protect money instead of waiting for
-              the window to settle win/loss.{'\n\n'}
+              When On, if you already hold a trade and the live lean flips strongly against you,
+              Cloud Run places an IOC sell to exit early — aiming to protect money instead of waiting
+              for the window to settle win/loss.{'\n\n'}
               After the wait-after-fill, this can fire at any remaining time in the 15‑minute window
               — not only in the last minutes.{'\n\n'}
               When Off (default), open trades ride until settlement.{'\n\n'}

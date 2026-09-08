@@ -41,13 +41,24 @@ describe('AsyncMutex / WindowLock', () => {
     expect(order).toEqual([1, 2, 3, 4]);
   });
 
-  test('window lock is single-flight per market', () => {
+  test('window lock is single-flight per market at default cap 1', () => {
     const w = new WindowLockRegistry();
     expect(w.tryClaim('M1', 'a')).toBe(true);
     expect(w.tryClaim('M1', 'b')).toBe(false);
     expect(w.tryClaim('M2', 'c')).toBe(true);
     w.release('M1');
     expect(w.tryClaim('M1', 'd')).toBe(true);
+  });
+
+  test('window lock allows up to maxClaims and does not double-count claimExisting', () => {
+    const w = new WindowLockRegistry();
+    expect(w.tryClaim('M1', 'a', 2)).toBe(true);
+    expect(w.tryClaim('M1', 'b', 2)).toBe(true);
+    expect(w.tryClaim('M1', 'c', 2)).toBe(false);
+    w.release('M1', 'b');
+    expect(w.tryClaim('M1', 'd', 2)).toBe(true);
+    w.claimExisting('M1', 'a');
+    expect(w.count('M1')).toBe(2);
   });
 
   test('claimExisting rebuilds lock after hydrate/restart', () => {
@@ -128,6 +139,17 @@ describe('evaluateStaticGate edge cases', () => {
     expect(evaluateStaticGate(lean(), cfg).skip_reason).toBe('asset_disabled');
   });
 
+  test('max_trades_asset_window', () => {
+    const cfg = base();
+    cfg.risk.max_trades_per_asset_per_window = 1;
+    expect(evaluateStaticGate(lean(), cfg, { assetTradesInWindow: 1 }).skip_reason).toBe(
+      'max_trades_asset_window'
+    );
+    expect(evaluateStaticGate(lean(), cfg, { assetTradesInWindow: 0 }).ok).toBe(true);
+    cfg.risk.max_trades_per_asset_per_window = 2;
+    expect(evaluateStaticGate(lean(), cfg, { assetTradesInWindow: 1 }).ok).toBe(true);
+  });
+
   test('max_open', () => {
     const cfg = base();
     cfg.risk.max_open_positions = 1;
@@ -191,6 +213,35 @@ describe('TradingEngine live place', () => {
     const r2 = await engine.tryPlaceFromLean(lean({ abs_gap: 10 }), cfg);
     expect(r2.ok).toBe(false);
     expect(r2.gate.skip_reason).toBe('window_locked');
+  });
+
+  test('cap 2 allows a second live buy on the same ticker', async () => {
+    const pem = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    }).privateKey;
+    const fetchImpl = jest.fn(async () => ({
+      status: 201,
+      json: async () => ({ order_id: 'x', fill_count: '1.00' }),
+      text: async () => '',
+    })) as any;
+    const client = new KalshiClient('k', pem, 'production', fetchImpl);
+    const engine = new TradingEngine(client);
+    const cfg = defaultAppConfig();
+    cfg.auto_trade_enabled = true;
+    cfg.execution_mode = 'live';
+    cfg.live_armed = true;
+    cfg.cushions.Gold = 7;
+    cfg.risk.max_trades_per_asset_per_window = 2;
+
+    const r1 = await engine.tryPlaceFromLean(lean({ abs_gap: 10 }), cfg);
+    expect(r1.ok).toBe(true);
+    const r2 = await engine.tryPlaceFromLean(lean({ abs_gap: 10 }), cfg, { assetTradesInWindow: 1 });
+    expect(r2.ok).toBe(true);
+    const r3 = await engine.tryPlaceFromLean(lean({ abs_gap: 10 }), cfg, { assetTradesInWindow: 2 });
+    expect(r3.ok).toBe(false);
+    expect(r3.gate.skip_reason).toBe('max_trades_asset_window');
   });
 });
 

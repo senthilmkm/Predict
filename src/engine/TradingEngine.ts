@@ -2,6 +2,7 @@ import { AppConfig } from '../config/types';
 import { KalshiClient, KalshiPlaceResult } from '../services/kalshi/client';
 import { AsyncMutex, WindowLockRegistry } from './concurrency';
 import { evaluateStaticGate, LeanSignal } from './gates';
+import { windowBuyCap } from '../../packages/trading-core/src/gates';
 
 export interface TradeIntentRecord {
   at: string;
@@ -37,7 +38,7 @@ export class TradingEngine {
       openPositions?: number;
       dailyPnlUsd?: number;
       tradesToday?: number;
-      assetTradesToday?: number;
+      assetTradesInWindow?: number;
     }
   ): Promise<{ ok: boolean; placed?: KalshiPlaceResult; gate: ReturnType<typeof evaluateStaticGate> }> {
     return this.mutex.runExclusive(async () => {
@@ -54,7 +55,8 @@ export class TradingEngine {
       }
 
       const clientOrderId = `fs-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-      if (!this.windows.tryClaim(gate.market_ticker!, clientOrderId)) {
+      const cap = windowBuyCap(cfg.risk);
+      if (!this.windows.tryClaim(gate.market_ticker!, clientOrderId, cap)) {
         this.intents.push({
           at: new Date().toISOString(),
           event: 'skip',
@@ -67,7 +69,7 @@ export class TradingEngine {
 
       try {
         if (!this.client) {
-          this.windows.release(gate.market_ticker!);
+          this.windows.release(gate.market_ticker!, clientOrderId);
           return { ok: false, gate: { ...gate, ok: false, skip_reason: 'no_client' } };
         }
 
@@ -93,11 +95,11 @@ export class TradingEngine {
         });
 
         if (!placed.ok) {
-          this.windows.release(gate.market_ticker!);
+          this.windows.release(gate.market_ticker!, clientOrderId);
         }
         return { ok: placed.ok, placed, gate };
       } catch (e) {
-        this.windows.release(gate.market_ticker!);
+        this.windows.release(gate.market_ticker!, clientOrderId);
         throw e;
       }
     });

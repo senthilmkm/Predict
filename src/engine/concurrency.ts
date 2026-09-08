@@ -25,29 +25,48 @@ export class AsyncMutex {
   }
 }
 
+/** Per-ticker buy claims for the current 15m contract. Cap comes from risk config. */
 export class WindowLockRegistry {
-  private locks = new Map<string, { claimedAt: number; clientOrderId: string }>();
+  private locks = new Map<string, string[]>();
 
-  tryClaim(marketTicker: string, clientOrderId: string): boolean {
+  count(marketTicker: string): number {
+    return (this.locks.get(marketTicker) || []).length;
+  }
+
+  tryClaim(marketTicker: string, clientOrderId: string, maxClaims = 1): boolean {
     if (!marketTicker) return false;
-    if (this.locks.has(marketTicker)) return false;
-    this.locks.set(marketTicker, { claimedAt: Date.now(), clientOrderId });
+    const cap = Math.min(5, Math.max(1, Math.round(Number(maxClaims) || 1)));
+    const list = this.locks.get(marketTicker) || [];
+    if (list.length >= cap) return false;
+    list.push(clientOrderId);
+    this.locks.set(marketTicker, list);
     return true;
   }
 
-  /** Rebuild locks from hydrated pending fills (survives app restart). */
+  /** Rebuild claims from hydrated fills (survives app restart). */
   claimExisting(marketTicker: string, clientOrderId = 'hydrated'): void {
     if (!marketTicker) return;
-    if (this.locks.has(marketTicker)) return;
-    this.locks.set(marketTicker, { claimedAt: Date.now(), clientOrderId });
+    const list = this.locks.get(marketTicker) || [];
+    if (list.includes(clientOrderId)) return;
+    list.push(clientOrderId);
+    this.locks.set(marketTicker, list);
   }
 
-  release(marketTicker: string): void {
-    this.locks.delete(marketTicker);
+  release(marketTicker: string, clientOrderId?: string): void {
+    const list = this.locks.get(marketTicker) || [];
+    if (!list.length) return;
+    if (clientOrderId) {
+      const i = list.lastIndexOf(clientOrderId);
+      if (i >= 0) list.splice(i, 1);
+    } else {
+      list.pop();
+    }
+    if (list.length) this.locks.set(marketTicker, list);
+    else this.locks.delete(marketTicker);
   }
 
   isLocked(marketTicker: string): boolean {
-    return this.locks.has(marketTicker);
+    return this.count(marketTicker) > 0;
   }
 
   clear(): void {

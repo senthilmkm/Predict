@@ -1,6 +1,6 @@
 /**
  * Bundled risk defaults — mirrored from Command Center Kalshi / Predict tab.
- * Also seeded into phone storage (`foresight.risk.defaults.v1`) so
+ * Also seeded into phone storage (`foresight.risk.defaults.v3`) so
  * Settings → Restore defaults can reload them offline.
  */
 import { RiskConfig, TimeInForce } from './types';
@@ -11,7 +11,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   min_dollars_per_trade: 1,
   max_open_positions: 5,
   max_trades_per_day: 100,
-  max_trades_per_asset_per_day: 100,
+  max_trades_per_asset_per_window: 1,
   daily_loss_stop_usd: 50,
   min_minutes_left: 2,
   min_minutes_elapsed: 2,
@@ -37,12 +37,12 @@ export const RISK_FIELD_META: {
   { key: 'max_open_positions', label: 'Max open positions', kind: 'int', step: 1, min: 1, max: 50 },
   { key: 'max_trades_per_day', label: 'Max trades / day', kind: 'int', step: 1, min: 1, max: 50000 },
   {
-    key: 'max_trades_per_asset_per_day',
-    label: 'Max trades / asset / day',
+    key: 'max_trades_per_asset_per_window',
+    label: 'Max trades / asset / 15m window',
     kind: 'int',
     step: 1,
     min: 1,
-    max: 5000,
+    max: 5,
   },
   { key: 'daily_loss_stop_usd', label: 'Daily loss stop ($)', kind: 'money', step: 5, min: 1, max: 10000 },
   { key: 'min_minutes_left', label: 'Min minutes left (Buy only)', kind: 'int', step: 1, min: 0, max: 14 },

@@ -76,8 +76,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     max_trades_per_day: Math.round(
       clamp(Number(r.max_trades_per_day ?? d.max_trades_per_day), 1, 50000)
     ),
-    max_trades_per_asset_per_day: Math.round(
-      clamp(Number(r.max_trades_per_asset_per_day ?? d.max_trades_per_asset_per_day), 1, 5000)
+    // New field only — do not migrate old max_trades_per_asset_per_day (was 100).
+    max_trades_per_asset_per_window: Math.round(
+      clamp(Number(r.max_trades_per_asset_per_window ?? d.max_trades_per_asset_per_window), 1, 5)
     ),
     daily_loss_stop_usd: clamp(Number(r.daily_loss_stop_usd ?? d.daily_loss_stop_usd), 1, 10000),
     min_minutes_left: Math.round(clamp(Number(r.min_minutes_left ?? d.min_minutes_left), 0, 14)),

@@ -19,7 +19,7 @@ export interface KalshiPublicConfig {
   daily_loss_stop_usd?: number;
   max_open_positions?: number;
   max_trades_per_day?: number;
-  max_trades_per_asset_per_day?: number;
+  max_trades_per_asset_per_window?: number;
   trade_wti?: boolean;
   trade_gold?: boolean;
   trade_silver?: boolean;
@@ -86,8 +86,8 @@ export function mergePredictTabConfig(
       daily_loss_stop_usd: Number(kalshi.daily_loss_stop_usd ?? base.risk.daily_loss_stop_usd),
       max_open_positions: Number(kalshi.max_open_positions ?? base.risk.max_open_positions),
       max_trades_per_day: Number(kalshi.max_trades_per_day ?? base.risk.max_trades_per_day),
-      max_trades_per_asset_per_day: Number(
-        kalshi.max_trades_per_asset_per_day ?? base.risk.max_trades_per_asset_per_day
+      max_trades_per_asset_per_window: Number(
+        (kalshi as any).max_trades_per_asset_per_window ?? base.risk.max_trades_per_asset_per_window
       ),
       max_entry_ask_usd: Number(kalshi.max_entry_ask_usd ?? base.risk.max_entry_ask_usd),
       min_minutes_left: Number(kalshi.min_minutes_left ?? base.risk.min_minutes_left),

@@ -139,6 +139,8 @@ describe('Settings credentials', () => {
     await fireEvent.press(s.getByTestId('btn-risk-help'));
     await waitFor(() => expect(s.getByTestId('modal-risk-help')).toBeTruthy());
     expect(s.getByText('Protect money (early sell)')).toBeTruthy();
+    expect(s.getByText('Max trades / asset / 15m window')).toBeTruthy();
+    expect(s.queryByText('Max trades / asset / day')).toBeNull();
     await fireEvent.press(s.getByTestId('btn-got-it-risk-help'));
     await waitFor(() => expect(s.queryByTestId('modal-risk-help')).toBeNull());
   });
@@ -147,7 +149,12 @@ describe('Settings credentials', () => {
     const s = await render(<SettingsScreen />);
     await fireEvent.press(s.getByTestId('btn-toggle-risk'));
     await waitFor(() => expect(s.getByTestId('risk-field-protect_sell_enabled')).toBeTruthy());
-    expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy();
+    expect(s.getByTestId('risk-field-max_trades_per_asset_per_window')).toBeTruthy();
+    expect(s.getByTestId('risk-value-max_trades_per_asset_per_window').props.children).toBe('1');
+    expect(s.queryByTestId('risk-field-max_trades_per_asset_per_day')).toBeNull();
+    expect(s.getByTestId('risk-hint-protect-sell-auto-off').props.children).toMatch(
+      /Auto-trade is Off/
+    );
     expect(s.getByTestId('risk-value-protect_sell_gap_ratio').props.children).toMatch(/1\.00×/);
     expect(s.getByTestId('risk-value-protect_sell_grace_seconds').props.children).toMatch(/45s/);
   });

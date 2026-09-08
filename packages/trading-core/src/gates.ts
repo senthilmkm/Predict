@@ -33,6 +33,50 @@ function money2(n: number): string {
   return (Math.round(n * 10000) / 10000).toFixed(4);
 }
 
+/** Clamp 1–5. Missing / old per-day values default to 1 (do not inherit 100). */
+export function windowBuyCap(risk: { max_trades_per_asset_per_window?: number } | null | undefined): number {
+  const n = Number(risk?.max_trades_per_asset_per_window);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(5, Math.max(1, Math.round(n)));
+}
+
+export function isCountableWindowBuy(trade: {
+  dryRun?: boolean;
+  dry_run?: boolean;
+  status?: string;
+  outcome?: string | null;
+  fillCount?: number | null;
+  fill_count?: number | null;
+  count?: string | number | null;
+}): boolean {
+  if (trade.dryRun || trade.dry_run) return false;
+  const outcome = String(trade.outcome || 'pending');
+  if (outcome === 'miss' || outcome === 'dry_run') return false;
+  const fills = Number(trade.fillCount ?? trade.fill_count ?? 0);
+  if (Number.isFinite(fills) && fills > 0) return true;
+  const status = String(trade.status || '');
+  if (status === 'CANCELLED') return false;
+  const count = Number(trade.count ?? 0);
+  if (Number.isFinite(count) && count > 0 && (status === 'FILLED' || status === 'SUBMITTED' || status === 'SETTLED')) {
+    return true;
+  }
+  return status === 'FILLED' || status === 'SUBMITTED' || status === 'SETTLED';
+}
+
+export function countWindowBuysForTicker(
+  trades: Array<{ ticker?: string; market_ticker?: string } & Parameters<typeof isCountableWindowBuy>[0]>,
+  marketTicker: string
+): number {
+  const ticker = String(marketTicker || '').trim();
+  if (!ticker) return 0;
+  let n = 0;
+  for (const row of trades || []) {
+    const rowTicker = String(row?.ticker || row?.market_ticker || '').trim();
+    if (rowTicker === ticker && isCountableWindowBuy(row)) n += 1;
+  }
+  return n;
+}
+
 export function evaluateStaticGate(
   lean: LeanSignal,
   cfg: AppConfig,
@@ -40,13 +84,13 @@ export function evaluateStaticGate(
     openPositions?: number;
     dailyPnlUsd?: number;
     tradesToday?: number;
-    assetTradesToday?: number;
+    assetTradesInWindow?: number;
   }
 ): GateResult {
   const openPositions = opts?.openPositions ?? 0;
   const dailyPnl = opts?.dailyPnlUsd ?? 0;
   const tradesToday = opts?.tradesToday ?? 0;
-  const assetTradesToday = opts?.assetTradesToday ?? 0;
+  const assetTradesInWindow = opts?.assetTradesInWindow ?? 0;
 
   if (!cfg.auto_trade_enabled) {
     return { ok: false, skip_reason: 'auto_trade_off' };
@@ -82,8 +126,8 @@ export function evaluateStaticGate(
   if (tradesToday >= cfg.risk.max_trades_per_day) {
     return { ok: false, skip_reason: 'max_trades_day' };
   }
-  if (assetTradesToday >= cfg.risk.max_trades_per_asset_per_day) {
-    return { ok: false, skip_reason: 'max_trades_asset_day' };
+  if (assetTradesInWindow >= windowBuyCap(cfg.risk)) {
+    return { ok: false, skip_reason: 'max_trades_asset_window' };
   }
 
   let ask = 0.9;

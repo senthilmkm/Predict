@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { assertPemLooksValid, defaultAppConfig } from 'trading-core';
+import { windowBuyCap } from '../../../../packages/trading-core/src/gates';
 import { saveUserSecret, deleteUserSecret } from '../services/secretManager';
 import {
   getUserDoc,
@@ -184,9 +185,15 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
     if (typeof cloudTradingEnabled === 'boolean') updateData.cloudTradingEnabled = cloudTradingEnabled;
     if (state === 'ARMED' || state === 'DISARMED') updateData.state = state;
     if (config) {
+      const risk = config.risk || {};
+      const { max_trades_per_asset_per_day: _removedPerDay, ...restRisk } = risk;
       updateData.config = {
         ...config,
         poll_interval_seconds: systemConfig.tick_interval_seconds,
+        risk: {
+          ...restRisk,
+          max_trades_per_asset_per_window: windowBuyCap(risk),
+        },
       };
     }
     if (onboardingRecord) updateData.onboardingRecord = onboardingRecord;

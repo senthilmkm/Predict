@@ -3,8 +3,8 @@ import { cloneDefaultRisk, DEFAULT_RISK_CONFIG } from '../config/riskDefaults';
 import { normalizeRiskConfig } from '../config/normalize';
 import { getKeyValueStore } from '../platform/storage';
 
-const RISK_DEFAULTS_KEY = 'foresight.risk.defaults.v2';
-const RISK_DEFAULTS_VERSION = 2;
+const RISK_DEFAULTS_KEY = 'foresight.risk.defaults.v3';
+const RISK_DEFAULTS_VERSION = 3;
 
 /** Seed bundled risk defaults into phone storage (re-seeds when key/version bumps). */
 export async function ensureRiskDefaultsOnDevice(): Promise<RiskConfig> {

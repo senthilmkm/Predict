@@ -1,5 +1,6 @@
 import { AppConfig, AssetKey } from '../config/types';
 import { snapshotConfig } from '../config/normalize';
+import { windowBuyCap } from '../../packages/trading-core/src/gates';
 
 export interface LeanSignal {
   asset: AssetKey;
@@ -45,14 +46,14 @@ export function evaluateStaticGate(
     openPositions?: number;
     dailyPnlUsd?: number;
     tradesToday?: number;
-    assetTradesToday?: number;
+    assetTradesInWindow?: number;
   }
 ): GateResult {
   const cfg = snapshotConfig(cfgIn);
   const openPositions = opts?.openPositions ?? 0;
   const dailyPnl = opts?.dailyPnlUsd ?? 0;
   const tradesToday = opts?.tradesToday ?? 0;
-  const assetTradesToday = opts?.assetTradesToday ?? 0;
+  const assetTradesInWindow = opts?.assetTradesInWindow ?? 0;
 
   if (!cfg.auto_trade_enabled) {
     return { ok: false, skip_reason: 'auto_trade_off' };
@@ -88,8 +89,8 @@ export function evaluateStaticGate(
   if (tradesToday >= cfg.risk.max_trades_per_day) {
     return { ok: false, skip_reason: 'max_trades_day' };
   }
-  if (assetTradesToday >= cfg.risk.max_trades_per_asset_per_day) {
-    return { ok: false, skip_reason: 'max_trades_asset_day' };
+  if (assetTradesInWindow >= windowBuyCap(cfg.risk)) {
+    return { ok: false, skip_reason: 'max_trades_asset_window' };
   }
 
   let ask = 0.9;

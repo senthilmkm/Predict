@@ -68,12 +68,33 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.daily_loss_stop_usd).toBe(1);
     expect(cfg.risk.max_open_positions).toBe(50);
     expect(cfg.risk.max_trades_per_day).toBe(1);
+    expect(cfg.risk.max_trades_per_asset_per_window).toBe(1);
     expect(cfg.risk.chase_above_ask_usd).toBe(0.05);
     expect(cfg.risk.min_dollars_per_trade).toBe(1);
     expect(cfg.risk.time_in_force).toBe('immediate_or_cancel');
     expect(cfg.risk.protect_sell_enabled).toBe(false);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(1);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(45);
+  });
+
+  test('old max_trades_per_asset_per_day is ignored; window cap defaults to 1 and clamps 1–5', () => {
+    expect(
+      normalizeAppConfig({
+        risk: { max_trades_per_asset_per_day: 100 },
+      } as any).risk.max_trades_per_asset_per_window
+    ).toBe(1);
+    expect(
+      normalizeAppConfig({
+        risk: { max_trades_per_asset_per_window: 2 },
+      } as any).risk.max_trades_per_asset_per_window
+    ).toBe(2);
+    expect(
+      normalizeAppConfig({
+        risk: { max_trades_per_asset_per_window: 99 },
+      } as any).risk.max_trades_per_asset_per_window
+    ).toBe(5);
+    expect(defaultAppConfig().risk.max_trades_per_asset_per_window).toBe(1);
+    expect((defaultAppConfig().risk as any).max_trades_per_asset_per_day).toBeUndefined();
   });
 
   test('normalizeRiskConfig clamps protect sell ratio and grace', () => {

@@ -3,10 +3,14 @@ import {
   AssetKey,
   AssetRegistry,
   computeLean,
-  evaluateStaticGate,
   KalshiClient,
   defaultAppConfig,
 } from 'trading-core';
+import {
+  countWindowBuysForTicker,
+  evaluateStaticGate,
+  windowBuyCap,
+} from '../../../../packages/trading-core/src/gates';
 import { getUserSecret } from '../services/secretManager';
 import {
   getEnrolledActiveUsers,
@@ -130,7 +134,7 @@ async function runOneTick() {
     await Promise.all(
       batch.map(async (user) => {
         const userId = user.userId;
-        const userClaimedWindows = new Set<string>();
+        const windowClaims = new Map<string, number>();
 
         try {
           const cfg = user.config || defaultAppConfig();
@@ -148,7 +152,6 @@ async function runOneTick() {
           const userTrades = loadTradeBook
             ? await settlePendingCloudTrades(userId, rawTrades, now, quoteCache)
             : [];
-          const existingTickers = new Set(userTrades.map((t) => t.ticker));
           const tradesTodayList = liveCloudTradesToday(userTrades, now);
           let openPositions = userTrades.filter(
             (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
@@ -257,11 +260,12 @@ async function runOneTick() {
             }
 
             if (absGap < userCushion) continue;
-            const windowKey = `${marketTicker}_${lean.window_end || 'window'}`;
+            const windowCap = windowBuyCap(cfg.risk);
+            const buysOnTicker =
+              countWindowBuysForTicker(userTrades, marketTicker) + (windowClaims.get(marketTicker) || 0);
+            if (buysOnTicker >= windowCap) continue;
 
-            if (existingTickers.has(marketTicker) || userClaimedWindows.has(windowKey)) continue;
-
-            const assetTradesToday = tradesTodayList.filter((t) => t.asset === asset).length;
+            const assetTradesInWindow = buysOnTicker;
 
             const gate = evaluateStaticGate(
               {
@@ -281,7 +285,7 @@ async function runOneTick() {
               {
                 openPositions,
                 tradesToday,
-                assetTradesToday,
+                assetTradesInWindow,
                 dailyPnlUsd,
               }
             );
@@ -319,7 +323,7 @@ async function runOneTick() {
               continue;
             }
 
-            userClaimedWindows.add(windowKey);
+            windowClaims.set(marketTicker, (windowClaims.get(marketTicker) || 0) + 1);
 
             const client = new KalshiClient(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo');
             const placeRes = await client.placeOrder({
@@ -363,7 +367,10 @@ async function runOneTick() {
               };
 
               await saveTradeRecord(userId, tradeDoc);
-              existingTickers.add(marketTicker);
+              userTrades.unshift(tradeDoc);
+              if (!filled) {
+                windowClaims.set(marketTicker, Math.max(0, (windowClaims.get(marketTicker) || 1) - 1));
+              }
               if (filled && !tradeDoc.dryRun) {
                 openPositions += 1;
                 tradesToday += 1;
@@ -395,6 +402,8 @@ async function runOneTick() {
                   { collapseId: fillCollapseId(userId, tradeId) }
                 );
               }
+            } else {
+              windowClaims.set(marketTicker, Math.max(0, (windowClaims.get(marketTicker) || 1) - 1));
             }
           }
 

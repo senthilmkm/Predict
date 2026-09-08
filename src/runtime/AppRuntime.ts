@@ -2,6 +2,7 @@ import { AppConfig, AssetKey } from '../config/types';
 import { snapshotConfig } from '../config/normalize';
 import { TradingEngine } from '../engine/TradingEngine';
 import { LeanSignal } from '../engine/gates';
+import { countWindowBuysForTicker, isCountableWindowBuy } from '../../packages/trading-core/src/gates';
 import { KalshiClient } from '../services/kalshi/client';
 import { loadCredentials } from '../services/credentials';
 import { computeLean, LeanResult } from '../services/lean/lean';
@@ -87,8 +88,8 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'daily loss stop';
     case 'max_trades_day':
       return 'max trades/day';
-    case 'max_trades_asset_day':
-      return 'max trades/asset/day';
+    case 'max_trades_asset_window':
+      return 'max trades/asset/15m window';
     case 'ask_too_rich':
       return 'ask too rich';
     case 'notional_too_small':
@@ -295,12 +296,11 @@ export class AppRuntime {
         }
       }
     }
-    // Prevent double-entry on the same 15m window after restart
-    for (const t of this.trades.pendingFilled()) {
-      this.engine.windows.claimExisting(
-        t.market_ticker,
-        t.order_id || t.id || 'hydrated'
-      );
+    // Count actual buys per 15m ticker so a second buy can use remaining window cap
+    this.engine.windows.clear();
+    for (const t of this.trades.list(200)) {
+      if (!isCountableWindowBuy(t) || !t.market_ticker) continue;
+      this.engine.windows.claimExisting(t.market_ticker, t.order_id || t.id || 'hydrated');
     }
     this.portfolioSamples = await loadPortfolioSamples();
     this.applyChange24h();
@@ -623,7 +623,10 @@ export class AppRuntime {
             openPositions,
             dailyPnlUsd: dailyPnl,
             tradesToday: dayCounts.total,
-            assetTradesToday: dayCounts.byAsset[asset] || 0,
+            assetTradesInWindow: countWindowBuysForTicker(
+              this.trades.list(200),
+              lean.market_ticker
+            ),
           });
         } catch (e: any) {
           const msg = `place failed · ${String(e?.message || e)}`;
