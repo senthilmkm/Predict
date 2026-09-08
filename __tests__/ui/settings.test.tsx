@@ -95,6 +95,8 @@ describe('Settings toggles', () => {
     expect(s.getByTestId('btn-prune-alerts')).toBeTruthy();
     expect(s.getByTestId('account-cloud-identity-card')).toBeTruthy();
     expect(s.getByTestId('settings-disclaimer')).toBeTruthy();
+    expect(s.getByTestId('section-faq')).toBeTruthy();
+    expect(s.queryByTestId('faq-accordion')).toBeNull();
 
     const texts: string[] = [];
     const walk = (n: { children?: Array<string | { children?: unknown[] }> }) => {
@@ -106,10 +108,26 @@ describe('Settings toggles', () => {
     walk(s.getByTestId('screen-settings'));
     const legalAt = texts.indexOf('Legal');
     const accountAt = texts.indexOf('Account & Cloud Identity');
+    const faqAt = texts.indexOf('FAQ');
     const supportAt = texts.indexOf('Support');
     expect(legalAt).toBeGreaterThan(-1);
     expect(accountAt).toBeGreaterThan(legalAt);
-    expect(supportAt).toBeGreaterThan(accountAt);
+    expect(faqAt).toBeGreaterThan(accountAt);
+    expect(supportAt).toBeGreaterThan(faqAt);
+  });
+
+  test('FAQ accordion expands a disclaimer answer', async () => {
+    const s = await render(<SettingsScreen />);
+    await fireEvent.press(s.getByTestId('btn-toggle-faq'));
+    await waitFor(() => expect(s.getByTestId('faq-accordion')).toBeTruthy());
+    expect(s.getByTestId('faq-category-disclaimer')).toBeTruthy();
+    expect(s.getByTestId('faq-q-does-it-guarantee')).toBeTruthy();
+    expect(s.queryByTestId('faq-a-does-it-guarantee')).toBeNull();
+    await fireEvent.press(s.getByTestId('faq-q-does-it-guarantee'));
+    await waitFor(() => expect(s.getByTestId('faq-a-does-it-guarantee')).toBeTruthy());
+    expect(String(s.getByTestId('faq-a-does-it-guarantee').props.children)).toMatch(
+      /does not guarantee profits/i
+    );
   });
 
   test('5-tap version text unlocks Developer Diagnostics', async () => {

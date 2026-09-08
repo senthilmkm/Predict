@@ -29,6 +29,7 @@ import { RISK_FIELD_META, TIME_IN_FORCE_OPTIONS } from '../config/riskDefaults';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { getPricingConfig } from '../config/pricing';
 import { SupportContactFooter } from '../components/SupportContactFooter';
+import { FaqAccordion } from '../components/FaqAccordion';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { AutoTradeRiskAcceptModal } from '../components/AutoTradeRiskAcceptModal';
 import { KalshiApiKeyHelpContent } from '../components/KalshiApiKeyHelpContent';
@@ -154,6 +155,7 @@ export function SettingsScreen() {
   const [busyKey, setBusyKey] = useState<BusyKey>(null);
   const busyLock = React.useRef(false);
   const [riskOpen, setRiskOpen] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(false);
   const [riskHelpOpen, setRiskHelpOpen] = useState(false);
   const [credsHelpOpen, setCredsHelpOpen] = useState(false);
 
@@ -1022,6 +1024,14 @@ export function SettingsScreen() {
             This persistent User ID matches your account in the Admin Portal for cloud synchronization and automated trade execution.
           </Text>
         </View>
+
+        <View style={styles.collapseHeader} testID="section-faq">
+          <Text style={styles.sectionInline}>FAQ</Text>
+          <Pressable onPress={() => setFaqOpen((v) => !v)} testID="btn-toggle-faq" hitSlop={8}>
+            <Text style={styles.collapseHint}>{faqOpen ? 'Hide' : 'Show'}</Text>
+          </Pressable>
+        </View>
+        {faqOpen ? <FaqAccordion /> : null}
 
         <Text style={styles.section}>Support</Text>
         <SupportContactFooter />
