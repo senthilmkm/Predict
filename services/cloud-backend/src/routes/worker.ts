@@ -18,9 +18,37 @@ import {
   TradeRecordDoc,
 } from '../services/firestore';
 import { sendPushNotification } from '../services/notifications';
+import {
+  claimLeanAlert,
+  fillCollapseId,
+  fillPushEnabled,
+  leanCollapseId,
+  leanPushEnabled,
+  pruneLeanAlertsSent,
+  type LeanAlertsSent,
+} from '../services/leanAlerts';
 import { isMarketOpen } from '../services/marketHours';
+import {
+  cloudDailyRealizedPnl,
+  createQuoteCache,
+  liveCloudTradesToday,
+  settlePendingCloudTrades,
+} from '../services/settlement';
 
 export const workerRouter = Router();
+
+/** Same-process cache so 20s sub-ticks cannot re-ding before Firestore is re-read. */
+const leanAlertMemory = new Map<string, LeanAlertsSent>();
+
+export function resetLeanAlertMemoryForTests(): void {
+  leanAlertMemory.clear();
+}
+
+function loadLeanAlertsSent(userId: string, fromDoc: any): LeanAlertsSent {
+  const docSent = pruneLeanAlertsSent(fromDoc?.leanAlertsSent);
+  const memSent = pruneLeanAlertsSent(leanAlertMemory.get(userId));
+  return { ...docSent, ...memSent };
+}
 
 // Helper to chunk array for parallel batch execution
 function chunkArray<T>(items: T[], chunkSize: number): T[][] {
@@ -90,6 +118,7 @@ async function runOneTick() {
   // 2. PARALLEL BATCH PROCESSING: Process active users in concurrent batches of 50
   const BATCH_SIZE = 50;
   const userBatches = chunkArray(activeUsers, BATCH_SIZE);
+  const quoteCache = createQuoteCache();
 
   for (const batch of userBatches) {
     await Promise.all(
@@ -98,15 +127,22 @@ async function runOneTick() {
         const userClaimedWindows = new Set<string>();
 
         try {
-          const userTrades = await getTradeRecords(userId);
-          const existingTickers = new Set(userTrades.map((t) => t.ticker));
-
-          const todayKey = new Date().toISOString().slice(0, 10);
-          const tradesTodayList = userTrades.filter((t) => (t.executedAt || '').slice(0, 10) === todayKey);
-          const openPositions = userTrades.filter((t) => t.status === 'SUBMITTED' || t.status === 'FILLED').length;
-          const tradesToday = tradesTodayList.length;
-
           const cfg = user.config || defaultAppConfig();
+          const isArmedTrader = Boolean(
+            cfg.auto_trade_enabled && user.state === 'ARMED' && user.kalshiConfigured
+          );
+          // Alert-only users skip the trade book — avoids 1000 Firestore reads/tick.
+          const rawTrades = isArmedTrader ? await getTradeRecords(userId) : [];
+          const userTrades = isArmedTrader
+            ? await settlePendingCloudTrades(userId, rawTrades, now, quoteCache)
+            : [];
+          const existingTickers = new Set(userTrades.map((t) => t.ticker));
+          const tradesTodayList = liveCloudTradesToday(userTrades, now);
+          let openPositions = userTrades.filter(
+            (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+          ).length;
+          let tradesToday = tradesTodayList.length;
+          const dailyPnlUsd = cloudDailyRealizedPnl(tradesTodayList);
           const isLive = cfg.execution_mode === 'live' && user.state === 'ARMED';
           let tradesCount = 0;
           let leansCount = 0;
@@ -115,6 +151,9 @@ async function runOneTick() {
             ...(user.pushTokens || []),
             ...(user.fcmTokens || []),
           ].filter((t, i, arr) => t && arr.indexOf(t) === i);
+
+          let leanAlertsSent = loadLeanAlertsSent(userId, user);
+          let leanAlertsDirty = false;
 
           for (const asset of assets) {
             if (!cfg.assets_enabled?.[asset]) continue;
@@ -154,18 +193,33 @@ async function runOneTick() {
                 openPositions,
                 tradesToday,
                 assetTradesToday,
+                dailyPnlUsd,
               }
             );
 
-            if (cfg.alerts_enabled && userTokens.length > 0) {
-              const title = `Signal · ${asset} ${lean.decision}`;
-              const body = `Gap $${absGap.toFixed(2)} · Cushion $${userCushion} · ${lean.minutes_left ?? '?'}m left`;
-              void sendPushNotification(userTokens, title, body, {
-                asset,
-                ticker: marketTicker,
-                type: 'lean_signal',
-                source: 'gcp',
-              });
+            if (leanPushEnabled(cfg) && userTokens.length > 0) {
+              const claim = claimLeanAlert(leanAlertsSent, marketTicker, lean.decision, now);
+              leanAlertsSent = claim.next;
+              if (claim.send) {
+                leanAlertsDirty = true;
+                leanAlertMemory.set(userId, leanAlertsSent);
+                const title = `Signal · ${asset} ${lean.decision}`;
+                const body = `Gap $${absGap.toFixed(2)} · Cushion $${userCushion} · ${lean.minutes_left ?? '?'}m left`;
+                void sendPushNotification(
+                  userTokens,
+                  title,
+                  body,
+                  {
+                    asset,
+                    ticker: marketTicker,
+                    decision: lean.decision,
+                    type: 'lean_signal',
+                    kind: 'lean_signal',
+                    source: 'gcp',
+                  },
+                  { collapseId: leanCollapseId(userId, claim.key) }
+                );
+              }
             }
 
             if (!cfg.auto_trade_enabled || user.state !== 'ARMED' || !gate.ok || !gate.price || !gate.count) continue;
@@ -191,6 +245,9 @@ async function runOneTick() {
             if (placeRes.ok) {
               tradesCount++;
               const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+              const fillCount = Number(placeRes.fill_count ?? gate.count ?? 0);
+              const filled = Number.isFinite(fillCount) && fillCount > 0;
+              const payPrice = Number(gate.pay_price ?? 0) || null;
 
               const tradeDoc: TradeRecordDoc = {
                 tradeId,
@@ -198,18 +255,31 @@ async function runOneTick() {
                 ticker: marketTicker,
                 asset: lean.asset,
                 decision: lean.decision,
-                count: gate.count,
+                count: filled ? String(fillCount) : String(gate.count || 0),
                 price: gate.price,
-                notionalUsd: gate.notional_usd || 0,
+                notionalUsd: filled && payPrice
+                  ? Math.round(fillCount * payPrice * 100) / 100
+                  : gate.notional_usd || 0,
                 dryRun: !isLive,
-                status: 'SUBMITTED',
+                status: filled ? 'FILLED' : 'CANCELLED',
                 leanDiff: absGap,
                 liveSpot: lean.live,
                 strike: lean.strike,
                 executedAt: now.toISOString(),
+                orderId: placeRes.order_id ?? null,
+                payPrice,
+                fillCount: filled ? fillCount : 0,
+                outcome: filled ? 'pending' : 'miss',
+                pnlUsd: null,
               };
 
               await saveTradeRecord(userId, tradeDoc);
+              existingTickers.add(marketTicker);
+              if (filled && !tradeDoc.dryRun) {
+                openPositions += 1;
+                tradesToday += 1;
+                tradesTodayList.push(tradeDoc);
+              }
               await writeAuditLog(userId, 'TRADE_TRIGGERED', {
                 tradeId,
                 ticker: marketTicker,
@@ -218,24 +288,35 @@ async function runOneTick() {
                 mode: isLive ? 'live' : 'demo',
               });
 
-              if (userTokens.length > 0) {
+              if (fillPushEnabled(cfg) && userTokens.length > 0) {
                 const fillTitle = isLive ? `Order Placed · ${asset} ${lean.decision}` : `Dry-Run Order · ${asset} ${lean.decision}`;
                 const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
                 const fillBody = `${gate.count} ctr @ $${priceVal.toFixed(2)} · Cost $${(gate.notional_usd || 0).toFixed(2)}`;
-                void sendPushNotification(userTokens, fillTitle, fillBody, {
-                  tradeId,
-                  asset: lean.asset,
-                  type: 'order_filled',
-                  source: 'gcp',
-                });
+                void sendPushNotification(
+                  userTokens,
+                  fillTitle,
+                  fillBody,
+                  {
+                    tradeId,
+                    asset: lean.asset,
+                    type: 'order_filled',
+                    kind: 'order_filled',
+                    source: 'gcp',
+                  },
+                  { collapseId: fillCollapseId(userId, tradeId) }
+                );
               }
             }
           }
 
+          if (leanAlertsDirty) {
+            leanAlertMemory.set(userId, leanAlertsSent);
+          }
           await upsertUserDoc(userId, {
             lastTickAt: now.toISOString(),
             lastError: null,
-          });
+            ...(leanAlertsDirty ? { leanAlertsSent } : {}),
+          } as any);
 
           results.push({ userId, tradesPlaced: tradesCount, leansEvaluated: leansCount });
         } catch (err: any) {

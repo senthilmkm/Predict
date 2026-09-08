@@ -189,9 +189,11 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
 
     expect(rt.status.lastLeans.Gold?.decision).toBe('YES');
     expect(rt.alerts.list().length).toBeGreaterThan(0);
+    expect(rt.alerts.list().some((a) => a.kind === 'lean_signal')).toBe(true);
+    expect(rt.alerts.list().some((a) => a.kind === 'order_filled')).toBe(true);
     expect(rt.trades.list().some((t) => t.outcome === 'pending' && !t.dry_run)).toBe(true);
-    expect(notified).toContain('lean_signal');
-    expect(notified).toContain('order_filled');
+    expect(notified).not.toContain('lean_signal');
+    expect(notified).not.toContain('order_filled');
   });
 });
 

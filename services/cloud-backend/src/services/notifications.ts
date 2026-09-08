@@ -2,12 +2,14 @@ export async function sendPushNotification(
   tokens: string[],
   title: string,
   body: string,
-  data?: Record<string, any>
+  data?: Record<string, any>,
+  opts?: { collapseId?: string }
 ): Promise<{ successCount: number; failureCount: number }> {
   if (!tokens || tokens.length === 0) {
     return { successCount: 0, failureCount: 0 };
   }
 
+  const collapseId = opts?.collapseId ? String(opts.collapseId).slice(0, 64) : undefined;
   const messages = tokens.map((token) => ({
     to: token,
     sound: 'default',
@@ -17,6 +19,7 @@ export async function sendPushNotification(
     body,
     _contentAvailable: true,
     interruptionLevel: 'active',
+    ...(collapseId ? { collapseId, collapseKey: collapseId } : {}),
     data: { source: 'gcp', ...(data || {}) },
   }));
 

@@ -169,8 +169,14 @@ export function snapshotConfig(cfg: AppConfig): AppConfig {
   return JSON.parse(JSON.stringify(cfg)) as AppConfig;
 }
 
+/** Lean + fill sounds come from GCP only — phone must not ding the same event. */
+export function isCloudOwnedAlertSound(kind: string): boolean {
+  return kind === 'lean_signal' || kind === 'order_filled';
+}
+
 export function shouldPushAlert(cfg: AppConfig, kind: keyof AppConfig['alert_prefs']): boolean {
   if (!cfg.alerts_enabled) return false;
+  if (isCloudOwnedAlertSound(kind)) return false;
   const pref = cfg.alert_prefs[kind];
   if (!pref || !pref.enabled || !pref.push) return false;
   return true;

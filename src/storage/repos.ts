@@ -40,11 +40,70 @@ export interface DashboardStats {
   win_rate: number | null;
 }
 
+/** Same Kalshi fill from phone + Cloud Run (ids and timestamps almost never match exactly). */
+export const TRADE_DEDUP_WINDOW_MS = 3 * 60 * 1000;
+
+export function isSameTradeRecord(a: TradeRecord, b: TradeRecord): boolean {
+  if (a.id && b.id && a.id === b.id) return true;
+  const oa = (a.order_id || '').trim();
+  const ob = (b.order_id || '').trim();
+  if (oa && ob) return oa === ob;
+  const tickerA = (a.market_ticker || '').trim();
+  const tickerB = (b.market_ticker || '').trim();
+  if (!tickerA || tickerA !== tickerB) return false;
+  if (a.side && b.side && a.side !== b.side) return false;
+  const ta = new Date(a.at).getTime();
+  const tb = new Date(b.at).getTime();
+  if (Number.isFinite(ta) && Number.isFinite(tb)) {
+    return Math.abs(ta - tb) <= TRADE_DEDUP_WINDOW_MS;
+  }
+  return a.at === b.at;
+}
+
+function isFinalOutcome(outcome: TradeOutcome | undefined): boolean {
+  return outcome === 'win' || outcome === 'loss' || outcome === 'exited' || outcome === 'miss';
+}
+
+function pickFillCount(existing: TradeRecord, incoming: TradeRecord): number | null | undefined {
+  const e = existing.fill_count;
+  const n = incoming.fill_count;
+  if (e != null && Number(e) > 1 && (n == null || Number(n) === 1)) return e;
+  if (n != null && Number.isFinite(Number(n))) return Number(n);
+  return e;
+}
+
 export class MemoryTradeRepo {
   private trades: TradeRecord[] = [];
 
   insert(row: TradeRecord): void {
     this.trades.unshift(row);
+  }
+
+  upsert(row: TradeRecord): void {
+    const i = this.trades.findIndex((t) => isSameTradeRecord(t, row));
+    if (i >= 0) {
+      const existing = this.trades[i];
+      const isAlreadyFinalized = isFinalOutcome(existing.outcome);
+      const incomingWeak =
+        row.outcome === 'pending' || row.outcome == null || (isAlreadyFinalized && !isFinalOutcome(row.outcome));
+      const outcome = isAlreadyFinalized && incomingWeak ? existing.outcome : row.outcome;
+      const incomingPnlMissing = row.pnl_usd == null;
+      const pnl_usd =
+        isAlreadyFinalized && (incomingWeak || incomingPnlMissing) ? existing.pnl_usd : (row.pnl_usd ?? existing.pnl_usd);
+      this.trades[i] = {
+        ...existing,
+        ...row,
+        id: existing.id,
+        at: existing.at,
+        order_id: existing.order_id || row.order_id,
+        fill_count: pickFillCount(existing, row),
+        fill_price: existing.fill_price ?? row.fill_price,
+        outcome,
+        pnl_usd,
+      };
+    } else {
+      this.trades.unshift(row);
+    }
   }
 
   update(id: string, patch: Partial<TradeRecord>): boolean {
@@ -124,30 +183,59 @@ export class MemoryTradeRepo {
   }
 }
 
-export function statsFromCloudTrades(cloudTrades: any[], now = new Date()): DashboardStats {
-  const repo = new MemoryTradeRepo();
-  for (const ct of cloudTrades || []) {
-    const row: TradeRecord = {
+function dollarsPrice(raw: unknown): number | null {
+  const n = raw != null ? Number(raw) : NaN;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n > 1 ? Math.round((n / 100) * 10000) / 10000 : n;
+}
+
+export function cloudTradesToRecords(cloudTrades: any[]): TradeRecord[] {
+  return (cloudTrades || []).filter((ct) => ct && typeof ct === 'object').map((ct) => {
+    const economic = dollarsPrice(ct.payPrice ?? ct.pay_price) ?? dollarsPrice(ct.price);
+    const countRaw = ct.fillCount ?? ct.fill_count ?? ct.count;
+    const fillCount =
+      countRaw != null && String(countRaw).trim() !== '' && Number.isFinite(Number(countRaw))
+        ? Number(countRaw)
+        : null;
+    const pnl =
+      ct.pnlUsd != null ? Number(ct.pnlUsd) : ct.pnl_usd != null ? Number(ct.pnl_usd) : null;
+    const settled = ct.status === 'SETTLED' || ct.outcome === 'win' || ct.outcome === 'loss';
+    const cancelled = ct.status === 'CANCELLED';
+    let outcome: TradeOutcome;
+    if (ct.outcome) {
+      outcome = ct.outcome;
+    } else if (settled && pnl != null) {
+      outcome = pnl >= 0 ? 'win' : 'loss';
+    } else if (settled) {
+      outcome = 'pending';
+    } else if (cancelled || (fillCount != null && fillCount <= 0)) {
+      outcome = 'miss';
+    } else if (ct.status === 'FILLED' || ct.status === 'SUBMITTED') {
+      outcome = 'pending';
+    } else {
+      outcome = 'miss';
+    }
+
+    return {
       id: ct.tradeId || ct.id || `trade_${Math.random()}`,
       at: ct.executedAt || ct.at || new Date().toISOString(),
       asset: ct.asset || ct.ticker || 'WTI',
       market_ticker: ct.ticker || ct.market_ticker || '',
       side: ct.decision || ct.side || 'YES',
       notional_usd: Number(ct.notionalUsd || ct.notional_usd || 0),
-      fill_price: ct.price != null ? Number(ct.price) : null,
-      fill_count: ct.count != null ? Number(ct.count) : 1,
-      pnl_usd: ct.pnlUsd != null ? Number(ct.pnlUsd) : ct.pnl_usd != null ? Number(ct.pnl_usd) : null,
-      outcome:
-        ct.outcome ||
-        (ct.status === 'SETTLED'
-          ? Number(ct.pnlUsd || 0) >= 0
-            ? 'win'
-            : 'loss'
-          : ct.status === 'FILLED' || ct.status === 'SUBMITTED'
-            ? 'pending'
-            : 'miss'),
+      fill_price: economic,
+      fill_count: fillCount,
+      pnl_usd: pnl,
+      outcome,
       dry_run: Boolean(ct.dryRun || ct.dry_run),
+      order_id: ct.orderId || ct.order_id || null,
     };
+  });
+}
+
+export function statsFromCloudTrades(cloudTrades: any[], now = new Date()): DashboardStats {
+  const repo = new MemoryTradeRepo();
+  for (const row of cloudTradesToRecords(cloudTrades)) {
     repo.insert(row);
   }
   return repo.statsToday(now);
@@ -160,6 +248,7 @@ export class MemoryAlertRepo {
     const rowTime = new Date(row.at).getTime();
 
     const isDup = this.alerts.some((existing) => {
+      if (existing.kind && row.kind && existing.kind !== row.kind) return false;
       const existingTime = new Date(existing.at).getTime();
       const diffMs = Math.abs(rowTime - existingTime);
       if (Number.isFinite(diffMs) && diffMs > 120_000) return false;
@@ -178,10 +267,13 @@ export class MemoryAlertRepo {
       const b2 = norm(row.body);
 
       if (t1 === t2 && b1 === b2) return true;
+      if (t1 === t2 && t1.length > 3) return true;
       if (b1.length > 5 && b1 === b2) return true;
 
       const matchAssetSide = (s: string) => {
-        const m = s.match(/\b(btc|eth|sol|wti|spx|ixic)\s+(yes|no)\b/i);
+        const signal = s.match(/signal\s*[·•\-]\s*([a-z0-9]+)\s+(yes|no)/i);
+        if (signal) return `${signal[1]} ${signal[2]}`.toLowerCase();
+        const m = s.match(/\b(btc|eth|sol|doge|xrp|bnb|avax|sui|link|wti|gold|silver|ng|copper|spx|ndx|eurusd|gbpusd|usdjpy|ixic)\s+(yes|no)\b/i);
         return m ? m[0].toLowerCase() : null;
       };
 
