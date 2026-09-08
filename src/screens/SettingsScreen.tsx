@@ -99,7 +99,6 @@ export function SettingsScreen() {
   const stop = useRuntimeStore((s) => s.stop);
   const tickOnce = useRuntimeStore((s) => s.tickOnce);
   const status = useRuntimeStore((s) => s.status);
-  const alertCount = useRuntimeStore((s) => s.alerts.length);
   const pricing = getPricingConfig();
   const subEntitled = useSubscriptionStore((s) => hasPredictAccess(s));
   const subTrialing = useSubscriptionStore((s) => s.isTrialing);
@@ -640,12 +639,6 @@ export function SettingsScreen() {
             </Pressable>
           </View>
         </View>
-        <View style={styles.slimCard}>
-          <Text style={styles.slimLabel}>Stored alerts</Text>
-          <Text style={styles.slimMeta} testID="alert-stored-count">
-            {alertCount}
-          </Text>
-        </View>
         <ActionButton
           testID="btn-prune-alerts"
           variant="slim"
@@ -849,17 +842,6 @@ export function SettingsScreen() {
           </>
         ) : null}
 
-        <Text style={styles.section}>Account & Cloud Identity</Text>
-        <View style={styles.subCard} testID="account-cloud-identity-card">
-          <Text style={styles.slimLabel}>{displayNameState || 'Apple User'}</Text>
-          <Text style={styles.slimMeta} testID="cloud-user-id">
-            User ID: {cloudUserId || 'Loading...'}
-          </Text>
-          <Text style={styles.hint}>
-            This persistent User ID matches your account in the Admin Portal for cloud synchronization and automated trade execution.
-          </Text>
-        </View>
-
         <View style={styles.sectionRow}>
           <Text style={[styles.section, styles.sectionNoTop]}>Kalshi credentials</Text>
           <Pressable
@@ -1028,6 +1010,17 @@ export function SettingsScreen() {
               No acceptance recorded yet. First-launch onboarding saves this after you confirm.
             </Text>
           )}
+        </View>
+
+        <Text style={styles.section}>Account & Cloud Identity</Text>
+        <View style={styles.subCard} testID="account-cloud-identity-card">
+          <Text style={styles.slimLabel}>{displayNameState || 'Apple User'}</Text>
+          <Text style={styles.slimMeta} testID="cloud-user-id">
+            User ID: {cloudUserId || 'Loading...'}
+          </Text>
+          <Text style={styles.hint}>
+            This persistent User ID matches your account in the Admin Portal for cloud synchronization and automated trade execution.
+          </Text>
         </View>
 
         <Text style={styles.section}>Support</Text>

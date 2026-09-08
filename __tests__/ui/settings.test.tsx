@@ -87,6 +87,31 @@ describe('Settings toggles', () => {
     expect(useConfigStore.getState().config.risk.time_in_force).toBe('immediate_or_cancel');
   });
 
+  test('stored-alert count is not duplicated; account identity sits below Legal', async () => {
+    const s = await render(<SettingsScreen />);
+    expect(s.queryByText('Stored alerts')).toBeNull();
+    expect(s.queryByTestId('alert-stored-count')).toBeNull();
+    expect(s.getByTestId('alert-retention-row')).toBeTruthy();
+    expect(s.getByTestId('btn-prune-alerts')).toBeTruthy();
+    expect(s.getByTestId('account-cloud-identity-card')).toBeTruthy();
+    expect(s.getByTestId('settings-disclaimer')).toBeTruthy();
+
+    const texts: string[] = [];
+    const walk = (n: { children?: Array<string | { children?: unknown[] }> }) => {
+      for (const child of n.children ?? []) {
+        if (typeof child === 'string') texts.push(child);
+        else if (child && typeof child === 'object') walk(child as any);
+      }
+    };
+    walk(s.getByTestId('screen-settings'));
+    const legalAt = texts.indexOf('Legal');
+    const accountAt = texts.indexOf('Account & Cloud Identity');
+    const supportAt = texts.indexOf('Support');
+    expect(legalAt).toBeGreaterThan(-1);
+    expect(accountAt).toBeGreaterThan(legalAt);
+    expect(supportAt).toBeGreaterThan(accountAt);
+  });
+
   test('5-tap version text unlocks Developer Diagnostics', async () => {
     const s = await render(<SettingsScreen />);
     expect(s.queryByTestId('toggle-poller')).toBeNull();
