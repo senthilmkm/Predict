@@ -374,6 +374,31 @@ describe('iOS ↔ Cloud trade wiring', () => {
     expect(rt2.alerts.list().some((a) => a.id === 'fill:t1')).toBe(false);
   });
 
+  test('first Cloud alert catch-up marks the dump read; later rows stay unread', async () => {
+    const rt = new AppRuntime({ getConfig: () => defaultAppConfig() });
+    rt.alerts.insert({
+      id: 'dump-1',
+      at: new Date().toISOString(),
+      kind: 'lean_signal',
+      title: 'Gold YES',
+      body: 'gap',
+      read: false,
+    });
+    await rt.catchUpAlertsInboxAfterCloudSync();
+    expect(rt.alerts.unreadCount()).toBe(0);
+
+    rt.alerts.insert({
+      id: 'new-1',
+      at: new Date().toISOString(),
+      kind: 'order_filled',
+      title: 'Order Placed · Gold YES',
+      body: '1 ctr',
+      read: false,
+    });
+    await rt.catchUpAlertsInboxAfterCloudSync();
+    expect(rt.alerts.unreadCount()).toBe(1);
+  });
+
   test('syncCloudTradeActions shows Cloud skip reasons and a later empty map clears them', () => {
     const rt = new AppRuntime({ getConfig: () => defaultAppConfig() });
     rt.syncCloudTradeActions({

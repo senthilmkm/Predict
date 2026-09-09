@@ -392,7 +392,7 @@ export function getFaqCategories(): FaqCategory[] {
             'History = every Predict fill and alert on this phone, with filters (pending, win, loss, miss). Status dots: green settled win / still favorable, yellow checking, red unfavorable or settled loss, gray IOC miss.\n\n' +
             'Home pulls Cloud alerts after each poll so a lean can show in History without opening this tab.\n\n' +
             'Dashboard = today’s Predict stats (ET): win rate, closed P&L from Predict fills today, W/L, pending, IOC misses, alerts logged, unread. Closed P&L is not the same as Change (24h).\n\n' +
-            'Bell (top right) = Alerts hub: recent alerts, mute by type, delete. That count is the same family as Dashboard “Alerts logged.”',
+            'Bell (top right) = new alerts since you last opened Alerts (bell page or History → Alerts). Leaving that list clears the badge. Bell mute is only the lock-screen ping (see “Mute vs Notify on lean signals”). Delete still removes rows.',
         },
         {
           id: 'export',
@@ -405,18 +405,36 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'alert-retention',
           q: 'How long are alerts kept? Why is there no “stored alerts” number in Settings?',
           a:
-            'Settings → Signal alerts → Keep alert history (default 30 days, 1–365). Older rows auto-delete on this phone. “Prune older alerts now” deletes anything past that window on this phone and in Cloud; today’s stay.\n\n' +
+            'Settings → Alerts → Keep alert history (default 30 days, 1–365). Older rows auto-delete on this phone. “Prune older alerts now” deletes anything past that window on this phone and in Cloud; today’s stay.\n\n' +
             'The count lives on Dashboard as Alerts logged (and in the Alerts hub). Settings does not repeat that number.\n\n' +
             'A new install receives up to the 400 most recent Cloud alerts.',
+        },
+        {
+          id: 'mute-vs-lean-toggle',
+          q: 'Mute vs Notify on lean signals — what is the difference?',
+          a:
+            'Two different controls. Easy to mix up.\n\n' +
+            'Bell mute matrix (bell page → Mute matrix):\n' +
+            '• Per type: leans, fills, misses, wins/losses, and so on.\n' +
+            '• Mute = no lock-screen ping for that type.\n' +
+            '• The row still appears on the bell page and in History → Alerts (“silent log”).\n' +
+            '• Auto-trade is unchanged.\n\n' +
+            'Settings → Notify on lean signals (off):\n' +
+            '• New lean signals stop completely — no ping and no new lean row on the bell page or History.\n' +
+            '• Fills, misses, Trade won/lost, Protect sells, and daily loss stop still show on the bell page.\n' +
+            '• Side effect: all lock-screen pings stop, including fills and wins. Bell mute “push on” cannot override this.\n\n' +
+            'Want no leans anywhere, but still hear fills? Leave Notify on lean signals ON. On the bell page, mute only Lean signals.\n\n' +
+            'Want a quiet lock screen but keep the list? Leave Notify on lean signals ON. Mute the types you do not want to hear.',
         },
         {
           id: 'mute-sounds',
           q: 'How do sounds and mutes work?',
           a:
-            'Master switch: Settings → Notify on lean signals.\n\n' +
-            'Per type: open the bell → expand mute options. You can mute lean signals, orders placed, fills, IOC misses, trade results, protect-sells, daily loss stop, and errors.\n\n' +
-            'Lean, fill, protect-sell, trade result, IOC miss, and daily loss stop sounds are sent from Cloud Run so the phone does not play the same event twice.\n\n' +
-            'A lean below your cushion is stored in History without a sound.',
+            'Pings (leans, fills, protect, trade results, IOC misses, daily loss stop) come from Cloud Run so the phone does not play the same event twice.\n\n' +
+            'To quiet one type but keep the list: bell page → Mute matrix.\n\n' +
+            'To stop new lean rows (and all lock-screen pings): Settings → Notify on lean signals off.\n\n' +
+            'A lean below your cushion is not stored and has no sound.\n\n' +
+            'See “Mute vs Notify on lean signals — what is the difference?” for the full split.',
         },
       ],
     },

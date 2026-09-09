@@ -33,13 +33,15 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/Cloud Run/);
     expect(blob).toMatch(/phone does not/i);
     expect(blob).toMatch(/does not send buy or sell orders/i);
-    expect(blob).toMatch(/daily loss stop sounds are sent from Cloud Run/i);
+    expect(blob).toMatch(/daily loss stop/i);
     expect(blob).toMatch(/Max trades \/ asset \/ 15m window/);
     expect(blob).toMatch(/\$29\.99/);
     expect(blob).toMatch(/7-day/);
     expect(blob).toMatch(/kill switch/i);
     expect(blob).toMatch(/settlements continue after Auto-trade Off/i);
-    expect(blob).toMatch(/lean below your cushion is stored in History without a sound/i);
+    expect(blob).toMatch(/lean below your cushion is not stored/i);
+    expect(blob).toMatch(/Mute vs Notify on lean signals/i);
+    expect(blob).toMatch(/silent log/i);
     expect(blob).toMatch(/400 most recent Cloud alerts/);
     expect(blob).toMatch(/Secure Store/);
     expect(blob).toContain(supportContactEmail());

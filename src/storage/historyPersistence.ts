@@ -4,6 +4,8 @@ import { AlertRecord, MemoryAlertRepo, MemoryTradeRepo, TradeRecord } from './re
 const TRADES_KEY = 'foresight.trades.v1';
 const ALERTS_KEY = 'foresight.alerts.v1';
 const DISMISSED_ALERTS_KEY = 'foresight.alerts.dismissed.v1';
+/** After the first successful Cloud alert pull, treat that dump as already seen. */
+export const ALERTS_INBOX_CAUGHT_UP_KEY = 'foresight.alerts.inboxCaughtUp.v1';
 
 export async function hydrateRepos(
   trades: MemoryTradeRepo,

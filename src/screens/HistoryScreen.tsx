@@ -6,6 +6,7 @@ import { useRuntimeStore } from '../state/runtimeStore';
 import { AssetKey } from '../config/types';
 import { LeanResult } from '../services/lean/lean';
 import { TradeRecord } from '../storage/repos';
+import { useMarkAlertsSeenOnLeave } from '../hooks/useMarkAlertsSeenOnLeave';
 import {
   ALERT_FILTERS,
   TRADE_FILTERS,
@@ -68,6 +69,7 @@ export function HistoryScreen() {
   const alerts = useRuntimeStore((s) => s.alerts);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const [refreshing, setRefreshing] = useState(false);
+  useMarkAlertsSeenOnLeave(tab === 'alerts');
 
   useEffect(() => {
     void refreshCloudSnapshot();

@@ -24,6 +24,7 @@ afterEach(() => cleanup());
 describe('History / Dashboard / AlertsHub', () => {
   test('History trade status dot logic (favorable green, border yellow, unfavorable red)', async () => {
     useRuntimeStore.setState({
+      refreshCloudSnapshot: async () => {},
       trades: [
         {
           id: 't-win',
@@ -179,65 +180,54 @@ describe('History / Dashboard / AlertsHub', () => {
     await fireEvent.press(s.getByTestId('btn-toggle-mute-matrix'));
     await fireEvent(s.getByTestId('alert-push-lean_signal'), 'valueChange', false);
     expect(useConfigStore.getState().config.alert_prefs.lean_signal.push).toBe(false);
-    await fireEvent.press(s.getByTestId('btn-mark-all-read'));
   });
 
-  test('Mark all read shows spinner then clears unread', async () => {
+  test('History Alerts tab then Trades clears unread; Trades-only does not', async () => {
     const rt = useRuntimeStore.getState().ensure();
     rt.alerts.insert({
-      id: 'u1',
+      id: 'u-hist',
       at: new Date().toISOString(),
-      kind: 'lean_signal',
-      title: 'Gold YES',
-      body: 'gap',
-      read: false,
-    });
-    rt.alerts.insert({
-      id: 'u2',
-      at: new Date().toISOString(),
-      kind: 'order_placed',
-      title: 'BTC',
-      body: 'placed',
+      kind: 'order_filled',
+      title: 'Order Placed · Gold YES',
+      body: '1 ctr',
       read: false,
     });
     useRuntimeStore.getState().syncFromRuntime();
-    expect(useRuntimeStore.getState().unread).toBe(2);
+    expect(useRuntimeStore.getState().unread).toBe(1);
 
-    const s = await render(<AlertsHubScreen />);
-    expect(s.getByText(/Unread:\s*2/)).toBeTruthy();
+    const s = await render(<HistoryScreen />);
+    expect(useRuntimeStore.getState().unread).toBe(1);
 
-    await fireEvent.press(s.getByTestId('btn-mark-all-read'));
-    await waitFor(() => expect(s.getByTestId('mark-all-read-spinner')).toBeTruthy());
+    await fireEvent.press(s.getByTestId('seg-alerts'));
+    expect(useRuntimeStore.getState().unread).toBe(1);
+
+    await fireEvent.press(s.getByTestId('seg-trades'));
     await waitFor(() => expect(useRuntimeStore.getState().unread).toBe(0));
-    await waitFor(() => expect(s.queryByTestId('mark-all-read-spinner')).toBeNull());
-    expect(s.getByText('Mark all read')).toBeTruthy();
   });
 
   test('AlertsHub Recent: select all + confirm bulk delete', async () => {
-    const alerts = [
-      {
-        id: 'a1',
-        at: '2026-09-03T10:00:00.000Z',
-        kind: 'lean_signal',
-        title: 't1',
-        body: 'b1',
-        read: false,
-      },
-      {
-        id: 'a2',
-        at: '2026-09-03T10:01:00.000Z',
-        kind: 'order_placed',
-        title: 't2',
-        body: 'b2',
-        read: true,
-      },
-    ];
-
+    const rt = useRuntimeStore.getState().ensure();
+    rt.alerts.insert({
+      id: 'a1',
+      at: '2026-09-03T10:00:00.000Z',
+      kind: 'lean_signal',
+      title: 't1',
+      body: 'b1',
+      read: false,
+    });
+    rt.alerts.insert({
+      id: 'a2',
+      at: '2026-09-03T10:01:00.000Z',
+      kind: 'order_placed',
+      title: 't2',
+      body: 'b2',
+      read: true,
+    });
     const mockDelete = jest.fn(async (ids: string[]) => ids.length);
+    useRuntimeStore.getState().syncFromRuntime();
     useRuntimeStore.setState({
-      alerts,
-      unread: 1,
       deleteAlertsByIds: mockDelete,
+      refreshCloudSnapshot: async () => {},
     });
 
     const s = await render(<AlertsHubScreen />);

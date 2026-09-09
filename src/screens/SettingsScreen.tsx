@@ -19,31 +19,22 @@ import {
   ALERT_RETENTION_MIN_DAYS,
   modeHint,
   modeLabel,
-  POLL_INTERVAL_DEFAULT_SEC,
-  POLL_INTERVAL_MAX_SEC,
-  POLL_INTERVAL_MIN_SEC,
   RiskConfig,
   TimeInForce,
 } from '../config/types';
 import { RISK_FIELD_META, TIME_IN_FORCE_OPTIONS } from '../config/riskDefaults';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
-import { getPricingConfig } from '../config/pricing';
 import { SupportContactFooter } from '../components/SupportContactFooter';
-import { FaqAccordion } from '../components/FaqAccordion';
-import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { AutoTradeRiskAcceptModal } from '../components/AutoTradeRiskAcceptModal';
 import { KalshiApiKeyHelpContent } from '../components/KalshiApiKeyHelpContent';
-import { PaywallManageModal } from './PaywallScreen';
 import {
-  AutoTradeRiskAcceptance,
-  getLatestAutoTradeRiskAcceptance,
   hasAcceptedCurrentDisclaimer,
   recordAutoTradeRiskAcceptance,
 } from '../storage/riskAcceptance';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { cloudClient } from '../services/cloud/cloudClient';
-import { hasPredictAccess, useSubscriptionStore } from '../state/subscriptionStore';
+import { useSubscriptionStore } from '../state/subscriptionStore';
 import {
   authenticateForSecrets,
   clearCredentials,
@@ -51,7 +42,6 @@ import {
   loadCredentials,
   saveCredentials,
 } from '../services/credentials';
-import { getPersistentUserId, getUserDisplayName } from '../services/userId';
 import { KalshiClient } from '../services/kalshi/client';
 import { assertPemLooksValid } from '../services/kalshi/sign';
 
@@ -88,7 +78,11 @@ type BusyKey =
 const MIN_BUSY_MS =
   typeof process !== 'undefined' && process.env.NODE_ENV === 'test' ? 0 : 450;
 
-export function SettingsScreen() {
+export function SettingsScreen({
+  onOpenAccountAndMore,
+}: {
+  onOpenAccountAndMore?: () => void;
+} = {}) {
   const config = useConfigStore((s) => s.config);
   const setConfig = useConfigStore((s) => s.setConfig);
   const setAutoTrade = useConfigStore((s) => s.setAutoTrade);
@@ -100,21 +94,11 @@ export function SettingsScreen() {
   const stop = useRuntimeStore((s) => s.stop);
   const tickOnce = useRuntimeStore((s) => s.tickOnce);
   const status = useRuntimeStore((s) => s.status);
-  const pricing = getPricingConfig();
-  const subEntitled = useSubscriptionStore((s) => hasPredictAccess(s));
-  const subTrialing = useSubscriptionStore((s) => s.isTrialing);
-  const subBusy = useSubscriptionStore((s) => s.busy);
-  const subProductId = useSubscriptionStore((s) => s.productId);
-  const subExpirationAt = useSubscriptionStore((s) => s.expirationAt);
-  const subWillRenew = useSubscriptionStore((s) => s.willRenew);
   const refreshSub = useSubscriptionStore((s) => s.refresh);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
   const [refreshing, setRefreshing] = useState(false);
-  const [paywallOpen, setPaywallOpen] = useState(false);
   const [autoTradeRiskOpen, setAutoTradeRiskOpen] = useState(false);
-  const [lastRiskAcceptance, setLastRiskAcceptance] =
-    useState<AutoTradeRiskAcceptance | null>(null);
 
   const [devTaps, setDevTaps] = useState(0);
   const [devUnlocked, setDevUnlocked] = useState(false);
@@ -155,21 +139,11 @@ export function SettingsScreen() {
   const [busyKey, setBusyKey] = useState<BusyKey>(null);
   const busyLock = React.useRef(false);
   const [riskOpen, setRiskOpen] = useState(false);
-  const [faqOpen, setFaqOpen] = useState(false);
   const [riskHelpOpen, setRiskHelpOpen] = useState(false);
   const [credsHelpOpen, setCredsHelpOpen] = useState(false);
 
-  const [cloudUserId, setCloudUserId] = useState<string>('');
-  const [displayNameState, setDisplayNameState] = useState<string>('');
-
   useEffect(() => {
     void hasCredentials().then(setHasCreds);
-    void getPersistentUserId().then(setCloudUserId);
-    void getUserDisplayName().then(setDisplayNameState);
-  }, []);
-
-  useEffect(() => {
-    void getLatestAutoTradeRiskAcceptance().then(setLastRiskAcceptance);
   }, []);
 
   /** Safe against stale Zustand HMR instances missing newer actions. */
@@ -301,8 +275,7 @@ export function SettingsScreen() {
         }
         try {
           // Audit log that Auto-trade was armed (disclaimer already accepted earlier)
-          const rec = await recordAutoTradeRiskAcceptance();
-          setLastRiskAcceptance(rec);
+          await recordAutoTradeRiskAcceptance();
         } catch {
           /* still enable even if local log fails */
         }
@@ -532,129 +505,6 @@ export function SettingsScreen() {
           </Text>
         ) : null}
 
-        <Text style={styles.section}>Subscription</Text>
-        <View style={styles.subCard} testID="subscription-manage-card">
-          <View style={styles.subCardHeader}>
-            <Text style={styles.slimLabel}>Predict Pro</Text>
-            <Pressable
-              testID="btn-manage-subscription"
-              onPress={() => setPaywallOpen(true)}
-              hitSlop={10}
-              style={styles.manageLinkBtn}
-            >
-              <Text style={styles.manageLink}>Manage</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.slimMeta} testID="subscription-status">
-            {!pricing.subscription.enabled
-              ? 'Gating disabled in pricing.json'
-              : subEntitled
-                ? subTrialing
-                  ? 'Free trial active'
-                  : subWillRenew
-                    ? 'Active · renews monthly'
-                    : 'Active'
-                : 'Not subscribed'}
-          </Text>
-          <Text style={styles.hint}>
-            {pricing.subscription.priceLabel}
-            {pricing.subscription.periodLabel}
-            {pricing.subscription.freeTrial.enabled
-              ? ` · ${pricing.subscription.freeTrial.label}`
-              : ''}
-          </Text>
-          {subProductId ? (
-            <Text style={styles.hint}>Product: {subProductId}</Text>
-          ) : null}
-          {subExpirationAt ? (
-            <Text style={styles.hint}>
-              Renews / ends: {new Date(subExpirationAt).toLocaleString()}
-            </Text>
-          ) : null}
-        </View>
-        <Row
-          testID="btn-refresh-subscription"
-          label="Refresh status"
-          value="Refresh"
-          busy={subBusy}
-          busyLabel="Refreshing…"
-          disabled={anyBusy || subBusy}
-          onPress={() => {
-            void (async () => {
-              await refreshSub();
-              note('Subscription status refreshed');
-            })();
-          }}
-        />
-        <Text style={styles.hint}>
-          Tap Manage for plan details, Restore Purchases, Privacy Policy, and Terms of Use.
-        </Text>
-
-        <Text style={styles.section}>Signal alerts</Text>
-        <View style={styles.controlCard}>
-          <View style={styles.controlRow}>
-            <View style={styles.controlCopy}>
-              <Text style={styles.controlTitle}>Notify on lean signals</Text>
-              <Text style={styles.controlHint}>
-                Local alerts when a lean appears. Does not place any orders.
-              </Text>
-            </View>
-            <Switch
-              testID="toggle-alerts"
-              value={config.alerts_enabled}
-              disabled={anyBusy}
-              onValueChange={() => void toggleAlerts()}
-              trackColor={{ false: colors.border, true: colors.accent }}
-              thumbColor={colors.textPrimary}
-            />
-          </View>
-        </View>
-        <View style={styles.slimCard} testID="alert-retention-row">
-          <Text style={styles.slimLabel}>Keep alert history</Text>
-          <View style={styles.pollControls}>
-            <Pressable
-              testID="btn-retention-down"
-              style={styles.chip}
-              onPress={() => void bumpRetention(-5)}
-              disabled={anyBusy || config.alert_retention_days <= ALERT_RETENTION_MIN_DAYS}
-            >
-              {busyKey === 'retention' ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <Text style={styles.chipText}>−5</Text>
-              )}
-            </Pressable>
-            <Text style={styles.pollValue} testID="alert-retention-value">
-              {config.alert_retention_days}d
-            </Text>
-            <Pressable
-              testID="btn-retention-up"
-              style={styles.chip}
-              onPress={() => void bumpRetention(5)}
-              disabled={anyBusy || config.alert_retention_days >= ALERT_RETENTION_MAX_DAYS}
-            >
-              {busyKey === 'retention' ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <Text style={styles.chipText}>+5</Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-        <ActionButton
-          testID="btn-prune-alerts"
-          variant="slim"
-          label="Prune older alerts now"
-          busyLabel="Pruning old alerts…"
-          busy={busyKey === 'prune'}
-          disabled={anyBusy && busyKey !== 'prune'}
-          onPress={() => void pruneNow()}
-        />
-        <Text style={styles.hint}>
-          Default {ALERT_RETENTION_DEFAULT_DAYS}d · {ALERT_RETENTION_MIN_DAYS}–
-          {ALERT_RETENTION_MAX_DAYS}d. Prune removes older alerts on this phone and in Cloud.
-        </Text>
-
         <Text style={styles.section}>Auto-trade</Text>
         <View style={styles.controlCard}>
           <View style={styles.controlRow}>
@@ -683,166 +533,6 @@ export function SettingsScreen() {
             </Text>
           )}
         </View>
-
-        {devUnlocked ? (
-          <View style={styles.controlCard} testID="dev-diagnostics-card">
-            <Text style={styles.sectionNoTop}>Developer Diagnostics</Text>
-            <Row
-              testID="toggle-poller"
-              label="Live Feed Polling"
-              value={status?.running ? 'Active' : 'Paused'}
-              busy={busyKey === 'poller'}
-              busyLabel={status?.running ? 'Pausing…' : 'Activating…'}
-              disabled={anyBusy}
-              onPress={() => void togglePoller()}
-            />
-            <ActionButton
-              testID="btn-tick-once"
-              variant="slim"
-              label="Tick once"
-              busyLabel="Ticking once…"
-              busy={false}
-              disabled={anyBusy}
-              onPress={() => void tickOnce()}
-            />
-          </View>
-        ) : null}
-
-        <View style={styles.collapseHeader}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionInline}>Risk</Text>
-            <Pressable
-              testID="btn-risk-help"
-              style={styles.infoBtn}
-              onPress={() => setRiskHelpOpen(true)}
-              accessibilityLabel="Settings guide — what do these settings mean"
-              hitSlop={8}
-            >
-              <Text style={styles.infoBtnText}>i</Text>
-            </Pressable>
-          </View>
-          <Pressable onPress={() => setRiskOpen((v) => !v)} testID="btn-toggle-risk" hitSlop={8}>
-            <Text style={styles.collapseHint}>{riskOpen ? 'Hide' : 'Show'}</Text>
-          </Pressable>
-        </View>
-        {riskOpen ? (
-          <>
-            {RISK_FIELD_META.map((meta) => {
-              if (meta.kind === 'tif') {
-                const cur = config.risk.time_in_force;
-                return (
-                  <View key={meta.key} style={styles.riskField} testID={`risk-field-${meta.key}`}>
-                    <Text style={styles.riskLabel}>{meta.label}</Text>
-                    <View style={styles.tifRow}>
-                      {TIME_IN_FORCE_OPTIONS.map((opt) => (
-                        <Pressable
-                          key={opt.value}
-                          testID={`tif-${opt.value}`}
-                          style={[styles.tifChip, cur === opt.value && styles.tifChipOn]}
-                          onPress={() => setRiskField('time_in_force', opt.value as TimeInForce)}
-                        >
-                          <Text style={[styles.tifText, cur === opt.value && styles.tifTextOn]}>
-                            {opt.label}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                );
-              }
-              if (meta.kind === 'toggle') {
-                const on = Boolean(config.risk[meta.key as keyof RiskConfig]);
-                return (
-                  <View
-                    key={meta.key}
-                    style={[styles.riskField, styles.riskFieldStack]}
-                    testID={`risk-field-${meta.key}`}
-                  >
-                    <View style={styles.riskToggleRow}>
-                      <Text style={[styles.riskLabel, { flex: 1 }]}>{meta.label}</Text>
-                      <Switch
-                        testID={`risk-toggle-${meta.key}`}
-                        value={on}
-                        onValueChange={(v) => setRiskField(meta.key as any, v as any)}
-                        trackColor={{ true: colors.accent, false: colors.mute }}
-                      />
-                    </View>
-                    <Text style={styles.riskHint}>
-                      {on
-                        ? 'On — sell anytime lean flips against you (after the wait-after-fill)'
-                        : 'Off — holds until the window settles (win or loss)'}
-                    </Text>
-                    <Text style={styles.riskHint} testID="risk-hint-protect-sell-auto-off">
-                      Still runs 24/7 on Cloud Run if Auto-trade is Off.
-                    </Text>
-                  </View>
-                );
-              }
-              const raw = config.risk[meta.key as keyof RiskConfig];
-              const display =
-                meta.kind === 'chase' || meta.kind === 'money'
-                  ? `$${Number(raw).toFixed(meta.kind === 'chase' ? 2 : 0)}`
-                  : meta.kind === 'ratio'
-                    ? `${Number(raw).toFixed(2)}×`
-                    : meta.kind === 'seconds'
-                      ? `${Number(raw)}s`
-                      : String(raw);
-              const disabledProtect =
-                (meta.key === 'protect_sell_gap_ratio' ||
-                  meta.key === 'protect_sell_grace_seconds') &&
-                !config.risk.protect_sell_enabled;
-              return (
-                <View
-                  key={meta.key}
-                  style={[styles.riskField, disabledProtect && { opacity: 0.45 }]}
-                  testID={`risk-field-${meta.key}`}
-                >
-                  <Text style={styles.riskLabel}>{meta.label}</Text>
-                  <View style={styles.pollControls}>
-                    <Pressable
-                      testID={`risk-down-${meta.key}`}
-                      style={styles.chip}
-                      disabled={disabledProtect}
-                      onPress={() => {
-                        const next = Number(raw) - meta.step;
-                        setRiskField(meta.key as any, next as any);
-                      }}
-                    >
-                      <Text style={styles.chipText}>−</Text>
-                    </Pressable>
-                    <Text style={styles.pollValue} testID={`risk-value-${meta.key}`}>
-                      {display}
-                    </Text>
-                    <Pressable
-                      testID={`risk-up-${meta.key}`}
-                      style={styles.chip}
-                      disabled={disabledProtect}
-                      onPress={() => {
-                        const next = Number(raw) + meta.step;
-                        setRiskField(meta.key as any, next as any);
-                      }}
-                    >
-                      <Text style={styles.chipText}>+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })}
-            <ActionButton
-              testID="btn-restore-risk-defaults"
-              variant="slim"
-              label="Restore default values"
-              busyLabel="Restoring risk defaults…"
-              busy={busyKey === 'restore'}
-              disabled={anyBusy && busyKey !== 'restore'}
-              onPress={() => void restoreRisk()}
-            />
-            <Text style={styles.hint}>
-              Defaults: Protect money Off · gap 1.00× · wait 45s after fill. Stored on this phone for
-              restore.
-            </Text>
-          </>
-        ) : null}
 
         <View style={styles.sectionRow}>
           <Text style={[styles.section, styles.sectionNoTop]}>Kalshi credentials</Text>
@@ -981,57 +671,246 @@ export function SettingsScreen() {
           Paste your Kalshi API key ID and private key PEM. Saved credentials enable 24/7 cloud auto-trading on GCP.
         </Text>
 
-        <Text style={styles.section}>Legal</Text>
-        <TradingDisclaimer
-          variant="long"
-          showTitle
-          collapsible
-          defaultCollapsed
-          testID="settings-disclaimer"
-        />
-        <View style={styles.subCard} testID="risk-acceptance-local">
-          <Text style={styles.slimLabel}>Risk disclaimer acceptance (this device)</Text>
-          {lastRiskAcceptance ? (
-            <>
-              <Text style={styles.slimMeta} testID="risk-acceptance-at">
-                Last recorded: {new Date(lastRiskAcceptance.acceptedAt).toLocaleString()}
-                {lastRiskAcceptance.source ? ` · ${lastRiskAcceptance.source}` : ''}
+        <Text style={styles.section}>Alerts</Text>
+        <View style={styles.controlCard}>
+          <View style={styles.controlRow}>
+            <View style={styles.controlCopy}>
+              <Text style={styles.controlTitle}>Notify on lean signals</Text>
+              <Text style={styles.controlHint} testID="alerts-notify-hint">
+                Off = no new lean rows and no lock-screen pings (including fills). Money rows still
+                collect in Alerts. To hear fills but not leans, leave this On and mute Lean signals
+                on the bell.
               </Text>
-              <Text style={styles.hint}>
-                Disclaimer {lastRiskAcceptance.disclaimerVersion} · app{' '}
-                {lastRiskAcceptance.appVersion}
-                {lastRiskAcceptance.buildNumber
-                  ? ` (${lastRiskAcceptance.buildNumber})`
-                  : ''}{' '}
-                · stored only on this phone. Same disclaimer is not asked again until the text
-                version changes.
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.hint} testID="risk-acceptance-none">
-              No acceptance recorded yet. First-launch onboarding saves this after you confirm.
+            </View>
+            <Switch
+              testID="toggle-alerts"
+              value={config.alerts_enabled}
+              disabled={anyBusy}
+              onValueChange={() => void toggleAlerts()}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.textPrimary}
+            />
+          </View>
+        </View>
+        <Text style={styles.alertHistoryLabel}>Alert history</Text>
+        <View style={styles.slimCard} testID="alert-retention-row">
+          <Text style={styles.slimLabel}>Keep alert history</Text>
+          <View style={styles.pollControls}>
+            <Pressable
+              testID="btn-retention-down"
+              style={styles.chip}
+              onPress={() => void bumpRetention(-5)}
+              disabled={anyBusy || config.alert_retention_days <= ALERT_RETENTION_MIN_DAYS}
+            >
+              {busyKey === 'retention' ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Text style={styles.chipText}>−5</Text>
+              )}
+            </Pressable>
+            <Text style={styles.pollValue} testID="alert-retention-value">
+              {config.alert_retention_days}d
             </Text>
-          )}
+            <Pressable
+              testID="btn-retention-up"
+              style={styles.chip}
+              onPress={() => void bumpRetention(5)}
+              disabled={anyBusy || config.alert_retention_days >= ALERT_RETENTION_MAX_DAYS}
+            >
+              {busyKey === 'retention' ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Text style={styles.chipText}>+5</Text>
+              )}
+            </Pressable>
+          </View>
         </View>
+        <ActionButton
+          testID="btn-prune-alerts"
+          variant="slim"
+          label="Prune older alerts now"
+          busyLabel="Pruning old alerts…"
+          busy={busyKey === 'prune'}
+          disabled={anyBusy && busyKey !== 'prune'}
+          onPress={() => void pruneNow()}
+        />
+        <Text style={styles.hint}>
+          Default {ALERT_RETENTION_DEFAULT_DAYS}d · {ALERT_RETENTION_MIN_DAYS}–
+          {ALERT_RETENTION_MAX_DAYS}d. Prune removes older alerts on this phone and in Cloud.
+        </Text>
 
-        <Text style={styles.section}>Account & Cloud Identity</Text>
-        <View style={styles.subCard} testID="account-cloud-identity-card">
-          <Text style={styles.slimLabel}>{displayNameState || 'Apple User'}</Text>
-          <Text style={styles.slimMeta} testID="cloud-user-id">
-            User ID: {cloudUserId || 'Loading...'}
-          </Text>
-          <Text style={styles.hint}>
-            This persistent User ID matches your account in the Admin Portal for cloud synchronization and automated trade execution.
-          </Text>
-        </View>
-
-        <View style={styles.collapseHeader} testID="section-faq">
-          <Text style={styles.sectionInline}>FAQ</Text>
-          <Pressable onPress={() => setFaqOpen((v) => !v)} testID="btn-toggle-faq" hitSlop={8}>
-            <Text style={styles.collapseHint}>{faqOpen ? 'Hide' : 'Show'}</Text>
+        <View style={styles.collapseHeader}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionInline}>Risk</Text>
+            <Pressable
+              testID="btn-risk-help"
+              style={styles.infoBtn}
+              onPress={() => setRiskHelpOpen(true)}
+              accessibilityLabel="Settings guide — what do these settings mean"
+              hitSlop={8}
+            >
+              <Text style={styles.infoBtnText}>i</Text>
+            </Pressable>
+          </View>
+          <Pressable onPress={() => setRiskOpen((v) => !v)} testID="btn-toggle-risk" hitSlop={8}>
+            <Text style={styles.collapseHint}>{riskOpen ? 'Hide' : 'Show'}</Text>
           </Pressable>
         </View>
-        {faqOpen ? <FaqAccordion /> : null}
+        {riskOpen ? (
+          <>
+            {RISK_FIELD_META.map((meta) => {
+              if (meta.kind === 'tif') {
+                const cur = config.risk.time_in_force;
+                return (
+                  <View key={meta.key} style={styles.riskField} testID={`risk-field-${meta.key}`}>
+                    <Text style={styles.riskLabel}>{meta.label}</Text>
+                    <View style={styles.tifRow}>
+                      {TIME_IN_FORCE_OPTIONS.map((opt) => (
+                        <Pressable
+                          key={opt.value}
+                          testID={`tif-${opt.value}`}
+                          style={[styles.tifChip, cur === opt.value && styles.tifChipOn]}
+                          onPress={() => setRiskField('time_in_force', opt.value as TimeInForce)}
+                        >
+                          <Text style={[styles.tifText, cur === opt.value && styles.tifTextOn]}>
+                            {opt.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                );
+              }
+              if (meta.kind === 'toggle') {
+                const on = Boolean(config.risk[meta.key as keyof RiskConfig]);
+                return (
+                  <View
+                    key={meta.key}
+                    style={[styles.riskField, styles.riskFieldStack]}
+                    testID={`risk-field-${meta.key}`}
+                  >
+                    <View style={styles.riskToggleRow}>
+                      <Text style={[styles.riskLabel, { flex: 1 }]}>{meta.label}</Text>
+                      <Switch
+                        testID={`risk-toggle-${meta.key}`}
+                        value={on}
+                        onValueChange={(v) => setRiskField(meta.key as any, v as any)}
+                        trackColor={{ true: colors.accent, false: colors.mute }}
+                      />
+                    </View>
+                    <Text style={styles.riskHint}>
+                      {on
+                        ? 'On — sell anytime lean flips against you (after the wait-after-fill)'
+                        : 'Off — holds until the window settles (win or loss)'}
+                    </Text>
+                    <Text style={styles.riskHint} testID="risk-hint-protect-sell-auto-off">
+                      Still runs 24/7 on Cloud Run if Auto-trade is Off.
+                    </Text>
+                  </View>
+                );
+              }
+              const raw = config.risk[meta.key as keyof RiskConfig];
+              const display =
+                meta.kind === 'chase' || meta.kind === 'money'
+                  ? `$${Number(raw).toFixed(meta.kind === 'chase' ? 2 : 0)}`
+                  : meta.kind === 'ratio'
+                    ? `${Number(raw).toFixed(2)}×`
+                    : meta.kind === 'seconds'
+                      ? `${Number(raw)}s`
+                      : String(raw);
+              const disabledProtect =
+                (meta.key === 'protect_sell_gap_ratio' ||
+                  meta.key === 'protect_sell_grace_seconds') &&
+                !config.risk.protect_sell_enabled;
+              return (
+                <View
+                  key={meta.key}
+                  style={[styles.riskField, disabledProtect && { opacity: 0.45 }]}
+                  testID={`risk-field-${meta.key}`}
+                >
+                  <Text style={styles.riskLabel}>{meta.label}</Text>
+                  <View style={styles.pollControls}>
+                    <Pressable
+                      testID={`risk-down-${meta.key}`}
+                      style={styles.chip}
+                      disabled={disabledProtect}
+                      onPress={() => {
+                        const next = Number(raw) - meta.step;
+                        setRiskField(meta.key as any, next as any);
+                      }}
+                    >
+                      <Text style={styles.chipText}>−</Text>
+                    </Pressable>
+                    <Text style={styles.pollValue} testID={`risk-value-${meta.key}`}>
+                      {display}
+                    </Text>
+                    <Pressable
+                      testID={`risk-up-${meta.key}`}
+                      style={styles.chip}
+                      disabled={disabledProtect}
+                      onPress={() => {
+                        const next = Number(raw) + meta.step;
+                        setRiskField(meta.key as any, next as any);
+                      }}
+                    >
+                      <Text style={styles.chipText}>+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+            <ActionButton
+              testID="btn-restore-risk-defaults"
+              variant="slim"
+              label="Restore default values"
+              busyLabel="Restoring risk defaults…"
+              busy={busyKey === 'restore'}
+              disabled={anyBusy && busyKey !== 'restore'}
+              onPress={() => void restoreRisk()}
+            />
+            <Text style={styles.hint}>
+              Defaults: Protect money Off · gap 1.00× · wait 45s after fill. Stored on this phone for
+              restore.
+            </Text>
+          </>
+        ) : null}
+
+        {devUnlocked ? (
+          <View style={styles.controlCard} testID="dev-diagnostics-card">
+            <Text style={styles.sectionNoTop}>Developer Diagnostics</Text>
+            <Row
+              testID="toggle-poller"
+              label="Live Feed Polling"
+              value={status?.running ? 'Active' : 'Paused'}
+              busy={busyKey === 'poller'}
+              busyLabel={status?.running ? 'Pausing…' : 'Activating…'}
+              disabled={anyBusy}
+              onPress={() => void togglePoller()}
+            />
+            <ActionButton
+              testID="btn-tick-once"
+              variant="slim"
+              label="Tick once"
+              busyLabel="Ticking once…"
+              busy={false}
+              disabled={anyBusy}
+              onPress={() => void tickOnce()}
+            />
+          </View>
+        ) : null}
+
+        <Pressable
+          testID="btn-open-settings-more"
+          style={styles.moreRow}
+          onPress={() => onOpenAccountAndMore?.()}
+          accessibilityLabel="Account and more: subscription, ID, legal, FAQ"
+        >
+          <View style={styles.moreCopy}>
+            <Text style={styles.sectionInline}>Account & more</Text>
+            <Text style={styles.hint}>Subscription, ID, legal, FAQ</Text>
+          </View>
+          <Text style={styles.moreChevron}>›</Text>
+        </Pressable>
 
         <Text style={styles.section}>Support</Text>
         <SupportContactFooter />
@@ -1049,7 +928,6 @@ export function SettingsScreen() {
 
       <KalshiCredsHelpModal visible={credsHelpOpen} onClose={() => setCredsHelpOpen(false)} />
       <RiskHelpModal visible={riskHelpOpen} onClose={() => setRiskHelpOpen(false)} />
-      <PaywallManageModal visible={paywallOpen} onClose={() => setPaywallOpen(false)} />
       <AutoTradeRiskAcceptModal
         visible={autoTradeRiskOpen}
         onCancel={() => setAutoTradeRiskOpen(false)}
@@ -1104,6 +982,11 @@ function RiskHelpModal({
               When On, the app may place real Kalshi buy orders when cushions and Risk gates pass.
               Turning this On requires Face ID / biometrics. Auto-trading runs 24/7 securely on GCP Cloud Run.
               Independent from alerts — you can trade with alerts muted.
+            </HelpItem>
+            <HelpItem title="Notify on lean vs mute on the bell" testID="help-notify-vs-mute">
+              Settings → Notify on lean signals Off stops new lean rows and all lock-screen pings
+              (including fills). Money rows still collect in Alerts. To hear fills but not leans,
+              leave Notify On and mute Lean signals on the bell — that keeps the list, just no ping.
             </HelpItem>
             <HelpItem title="Keep alert history / Prune">
               How many days of alerts to keep. “Prune older alerts” deletes rows older than that
@@ -1249,7 +1132,7 @@ function RiskHelpModal({
               Tip: Start with Protect money Off, small $ per trade, and max open positions = 1. Turn
               Protect money On only after you understand early exits can lock in a small loss to
               avoid a full loss.{'\n\n'}
-              If something breaks, email support (from config.json): {supportContactEmail()}
+              If something breaks, email support: {supportContactEmail()}
             </Text>
           </ScrollView>
           <Pressable testID="btn-got-it-risk-help" style={styles.modalDone} onPress={onClose}>
@@ -1261,9 +1144,17 @@ function RiskHelpModal({
   );
 }
 
-function HelpItem({ title, children }: { title: string; children: React.ReactNode }) {
+function HelpItem({
+  title,
+  children,
+  testID,
+}: {
+  title: string;
+  children: React.ReactNode;
+  testID?: string;
+}) {
   return (
-    <View style={styles.helpItem}>
+    <View style={styles.helpItem} testID={testID}>
       <Text style={styles.helpItemTitle}>{title}</Text>
       <Text style={styles.helpItemText}>{children}</Text>
     </View>
@@ -1624,6 +1515,31 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   collapseHint: { color: colors.mute, fontSize: 12, fontWeight: '600' },
+  alertHistoryLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  moreRow: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: spacing.sm,
+  },
+  moreCopy: { flex: 1, gap: 3 },
+  moreChevron: {
+    color: colors.accent,
+    fontSize: 28,
+    fontWeight: '300',
+    lineHeight: 30,
+  },
   helpItem: { marginBottom: 12 },
   helpItemTitle: { color: colors.textPrimary, fontWeight: '700', fontSize: 13, marginBottom: 3 },
   helpItemText: { color: colors.textSecondary, fontSize: 12, lineHeight: 17 },

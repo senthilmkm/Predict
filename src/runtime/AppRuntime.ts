@@ -10,7 +10,8 @@ import { isMarketOpen } from '../services/marketHours';
 import { maybeNotify } from '../services/notifications';
 import { cloudClient } from '../services/cloud/cloudClient';
 import { MemoryAlertRepo, MemoryTradeRepo, TradeRecord, AlertRecord, cloudTradesToRecords, cloudAlertsToRecords } from '../storage/repos';
-import { hydrateRepos, persistRepos } from '../storage/historyPersistence';
+import { ALERTS_INBOX_CAUGHT_UP_KEY, hydrateRepos, persistRepos } from '../storage/historyPersistence';
+import { getKeyValueStore } from '../platform/storage';
 import { loadPortfolioSamples, persistPortfolioSamples } from '../storage/portfolioPersistence';
 import { settlePendingTrades, inferFillCount, computeTradePnlUsd } from '../services/settlement';
 import {
@@ -111,6 +112,7 @@ export class AppRuntime {
   private authBlockedUntilMs = 0;
   private balanceInFlight: Promise<void> | null = null;
   private lastBalanceFetchMs = 0;
+  private alertsInboxCaughtUp = false;
 
   constructor(opts: {
     getConfig: () => AppConfig;
@@ -358,6 +360,29 @@ export class AppRuntime {
     this.onChange?.();
   }
 
+  /**
+   * First successful Cloud alert GET: mark the dump read so a reinstall
+   * does not show 400 unread. Later inserts stay unread until the user looks.
+   */
+  async catchUpAlertsInboxAfterCloudSync(): Promise<void> {
+    if (this.alertsInboxCaughtUp) return;
+    const kv = getKeyValueStore();
+    try {
+      const prior = await kv.getItem(ALERTS_INBOX_CAUGHT_UP_KEY);
+      if (prior === '1') {
+        this.alertsInboxCaughtUp = true;
+        return;
+      }
+      this.alerts.markAllRead();
+      await kv.setItem(ALERTS_INBOX_CAUGHT_UP_KEY, '1');
+      this.alertsInboxCaughtUp = true;
+      await this.persistHistory();
+      this.onChange?.();
+    } catch {
+      /* next Cloud pull can retry */
+    }
+  }
+
   start(intervalMs = 20000): void {
     if (this.timer) {
       clearInterval(this.timer);
@@ -603,6 +628,7 @@ export class AppRuntime {
       ]);
       if (alertsRes.ok && Array.isArray(alertsRes.alerts)) {
         this.syncCloudAlerts(alertsRes.alerts);
+        await this.catchUpAlertsInboxAfterCloudSync();
       }
       if (statusRes.ok) {
         this.syncCloudTradeActions(statusRes.userDoc?.lastTradeAction);

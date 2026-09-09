@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { fireEvent, render, waitFor, cleanup } from './test-utils';
+import { within } from '@testing-library/react-native';
 import { cancelScheduledPersist } from '../../src/storage/configPersistence';
 import {
   MemoryKeyValueStore,
@@ -10,9 +12,34 @@ import { useConfigStore } from '../../src/state/configStore';
 import { resetRuntimeStoreForTests } from '../../src/state/runtimeStore';
 import { defaultAppConfig } from '../../src/config/types';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
+import { SettingsMoreScreen } from '../../src/screens/SettingsMoreScreen';
 import { generateKeyPairSync } from 'crypto';
-import { saveCredentials } from '../../src/services/credentials';
+import { saveCredentials, hasCredentials, clearCredentials } from '../../src/services/credentials';
 import { KalshiClient } from '../../src/services/kalshi/client';
+
+function SettingsHost() {
+  const [more, setMore] = useState(false);
+  return (
+    <View testID="settings-host">
+      <View
+        testID="settings-home-slot"
+        // Keep Settings mounted while More is open (mirrors root stack).
+        style={more ? { height: 0, overflow: 'hidden' } : undefined}
+        pointerEvents={more ? 'none' : 'auto'}
+      >
+        <SettingsScreen onOpenAccountAndMore={() => setMore(true)} />
+      </View>
+      {more ? (
+        <View>
+          <Pressable testID="btn-settings-more-back" onPress={() => setMore(false)}>
+            <Text>Back</Text>
+          </Pressable>
+          <SettingsMoreScreen />
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 function reset() {
   cleanup();
@@ -21,6 +48,7 @@ function reset() {
   setSecureStore(new MemoryKeyValueStore());
   resetRuntimeStoreForTests();
   useConfigStore.setState({ config: defaultAppConfig(), hydrated: true });
+  return clearCredentials();
 }
 
 describe('Settings toggles', () => {
@@ -87,16 +115,33 @@ describe('Settings toggles', () => {
     expect(useConfigStore.getState().config.risk.time_in_force).toBe('immediate_or_cancel');
   });
 
-  test('stored-alert count is not duplicated; account identity sits below Legal', async () => {
-    const s = await render(<SettingsScreen />);
+  test('daily Settings parks subscription legal identity FAQ one tap away', async () => {
+    const s = await render(<SettingsHost />);
     expect(s.queryByText('Stored alerts')).toBeNull();
     expect(s.queryByTestId('alert-stored-count')).toBeNull();
     expect(s.getByTestId('alert-retention-row')).toBeTruthy();
     expect(s.getByTestId('btn-prune-alerts')).toBeTruthy();
+    expect(s.getByTestId('btn-open-settings-more')).toBeTruthy();
+    expect(s.queryByTestId('subscription-manage-card')).toBeNull();
+    expect(s.queryByTestId('account-cloud-identity-card')).toBeNull();
+    expect(s.queryByTestId('settings-disclaimer')).toBeNull();
+    expect(s.queryByTestId('section-faq')).toBeNull();
+    expect(s.queryByTestId('faq-accordion')).toBeNull();
+    expect(s.getByTestId('support-contact')).toBeTruthy();
+    expect(String(s.getByTestId('alerts-notify-hint').props.children)).toMatch(
+      /mute Lean signals on the bell/i
+    );
+
+    await fireEvent.press(s.getByTestId('btn-open-settings-more'));
+    await waitFor(() => expect(s.getByTestId('screen-settings-more')).toBeTruthy());
+    expect(s.getByTestId('subscription-manage-card')).toBeTruthy();
     expect(s.getByTestId('account-cloud-identity-card')).toBeTruthy();
     expect(s.getByTestId('settings-disclaimer')).toBeTruthy();
     expect(s.getByTestId('section-faq')).toBeTruthy();
-    expect(s.queryByTestId('faq-accordion')).toBeNull();
+    expect(s.getByTestId('faq-accordion')).toBeTruthy();
+    expect(
+      within(s.getByTestId('screen-settings-more')).queryByTestId('support-contact')
+    ).toBeNull();
 
     const texts: string[] = [];
     const walk = (n: { children?: Array<string | { children?: unknown[] }> }) => {
@@ -105,22 +150,24 @@ describe('Settings toggles', () => {
         else if (child && typeof child === 'object') walk(child as any);
       }
     };
-    walk(s.getByTestId('screen-settings'));
-    const legalAt = texts.indexOf('Legal');
+    walk(s.getByTestId('screen-settings-more'));
+    const subAt = texts.indexOf('Subscription');
     const accountAt = texts.indexOf('Account & Cloud Identity');
+    const legalAt = texts.indexOf('Legal');
     const faqAt = texts.indexOf('FAQ');
-    const supportAt = texts.indexOf('Support');
-    expect(legalAt).toBeGreaterThan(-1);
-    expect(accountAt).toBeGreaterThan(legalAt);
-    expect(faqAt).toBeGreaterThan(accountAt);
-    expect(supportAt).toBeGreaterThan(faqAt);
+    expect(subAt).toBeGreaterThan(-1);
+    expect(accountAt).toBeGreaterThan(subAt);
+    expect(legalAt).toBeGreaterThan(accountAt);
+    expect(faqAt).toBeGreaterThan(legalAt);
   });
 
   test('FAQ accordion expands a disclaimer answer', async () => {
-    const s = await render(<SettingsScreen />);
-    await fireEvent.press(s.getByTestId('btn-toggle-faq'));
+    const s = await render(<SettingsHost />);
+    await fireEvent.press(s.getByTestId('btn-open-settings-more'));
     await waitFor(() => expect(s.getByTestId('faq-accordion')).toBeTruthy());
+    expect(s.queryByTestId('btn-toggle-faq')).toBeNull();
     expect(s.getByTestId('faq-category-disclaimer')).toBeTruthy();
+    expect(s.getByTestId('faq-q-mute-vs-lean-toggle')).toBeTruthy();
     expect(s.getByTestId('faq-q-does-it-guarantee')).toBeTruthy();
     expect(s.queryByTestId('faq-a-does-it-guarantee')).toBeNull();
     await fireEvent.press(s.getByTestId('faq-q-does-it-guarantee'));
@@ -131,8 +178,8 @@ describe('Settings toggles', () => {
   });
 
   test('FAQ what-markets lists live 15m books and no forex', async () => {
-    const s = await render(<SettingsScreen />);
-    await fireEvent.press(s.getByTestId('btn-toggle-faq'));
+    const s = await render(<SettingsHost />);
+    await fireEvent.press(s.getByTestId('btn-open-settings-more'));
     await waitFor(() => expect(s.getByTestId('faq-accordion')).toBeTruthy());
     await fireEvent.press(s.getByTestId('faq-q-what-markets'));
     const a = String(s.getByTestId('faq-a-what-markets').props.children);
@@ -198,6 +245,8 @@ describe('Settings credentials', () => {
     expect(s.getByText('Protect money (early sell)')).toBeTruthy();
     expect(s.getByText('Max trades / asset / 15m window')).toBeTruthy();
     expect(s.queryByText('Max trades / asset / day')).toBeNull();
+    expect(s.getByTestId('help-notify-vs-mute')).toBeTruthy();
+    expect(s.queryByText(/from config\.json/i)).toBeNull();
     await fireEvent.press(s.getByTestId('btn-got-it-risk-help'));
     await waitFor(() => expect(s.queryByTestId('modal-risk-help')).toBeNull());
   });
@@ -281,5 +330,57 @@ describe('Settings credentials', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  test('Wipe cancel leaves credentials in place', async () => {
+    const Alert = require('react-native').Alert;
+    const spy = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+      const cancel = (buttons || []).find((b: { text: string }) => b.text === 'Cancel');
+      cancel?.onPress?.();
+    });
+    try {
+      await saveCredentials({
+        keyId: 'k',
+        privateKeyPem: generateKeyPairSync('rsa', {
+          modulusLength: 2048,
+          privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+          publicKeyEncoding: { type: 'spki', format: 'pem' },
+        }).privateKey,
+        env: 'production',
+      });
+      const s = await render(<SettingsScreen />);
+      await fireEvent.press(s.getByTestId('btn-wipe-creds'));
+      expect(await hasCredentials()).toBe(true);
+      expect(s.getByTestId('creds-status').props.children).toMatch(/Saved/i);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('test connection with no keys shows fail line', async () => {
+    const Alert = require('react-native').Alert;
+    const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      const s = await render(<SettingsScreen />);
+      await fireEvent.press(s.getByTestId('btn-test-connection'));
+      await waitFor(() =>
+        expect(String(s.getByTestId('connection-test-result').props.children)).toMatch(
+          /No credentials/i
+        )
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('Account & more Back keeps expanded Risk', async () => {
+    const s = await render(<SettingsHost />);
+    await fireEvent.press(s.getByTestId('btn-toggle-risk'));
+    await waitFor(() => expect(s.getByTestId('risk-field-protect_sell_enabled')).toBeTruthy());
+    await fireEvent.press(s.getByTestId('btn-open-settings-more'));
+    await waitFor(() => expect(s.getByTestId('screen-settings-more')).toBeTruthy());
+    await fireEvent.press(s.getByTestId('btn-settings-more-back'));
+    await waitFor(() => expect(s.queryByTestId('screen-settings-more')).toBeNull());
+    expect(s.getByTestId('risk-field-protect_sell_enabled')).toBeTruthy();
   });
 });

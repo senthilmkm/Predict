@@ -10,6 +10,7 @@ import { CushionsScreen } from '../screens/CushionsScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { SettingsMoreScreen } from '../screens/SettingsMoreScreen';
 import { AlertsHubScreen } from '../screens/AlertsHubScreen';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { exportAndShareHistory } from '../services/exportHistory';
@@ -122,7 +123,13 @@ function MainTabs({ navigation }: any) {
       <Tab.Screen name="Cushions" component={CushionsScreen} />
       <Tab.Screen name="History" component={HistoryScreen} />
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
+      <Tab.Screen name="Settings" options={{ title: 'Settings' }}>
+        {() => (
+          <SettingsScreen
+            onOpenAccountAndMore={() => navigation.navigate('SettingsMore')}
+          />
+        )}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
@@ -141,6 +148,16 @@ export function RootNavigator() {
           options={{
             title: 'Alerts',
             presentation: 'modal',
+            headerStyle: { backgroundColor: colors.surface },
+            headerTintColor: colors.textPrimary,
+          }}
+        />
+        <Stack.Screen
+          name="SettingsMore"
+          component={SettingsMoreScreen}
+          options={{
+            title: 'Account & more',
+            headerBackTitle: 'Settings',
             headerStyle: { backgroundColor: colors.surface },
             headerTintColor: colors.textPrimary,
           }}
