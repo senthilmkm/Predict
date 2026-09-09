@@ -344,6 +344,13 @@ export function HomeScreen() {
                   >
                     {row.trade.detail}
                   </Text>
+                ) : row.decision === 'SKIP' && row.isOpen && !row.noMarket && !row.err ? (
+                  <Text
+                    style={[styles.tradeAction, { color: colors.warn }]}
+                    testID={`skip-reason-${row.asset}`}
+                  >
+                    below cushion
+                  </Text>
                 ) : null}
               </View>
               <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>

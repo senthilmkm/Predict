@@ -446,8 +446,10 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'no-order',
           q: 'Home says “no order” — is that a bug?',
           a:
-            'Usually not. It means a risk gate skipped the buy (too early, too little time, max open, window cap, daily cap, loss stop, ask too high, size too small, asset off, or market closed).\n\n' +
-            'Read the short reason on Home. Open Settings → Risk → i for what each limit means.',
+            'Two different lines on Home → Last signals:\n\n' +
+            '• SKIP (amber) — live price is not far enough past the strike. The line under it says “below cushion.” That is not a skipped order.\n\n' +
+            '• YES or NO with a second amber line — Cloud tried a buy and a Risk gate stopped it (ask too rich, too early, too little time left, size too small, and so on).\n\n' +
+            'Open Settings → Risk → i for what each limit means.',
         },
         {
           id: 'connection-fail',

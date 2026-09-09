@@ -132,6 +132,22 @@ describe('Settings toggles', () => {
       /mute Lean signals on the bell/i
     );
 
+    const homeTexts: string[] = [];
+    const walkHome = (n: { children?: Array<string | { children?: unknown[] }> }) => {
+      for (const child of n.children ?? []) {
+        if (typeof child === 'string') homeTexts.push(child);
+        else if (child && typeof child === 'object') walkHome(child as any);
+      }
+    };
+    walkHome(s.getByTestId('screen-settings'));
+    const kalshiAt = homeTexts.indexOf('Kalshi credentials');
+    const riskAt = homeTexts.indexOf('Risk');
+    const alertsAt = homeTexts.indexOf('Alerts');
+    expect(kalshiAt).toBeGreaterThan(-1);
+    expect(riskAt).toBeGreaterThan(-1);
+    expect(alertsAt).toBeGreaterThan(riskAt);
+    expect(kalshiAt).toBeGreaterThan(alertsAt);
+
     await fireEvent.press(s.getByTestId('btn-open-settings-more'));
     await waitFor(() => expect(s.getByTestId('screen-settings-more')).toBeTruthy());
     expect(s.getByTestId('subscription-manage-card')).toBeTruthy();

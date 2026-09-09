@@ -40,6 +40,7 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/kill switch/i);
     expect(blob).toMatch(/settlements continue after Auto-trade Off/i);
     expect(blob).toMatch(/lean below your cushion is not stored/i);
+    expect(blob).toMatch(/below cushion/i);
     expect(blob).toMatch(/Mute vs Notify on lean signals/i);
     expect(blob).toMatch(/silent log/i);
     expect(blob).toMatch(/400 most recent Cloud alerts/);

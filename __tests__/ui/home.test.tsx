@@ -120,4 +120,75 @@ describe('HomeScreen', () => {
       spy.mockRestore();
     }
   });
+
+  test('SKIP lean on an open market shows below cushion', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        assets_enabled: { BTC: true } as any,
+      },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'SKIP',
+          live: 100,
+          strike: 99,
+          abs_gap: 1,
+          minutes_left: 8,
+          phase: 'live',
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('signal-decision-BTC').props.children).toBe('SKIP');
+    expect(s.getByTestId('skip-reason-BTC').props.children).toBe('below cushion');
+  });
+
+  test('YES with Cloud skip shows ask too rich, not below cushion', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        auto_trade_enabled: true,
+        execution_mode: 'live',
+        live_armed: true,
+        assets_enabled: { BTC: true } as any,
+      },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'YES',
+          live: 200,
+          strike: 100,
+          abs_gap: 100,
+          minutes_left: 8,
+          phase: 'live',
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+      tradeActions: {
+        BTC: {
+          status: 'skipped',
+          detail: 'skipped · ask too rich',
+          at: new Date().toISOString(),
+        },
+      },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('signal-decision-BTC').props.children).toBe('YES');
+    expect(s.getByTestId('trade-action-BTC').props.children).toBe('skipped · ask too rich');
+    expect(s.queryByTestId('skip-reason-BTC')).toBeNull();
+  });
 });
