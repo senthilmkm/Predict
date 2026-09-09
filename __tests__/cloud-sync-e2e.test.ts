@@ -308,6 +308,47 @@ describe('iOS ↔ Cloud trade wiring', () => {
     expect(rt.alerts.list().filter((a) => a.kind === 'order_filled')).toHaveLength(1);
   });
 
+  test('two fills in the same window stay two alerts even if title and price match', () => {
+    const rt = new AppRuntime({ getConfig: () => defaultAppConfig() });
+    const at = new Date().toISOString();
+    rt.syncCloudAlerts([
+      {
+        alertId: 'fill:trade_a',
+        kind: 'order_filled',
+        title: 'Order Placed · Silver NO',
+        body: '5 ctr @ $0.04 · Cost $4.80',
+        at,
+        source: 'gcp',
+      },
+      {
+        alertId: 'fill:trade_b',
+        kind: 'order_filled',
+        title: 'Order Placed · Silver NO',
+        body: '5 ctr @ $0.04 · Cost $4.80',
+        at,
+        source: 'gcp',
+      },
+      {
+        alertId: 'settle:trade_a',
+        kind: 'trade_result',
+        title: 'Trade won',
+        body: 'Silver NO · P&L $0.20 · KXSILVER15M-X',
+        at,
+        source: 'gcp',
+      },
+      {
+        alertId: 'settle:trade_b',
+        kind: 'trade_result',
+        title: 'Trade won',
+        body: 'Silver NO · P&L $0.20 · KXSILVER15M-X',
+        at,
+        source: 'gcp',
+      },
+    ] as any);
+    expect(rt.alerts.list().filter((a) => a.kind === 'order_filled')).toHaveLength(2);
+    expect(rt.alerts.list().filter((a) => a.kind === 'trade_result')).toHaveLength(2);
+  });
+
   test('deleteAlertsByIds is not restored by a later Cloud sync or hydrate', async () => {
     const payload = [
       {
@@ -331,6 +372,20 @@ describe('iOS ↔ Cloud trade wiring', () => {
     await rt2.hydrateHistory();
     rt2.syncCloudAlerts(payload);
     expect(rt2.alerts.list().some((a) => a.id === 'fill:t1')).toBe(false);
+  });
+
+  test('syncCloudTradeActions shows Cloud skip reasons and a later empty map clears them', () => {
+    const rt = new AppRuntime({ getConfig: () => defaultAppConfig() });
+    rt.syncCloudTradeActions({
+      BNB: { status: 'skipped', detail: 'skipped · ask too rich', at: '2026-09-08T21:40:00.000Z' },
+    });
+    expect(rt.status.lastTradeAction.BNB).toEqual({
+      status: 'skipped',
+      detail: 'skipped · ask too rich',
+      at: '2026-09-08T21:40:00.000Z',
+    });
+    rt.syncCloudTradeActions({});
+    expect(rt.status.lastTradeAction.BNB).toBeUndefined();
   });
 
   test('pruneAlertsNow asks Cloud to hide the same retention window', () => {

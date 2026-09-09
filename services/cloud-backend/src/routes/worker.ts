@@ -9,8 +9,10 @@ import {
 import {
   countWindowBuysForTicker,
   evaluateStaticGate,
+  formatSkipReason,
   windowBuyCap,
 } from '../../../../packages/trading-core/src/gates';
+import { LastTradeAction } from '../../../../packages/trading-core/src/types';
 import { getUserSecret } from '../services/secretManager';
 import {
   getEnrolledActiveUsers,
@@ -65,6 +67,25 @@ function loadLeanAlertsSent(userId: string, fromDoc: any): LeanAlertsSent {
   const docSent = pruneLeanAlertsSent(fromDoc?.leanAlertsSent);
   const memSent = pruneLeanAlertsSent(leanAlertMemory.get(userId));
   return { ...docSent, ...memSent };
+}
+
+function copyLastTradeActions(fromDoc: any): Partial<Record<string, LastTradeAction>> {
+  const raw = fromDoc?.lastTradeAction;
+  if (!raw || typeof raw !== 'object') return {};
+  const next: Partial<Record<string, LastTradeAction>> = {};
+  for (const [asset, action] of Object.entries(raw)) {
+    if (!action || typeof action !== 'object') continue;
+    const row = action as LastTradeAction;
+    if (row.status !== 'placed' && row.status !== 'skipped' && row.status !== 'failed') continue;
+    const detail = String(row.detail || '').trim();
+    if (!detail) continue;
+    next[asset] = { status: row.status, detail, at: String(row.at || '') };
+  }
+  return next;
+}
+
+function skippedTradeAction(reason: string | undefined, at: string): LastTradeAction {
+  return { status: 'skipped', detail: `skipped · ${formatSkipReason(reason)}`, at };
 }
 
 // Helper to chunk array for parallel batch execution
@@ -196,6 +217,7 @@ async function runOneTick() {
           let leanAlertsSent = loadLeanAlertsSent(userId, user);
           let leanAlertsDirty = false;
           let cachedSecret: Awaited<ReturnType<typeof getUserSecret>> | undefined;
+          const lastTradeAction = copyLastTradeActions(user);
 
           for (const asset of assets) {
             if (!cfg.assets_enabled?.[asset]) continue;
@@ -306,11 +328,17 @@ async function runOneTick() {
               }
             }
 
-            if (absGap < userCushion) continue;
+            if (absGap < userCushion) {
+              delete lastTradeAction[asset];
+              continue;
+            }
             const windowCap = windowBuyCap(cfg.risk);
             const buysOnTicker =
               countWindowBuysForTicker(userTrades, marketTicker) + (windowClaims.get(marketTicker) || 0);
-            if (buysOnTicker >= windowCap) continue;
+            if (buysOnTicker >= windowCap) {
+              lastTradeAction[asset] = skippedTradeAction('max_trades_asset_window', tickIso);
+              continue;
+            }
 
             const gate = evaluateStaticGate(
               {
@@ -335,10 +363,21 @@ async function runOneTick() {
               }
             );
 
-            if (!cfg.auto_trade_enabled || user.state !== 'ARMED' || !gate.ok || !gate.price || !gate.count) continue;
+            if (!cfg.auto_trade_enabled || user.state !== 'ARMED') {
+              delete lastTradeAction[asset];
+              continue;
+            }
+            if (!gate.ok || !gate.price || !gate.count) {
+              lastTradeAction[asset] = skippedTradeAction(
+                gate.skip_reason || 'notional_too_small',
+                tickIso
+              );
+              continue;
+            }
 
             const secret = await getUserSecret(userId);
             if (!secret || !secret.privateKeyPem || !secret.keyId) {
+              lastTradeAction[asset] = skippedTradeAction('no_client', tickIso);
               await upsertUserDoc(userId, { lastError: 'missing_secret_key' });
               continue;
             }
@@ -405,6 +444,13 @@ async function runOneTick() {
               });
 
               const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
+              lastTradeAction[asset] = filled
+                ? {
+                    status: 'placed',
+                    detail: `placed ${lean.decision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
+                    at: tickIso,
+                  }
+                : { status: 'failed', detail: 'IOC no fill', at: tickIso };
               if (filled) {
                 const fillTitle = isLive
                   ? `Order Placed · ${asset} ${lean.decision}`
@@ -443,6 +489,11 @@ async function runOneTick() {
               }
             } else {
               windowClaims.set(marketTicker, Math.max(0, (windowClaims.get(marketTicker) || 1) - 1));
+              lastTradeAction[asset] = {
+                status: 'failed',
+                detail: String(placeRes.error || 'order failed'),
+                at: tickIso,
+              };
             }
           }
 
@@ -452,6 +503,7 @@ async function runOneTick() {
           await upsertUserDoc(userId, {
             lastTickAt: now.toISOString(),
             lastError: null,
+            lastTradeAction,
             ...(leanAlertsDirty ? { leanAlertsSent } : {}),
           } as any);
 

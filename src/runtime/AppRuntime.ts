@@ -1,7 +1,8 @@
 import { AppConfig, AssetKey } from '../config/types';
 import { snapshotConfig } from '../config/normalize';
 import { TradingEngine } from '../engine/TradingEngine';
-import { isCountableWindowBuy } from '../../packages/trading-core/src/gates';
+import { formatSkipReason, isCountableWindowBuy } from '../../packages/trading-core/src/gates';
+import { LastTradeAction as CloudLastTradeAction } from '../../packages/trading-core/src/types';
 import { KalshiClient } from '../services/kalshi/client';
 import { loadCredentials } from '../services/credentials';
 import { computeLean, LeanResult } from '../services/lean/lean';
@@ -68,42 +69,7 @@ export interface RuntimeStatus {
   change24hWindowMs: number | null;
 }
 
-export function formatSkipReason(reason: string | undefined): string {
-  switch (reason) {
-    case 'auto_trade_off':
-      return 'auto-trade off';
-    case 'asset_disabled':
-      return 'asset off';
-    case 'window_ended':
-      return 'window ended';
-    case 'skip_decision':
-      return 'SKIP signal';
-    case 'minutes_left':
-      return 'too little time left';
-    case 'minutes_elapsed':
-      return 'too early in window';
-    case 'below_cushion':
-      return 'below cushion';
-    case 'max_open':
-      return 'max open positions';
-    case 'daily_loss_stop':
-      return 'daily loss stop';
-    case 'max_trades_day':
-      return 'max trades/day';
-    case 'max_trades_asset_window':
-      return 'max trades/asset/15m window';
-    case 'ask_too_rich':
-      return 'ask too rich';
-    case 'notional_too_small':
-      return 'size too small';
-    case 'window_locked':
-      return 'already traded this window';
-    case 'no_client':
-      return 'no Kalshi credentials';
-    default:
-      return reason || 'gate';
-  }
-}
+export { formatSkipReason };
 
 /**
  * Foreground lean/settlement/alert loop. This phone never places orders —
@@ -281,6 +247,34 @@ export class AppRuntime {
     const dropped = this.alerts.dropInvalidLeans();
     if (inserted === 0 && dropped === 0) return;
     void this.persistHistory();
+    this.onChange?.();
+  }
+
+  /** Cloud Run owns skip/place reasons. Phone Last signals only displays them. */
+  syncCloudTradeActions(actions: Partial<Record<string, CloudLastTradeAction>> | undefined): void {
+    if (this.status.killSwitch) return;
+    if (actions == null || typeof actions !== 'object') return;
+    const next: Partial<Record<AssetKey, LastTradeAction>> = {};
+    for (const [asset, action] of Object.entries(actions)) {
+      if (!action || typeof action !== 'object') continue;
+      const status = action.status;
+      if (status !== 'placed' && status !== 'skipped' && status !== 'failed') continue;
+      const detail = String(action.detail || '').trim();
+      if (!detail) continue;
+      next[asset] = { status, detail, at: String(action.at || '') };
+    }
+    const prev = this.status.lastTradeAction;
+    const prevKeys = Object.keys(prev);
+    const nextKeys = Object.keys(next);
+    const same =
+      prevKeys.length === nextKeys.length &&
+      nextKeys.every((asset) => {
+        const a = prev[asset];
+        const b = next[asset];
+        return !!a && !!b && a.status === b.status && a.detail === b.detail && a.at === b.at;
+      });
+    if (same) return;
+    this.status.lastTradeAction = next;
     this.onChange?.();
   }
 
@@ -514,13 +508,6 @@ export class AppRuntime {
           }
           const msg = `price/lean failed · ${raw}`;
           this.noteAssetError(asset, msg, tickErrors);
-          if (cfg.auto_trade_enabled) {
-            this.status.lastTradeAction[asset] = {
-              status: 'idle',
-              detail: 'no order · lean failed this tick',
-              at: tickAt,
-            };
-          }
           this.pulseHeartbeat();
           continue;
         }
@@ -546,45 +533,24 @@ export class AppRuntime {
             this.status.assetErrors[asset] = msg;
             tickErrors.push(`${asset}: ${msg}`);
           }
-          if (cfg.auto_trade_enabled) {
-            this.status.lastTradeAction[asset] = {
-              status: 'idle',
-              detail: `no order · ${lean.message || 'lean unavailable'}`,
-              at: tickAt,
-            };
-          }
           continue;
         }
         if (!lean.market_ticker) {
           if (open) {
             this.noteAssetError(asset, 'no market ticker', tickErrors);
           }
-          if (cfg.auto_trade_enabled) {
-            this.status.lastTradeAction[asset] = {
-              status: 'idle',
-              detail: 'no order · no market ticker',
-              at: tickAt,
-            };
-          }
           continue;
         }
         if (lean.live == null || !Number.isFinite(lean.live)) {
           this.noteAssetError(asset, 'live price missing', tickErrors);
-          if (cfg.auto_trade_enabled) {
-            this.status.lastTradeAction[asset] = {
-              status: 'idle',
-              detail: 'no order · live price missing',
-              at: tickAt,
-            };
-          }
           continue;
         }
 
         // Clear prior asset error on success path for this asset
         delete this.status.assetErrors[asset];
 
-        // Buys, sells, and trading History are owned by Cloud Run.
-        // Home still shows lastLeans; lean_signal rows arrive via syncCloudAlerts.
+        // Buys, sells, skip reasons, and trading History are owned by Cloud Run.
+        // Home shows lastLeans locally; lastTradeAction arrives via syncCloudTradeActions.
 
         if (this.status.killSwitch) {
           this.status.lastTradeAction[asset] = {
@@ -592,11 +558,6 @@ export class AppRuntime {
             detail: 'skipped · kill switch',
             at: tickAt,
           };
-          continue;
-        }
-
-        if (cfg.auto_trade_enabled) {
-          delete this.status.lastTradeAction[asset];
         }
       }
 
@@ -633,12 +594,18 @@ export class AppRuntime {
     }
   }
 
-  /** Pull Cloud History after a Home tick so leans appear without opening History. */
+  /** Pull Cloud History + skip reasons after a Home tick. */
   private async pullCloudAlerts(): Promise<void> {
     try {
-      const res = await cloudClient.getAlerts();
-      if (res.ok && Array.isArray(res.alerts)) {
-        this.syncCloudAlerts(res.alerts);
+      const [alertsRes, statusRes] = await Promise.all([
+        cloudClient.getAlerts(),
+        cloudClient.getStatus(),
+      ]);
+      if (alertsRes.ok && Array.isArray(alertsRes.alerts)) {
+        this.syncCloudAlerts(alertsRes.alerts);
+      }
+      if (statusRes.ok) {
+        this.syncCloudTradeActions(statusRes.userDoc?.lastTradeAction);
       }
     } catch {
       /* keep local History */

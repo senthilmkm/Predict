@@ -177,6 +177,19 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
     setNotifyImpl(async (p) => {
       notified.push(p.kind);
     });
+    const statusSpy = jest.spyOn(cloudClient, 'getStatus').mockResolvedValue({
+      ok: true,
+      userDoc: {
+        lastTradeAction: {
+          Gold: {
+            status: 'skipped',
+            detail: 'skipped · ask too rich',
+            at: '2026-09-08T21:40:00.000Z',
+          },
+        },
+      } as any,
+    });
+    const alertsSpy = jest.spyOn(cloudClient, 'getAlerts').mockResolvedValue({ ok: true, alerts: [] });
 
     const placeSpy = jest.spyOn(TradingEngine.prototype, 'tryPlaceFromLean');
     const exitSpy = jest.spyOn(TradingEngine.prototype, 'tryProtectExit');
@@ -191,7 +204,7 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
       await rt.tick();
 
       expect(rt.status.lastLeans.Gold?.decision).toBe('YES');
-      expect(rt.status.lastTradeAction.Gold).toBeUndefined();
+      expect(rt.status.lastTradeAction.Gold?.detail).toBe('skipped · ask too rich');
       expect(rt.alerts.list().filter((a) => a.kind === 'lean_signal')).toHaveLength(0);
       expect(rt.alerts.list().some((a) => a.kind === 'order_filled')).toBe(false);
       expect(rt.alerts.list().some((a) => a.kind === 'ioc_miss')).toBe(false);
@@ -205,6 +218,8 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
       global.Date = RealDate;
       placeSpy.mockRestore();
       exitSpy.mockRestore();
+      statusSpy.mockRestore();
+      alertsSpy.mockRestore();
     }
   });
 

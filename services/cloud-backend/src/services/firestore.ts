@@ -159,7 +159,12 @@ export async function upsertUserDoc(
   const f = getDb();
   if (f) {
     try {
-      await f.collection('users').doc(userId).set(updated, { merge: true });
+      const ref = f.collection('users').doc(userId);
+      await ref.set(updated, { merge: true });
+      // set({merge}) deep-merges maps; skip reasons must be replaced as a whole field.
+      if (Object.prototype.hasOwnProperty.call(data, 'lastTradeAction')) {
+        await ref.update({ lastTradeAction: (data as any).lastTradeAction || {} });
+      }
     } catch {
       /* fallback to local store */
     }

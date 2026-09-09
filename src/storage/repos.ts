@@ -345,8 +345,22 @@ function isFuzzyAlertDup(existing: AlertRecord, row: AlertRecord): boolean {
   return Boolean(as1 && as2 && as1 === as2);
 }
 
-/** GCP ↔ GCP: same kind + exact title/body only (never collapse two fills by title). */
+const MONEY_ALERT_KINDS = new Set([
+  'order_placed',
+  'order_filled',
+  'ioc_miss',
+  'trade_result',
+  'protect_sell',
+  'daily_loss_stop',
+]);
+
+function isMoneyAlertKind(kind?: string): boolean {
+  return MONEY_ALERT_KINDS.has(String(kind || ''));
+}
+
+/** GCP ↔ GCP: same kind + exact title/body only. Never collapse two fills/wins by copy. */
 function isExactGcpAlertDup(existing: AlertRecord, row: AlertRecord): boolean {
+  if (isMoneyAlertKind(row.kind) || isMoneyAlertKind(existing.kind)) return false;
   if ((existing.source || 'local') !== 'gcp') return false;
   if (existing.kind && row.kind && existing.kind !== row.kind) return false;
   if (!alertsWithin2m(existing, row)) return false;
@@ -403,6 +417,7 @@ export class MemoryAlertRepo {
     const incomingGcp = (row.source || '') === 'gcp';
     const isDup = this.alerts.some((existing) => {
       if (incomingId && existing.id === incomingId) return true;
+      if (isMoneyAlertKind(row.kind) || isMoneyAlertKind(existing.kind)) return false;
       if (incomingGcp) {
         if ((existing.source || 'local') === 'gcp') return isExactGcpAlertDup(existing, row);
         return isFuzzyAlertDup(existing, row);

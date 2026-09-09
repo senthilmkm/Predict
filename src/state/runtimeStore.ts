@@ -224,6 +224,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         const rt = get().ensure();
         if (cloudTrades.length > 0) rt.syncCloudTrades(cloudTrades);
         if (alertsRes.ok) rt.syncCloudAlerts(cloudAlerts);
+        if (statusRes.ok) rt.syncCloudTradeActions(statusRes.userDoc?.lastTradeAction);
         if (gen !== cloudSnapshotGen) return;
         get().syncFromRuntime();
       } catch {

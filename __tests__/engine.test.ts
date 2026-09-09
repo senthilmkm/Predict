@@ -1,5 +1,6 @@
 import { AsyncMutex, WindowLockRegistry } from '../src/engine/concurrency';
 import { evaluateStaticGate, LeanSignal } from '../src/engine/gates';
+import { formatSkipReason } from '../packages/trading-core/src/gates';
 import { TradingEngine } from '../src/engine/TradingEngine';
 import { defaultAppConfig } from '../src/config/types';
 import { KalshiClient } from '../src/services/kalshi/client';
@@ -170,6 +171,14 @@ describe('evaluateStaticGate edge cases', () => {
     expect(
       evaluateStaticGate(lean({ abs_gap: 10, yes_ask: 0.8 }), cfg).skip_reason
     ).toBe('ask_too_rich');
+  });
+
+  test('formatSkipReason matches Last signals labels', () => {
+    expect(formatSkipReason('ask_too_rich')).toBe('ask too rich');
+    expect(formatSkipReason('minutes_elapsed')).toBe('too early in window');
+    expect(formatSkipReason('minutes_left')).toBe('too little time left');
+    expect(formatSkipReason('max_trades_asset_window')).toBe('max trades/asset/15m window');
+    expect(formatSkipReason('no_client')).toBe('no Kalshi credentials');
   });
 });
 

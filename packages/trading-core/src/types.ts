@@ -226,6 +226,15 @@ export function defaultAppConfig(): AppConfig {
   };
 }
 
+export type TradeActionStatus = 'placed' | 'skipped' | 'failed' | 'idle';
+
+export interface LastTradeAction {
+  status: TradeActionStatus;
+  /** Short human label, e.g. "placed YES · 2 @ $0.62" or "skipped · ask too rich" */
+  detail: string;
+  at: string;
+}
+
 export interface UserStatusDoc {
   userId: string;
   cloudTradingEnabled: boolean;
@@ -238,6 +247,8 @@ export interface UserStatusDoc {
   onboardingRecord?: Record<string, any>;
   lastTickAt?: string;
   lastError?: string | null;
+  /** Per-asset last Cloud buy attempt. Phone Last signals reads this. */
+  lastTradeAction?: Partial<Record<AssetKey, LastTradeAction>>;
   pushTokens?: string[];
   fcmTokens?: string[];
   updatedAt: string;

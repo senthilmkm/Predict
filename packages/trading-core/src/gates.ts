@@ -33,6 +33,44 @@ function money2(n: number): string {
   return (Math.round(n * 10000) / 10000).toFixed(4);
 }
 
+/** Home Last-signals amber/green label for a Cloud gate skip. */
+export function formatSkipReason(reason: string | undefined): string {
+  switch (reason) {
+    case 'auto_trade_off':
+      return 'auto-trade off';
+    case 'asset_disabled':
+      return 'asset off';
+    case 'window_ended':
+      return 'window ended';
+    case 'skip_decision':
+      return 'SKIP signal';
+    case 'minutes_left':
+      return 'too little time left';
+    case 'minutes_elapsed':
+      return 'too early in window';
+    case 'below_cushion':
+      return 'below cushion';
+    case 'max_open':
+      return 'max open positions';
+    case 'daily_loss_stop':
+      return 'daily loss stop';
+    case 'max_trades_day':
+      return 'max trades/day';
+    case 'max_trades_asset_window':
+      return 'max trades/asset/15m window';
+    case 'ask_too_rich':
+      return 'ask too rich';
+    case 'notional_too_small':
+      return 'size too small';
+    case 'window_locked':
+      return 'already traded this window';
+    case 'no_client':
+      return 'no Kalshi credentials';
+    default:
+      return reason || 'gate';
+  }
+}
+
 /** Clamp 1–5. Missing / old per-day values default to 1 (do not inherit 100). */
 export function windowBuyCap(risk: { max_trades_per_asset_per_window?: number } | null | undefined): number {
   const n = Number(risk?.max_trades_per_asset_per_window);
