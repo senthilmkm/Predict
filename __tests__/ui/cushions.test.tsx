@@ -29,12 +29,17 @@ describe('CushionsScreen', () => {
     expect(s.getByTestId('screen-cushions')).toBeTruthy();
     expect(s.getByTestId('reset-cushions-top-btn')).toBeTruthy();
     expect(s.getByTestId('reset-cushions-bottom-btn')).toBeTruthy();
-    for (const a of ['WTI', 'Gold', 'Silver', 'BTC', 'ETH', 'DOGE', 'EURUSD', 'XRP', 'COPPER']) {
+    for (const a of ['WTI', 'Gold', 'Silver', 'BTC', 'ETH', 'DOGE', 'XRP', 'COPPER']) {
       expect(s.getByTestId(`cushion-card-${a}`)).toBeTruthy();
       expect(s.getByTestId(`cushion-inc-${a}`)).toBeTruthy();
       expect(s.getByTestId(`cushion-dec-${a}`)).toBeTruthy();
       expect(s.getByTestId(`cushion-enable-${a}`)).toBeTruthy();
     }
+    for (const a of ['AVAX', 'SUI', 'LINK', 'EURUSD', 'GBPUSD', 'USDJPY']) {
+      expect(s.queryByTestId(`cushion-card-${a}`)).toBeNull();
+    }
+    expect(s.queryByTestId('filter-chip-forex')).toBeNull();
+    expect(s.queryByText(/coming soon/i)).toBeNull();
     const beforeGold = useConfigStore.getState().config.cushions.Gold;
     await fireEvent.press(s.getByTestId('cushion-inc-Gold'));
     expect(useConfigStore.getState().config.cushions.Gold).toBeGreaterThan(beforeGold);
@@ -43,7 +48,7 @@ describe('CushionsScreen', () => {
     expect(useConfigStore.getState().config.assets_enabled.WTI).toBe(false);
   });
 
-  test('small-step assets (DOGE, EURUSD, XRP, COPPER) can be increased and decreased via UI', async () => {
+  test('small-step assets (DOGE, XRP, COPPER) can be increased and decreased via UI', async () => {
     const s = await render(<CushionsScreen />);
     
     // DOGE test (default 0.005, step 0.001)
@@ -53,19 +58,18 @@ describe('CushionsScreen', () => {
     await fireEvent.press(s.getByTestId('cushion-dec-DOGE'));
     expect(useConfigStore.getState().config.cushions.DOGE).toBeCloseTo(dogeBefore, 5);
 
-    // EURUSD test (default 0.0005, step 0.0001)
-    const eurusdBefore = useConfigStore.getState().config.cushions.EURUSD;
-    await fireEvent.press(s.getByTestId('cushion-inc-EURUSD'));
-    expect(useConfigStore.getState().config.cushions.EURUSD).toBeCloseTo(eurusdBefore + 0.0001, 5);
-    await fireEvent.press(s.getByTestId('cushion-dec-EURUSD'));
-    expect(useConfigStore.getState().config.cushions.EURUSD).toBeCloseTo(eurusdBefore, 5);
-
     // XRP test (default 0.01, step 0.002)
     const xrpBefore = useConfigStore.getState().config.cushions.XRP;
     await fireEvent.press(s.getByTestId('cushion-inc-XRP'));
     expect(useConfigStore.getState().config.cushions.XRP).toBeCloseTo(xrpBefore + 0.002, 5);
     await fireEvent.press(s.getByTestId('cushion-dec-XRP'));
     expect(useConfigStore.getState().config.cushions.XRP).toBeCloseTo(xrpBefore, 5);
+
+    const copperBefore = useConfigStore.getState().config.cushions.COPPER;
+    await fireEvent.press(s.getByTestId('cushion-inc-COPPER'));
+    expect(useConfigStore.getState().config.cushions.COPPER).toBeCloseTo(copperBefore + 0.002, 5);
+    await fireEvent.press(s.getByTestId('cushion-dec-COPPER'));
+    expect(useConfigStore.getState().config.cushions.COPPER).toBeCloseTo(copperBefore, 5);
   });
 });
 

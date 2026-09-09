@@ -43,12 +43,11 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'what-markets',
           q: 'What markets does Predict trade?',
           a:
-            'Only Kalshi 15-minute contracts for the assets in the Cushions tab.\n\n' +
-            'Crypto (24/7): BTC, ETH, SOL, DOGE, XRP, BNB, AVAX, SUI, LINK.\n' +
-            'Commodities (CME hours): Gold, Silver, WTI, Natural Gas, Copper.\n' +
-            'US stock hours: S&P 500, Nasdaq 100.\n' +
-            'Forex hours: EUR/USD, GBP/USD, USD/JPY.\n\n' +
-            'A new 15-minute contract starts every quarter hour (for example 10:00, 10:15, 10:30). Predict does not trade longer Kalshi events.',
+            'Only Kalshi 15-minute up/down contracts for the assets on the Cushions tab. Predict does not trade hourly, daily, or other longer Kalshi events. There is no 15-minute forex on Kalshi right now, so those pairs are not listed.\n\n' +
+            'Crypto (24/7): BTC, ETH, SOL, DOGE, XRP, BNB.\n' +
+            'Commodities: Gold, Silver, WTI, Natural Gas, Copper. Nearly 24 hours; weekend pause and a daily ~5:00–6:00 PM ET halt.\n' +
+            'US indexes: S&P 500, Nasdaq 100. Weekdays about 9:30 AM–4:00 PM ET only.\n\n' +
+            'A new 15-minute window starts every quarter hour (10:00, 10:15, 10:30) only while Kalshi is listing that book. Closed hours show skip on Home — that is not a missing market.',
         },
         {
           id: 'what-is-lean',
@@ -262,8 +261,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'Why does Home say an asset is closed?',
           a:
             'Crypto can run 24/7. Other groups follow exchange hours (Eastern Time):\n' +
-            '• US indices: about 9:30 AM–4:00 PM ET, weekdays\n' +
-            '• Forex: weekend pause from Friday evening to Sunday 5:00 PM ET\n' +
+            '• US indexes: about 9:30 AM–4:00 PM ET, weekdays\n' +
             '• Gold, oil, and other CME commodities: weekend pause and a daily ~5:00–6:00 PM ET halt, plus listed holidays\n\n' +
             'Home may show a weekend/holiday banner. Closed assets are skipped; crypto can still lean.',
         },

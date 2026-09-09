@@ -244,6 +244,32 @@ describe('iOS ↔ Cloud trade wiring', () => {
         },
       ] as any)
     ).toEqual([]);
+    expect(
+      cloudAlertsToRecords([
+        {
+          alertId: 'lean:KXGOLD15M-X:YES',
+          kind: 'lean_signal',
+          title: 'Signal · Gold YES',
+          body: 'Gap $0.13 · Cushion $7.25 · 14m left',
+          at: '2026-09-08T16:00:00.000Z',
+          source: 'gcp',
+          decision: 'YES',
+        },
+      ] as any)
+    ).toEqual([]);
+    expect(
+      cloudAlertsToRecords([
+        {
+          alertId: 'lean:KXGOLD15M-X:YES',
+          kind: 'lean_signal',
+          title: 'Signal · Gold YES',
+          body: 'Gap $8.69 · Cushion $7.25 · 0m left',
+          at: '2026-09-08T16:00:00.000Z',
+          source: 'gcp',
+          decision: 'YES',
+        },
+      ] as any)
+    ).toEqual([]);
     expect(rows[0].source).toBe('gcp');
     expect(rows[0].kind).toBe('order_filled');
   });

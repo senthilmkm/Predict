@@ -130,6 +130,20 @@ describe('Settings toggles', () => {
     );
   });
 
+  test('FAQ what-markets lists live 15m books and no forex', async () => {
+    const s = await render(<SettingsScreen />);
+    await fireEvent.press(s.getByTestId('btn-toggle-faq'));
+    await waitFor(() => expect(s.getByTestId('faq-accordion')).toBeTruthy());
+    await fireEvent.press(s.getByTestId('faq-q-what-markets'));
+    const a = String(s.getByTestId('faq-a-what-markets').props.children);
+    expect(a).toMatch(/BTC, ETH, SOL, DOGE, XRP, BNB/);
+    expect(a).toMatch(/S&P 500, Nasdaq 100/);
+    expect(a).toMatch(/9:30 AM–4:00 PM ET only/);
+    expect(a).toMatch(/no 15-minute forex/i);
+    expect(a).not.toMatch(/EUR\/USD/);
+    expect(a).not.toMatch(/AVAX/);
+  });
+
   test('5-tap version text unlocks Developer Diagnostics', async () => {
     const s = await render(<SettingsScreen />);
     expect(s.queryByTestId('toggle-poller')).toBeNull();

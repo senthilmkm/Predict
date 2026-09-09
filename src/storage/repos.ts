@@ -241,6 +241,33 @@ export function isSkipLeanAlert(alertId?: string, decision?: string, title?: str
   return /signal\s*[·•\-]\s*\S+\s+SKIP\b/i.test(String(title || ''));
 }
 
+export function isBelowCushionLeanBody(body?: string): boolean {
+  const m = String(body || '').match(/Gap\s*\$([0-9]*\.?[0-9]+).*Cushion\s*\$([0-9]*\.?[0-9]+)/i);
+  if (!m) return false;
+  const gap = Number(m[1]);
+  const cushion = Number(m[2]);
+  return Number.isFinite(gap) && Number.isFinite(cushion) && gap < cushion;
+}
+
+export function isZeroMinutesLeftLeanBody(body?: string): boolean {
+  const m = String(body || '').match(/(\d+)\s*m left/i);
+  if (!m) return false;
+  return Number(m[1]) === 0;
+}
+
+export function isInvalidLeanAlert(
+  alertId?: string,
+  decision?: string,
+  title?: string,
+  body?: string
+): boolean {
+  return (
+    isSkipLeanAlert(alertId, decision, title) ||
+    isBelowCushionLeanBody(body) ||
+    isZeroMinutesLeftLeanBody(body)
+  );
+}
+
 export function cloudAlertsToRecords(cloudAlerts: any[]): AlertRecord[] {
   return (cloudAlerts || [])
     .filter((raw) => raw && typeof raw === 'object')
@@ -249,7 +276,7 @@ export function cloudAlertsToRecords(cloudAlerts: any[]): AlertRecord[] {
       const kind = String(raw.kind || raw.type || '').trim();
       const title = String(raw.title || '').trim();
       if (!id || !kind || !title) return null;
-      if (kind === 'lean_signal' && isSkipLeanAlert(id, raw.decision, title)) return null;
+      if (kind === 'lean_signal' && isInvalidLeanAlert(id, raw.decision, title, raw.body)) return null;
       const atRaw = raw.at || raw.createdAt || raw.timestamp;
       const atDate = atRaw ? new Date(atRaw) : new Date();
       const at = Number.isFinite(atDate.getTime()) ? atDate.toISOString() : new Date().toISOString();
@@ -351,7 +378,7 @@ export class MemoryAlertRepo {
   dropInvalidLeans(): number {
     const removedIds: string[] = [];
     this.alerts = this.alerts.filter((a) => {
-      if (a.kind === 'lean_signal' && isSkipLeanAlert(a.id, undefined, a.title)) {
+      if (a.kind === 'lean_signal' && isInvalidLeanAlert(a.id, undefined, a.title, a.body)) {
         if (a.id) removedIds.push(a.id);
         return false;
       }
@@ -363,7 +390,7 @@ export class MemoryAlertRepo {
 
   insert(row: AlertRecord): boolean {
     const incomingId = String(row.id || '').trim();
-    if (row.kind === 'lean_signal' && isSkipLeanAlert(incomingId, undefined, row.title)) {
+    if (row.kind === 'lean_signal' && isInvalidLeanAlert(incomingId, undefined, row.title, row.body)) {
       return false;
     }
     if (incomingId && this.dismissedIds.has(incomingId)) {

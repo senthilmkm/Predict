@@ -3,12 +3,13 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { colors, spacing } from '../theme/tokens';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
-import { formatChange24h } from '../util/moneyFormat';
+import { formatChange24h, formatChangeWindowLabel } from '../util/moneyFormat';
 
 export function DashboardScreen({ navigation }: { navigation?: any }) {
   const stats = useRuntimeStore((s) => s.stats);
   const change24hUsd = useRuntimeStore((s) => s.change24hUsd);
   const change24hPct = useRuntimeStore((s) => s.change24hPct);
+  const change24hWindowMs = useRuntimeStore((s) => s.change24hWindowMs);
   const unread = useRuntimeStore((s) => s.unread);
   const trades = useRuntimeStore((s) => s.trades);
   const alerts = useRuntimeStore((s) => s.alerts);
@@ -42,7 +43,7 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
     >
       <Text style={styles.heading}>Kalshi account</Text>
       <Card
-        label={change24hUsd == null ? 'Change (24h) · collecting' : 'Change (24h)'}
+        label={formatChangeWindowLabel(change24hWindowMs, change24hUsd)}
         value={formatChange24h(change24hUsd, change24hPct)}
         color={change24hUsd == null ? undefined : change24hUsd >= 0 ? colors.win : colors.loss}
       />
@@ -71,8 +72,9 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
         {trades[0]?.notional_usd != null ? ` · $${trades[0].notional_usd.toFixed(2)}` : ''}
       </Text>
       <Text style={styles.note}>
-        Change (24h) is your Kalshi Predictions total vs yesterday’s saved value. Closed P&L
-        is only Predict orders that filled today (ET). History has every fill.
+        Change is your Kalshi Predictions total vs a saved snapshot (24h when we have one,
+        otherwise since the first snapshot on this phone). Closed P&L is only Predict orders
+        that filled today (ET). History has every fill.
       </Text>
       <SupportContactFooter compact />
     </ScrollView>

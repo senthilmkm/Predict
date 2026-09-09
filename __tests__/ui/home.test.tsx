@@ -33,7 +33,7 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('home-cash-block')).toBeTruthy();
     expect(s.getByText('PREDICTIONS')).toBeTruthy();
     expect(s.getByTestId('home-change-24h-label').props.children).toMatch(/Change \(24h\)/);
-    expect(s.getByTestId('home-change-24h')).toBeTruthy();
+    expect(s.getByTestId('home-change-24h').props.children).toBe('Collecting…');
     expect(s.getByTestId('home-today-trades')).toBeTruthy();
     expect(s.getByText('Predict trades today')).toBeTruthy();
     expect(s.getByText('Cash')).toBeTruthy();
@@ -44,6 +44,19 @@ describe('HomeScreen', () => {
     expect(s.queryByTestId('btn-tick-once')).toBeNull();
     expect(s.getByTestId('support-contact')).toBeTruthy();
     expect(s.getByText(/senthil930@gmail\.com/)).toBeTruthy();
+  });
+
+  test('Predictions change shows a dollar value and a shorter window until 24h exists', async () => {
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      change24hUsd: 1.18,
+      change24hPct: 0.84,
+      change24hWindowMs: 4 * 60 * 60 * 1000,
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('home-change-24h').props.children).toBe('+$1.18 (+0.84%)');
+    expect(s.getByTestId('home-change-24h-label').props.children).toBe('Change (4h)');
   });
 
   test('integration error banner includes support email from config.json', async () => {

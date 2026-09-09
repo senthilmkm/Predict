@@ -191,8 +191,7 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
       await rt.tick();
 
       expect(rt.status.lastLeans.Gold?.decision).toBe('YES');
-      expect(rt.status.lastTradeAction.Gold?.status).toBe('idle');
-      expect(rt.status.lastTradeAction.Gold?.detail).toMatch(/Cloud Run places orders/);
+      expect(rt.status.lastTradeAction.Gold).toBeUndefined();
       expect(rt.alerts.list().filter((a) => a.kind === 'lean_signal')).toHaveLength(0);
       expect(rt.alerts.list().some((a) => a.kind === 'order_filled')).toBe(false);
       expect(rt.alerts.list().some((a) => a.kind === 'ioc_miss')).toBe(false);

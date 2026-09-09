@@ -74,7 +74,7 @@
     "defaultCushion": 0.2,
     "cushionBounds": { "min": 0.02, "max": 5.0, "step": 0.02 },
     "scheduleType": "CRYPTO_24_7",
-    "enabled": true
+    "enabled": false
   },
   {
     "key": "SUI",
@@ -85,7 +85,7 @@
     "defaultCushion": 0.02,
     "cushionBounds": { "min": 0.005, "max": 0.5, "step": 0.005 },
     "scheduleType": "CRYPTO_24_7",
-    "enabled": true
+    "enabled": false
   },
   {
     "key": "LINK",
@@ -96,7 +96,7 @@
     "defaultCushion": 0.1,
     "cushionBounds": { "min": 0.01, "max": 2.0, "step": 0.01 },
     "scheduleType": "CRYPTO_24_7",
-    "enabled": true
+    "enabled": false
   },
   {
     "key": "WTI",
@@ -135,7 +135,7 @@
     "key": "NG",
     "name": "Natural Gas 15m",
     "category": "CME Commodities",
-    "seriesTicker": "KXNG15M",
+    "seriesTicker": "KXNATGAS15M",
     "pythFeedId": "f9f60f6432b4923e2fb72506e877abdb847ef1f6305a4ecb3f6bb99d63ab2153",
     "defaultCushion": 0.02,
     "cushionBounds": { "min": 0.005, "max": 0.2, "step": 0.005 },
@@ -168,7 +168,7 @@
     "key": "NDX",
     "name": "Nasdaq 100 15m",
     "category": "Stock Indices",
-    "seriesTicker": "KXNASDAQ15M",
+    "seriesTicker": "KXNDQ15M",
     "pythFeedId": "95ca28114f6b158097b37084534f595f9c403328574d32a933f0011234567890",
     "defaultCushion": 15.0,
     "cushionBounds": { "min": 2.0, "max": 100.0, "step": 1.0 },
@@ -184,7 +184,7 @@
     "defaultCushion": 0.0005,
     "cushionBounds": { "min": 0.0001, "max": 0.005, "step": 0.0001 },
     "scheduleType": "FOREX_HOURS",
-    "enabled": true
+    "enabled": false
   },
   {
     "key": "GBPUSD",
@@ -195,7 +195,7 @@
     "defaultCushion": 0.0008,
     "cushionBounds": { "min": 0.0001, "max": 0.008, "step": 0.0001 },
     "scheduleType": "FOREX_HOURS",
-    "enabled": true
+    "enabled": false
   },
   {
     "key": "USDJPY",
@@ -206,6 +206,6 @@
     "defaultCushion": 0.15,
     "cushionBounds": { "min": 0.02, "max": 2.0, "step": 0.02 },
     "scheduleType": "FOREX_HOURS",
-    "enabled": true
+    "enabled": false
   }
 ]

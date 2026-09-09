@@ -71,16 +71,45 @@ export function findBaselineSample(
   return pick;
 }
 
+export type PortfolioChange = {
+  usd: number;
+  pct: number | null;
+  windowMs: number;
+  complete: boolean;
+};
+
+function oldestUsableSample(samples: PortfolioSample[]): PortfolioSample | null {
+  let oldest: PortfolioSample | null = null;
+  for (const s of samples) {
+    const t = sampleTimeMs(s);
+    if (!Number.isFinite(t)) continue;
+    if (!oldest || t < sampleTimeMs(oldest)) oldest = s;
+  }
+  return oldest;
+}
+
+function changeFromBaseline(
+  baseline: PortfolioSample,
+  currentUsd: number,
+  nowMs: number,
+  complete: boolean
+): PortfolioChange {
+  const usd = Math.round((currentUsd - baseline.predictionsUsd) * 100) / 100;
+  const pct =
+    baseline.predictionsUsd > 0 ? Math.round((usd / baseline.predictionsUsd) * 10000) / 100 : null;
+  return { usd, pct, windowMs: Math.max(0, nowMs - sampleTimeMs(baseline)), complete };
+}
+
 export function computeChange24h(
   samples: PortfolioSample[],
   currentUsd: number | null,
   nowMs = Date.now()
-): { usd: number; pct: number | null } | null {
+): PortfolioChange | null {
   if (currentUsd == null || !Number.isFinite(currentUsd)) return null;
-  const baseline = findBaselineSample(samples, nowMs - PORTFOLIO_LOOKBACK_MS);
-  if (!baseline) return null;
-  const usd = Math.round((currentUsd - baseline.predictionsUsd) * 100) / 100;
-  const pct =
-    baseline.predictionsUsd > 0 ? Math.round((usd / baseline.predictionsUsd) * 10000) / 100 : null;
-  return { usd, pct };
+  const near = findBaselineSample(samples, nowMs - PORTFOLIO_LOOKBACK_MS);
+  if (near) return changeFromBaseline(near, currentUsd, nowMs, true);
+  const oldest = oldestUsableSample(samples);
+  if (!oldest) return null;
+  if (nowMs - sampleTimeMs(oldest) < PORTFOLIO_SAMPLE_INTERVAL_MS) return null;
+  return changeFromBaseline(oldest, currentUsd, nowMs, false);
 }

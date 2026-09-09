@@ -81,6 +81,8 @@ describe('History / Dashboard / AlertsHub', () => {
   test('Dashboard root', async () => {
     const s = await render(<DashboardScreen />);
     expect(s.getByTestId('screen-dashboard')).toBeTruthy();
+    expect(s.getByText('Change (24h)')).toBeTruthy();
+    expect(s.getByText('Collecting…')).toBeTruthy();
   });
 
   test('Dashboard shows seeded stats / counts', async () => {
@@ -143,6 +145,18 @@ describe('History / Dashboard / AlertsHub', () => {
     expect(s.getByText('2')).toBeTruthy(); // alerts logged
     expect(s.getByText('1')).toBeTruthy(); // unread
     expect(s.getByText(/Latest trade: BTC pending/i)).toBeTruthy();
+  });
+
+  test('Dashboard Kalshi card uses a shorter window label until 24h exists', async () => {
+    useRuntimeStore.setState({
+      change24hUsd: 1.18,
+      change24hPct: 0.84,
+      change24hWindowMs: 4 * 60 * 60 * 1000,
+    });
+    const s = await render(<DashboardScreen />);
+    expect(s.getByText('+$1.18 (+0.84%)')).toBeTruthy();
+    expect(s.getByText('Change (4h)')).toBeTruthy();
+    expect(s.queryByText('Collecting…')).toBeNull();
   });
 
   test('AlertsHub mute matrix collapsible + mute all icon toggle + recent list', async () => {

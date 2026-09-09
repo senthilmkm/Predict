@@ -329,7 +329,7 @@ function visibleAlerts(rows: CloudAlertDoc[]): CloudAlertDoc[] {
 
 export function isVisibleCloudAlert(r: CloudAlertDoc): boolean {
   if (String(r.dismissedAt || '').trim()) return false;
-  if (String(r.kind || '') === 'lean_signal' && isSkipLeanAlert(r.alertId, r.decision, r.title)) {
+  if (String(r.kind || '') === 'lean_signal' && isInvalidLeanAlert(r.alertId, r.decision, r.title, r.body)) {
     return false;
   }
   return true;
@@ -339,6 +339,33 @@ export function isSkipLeanAlert(alertId?: string, decision?: string, title?: str
   if (String(decision || '').toUpperCase() === 'SKIP') return true;
   if (/:SKIP$/i.test(String(alertId || ''))) return true;
   return /signal\s*[·•\-]\s*\S+\s+SKIP\b/i.test(String(title || ''));
+}
+
+export function isBelowCushionLeanBody(body?: string): boolean {
+  const m = String(body || '').match(/Gap\s*\$([0-9]*\.?[0-9]+).*Cushion\s*\$([0-9]*\.?[0-9]+)/i);
+  if (!m) return false;
+  const gap = Number(m[1]);
+  const cushion = Number(m[2]);
+  return Number.isFinite(gap) && Number.isFinite(cushion) && gap < cushion;
+}
+
+export function isZeroMinutesLeftLeanBody(body?: string): boolean {
+  const m = String(body || '').match(/(\d+)\s*m left/i);
+  if (!m) return false;
+  return Number(m[1]) === 0;
+}
+
+export function isInvalidLeanAlert(
+  alertId?: string,
+  decision?: string,
+  title?: string,
+  body?: string
+): boolean {
+  return (
+    isSkipLeanAlert(alertId, decision, title) ||
+    isBelowCushionLeanBody(body) ||
+    isZeroMinutesLeftLeanBody(body)
+  );
 }
 
 export type SaveAlertResult = 'created' | 'exists' | false;

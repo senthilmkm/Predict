@@ -58,7 +58,7 @@ describe('Market Hours Schedule', () => {
   it('generates schedule notice banner for full-day closures', () => {
     const sat = new Date('2026-09-05T18:00:00Z');
     const notice = getMarketScheduleNotice(sat);
-    expect(notice).toContain('Commodity, Stock & Forex markets are closed for the weekend');
+    expect(notice).toContain('Commodity and stock markets are closed for the weekend');
     expect(notice).toContain('Polling active for 24/7 Crypto');
   });
 });

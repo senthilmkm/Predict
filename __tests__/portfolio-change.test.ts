@@ -28,7 +28,12 @@ describe('portfolio 24h change', () => {
       { at: new Date(ago).toISOString(), predictionsUsd: 139.3, cashUsd: 100 },
       { at: new Date(t0).toISOString(), predictionsUsd: 140.48, cashUsd: 101 },
     ];
-    expect(computeChange24h(samples, 140.48, t0)).toEqual({ usd: 1.18, pct: 0.85 });
+    expect(computeChange24h(samples, 140.48, t0)).toEqual({
+      usd: 1.18,
+      pct: 0.85,
+      windowMs: PORTFOLIO_LOOKBACK_MS,
+      complete: true,
+    });
   });
 
   test('prefers last sample at or before T-24h', () => {
@@ -67,13 +72,34 @@ describe('portfolio 24h change', () => {
   test('pct is null when baseline is zero (no fake percent)', () => {
     const ago = t0 - PORTFOLIO_LOOKBACK_MS;
     const samples = [{ at: new Date(ago).toISOString(), predictionsUsd: 0, cashUsd: 0 }];
-    expect(computeChange24h(samples, 10, t0)).toEqual({ usd: 10, pct: null });
+    expect(computeChange24h(samples, 10, t0)).toEqual({
+      usd: 10,
+      pct: null,
+      windowMs: PORTFOLIO_LOOKBACK_MS,
+      complete: true,
+    });
   });
 
   test('negative 24h change', () => {
     const ago = t0 - PORTFOLIO_LOOKBACK_MS;
     const samples = [{ at: new Date(ago).toISOString(), predictionsUsd: 200, cashUsd: 100 }];
-    expect(computeChange24h(samples, 180, t0)).toEqual({ usd: -20, pct: -10 });
+    expect(computeChange24h(samples, 180, t0)).toEqual({
+      usd: -20,
+      pct: -10,
+      windowMs: PORTFOLIO_LOOKBACK_MS,
+      complete: true,
+    });
+  });
+
+  test('falls back to the oldest sample when T-24h is missing', () => {
+    const ago = t0 - 4 * 60 * 60 * 1000;
+    const samples = [{ at: new Date(ago).toISOString(), predictionsUsd: 139.3, cashUsd: 100 }];
+    expect(computeChange24h(samples, 140.48, t0)).toEqual({
+      usd: 1.18,
+      pct: 0.85,
+      windowMs: 4 * 60 * 60 * 1000,
+      complete: false,
+    });
   });
 
   test('caps sample ring so storage stays bounded', () => {

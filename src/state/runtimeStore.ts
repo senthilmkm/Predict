@@ -39,6 +39,7 @@ interface RuntimeState {
   cashBalanceUsd: number | null;
   change24hUsd: number | null;
   change24hPct: number | null;
+  change24hWindowMs: number | null;
   ensure: () => AppRuntime;
   syncFromRuntime: () => void;
   start: () => void;
@@ -70,6 +71,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   cashBalanceUsd: null,
   change24hUsd: null,
   change24hPct: null,
+  change24hWindowMs: null,
   ensure: () => {
     let rt = get().runtime;
     if (!rt) {
@@ -100,6 +102,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         cashBalanceUsd: null,
         change24hUsd: null,
         change24hPct: null,
+        change24hWindowMs: null,
       });
       return;
     }
@@ -134,6 +137,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       cashBalanceUsd: rt.status.cashBalanceUsd,
       change24hUsd: rt.status.change24hUsd,
       change24hPct: rt.status.change24hPct,
+      change24hWindowMs: rt.status.change24hWindowMs,
     });
   },
   start: () => {
@@ -258,5 +262,6 @@ export function resetRuntimeStoreForTests() {
     cashBalanceUsd: null,
     change24hUsd: null,
     change24hPct: null,
+    change24hWindowMs: null,
   });
 }

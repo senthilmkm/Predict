@@ -131,4 +131,20 @@ describe('MemoryAlertRepo.pruneOlderThanDays', () => {
       })
     ).toBe(false);
   });
+
+  test('dropInvalidLeans removes 0m-left signals', () => {
+    const repo = new MemoryAlertRepo();
+    expect(
+      repo.insert({
+        id: 'lean:KXGOLD15M-X:YES',
+        kind: 'lean_signal',
+        title: 'Signal · Gold YES',
+        body: 'Gap $8.69 · Cushion $7.25 · 0m left',
+        at: '2026-09-08T12:00:00.000Z',
+        read: false,
+        source: 'gcp',
+      })
+    ).toBe(false);
+    expect(repo.list()).toHaveLength(0);
+  });
 });

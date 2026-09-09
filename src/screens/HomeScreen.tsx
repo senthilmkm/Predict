@@ -20,7 +20,7 @@ import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF } from '../config/disclaimers';
-import { formatChange24h, formatUsd } from '../util/moneyFormat';
+import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/moneyFormat';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -47,6 +47,7 @@ export function HomeScreen() {
   const cashBalanceUsd = useRuntimeStore((s) => s.cashBalanceUsd);
   const change24hUsd = useRuntimeStore((s) => s.change24hUsd);
   const change24hPct = useRuntimeStore((s) => s.change24hPct);
+  const change24hWindowMs = useRuntimeStore((s) => s.change24hWindowMs);
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const alerts = useRuntimeStore((s) => s.alerts);
@@ -203,6 +204,7 @@ export function HomeScreen() {
             cashUsd={cashBalanceUsd}
             change24hUsd={change24hUsd}
             change24hPct={change24hPct}
+            change24hWindowMs={change24hWindowMs}
           />
         </View>
       </View>
@@ -330,7 +332,7 @@ export function HomeScreen() {
                     {row.err}
                   </Text>
                 ) : null}
-                {autoTradeOn && row.trade ? (
+                {autoTradeOn && row.trade && row.trade.status !== 'idle' ? (
                   <Text
                     style={[
                       styles.tradeAction,
@@ -384,11 +386,13 @@ function PortfolioSummary({
   cashUsd,
   change24hUsd,
   change24hPct,
+  change24hWindowMs,
 }: {
   predictionsUsd: number | null;
   cashUsd: number | null;
   change24hUsd: number | null;
   change24hPct: number | null;
+  change24hWindowMs: number | null;
 }) {
   const changeColor =
     change24hUsd == null ? colors.mute : change24hUsd >= 0 ? colors.win : colors.loss;
@@ -401,7 +405,7 @@ function PortfolioSummary({
           {formatChange24h(change24hUsd, change24hPct)}
         </Text>
         <Text style={styles.predChangeLabel} testID="home-change-24h-label">
-          {change24hUsd == null ? 'Change (24h) · collecting' : 'Change (24h)'}
+          {formatChangeWindowLabel(change24hWindowMs, change24hUsd)}
         </Text>
       </View>
       <View style={styles.cashCard} testID="home-cash-block">

@@ -42,9 +42,9 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(protectAlertId('trade_1')).toBe('protect:trade_1');
     expect(settleAlertId('trade_1')).toBe('settle:trade_1');
     expect(dailyLossAlertId('2026-09-08')).toBe('dailyloss:2026-09-08');
-    expect(leanAlertSide({ phase: 'ended', decision: 'SKIP', live: 10, strike: 9 })).toBeNull();
-    expect(leanAlertSide({ phase: 'live', decision: 'SKIP', live: 10, strike: 9 })).toBe('YES');
-    expect(leanAlertSide({ phase: 'live', decision: 'NO', live: 10, strike: 9 })).toBe('NO');
+    expect(leanAlertSide({ phase: 'ended', decision: 'SKIP' })).toBeNull();
+    expect(leanAlertSide({ phase: 'live', decision: 'SKIP' })).toBeNull();
+    expect(leanAlertSide({ phase: 'live', decision: 'NO' })).toBe('NO');
     expect(leanAlertSide({ phase: 'upcoming', decision: 'YES' })).toBeNull();
   });
 
@@ -80,7 +80,7 @@ describe('cloud alerts persist + mute + settlement', () => {
       leanAlertsSent: {},
       now,
     });
-    expect(yes.persisted).toBe(true);
+    expect(yes.persisted).toBe(false);
     const no = await maybeEmitLeanAlert({
       userId: uid,
       cfg: { alerts_enabled: true },
@@ -95,7 +95,60 @@ describe('cloud alerts persist + mute + settlement', () => {
       now,
     });
     expect(no.persisted).toBe(false);
-    expect((await getAlertRecords(uid)).map((a) => a.alertId)).toEqual(['lean:KXGOLD15M-FLIP:YES']);
+    expect(await getAlertRecords(uid)).toEqual([]);
+  });
+
+  test('0m-left YES/NO leans never persist even if gap clears cushion', async () => {
+    const uid = 'user_lean_expired';
+    const now = new Date('2026-09-08T22:00:00.000Z');
+    const expired = await maybeEmitLeanAlert({
+      userId: uid,
+      cfg: { alerts_enabled: true },
+      tokens: ['ExponentPushToken[test]'],
+      asset: 'Gold',
+      ticker: 'KXGOLD15M-26SEP082100-00',
+      decision: 'YES',
+      absGap: 8.69,
+      cushion: 7.25,
+      minutesLeft: 0,
+      leanAlertsSent: {},
+      now,
+    });
+    expect(expired).toEqual({ next: {}, dirty: false, persisted: false, pushed: false });
+    expect(await getAlertRecords(uid)).toEqual([]);
+
+    const live = await maybeEmitLeanAlert({
+      userId: uid,
+      cfg: { alerts_enabled: true },
+      tokens: [],
+      asset: 'Gold',
+      ticker: 'KXGOLD15M-26SEP082115-15',
+      decision: 'NO',
+      absGap: 9.15,
+      cushion: 7.25,
+      minutesLeft: 13,
+      leanAlertsSent: {},
+      now,
+    });
+    expect(live.persisted).toBe(true);
+    expect((await getAlertRecords(uid)).map((a) => a.alertId)).toEqual([
+      'lean:KXGOLD15M-26SEP082115-15:NO',
+    ]);
+
+    await saveAlertRecord(uid, {
+      alertId: 'lean:KXGOLD15M-26SEP082100-00:YES',
+      userId: uid,
+      kind: 'lean_signal',
+      title: 'Signal · Gold YES',
+      body: 'Gap $8.69 · Cushion $7.25 · 0m left',
+      at: '2026-09-08T21:59:00.000Z',
+      source: 'gcp',
+      decision: 'YES',
+    });
+    const listed = await request(app).get('/me/alerts').set('Authorization', `Bearer ${uid}`);
+    expect(listed.body.alerts.map((a: any) => a.alertId)).toEqual([
+      'lean:KXGOLD15M-26SEP082115-15:NO',
+    ]);
   });
 
   test('mute still persists; Alerts Off still persists money events', () => {
@@ -227,6 +280,16 @@ describe('cloud alerts persist + mute + settlement', () => {
       at: '2026-09-08T21:02:00.000Z',
       source: 'gcp',
       decision: 'SKIP',
+    });
+    await saveAlertRecord(uid, {
+      alertId: 'lean:KX-2:YES',
+      userId: uid,
+      kind: 'lean_signal',
+      title: 'Signal · Gold YES',
+      body: 'Gap $0.13 · Cushion $7.25 · 14m left',
+      at: '2026-09-08T21:03:00.000Z',
+      source: 'gcp',
+      decision: 'YES',
     });
     const afterSkip = await request(app).get('/me/alerts').set('Authorization', `Bearer ${uid}`);
     expect(afterSkip.body.alerts.map((a: any) => a.alertId)).toEqual(['fill:mine']);
@@ -470,7 +533,7 @@ describe('cloud alerts persist + mute + settlement', () => {
       now,
       sendPush: send,
     });
-    expect(below.persisted).toBe(true);
+    expect(below.persisted).toBe(false);
     expect(below.pushed).toBe(false);
     expect(pushes).toBe(0);
 
@@ -507,7 +570,8 @@ describe('cloud alerts persist + mute + settlement', () => {
     });
     expect(retry.dirty).toBe(false);
     expect(pushes).toBe(1);
-    expect((await getAlertRecords(uid)).map((a) => a.alertId)).toEqual(['lean:KXGOLD15M-A:YES']);
+    expect((await getAlertRecords(uid)).map((a) => a.alertId)).toEqual([]);
+    expect((await getAlertRecords(uid + '_fill')).map((a) => a.alertId)).toEqual(['lean:KXGOLD15M-B:YES']);
   });
 
   test('daily loss stop matches the buy gate and does not re-push', async () => {

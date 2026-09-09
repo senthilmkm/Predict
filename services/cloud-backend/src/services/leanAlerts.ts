@@ -44,7 +44,7 @@ export function claimLeanAlert(
   return { send: true, next, key };
 }
 
-/** Below-cushion leans persist in History but must not ding. */
+/** Below-cushion leans must not ding. */
 export function leanAlertPushTokens(absGap: number, cushion: number, tokens: string[]): string[] {
   if (!(Number(absGap) >= Number(cushion))) return [];
   return Array.isArray(tokens) ? tokens.filter(Boolean) : [];

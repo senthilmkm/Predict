@@ -100,9 +100,6 @@ async function runOneTick() {
       'DOGE',
       'XRP',
       'BNB',
-      'AVAX',
-      'SUI',
-      'LINK',
       'WTI',
       'Gold',
       'Silver',
@@ -110,9 +107,6 @@ async function runOneTick() {
       'COPPER',
       'SPX',
       'NDX',
-      'EURUSD',
-      'GBPUSD',
-      'USDJPY',
     ];
 
   // 1. DEDUPLICATION: Fetch market prices ONCE per tick for all assets (shared across all users)

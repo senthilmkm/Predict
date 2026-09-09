@@ -62,10 +62,13 @@ export function CushionsScreen() {
     }
   };
 
+  const visibleCategories = ALL_ASSET_CATEGORIES.filter(
+    (c) => AssetRegistry.getByCategory(c).length > 0
+  );
   const categoriesToDisplay =
     selectedFilter === 'All'
-      ? ALL_ASSET_CATEGORIES
-      : ALL_ASSET_CATEGORIES.filter((c) => c === selectedFilter);
+      ? visibleCategories
+      : visibleCategories.filter((c) => c === selectedFilter);
 
   const toggleCategoryMaster = (cat: AssetCategory, enable: boolean) => {
     const assets = AssetRegistry.getByCategory(cat);
@@ -107,7 +110,7 @@ export function CushionsScreen() {
             All
           </Text>
         </Pressable>
-        {ALL_ASSET_CATEGORIES.map((cat) => {
+        {visibleCategories.map((cat) => {
           const active = selectedFilter === cat;
           return (
             <Pressable

@@ -64,6 +64,8 @@ export interface RuntimeStatus {
   /** Predictions total now minus a stored sample from ~24h ago. Null until enough history. */
   change24hUsd: number | null;
   change24hPct: number | null;
+  /** Age of the baseline sample. Null until a change can be shown. */
+  change24hWindowMs: number | null;
 }
 
 export function formatSkipReason(reason: string | undefined): string {
@@ -125,6 +127,7 @@ export class AppRuntime {
     cashBalanceUsd: null,
     change24hUsd: null,
     change24hPct: null,
+    change24hWindowMs: null,
   };
 
   private portfolioSamples: PortfolioSample[] = [];
@@ -198,6 +201,7 @@ export class AppRuntime {
         this.status.cashBalanceUsd = null;
         this.status.change24hUsd = null;
         this.status.change24hPct = null;
+        this.status.change24hWindowMs = null;
         this.onChange?.();
         return;
       }
@@ -323,6 +327,7 @@ export class AppRuntime {
     const ch = computeChange24h(this.portfolioSamples, this.status.predictionsBalanceUsd);
     this.status.change24hUsd = ch?.usd ?? null;
     this.status.change24hPct = ch?.pct ?? null;
+    this.status.change24hWindowMs = ch?.windowMs ?? null;
   }
 
   private async persistHistory(): Promise<void> {
@@ -591,11 +596,7 @@ export class AppRuntime {
         }
 
         if (cfg.auto_trade_enabled) {
-          this.status.lastTradeAction[asset] = {
-            status: 'idle',
-            detail: 'Cloud Run places orders',
-            at: tickAt,
-          };
+          delete this.status.lastTradeAction[asset];
         }
       }
 

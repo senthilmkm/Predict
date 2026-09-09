@@ -143,7 +143,7 @@ export function getMarketScheduleNotice(date: Date = new Date()): string | null 
   const { weekday, hour, monthDay } = getETParts(date);
 
   if (CME_HOLIDAYS.has(monthDay)) {
-    return 'Commodity, Stock & Forex markets are closed for the holiday. Polling active for 24/7 Crypto (BTC, ETH, SOL, DOGE, XRP, BNB, AVAX, SUI, LINK). Non-crypto assets reopen next business day.';
+    return 'Commodity and stock markets are closed for the holiday. Polling active for 24/7 Crypto (BTC, ETH, SOL, DOGE, XRP, BNB). Non-crypto assets reopen next business day.';
   }
 
   const isWeekend =
@@ -152,7 +152,7 @@ export function getMarketScheduleNotice(date: Date = new Date()): string | null 
     (weekday === 'Sun' && hour < 18);
 
   if (isWeekend) {
-    return 'Commodity, Stock & Forex markets are closed for the weekend. Polling active for 24/7 Crypto (BTC, ETH, SOL, DOGE, XRP, BNB, AVAX, SUI, LINK). Forex reopens Sun 5:00 PM ET; Commodities Sun 6:00 PM ET; Stock Indices Mon 9:30 AM ET.';
+    return 'Commodity and stock markets are closed for the weekend. Polling active for 24/7 Crypto (BTC, ETH, SOL, DOGE, XRP, BNB). Commodities reopen Sun 6:00 PM ET; Stock Indices Mon 9:30 AM ET.';
   }
 
   return null;
