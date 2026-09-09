@@ -16,6 +16,7 @@ export function computeOverviewTradeMetrics(
 ): {
   trades24hCount: number;
   filled24hCount: number;
+  missed24hCount: number;
   volumeUsd24h: number;
 } {
   const last24h = nowMs - 24 * 60 * 60 * 1000;
@@ -29,6 +30,7 @@ export function computeOverviewTradeMetrics(
   return {
     trades24hCount: live24h.length,
     filled24hCount: filled24h.length,
+    missed24hCount: Math.max(0, live24h.length - filled24h.length),
     volumeUsd24h: Math.round(volumeUsd24h * 100) / 100,
   };
 }

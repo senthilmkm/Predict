@@ -85,6 +85,7 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
         activeTraders,
         trades24hCount: tradeMetrics.trades24hCount,
         filled24hCount: tradeMetrics.filled24hCount,
+        missed24hCount: tradeMetrics.missed24hCount,
         volumeUsd24h: tradeMetrics.volumeUsd24h,
         lastTickAt,
         assetCount: assets.length,

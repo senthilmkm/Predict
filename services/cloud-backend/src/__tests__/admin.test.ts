@@ -205,9 +205,14 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('GCP Cloud');
     expect(res.text).toContain('Created');
     expect(res.text).toContain('predict-trading-0904');
-    expect(res.text).toContain('Closed P&amp;L');
+    expect(res.text).toContain('Cloud P&amp;L');
     expect(res.text).toContain('Search user ID');
     expect(res.text).toContain('Filtered realized P&amp;L');
+    expect(res.text).toContain('tradeResultCount');
+    expect(res.text).toContain('type="date"');
+    expect(res.text).toContain('tradeFilterFromDate');
+    expect(res.text).toContain('tradeFilterToDate');
+    expect(res.text).not.toMatch(/>Apply<\/button>/);
   });
 
   test('11. POST /admin/api/config updates tick_interval_seconds dynamically', async () => {

@@ -42,6 +42,7 @@ describe('admin overview metrics', () => {
     const m = computeOverviewTradeMetrics(rows, now);
     expect(m.trades24hCount).toBe(4);
     expect(m.filled24hCount).toBe(3);
+    expect(m.missed24hCount).toBe(1);
     expect(m.volumeUsd24h).toBe(8.1);
     expect(isLiveFilledTrade(rows[2])).toBe(false);
     expect(isLiveFilledTrade(rows[4])).toBe(true);

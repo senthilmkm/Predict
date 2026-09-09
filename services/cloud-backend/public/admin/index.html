@@ -30,7 +30,9 @@
     }
   </script>
   <style>
+    html { color-scheme: dark; }
     body { background-color: #0F172A; color: #F8FAFC; font-family: 'Inter', sans-serif; }
+    input[type="date"], input[type="time"] { color-scheme: dark; }
     .glass-card { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid #334155; }
     .tab-btn.active { background-color: #0284C7; color: #FFFFFF; font-weight: 700; }
     /* Contextual Info Tooltip */
@@ -132,7 +134,7 @@
           <div class="tooltip-wrapper">
             <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
             <div class="tooltip-content">
-              <strong>24h Orders Placed:</strong> Live Kalshi orders the worker submitted in the last 24 hours (fills and IOC misses). Dry-runs excluded. “Filled” is only orders that received at least one contract.
+              <strong>24h Orders Placed:</strong> Live Kalshi orders the worker submitted in the last 24 hours. Dry-runs excluded. Filled = at least one contract. Miss = IOC / no fill (no money spent).
             </div>
           </div>
         </div>
@@ -242,7 +244,8 @@
               <div class="tooltip-wrapper">
                 <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
                 <div class="tooltip-content">
-                  Closed P&amp;L is realized only (SETTLED, win, loss, or protect-sell exited). Open FILLED positions are not included.
+                  Cloud closed P&amp;L (America/New_York day): SETTLED win / loss / protect-sell exited only. Open FILLED positions are not included.<br/><br/>
+                  The iOS “today” snapshot can be higher if that phone still has older local fills from before Cloud placed every order, or if the phone settled a fill Cloud has not written yet.
                 </div>
               </div>
             </h3>
@@ -259,7 +262,7 @@
                 <th class="py-3 px-4">Created</th>
                 <th class="py-3 px-4">State</th>
                 <th class="py-3 px-4">Mode & Bet Size</th>
-                <th class="py-3 px-4">Closed P&amp;L</th>
+                <th class="py-3 px-4">Cloud P&amp;L</th>
                 <th class="py-3 px-4">Last Tick</th>
                 <th class="py-3 px-4">Last Error</th>
                 <th class="py-3 px-4 text-right">Actions</th>
@@ -312,6 +315,7 @@
               </div>
             </h3>
             <p class="text-xs text-slate-400">Newest matching records first. Table may truncate; P&amp;L always uses every match.</p>
+            <p id="tradeResultCount" class="mt-1 text-sm font-semibold text-sky-300 font-sans">—</p>
           </div>
           <div id="tradePnlSummary" class="text-right">
             <div class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Filtered realized P&amp;L</div>
@@ -327,13 +331,13 @@
           </label>
           <label class="block">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Asset</span>
-            <select id="tradeFilterAsset" class="mt-1 w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500">
+            <select id="tradeFilterAsset" onchange="applyTradeFilters()" class="mt-1 w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500">
               <option value="">All assets</option>
             </select>
           </label>
           <label class="block">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Status</span>
-            <select id="tradeFilterStatus" class="mt-1 w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500">
+            <select id="tradeFilterStatus" onchange="applyTradeFilters()" class="mt-1 w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500">
               <option value="">All statuses</option>
               <option value="FILLED">FILLED</option>
               <option value="SETTLED">SETTLED</option>
@@ -343,15 +347,20 @@
           </label>
           <label class="block">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">From (date &amp; time)</span>
-            <input type="datetime-local" id="tradeFilterFrom" step="1" class="mt-1 w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500" />
+            <div class="mt-1 flex gap-1">
+              <input type="date" id="tradeFilterFromDate" onchange="applyTradeFilters()" class="min-w-0 flex-1 bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-2 py-2 focus:outline-none focus:border-sky-500" />
+              <input type="time" id="tradeFilterFromTime" step="1" onchange="applyTradeFilters()" class="w-[7.25rem] bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-2 py-2 focus:outline-none focus:border-sky-500" />
+            </div>
           </label>
           <label class="block">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">To (date &amp; time)</span>
-            <input type="datetime-local" id="tradeFilterTo" step="1" class="mt-1 w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500" />
+            <div class="mt-1 flex gap-1">
+              <input type="date" id="tradeFilterToDate" onchange="applyTradeFilters()" class="min-w-0 flex-1 bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-2 py-2 focus:outline-none focus:border-sky-500" />
+              <input type="time" id="tradeFilterToTime" step="1" onchange="applyTradeFilters()" class="w-[7.25rem] bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-2 py-2 focus:outline-none focus:border-sky-500" />
+            </div>
           </label>
-          <div class="flex items-center gap-2">
-            <button type="submit" class="flex-1 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition">Apply</button>
-            <button type="button" onclick="clearTradeFilters()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition">Clear</button>
+          <div class="flex items-center">
+            <button type="button" onclick="clearTradeFilters()" class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition">Clear</button>
           </div>
         </form>
 
@@ -555,9 +564,10 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       return { text: `${sign}$${Math.abs(v).toFixed(2)}`, cls };
     }
 
-    function datetimeLocalToIso(value) {
-      if (!value) return '';
-      const d = new Date(value);
+    function combineDateTimeToIso(dateVal, timeVal, endOfDay) {
+      if (!dateVal) return '';
+      const time = timeVal || (endOfDay ? '23:59:59' : '00:00:00');
+      const d = new Date(`${dateVal}T${time}`);
       return Number.isFinite(d.getTime()) ? d.toISOString() : '';
     }
 
@@ -587,8 +597,16 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       const userId = document.getElementById('tradeFilterUser')?.value?.trim();
       const asset = document.getElementById('tradeFilterAsset')?.value?.trim();
       const status = document.getElementById('tradeFilterStatus')?.value?.trim();
-      const from = datetimeLocalToIso(document.getElementById('tradeFilterFrom')?.value);
-      const to = datetimeLocalToIso(document.getElementById('tradeFilterTo')?.value);
+      const from = combineDateTimeToIso(
+        document.getElementById('tradeFilterFromDate')?.value,
+        document.getElementById('tradeFilterFromTime')?.value,
+        false
+      );
+      const to = combineDateTimeToIso(
+        document.getElementById('tradeFilterToDate')?.value,
+        document.getElementById('tradeFilterToTime')?.value,
+        true
+      );
       if (userId) params.set('userId', userId);
       if (asset) params.set('asset', asset);
       if (status) params.set('status', status);
@@ -610,13 +628,17 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       const userEl = document.getElementById('tradeFilterUser');
       const assetEl = document.getElementById('tradeFilterAsset');
       const statusEl = document.getElementById('tradeFilterStatus');
-      const fromEl = document.getElementById('tradeFilterFrom');
-      const toEl = document.getElementById('tradeFilterTo');
+      const fromDateEl = document.getElementById('tradeFilterFromDate');
+      const fromTimeEl = document.getElementById('tradeFilterFromTime');
+      const toDateEl = document.getElementById('tradeFilterToDate');
+      const toTimeEl = document.getElementById('tradeFilterToTime');
       if (userEl) userEl.value = '';
       if (assetEl) assetEl.value = '';
       if (statusEl) statusEl.value = '';
-      if (fromEl) fromEl.value = '';
-      if (toEl) toEl.value = '';
+      if (fromDateEl) fromDateEl.value = '';
+      if (fromTimeEl) fromTimeEl.value = '';
+      if (toDateEl) toDateEl.value = '';
+      if (toTimeEl) toTimeEl.value = '';
       applyTradeFilters();
     }
 
@@ -675,7 +697,9 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
           document.getElementById('metricActiveUsers').innerText = `${data.metrics.activeTraders || 0} Active`;
           document.getElementById('metric24hVolume').innerText = `$${Number(data.metrics.volumeUsd24h || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           document.getElementById('metric24hOrders').innerText = data.metrics.trades24hCount || 0;
-          document.getElementById('metric24hFilled').innerText = `${data.metrics.filled24hCount || 0} Filled`;
+          const filled = Number(data.metrics.filled24hCount || 0);
+          const missed = Number(data.metrics.missed24hCount || 0);
+          document.getElementById('metric24hFilled').innerText = `${filled} Filled · ${missed} Miss`;
           document.getElementById('metricLastTick').innerText = data.metrics.lastTickAt ? new Date(data.metrics.lastTickAt).toLocaleTimeString() : 'None';
           const assetEl = document.getElementById('metricAssetCatalog');
           if (assetEl && data.metrics.assetCount) {
@@ -777,8 +801,8 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
           const pnlColor = (n) => n > 0 ? 'text-emerald-400' : n < 0 ? 'text-rose-400' : 'text-slate-500';
           const pnlText = (n) => `${n > 0 ? '+' : n < 0 ? '-' : ''}$${Math.abs(n).toFixed(2)}`;
           const pnlCell = `
-            <div class="${pnlColor(pnlToday)} font-bold font-sans">${pnlText(pnlToday)} <span class="text-[9px] font-semibold text-slate-500">today</span></div>
-            <div class="text-[10px] ${pnlColor(pnlLife)} font-sans">${pnlText(pnlLife)} all-time</div>
+            <div class="${pnlColor(pnlToday)} font-bold font-sans">${pnlText(pnlToday)} <span class="text-[9px] font-semibold text-slate-500">Cloud today</span></div>
+            <div class="text-[10px] ${pnlColor(pnlLife)} font-sans">${pnlText(pnlLife)} Cloud all-time</div>
           `;
           const createdAt = u.createdAt
             ? new Date(u.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
@@ -832,20 +856,28 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
         const tbody = document.getElementById('tradeTableBody');
         const pnlEl = document.getElementById('tradePnlTotal');
         const metaEl = document.getElementById('tradeMatchMeta');
+        const countEl = document.getElementById('tradeResultCount');
         const pnlFmt = formatPnl(data.ok ? data.totalPnlUsd : NaN);
         if (pnlEl) {
           pnlEl.innerText = data.ok ? pnlFmt.text : '--';
           pnlEl.className = `text-xl font-black font-sans ${data.ok ? pnlFmt.cls : 'text-slate-400'}`;
         }
-        if (metaEl) {
+        if (metaEl || countEl) {
           if (!data.ok) {
-            metaEl.innerText = 'Could not load trades';
+            if (metaEl) metaEl.innerText = 'Could not load trades';
+            if (countEl) countEl.innerText = 'Could not load rows';
           } else {
             const matched = Number(data.matchedCount || 0);
             const shown = Number(data.displayedCount || (data.trades || []).length);
-            metaEl.innerText = data.truncated
-              ? `Showing ${shown} of ${matched} matches · P&L is all ${matched}`
-              : `${matched} match${matched === 1 ? '' : 'es'}`;
+            const rowLabel = data.truncated
+              ? `Showing ${shown} of ${matched} rows`
+              : `${matched} row${matched === 1 ? '' : 's'} returned`;
+            if (countEl) countEl.innerText = rowLabel;
+            if (metaEl) {
+              metaEl.innerText = data.truncated
+                ? `${rowLabel} · P&L uses all ${matched}`
+                : rowLabel;
+            }
           }
         }
         if (!data.ok || !data.trades || data.trades.length === 0) {
