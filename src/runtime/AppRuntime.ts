@@ -269,13 +269,13 @@ export class AppRuntime {
   }
 
   syncCloudAlerts(cloudAlerts: any[]): void {
-    if (!Array.isArray(cloudAlerts) || cloudAlerts.length === 0) return;
-    const records = cloudAlertsToRecords(cloudAlerts);
+    if (!Array.isArray(cloudAlerts)) return;
     let inserted = 0;
-    for (const r of records) {
+    for (const r of cloudAlertsToRecords(cloudAlerts)) {
       if (this.alerts.insert(r)) inserted += 1;
     }
-    if (inserted === 0) return;
+    const dropped = this.alerts.dropInvalidLeans();
+    if (inserted === 0 && dropped === 0) return;
     void this.persistHistory();
     this.onChange?.();
   }
@@ -336,6 +336,8 @@ export class AppRuntime {
     const removed = this.alerts.pruneOlderThanDays(days);
     void this.persistHistory();
     this.onChange?.();
+    // Same window on Cloud so GET /me/alerts cannot restore pruned rows.
+    void cloudClient.pruneAlerts(days);
     return removed;
   }
 
@@ -634,7 +636,7 @@ export class AppRuntime {
   private async pullCloudAlerts(): Promise<void> {
     try {
       const res = await cloudClient.getAlerts();
-      if (res.ok && Array.isArray(res.alerts) && res.alerts.length > 0) {
+      if (res.ok && Array.isArray(res.alerts)) {
         this.syncCloudAlerts(res.alerts);
       }
     } catch {

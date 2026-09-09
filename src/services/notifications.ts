@@ -80,6 +80,10 @@ export async function bindNativeNotifications(): Promise<void> {
       const kind = content.data?.kind || content.data?.type || 'lean_signal';
       const source = content.data?.source || 'gcp';
       const alertId = content.data?.alertId ? String(content.data.alertId) : undefined;
+      if (/signal\s*[·•\-]\s*\S+\s+SKIP\b/i.test(title) || /:SKIP$/i.test(alertId || '')) return;
+      const { isCloudOwnedAlertSound } = require('../config/normalize');
+      // Cloud-owned rows must carry a stable alertId or every cold start / tap forks History.
+      if (isCloudOwnedAlertSound(kind) && !alertId) return;
       const { useRuntimeStore } = require('../state/runtimeStore');
       const rt = useRuntimeStore.getState().ensure();
       rt.recordAlert(kind, title, body, source, alertId);
@@ -94,18 +98,6 @@ export async function bindNativeNotifications(): Promise<void> {
     });
 
     Notifications.addNotificationResponseReceivedListener((response: any) => {
-      try {
-        handleIncomingNotification(
-          response?.notification?.request?.content,
-          response?.notification?.request?.identifier
-        );
-      } catch {
-        /* best effort */
-      }
-    });
-
-    Notifications.getLastNotificationResponseAsync().then((response: any) => {
-      if (!response) return;
       try {
         handleIncomingNotification(
           response?.notification?.request?.content,

@@ -8,6 +8,7 @@ import {
   emitCloudAlert,
   fillAlertId,
   leanAlertId,
+  leanAlertSide,
   missAlertId,
   maybeEmitLeanAlert,
   persistSettlementAlertIfNeeded,
@@ -41,6 +42,60 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(protectAlertId('trade_1')).toBe('protect:trade_1');
     expect(settleAlertId('trade_1')).toBe('settle:trade_1');
     expect(dailyLossAlertId('2026-09-08')).toBe('dailyloss:2026-09-08');
+    expect(leanAlertSide({ phase: 'ended', decision: 'SKIP', live: 10, strike: 9 })).toBeNull();
+    expect(leanAlertSide({ phase: 'live', decision: 'SKIP', live: 10, strike: 9 })).toBe('YES');
+    expect(leanAlertSide({ phase: 'live', decision: 'NO', live: 10, strike: 9 })).toBe('NO');
+    expect(leanAlertSide({ phase: 'upcoming', decision: 'YES' })).toBeNull();
+  });
+
+  test('SKIP leans never persist and below-cushion does not write both sides', async () => {
+    const uid = 'user_lean_skip';
+    const now = new Date('2026-09-08T22:00:00.000Z');
+    const skip = await maybeEmitLeanAlert({
+      userId: uid,
+      cfg: { alerts_enabled: true },
+      tokens: ['ExponentPushToken[test]'],
+      asset: 'BTC',
+      ticker: 'KXBTC15M-SKIP',
+      decision: 'SKIP',
+      absGap: 1,
+      cushion: 7,
+      minutesLeft: 0,
+      leanAlertsSent: {},
+      now,
+    });
+    expect(skip).toEqual({ next: {}, dirty: false, persisted: false, pushed: false });
+    expect(await getAlertRecords(uid)).toEqual([]);
+
+    const yes = await maybeEmitLeanAlert({
+      userId: uid,
+      cfg: { alerts_enabled: true },
+      tokens: [],
+      asset: 'Gold',
+      ticker: 'KXGOLD15M-FLIP',
+      decision: 'YES',
+      absGap: 0.13,
+      cushion: 7.25,
+      minutesLeft: 14,
+      leanAlertsSent: {},
+      now,
+    });
+    expect(yes.persisted).toBe(true);
+    const no = await maybeEmitLeanAlert({
+      userId: uid,
+      cfg: { alerts_enabled: true },
+      tokens: [],
+      asset: 'Gold',
+      ticker: 'KXGOLD15M-FLIP',
+      decision: 'NO',
+      absGap: 0.02,
+      cushion: 7.25,
+      minutesLeft: 13,
+      leanAlertsSent: yes.next,
+      now,
+    });
+    expect(no.persisted).toBe(false);
+    expect((await getAlertRecords(uid)).map((a) => a.alertId)).toEqual(['lean:KXGOLD15M-FLIP:YES']);
   });
 
   test('mute still persists; Alerts Off still persists money events', () => {
@@ -163,6 +218,19 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.alerts.map((a: any) => a.alertId)).toEqual(['fill:mine']);
 
+    await saveAlertRecord(uid, {
+      alertId: 'lean:KX-1:SKIP',
+      userId: uid,
+      kind: 'lean_signal',
+      title: 'Signal · BTC SKIP',
+      body: 'Gap $1.00 · Cushion $7 · 0m left',
+      at: '2026-09-08T21:02:00.000Z',
+      source: 'gcp',
+      decision: 'SKIP',
+    });
+    const afterSkip = await request(app).get('/me/alerts').set('Authorization', `Bearer ${uid}`);
+    expect(afterSkip.body.alerts.map((a: any) => a.alertId)).toEqual(['fill:mine']);
+
     const src = require('fs').readFileSync(require('path').join(__dirname, '../services/firestore.ts'), 'utf8');
     expect(src).toContain("orderBy('at', 'desc')");
     expect(src).toContain('col.limit(400).get()');
@@ -170,6 +238,7 @@ describe('cloud alerts persist + mute + settlement', () => {
     const api = require('fs').readFileSync(require('path').join(__dirname, '../routes/api.ts'), 'utf8');
     expect(api).toContain('Number.isFinite(raw) ? raw : 400');
     expect(api).toContain("/me/alerts/dismiss");
+    expect(api).toContain("/me/alerts/prune");
   });
 
   test('POST /me/alerts/dismiss hides rows and the same alertId does not reappear', async () => {
@@ -206,6 +275,50 @@ describe('cloud alerts persist + mute + settlement', () => {
     ).toBe('exists');
     const after = await request(app).get('/me/alerts').set('Authorization', `Bearer ${uid}`);
     expect(after.body.alerts).toEqual([]);
+  });
+
+  test('POST /me/alerts/prune hides rows older than the retention window', async () => {
+    const uid = 'user_alert_prune';
+    const nowMs = Date.now();
+    const oldAt = new Date(nowMs - 40 * 24 * 60 * 60 * 1000).toISOString();
+    const freshAt = new Date(nowMs - 2 * 24 * 60 * 60 * 1000).toISOString();
+    await saveAlertRecord(uid, {
+      alertId: 'fill:old',
+      userId: uid,
+      kind: 'order_filled',
+      title: 'Order Placed · BTC YES',
+      body: 'old',
+      at: oldAt,
+      source: 'gcp',
+    });
+    await saveAlertRecord(uid, {
+      alertId: 'fill:fresh',
+      userId: uid,
+      kind: 'order_filled',
+      title: 'Order Placed · ETH YES',
+      body: 'fresh',
+      at: freshAt,
+      source: 'gcp',
+    });
+    const pruned = await request(app)
+      .post('/me/alerts/prune')
+      .set('Authorization', `Bearer ${uid}`)
+      .send({ olderThanDays: 30 });
+    expect(pruned.status).toBe(200);
+    expect(pruned.body).toEqual({ ok: true, dismissed: 1 });
+    const listed = await request(app).get('/me/alerts').set('Authorization', `Bearer ${uid}`);
+    expect(listed.body.alerts.map((a: any) => a.alertId)).toEqual(['fill:fresh']);
+    expect(
+      await saveAlertRecord(uid, {
+        alertId: 'fill:old',
+        userId: uid,
+        kind: 'order_filled',
+        title: 'Order Placed · BTC YES',
+        body: 'should not resurrect',
+        at: oldAt,
+        source: 'gcp',
+      })
+    ).toBe('exists');
   });
 
   test('this-tick settlement produces Trade won with exact phone wording and cents', async () => {
@@ -330,6 +443,7 @@ describe('cloud alerts persist + mute + settlement', () => {
     const capAt = src.indexOf('buysOnTicker >= windowCap');
     expect(leanAt).toBeGreaterThan(0);
     expect(leanAt).toBeLessThan(cushionAt);
+    expect(src).toContain('leanAlertSide');
     expect(cushionAt).toBeLessThan(capAt);
   });
 

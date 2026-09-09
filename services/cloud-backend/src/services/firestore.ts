@@ -324,7 +324,21 @@ function sortAlertsDesc(rows: CloudAlertDoc[]): CloudAlertDoc[] {
 }
 
 function visibleAlerts(rows: CloudAlertDoc[]): CloudAlertDoc[] {
-  return rows.filter((r) => !String(r.dismissedAt || '').trim());
+  return rows.filter((r) => isVisibleCloudAlert(r));
+}
+
+export function isVisibleCloudAlert(r: CloudAlertDoc): boolean {
+  if (String(r.dismissedAt || '').trim()) return false;
+  if (String(r.kind || '') === 'lean_signal' && isSkipLeanAlert(r.alertId, r.decision, r.title)) {
+    return false;
+  }
+  return true;
+}
+
+export function isSkipLeanAlert(alertId?: string, decision?: string, title?: string): boolean {
+  if (String(decision || '').toUpperCase() === 'SKIP') return true;
+  if (/:SKIP$/i.test(String(alertId || ''))) return true;
+  return /signal\s*[·•\-]\s*\S+\s+SKIP\b/i.test(String(title || ''));
 }
 
 export type SaveAlertResult = 'created' | 'exists' | false;
@@ -434,6 +448,72 @@ export async function dismissAlertRecords(userId: string, alertIds: string[]): P
   }
   if (n > 0) await batch.commit();
   return n;
+}
+
+function clampAlertRetentionDays(raw: number): number {
+  if (!Number.isFinite(raw)) return 30;
+  return Math.max(1, Math.min(365, Math.round(raw)));
+}
+
+function alertIsOlderThan(at: string | undefined, cutoffMs: number): boolean {
+  const t = new Date(String(at || '')).getTime();
+  return Number.isFinite(t) && t < cutoffMs;
+}
+
+/** Hide Cloud alerts older than the phone retention window. Docs stay so the same alertId cannot re-push. */
+export async function dismissAlertsOlderThan(
+  userId: string,
+  olderThanDays: number,
+  now = new Date()
+): Promise<number> {
+  if (!userId) return 0;
+  const days = clampAlertRetentionDays(olderThanDays);
+  const cutoffMs = now.getTime() - days * 24 * 60 * 60 * 1000;
+  const cutoffIso = new Date(cutoffMs).toISOString();
+  const stamped = now.toISOString();
+  const f = getDb();
+  if (!f) {
+    const rows = localAlertStore.get(userId) || [];
+    let n = 0;
+    for (const r of rows) {
+      if (String(r.dismissedAt || '').trim()) continue;
+      if (!alertIsOlderThan(r.at, cutoffMs)) continue;
+      r.dismissedAt = stamped;
+      n += 1;
+    }
+    return n;
+  }
+
+  const col = f.collection('users').doc(userId).collection('alerts');
+  let total = 0;
+  let cursor: any = null;
+  for (let page = 0; page < 10; page += 1) {
+    let docs: any[] = [];
+    try {
+      let q: any = col.where('at', '<', cutoffIso).orderBy('at', 'asc').limit(400);
+      if (cursor) q = q.startAfter(cursor);
+      const snapshot = await q.get();
+      docs = snapshot.docs;
+    } catch {
+      const snapshot = await col.limit(400).get();
+      docs = snapshot.docs.filter((d: any) => alertIsOlderThan(String(d.data()?.at || ''), cutoffMs));
+      cursor = null;
+    }
+    if (docs.length === 0) break;
+    cursor = docs[docs.length - 1];
+    const pending = docs.filter((d: any) => !String(d.data()?.dismissedAt || '').trim());
+    if (pending.length > 0) {
+      const batch = f.batch();
+      for (const d of pending) {
+        batch.set(d.ref, { dismissedAt: stamped }, { merge: true });
+      }
+      await batch.commit();
+      total += pending.length;
+    }
+    if (docs.length < 400) break;
+    if (!cursor) break;
+  }
+  return total;
 }
 
 export async function getTradeRecords(userId: string): Promise<TradeRecordDoc[]> {

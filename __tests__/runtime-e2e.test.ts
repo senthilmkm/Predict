@@ -443,6 +443,9 @@ describe('AppRuntime auto-trade e2e (mocked lean + place)', () => {
     expect(src).not.toMatch(/recordAlert\(\s*['"]daily_loss_stop['"]/);
     expect(src).not.toMatch(/recordAlert\(\s*['"]lean_signal['"]/);
     expect(src).toContain('pullCloudAlerts');
+    const notifySrc = fs.readFileSync(path.resolve(__dirname, '../src/services/notifications.ts'), 'utf8');
+    expect(notifySrc).not.toContain('getLastNotificationResponseAsync');
+    expect(notifySrc).toContain('isCloudOwnedAlertSound');
   });
 
   test('Home tick pulls Cloud alerts into History', async () => {

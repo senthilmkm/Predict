@@ -215,12 +215,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
         const cloudTrades = tradesRes.ok && Array.isArray(tradesRes.trades) ? tradesRes.trades : [];
         const cloudAlerts = alertsRes.ok && Array.isArray(alertsRes.alerts) ? alertsRes.alerts : [];
-        if (cloudTrades.length === 0 && cloudAlerts.length === 0) return;
         if (gen !== cloudSnapshotGen) return;
 
         const rt = get().ensure();
         if (cloudTrades.length > 0) rt.syncCloudTrades(cloudTrades);
-        if (cloudAlerts.length > 0) rt.syncCloudAlerts(cloudAlerts);
+        if (alertsRes.ok) rt.syncCloudAlerts(cloudAlerts);
         if (gen !== cloudSnapshotGen) return;
         get().syncFromRuntime();
       } catch {

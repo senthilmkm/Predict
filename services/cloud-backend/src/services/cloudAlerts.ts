@@ -23,6 +23,28 @@ export function leanAlertId(ticker: string, decision: string): string {
   return `lean:${String(ticker || '').trim()}:${String(decision || '').toUpperCase()}`;
 }
 
+/** History/push leans are YES/NO during a live window only — never SKIP. */
+export function leanAlertSide(lean: {
+  decision?: string;
+  phase?: string;
+  live?: number | null;
+  strike?: number | null;
+}): 'YES' | 'NO' | null {
+  if (String(lean.phase || '') !== 'live') return null;
+  const decision = String(lean.decision || '').toUpperCase();
+  if (decision === 'YES' || decision === 'NO') return decision;
+  const live = Number(lean.live);
+  const strike = Number(lean.strike);
+  if (!Number.isFinite(live) || !Number.isFinite(strike)) return null;
+  return live >= strike ? 'YES' : 'NO';
+}
+
+function tickerAlreadyHasLean(sent: LeanAlertsSent, ticker: string): boolean {
+  const t = String(ticker || '').trim();
+  if (!t) return false;
+  return Boolean(sent[`${t}:YES`] || sent[`${t}:NO`] || sent[t]);
+}
+
 export function fillAlertId(tradeId: string): string {
   return `fill:${String(tradeId || '').trim()}`;
 }
@@ -235,7 +257,16 @@ export async function maybeEmitLeanAlert(opts: {
   const key = leanAlertKey(ticker, decision);
   const persist = alertPersistEnabled(opts.cfg, 'lean_signal');
   const pushOk = leanPushEnabled(opts.cfg) && Array.isArray(opts.tokens) && opts.tokens.length > 0;
-  if ((!persist && !pushOk) || opts.leanAlertsSent[key]) {
+  const belowCushion = Number(opts.absGap) < Number(opts.cushion);
+  if (decision !== 'YES' && decision !== 'NO') {
+    return { next: opts.leanAlertsSent, dirty: false, persisted: false, pushed: false };
+  }
+  if (
+    (!persist && !pushOk) ||
+    !ticker ||
+    opts.leanAlertsSent[key] ||
+    (belowCushion && tickerAlreadyHasLean(opts.leanAlertsSent, ticker))
+  ) {
     return { next: opts.leanAlertsSent, dirty: false, persisted: false, pushed: false };
   }
 

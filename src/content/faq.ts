@@ -407,7 +407,7 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'alert-retention',
           q: 'How long are alerts kept? Why is there no “stored alerts” number in Settings?',
           a:
-            'Settings → Signal alerts → Keep alert history (default 30 days, 1–365). Older rows auto-delete. “Prune older alerts now” deletes anything past that window; today’s stay.\n\n' +
+            'Settings → Signal alerts → Keep alert history (default 30 days, 1–365). Older rows auto-delete on this phone. “Prune older alerts now” deletes anything past that window on this phone and in Cloud; today’s stay.\n\n' +
             'The count lives on Dashboard as Alerts logged (and in the Alerts hub). Settings does not repeat that number.\n\n' +
             'A new install receives up to the 400 most recent Cloud alerts.',
         },

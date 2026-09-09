@@ -8,6 +8,7 @@ import {
   getTradeRecords,
   getAlertRecords,
   dismissAlertRecords,
+  dismissAlertsOlderThan,
   getAuditLogs,
   writeAuditLog,
   getSystemConfig,
@@ -294,6 +295,13 @@ apiRouter.post('/me/alerts/dismiss', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
   const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
   const dismissed = await dismissAlertRecords(userId, ids);
+  res.json({ ok: true, dismissed });
+});
+
+// Settings → Prune older alerts — hide Cloud rows older than the phone retention window
+apiRouter.post('/me/alerts/prune', async (req: Request, res: Response) => {
+  const userId = extractUserId(req);
+  const dismissed = await dismissAlertsOlderThan(userId, Number(req.body?.olderThanDays));
   res.json({ ok: true, dismissed });
 });
 

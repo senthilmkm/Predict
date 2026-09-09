@@ -40,6 +40,7 @@ export async function hydrateRepos(
   } catch {
     /* ignore */
   }
+  alerts.dropInvalidLeans();
   alerts.pruneOlderThanDays(alertRetentionDays);
 }
 
@@ -48,6 +49,7 @@ export async function persistRepos(
   alerts: MemoryAlertRepo,
   alertRetentionDays = 30
 ): Promise<void> {
+  alerts.dropInvalidLeans();
   alerts.pruneOlderThanDays(alertRetentionDays);
   const kv = getKeyValueStore();
   await kv.setItem(TRADES_KEY, JSON.stringify(trades.list(500)));

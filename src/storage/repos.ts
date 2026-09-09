@@ -235,6 +235,12 @@ export function cloudTradesToRecords(cloudTrades: any[]): TradeRecord[] {
   });
 }
 
+export function isSkipLeanAlert(alertId?: string, decision?: string, title?: string): boolean {
+  if (String(decision || '').toUpperCase() === 'SKIP') return true;
+  if (/:SKIP$/i.test(String(alertId || ''))) return true;
+  return /signal\s*[·•\-]\s*\S+\s+SKIP\b/i.test(String(title || ''));
+}
+
 export function cloudAlertsToRecords(cloudAlerts: any[]): AlertRecord[] {
   return (cloudAlerts || [])
     .filter((raw) => raw && typeof raw === 'object')
@@ -243,6 +249,7 @@ export function cloudAlertsToRecords(cloudAlerts: any[]): AlertRecord[] {
       const kind = String(raw.kind || raw.type || '').trim();
       const title = String(raw.title || '').trim();
       if (!id || !kind || !title) return null;
+      if (kind === 'lean_signal' && isSkipLeanAlert(id, raw.decision, title)) return null;
       const atRaw = raw.at || raw.createdAt || raw.timestamp;
       const atDate = atRaw ? new Date(atRaw) : new Date();
       const at = Number.isFinite(atDate.getTime()) ? atDate.toISOString() : new Date().toISOString();
@@ -341,8 +348,24 @@ export class MemoryAlertRepo {
     }
   }
 
+  dropInvalidLeans(): number {
+    const removedIds: string[] = [];
+    this.alerts = this.alerts.filter((a) => {
+      if (a.kind === 'lean_signal' && isSkipLeanAlert(a.id, undefined, a.title)) {
+        if (a.id) removedIds.push(a.id);
+        return false;
+      }
+      return true;
+    });
+    this.rememberDismissed(removedIds);
+    return removedIds.length;
+  }
+
   insert(row: AlertRecord): boolean {
     const incomingId = String(row.id || '').trim();
+    if (row.kind === 'lean_signal' && isSkipLeanAlert(incomingId, undefined, row.title)) {
+      return false;
+    }
     if (incomingId && this.dismissedIds.has(incomingId)) {
       return false;
     }
@@ -384,12 +407,15 @@ export class MemoryAlertRepo {
   pruneOlderThanDays(retentionDays: number, now = new Date()): number {
     const days = Math.max(1, Math.round(Number(retentionDays) || 30));
     const cutoff = now.getTime() - days * 24 * 60 * 60 * 1000;
-    const before = this.alerts.length;
+    const removedIds: string[] = [];
     this.alerts = this.alerts.filter((a) => {
       const t = new Date(a.at).getTime();
-      return Number.isFinite(t) ? t >= cutoff : true;
+      const keep = Number.isFinite(t) ? t >= cutoff : true;
+      if (!keep && a.id) removedIds.push(a.id);
+      return keep;
     });
-    return before - this.alerts.length;
+    this.rememberDismissed(removedIds);
+    return removedIds.length;
   }
 
   clear(): void {

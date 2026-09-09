@@ -2,6 +2,7 @@ import { AppRuntime } from '../src/runtime/AppRuntime';
 import { defaultAppConfig } from '../src/config/types';
 import { MemoryTradeRepo, cloudAlertsToRecords, cloudTradesToRecords } from '../src/storage/repos';
 import { MemoryKeyValueStore, setKeyValueStore, setSecureStore } from '../src/platform/storage';
+import { cloudClient } from '../src/services/cloud/cloudClient';
 import { persistPortfolioSamples } from '../src/storage/portfolioPersistence';
 import { PORTFOLIO_LOOKBACK_MS } from '../src/services/portfolioChange';
 import { resetRuntimeStoreForTests, useRuntimeStore } from '../src/state/runtimeStore';
@@ -230,6 +231,19 @@ describe('iOS ↔ Cloud trade wiring', () => {
     ] as any);
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe('fill:t1');
+    expect(
+      cloudAlertsToRecords([
+        {
+          alertId: 'lean:KXBTC15M-X:SKIP',
+          kind: 'lean_signal',
+          title: 'Signal · BTC SKIP',
+          body: 'Gap $1.00 · Cushion $7 · 0m left',
+          at: '2026-09-08T16:00:00.000Z',
+          source: 'gcp',
+          decision: 'SKIP',
+        },
+      ] as any)
+    ).toEqual([]);
     expect(rows[0].source).toBe('gcp');
     expect(rows[0].kind).toBe('order_filled');
   });
@@ -291,5 +305,13 @@ describe('iOS ↔ Cloud trade wiring', () => {
     await rt2.hydrateHistory();
     rt2.syncCloudAlerts(payload);
     expect(rt2.alerts.list().some((a) => a.id === 'fill:t1')).toBe(false);
+  });
+
+  test('pruneAlertsNow asks Cloud to hide the same retention window', () => {
+    const prune = jest.spyOn(cloudClient, 'pruneAlerts').mockResolvedValue({ ok: true, dismissed: 1 });
+    const rt = new AppRuntime({ getConfig: () => ({ ...defaultAppConfig(), alert_retention_days: 30 }) });
+    expect(rt.pruneAlertsNow()).toBe(0);
+    expect(prune).toHaveBeenCalledWith(30);
+    prune.mockRestore();
   });
 });

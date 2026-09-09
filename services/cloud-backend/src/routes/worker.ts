@@ -37,6 +37,7 @@ import {
   emitCloudAlert,
   fillAlertId,
   missAlertId,
+  leanAlertSide,
   maybeEmitLeanAlert,
   protectAlertId,
   dailyLossAlertFromPnl,
@@ -289,23 +290,26 @@ async function runOneTick() {
               }
             }
 
-            const leanEmit = await maybeEmitLeanAlert({
-              userId,
-              cfg,
-              tokens: userTokens,
-              asset,
-              ticker: marketTicker,
-              decision: lean.decision,
-              absGap,
-              cushion: userCushion,
-              minutesLeft: lean.minutes_left ?? '?',
-              leanAlertsSent,
-              now,
-            });
-            if (leanEmit.dirty) {
-              leanAlertsSent = leanEmit.next;
-              leanAlertsDirty = true;
-              leanAlertMemory.set(userId, leanAlertsSent);
+            const leanSide = leanAlertSide(lean);
+            if (leanSide) {
+              const leanEmit = await maybeEmitLeanAlert({
+                userId,
+                cfg,
+                tokens: userTokens,
+                asset,
+                ticker: marketTicker,
+                decision: leanSide,
+                absGap,
+                cushion: userCushion,
+                minutesLeft: lean.minutes_left ?? '?',
+                leanAlertsSent,
+                now,
+              });
+              if (leanEmit.dirty) {
+                leanAlertsSent = leanEmit.next;
+                leanAlertsDirty = true;
+                leanAlertMemory.set(userId, leanAlertsSent);
+              }
             }
 
             if (absGap < userCushion) continue;

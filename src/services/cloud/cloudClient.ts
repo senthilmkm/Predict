@@ -178,6 +178,23 @@ export class PredictCloudClient {
     }
   }
 
+  async pruneAlerts(
+    olderThanDays: number
+  ): Promise<{ ok: boolean; dismissed?: number; error?: string }> {
+    const days = Math.max(1, Math.min(365, Math.round(Number(olderThanDays) || 30)));
+    try {
+      const res = await this.fetchWithAuth('/me/alerts/prune', {
+        method: 'POST',
+        body: JSON.stringify({ olderThanDays: days }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.error || 'alerts_prune_failed' };
+      return { ok: true, dismissed: Number(data.dismissed || 0) };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'network_error' };
+    }
+  }
+
   async dismissAlerts(ids: string[]): Promise<{ ok: boolean; dismissed?: number; error?: string }> {
     const alertIds = [...new Set((ids || []).map((id) => String(id || '').trim()).filter(Boolean))];
     if (alertIds.length === 0) return { ok: true, dismissed: 0 };

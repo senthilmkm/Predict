@@ -652,7 +652,7 @@ export function SettingsScreen() {
         />
         <Text style={styles.hint}>
           Default {ALERT_RETENTION_DEFAULT_DAYS}d · {ALERT_RETENTION_MIN_DAYS}–
-          {ALERT_RETENTION_MAX_DAYS}d. Older alerts auto-delete from this phone.
+          {ALERT_RETENTION_MAX_DAYS}d. Prune removes older alerts on this phone and in Cloud.
         </Text>
 
         <Text style={styles.section}>Auto-trade</Text>
@@ -1106,8 +1106,8 @@ function RiskHelpModal({
               Independent from alerts — you can trade with alerts muted.
             </HelpItem>
             <HelpItem title="Keep alert history / Prune">
-              How many days of alerts to keep on this phone. “Prune older alerts” deletes alerts
-              older than that window (today’s stay).
+              How many days of alerts to keep. “Prune older alerts” deletes rows older than that
+              window on this phone and in Cloud (today’s stay).
             </HelpItem>
 
             <Text style={styles.modalSection}>Polling</Text>
