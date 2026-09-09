@@ -44,6 +44,8 @@ export interface CloudAlertDoc {
   ticker?: string;
   tradeId?: string;
   decision?: string;
+  /** Set when the phone deletes the row. GET hides it; same alertId must not re-push. */
+  dismissedAt?: string;
 }
 
 export interface AuditLogDoc {
@@ -321,6 +323,10 @@ function sortAlertsDesc(rows: CloudAlertDoc[]): CloudAlertDoc[] {
   return [...rows].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
 }
 
+function visibleAlerts(rows: CloudAlertDoc[]): CloudAlertDoc[] {
+  return rows.filter((r) => !String(r.dismissedAt || '').trim());
+}
+
 export type SaveAlertResult = 'created' | 'exists' | false;
 
 function upsertLocalAlert(userId: string, alert: CloudAlertDoc): SaveAlertResult {
@@ -381,21 +387,53 @@ export async function getAlertRecords(userId: string, limit = 400): Promise<Clou
   const cap = Math.max(1, Math.min(400, Math.round(Number(limit) || 200)));
   const f = getDb();
   if (!f) {
-    return sortAlertsDesc(localAlertStore.get(userId) || []).slice(0, cap);
+    return sortAlertsDesc(visibleAlerts(localAlertStore.get(userId) || [])).slice(0, cap);
   }
   const col = f.collection('users').doc(userId).collection('alerts');
   try {
     const snapshot = await col.orderBy('at', 'desc').limit(cap).get();
-    return snapshot.docs.map((d: any) => d.data() as CloudAlertDoc);
+    return visibleAlerts(snapshot.docs.map((d: any) => d.data() as CloudAlertDoc));
   } catch {
     // Missing `at` index (or any orderBy failure) must not wipe History.
     try {
       const snapshot = await col.limit(400).get();
-      return sortAlertsDesc(snapshot.docs.map((d: any) => d.data() as CloudAlertDoc)).slice(0, cap);
+      return sortAlertsDesc(visibleAlerts(snapshot.docs.map((d: any) => d.data() as CloudAlertDoc))).slice(0, cap);
     } catch {
       return [];
     }
   }
+}
+
+/** Hide alerts the phone deleted. Keeps the doc so emitCloudAlert still sees `exists` (no re-push). */
+export async function dismissAlertRecords(userId: string, alertIds: string[]): Promise<number> {
+  const ids = [
+    ...new Set((alertIds || []).map((id) => String(id || '').trim()).filter(Boolean)),
+  ].slice(0, 400);
+  if (!userId || ids.length === 0) return 0;
+  const now = new Date().toISOString();
+  const f = getDb();
+  if (!f) {
+    const rows = localAlertStore.get(userId) || [];
+    let n = 0;
+    for (const r of rows) {
+      if (ids.includes(r.alertId) && !String(r.dismissedAt || '').trim()) {
+        r.dismissedAt = now;
+        n += 1;
+      }
+    }
+    return n;
+  }
+  const col = f.collection('users').doc(userId).collection('alerts');
+  const snaps = await Promise.all(ids.map((id) => col.doc(id).get()));
+  const batch = f.batch();
+  let n = 0;
+  for (const snap of snaps) {
+    if (!snap.exists) continue;
+    batch.set(snap.ref, { dismissedAt: now }, { merge: true });
+    n += 1;
+  }
+  if (n > 0) await batch.commit();
+  return n;
 }
 
 export async function getTradeRecords(userId: string): Promise<TradeRecordDoc[]> {

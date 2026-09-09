@@ -177,6 +177,22 @@ export class PredictCloudClient {
       return { ok: false, error: e?.message || 'network_error' };
     }
   }
+
+  async dismissAlerts(ids: string[]): Promise<{ ok: boolean; dismissed?: number; error?: string }> {
+    const alertIds = [...new Set((ids || []).map((id) => String(id || '').trim()).filter(Boolean))];
+    if (alertIds.length === 0) return { ok: true, dismissed: 0 };
+    try {
+      const res = await this.fetchWithAuth('/me/alerts/dismiss', {
+        method: 'POST',
+        body: JSON.stringify({ ids: alertIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.error || 'alerts_dismiss_failed' };
+      return { ok: true, dismissed: Number(data.dismissed || 0) };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'network_error' };
+    }
+  }
 }
 
 import { getPersistentUserId } from '../userId';

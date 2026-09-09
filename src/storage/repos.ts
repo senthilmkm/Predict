@@ -324,9 +324,28 @@ function isExactGcpAlertDup(existing: AlertRecord, row: AlertRecord): boolean {
 
 export class MemoryAlertRepo {
   private alerts: AlertRecord[] = [];
+  private dismissedIds = new Set<string>();
+
+  loadDismissed(ids: string[]): void {
+    this.dismissedIds = new Set((ids || []).map((id) => String(id || '').trim()).filter(Boolean));
+  }
+
+  dismissedList(): string[] {
+    return Array.from(this.dismissedIds);
+  }
+
+  rememberDismissed(ids: string[]): void {
+    for (const id of ids || []) {
+      const trimmed = String(id || '').trim();
+      if (trimmed) this.dismissedIds.add(trimmed);
+    }
+  }
 
   insert(row: AlertRecord): boolean {
     const incomingId = String(row.id || '').trim();
+    if (incomingId && this.dismissedIds.has(incomingId)) {
+      return false;
+    }
     if (incomingId && this.alerts.some((existing) => existing.id === incomingId)) {
       return false;
     }
@@ -380,6 +399,7 @@ export class MemoryAlertRepo {
   /** Delete alerts by ids. Returns how many were removed. */
   deleteByIds(ids: string[]): number {
     if (!ids.length) return 0;
+    this.rememberDismissed(ids);
     const idSet = new Set(ids);
     const before = this.alerts.length;
     this.alerts = this.alerts.filter((a) => !idSet.has(a.id));

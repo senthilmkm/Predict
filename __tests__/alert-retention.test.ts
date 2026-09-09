@@ -39,4 +39,30 @@ describe('MemoryAlertRepo.pruneOlderThanDays', () => {
     expect(repo.pruneOlderThanDays(30, now)).toBe(0);
     expect(repo.list()).toHaveLength(1);
   });
+
+  test('deleteByIds refuses a later insert of the same id', () => {
+    const repo = new MemoryAlertRepo();
+    repo.insert({
+      id: 'fill:t1',
+      kind: 'order_filled',
+      title: 'Order Placed',
+      body: '1 ctr',
+      at: '2026-09-08T12:00:00.000Z',
+      read: false,
+      source: 'gcp',
+    });
+    expect(repo.deleteByIds(['fill:t1'])).toBe(1);
+    expect(
+      repo.insert({
+        id: 'fill:t1',
+        kind: 'order_filled',
+        title: 'Order Placed',
+        body: '1 ctr',
+        at: '2026-09-08T12:00:00.000Z',
+        read: false,
+        source: 'gcp',
+      })
+    ).toBe(false);
+    expect(repo.list()).toHaveLength(0);
+  });
 });

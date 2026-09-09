@@ -267,4 +267,29 @@ describe('iOS ↔ Cloud trade wiring', () => {
     expect(rt.alerts.list().filter((a) => a.id === 'fill:t1')).toHaveLength(1);
     expect(rt.alerts.list().filter((a) => a.kind === 'order_filled')).toHaveLength(1);
   });
+
+  test('deleteAlertsByIds is not restored by a later Cloud sync or hydrate', async () => {
+    const payload = [
+      {
+        alertId: 'fill:t1',
+        kind: 'order_filled',
+        title: 'Order Placed · Gold YES',
+        body: '1 ctr @ $0.55 · Cost $0.55',
+        at: new Date().toISOString(),
+        source: 'gcp',
+      },
+    ];
+    const rt = new AppRuntime({ getConfig: () => defaultAppConfig() });
+    rt.syncCloudAlerts(payload);
+    expect(rt.alerts.list().some((a) => a.id === 'fill:t1')).toBe(true);
+    await rt.deleteAlertsByIds(['fill:t1']);
+    expect(rt.alerts.list().some((a) => a.id === 'fill:t1')).toBe(false);
+    rt.syncCloudAlerts(payload);
+    expect(rt.alerts.list().some((a) => a.id === 'fill:t1')).toBe(false);
+
+    const rt2 = new AppRuntime({ getConfig: () => defaultAppConfig() });
+    await rt2.hydrateHistory();
+    rt2.syncCloudAlerts(payload);
+    expect(rt2.alerts.list().some((a) => a.id === 'fill:t1')).toBe(false);
+  });
 });

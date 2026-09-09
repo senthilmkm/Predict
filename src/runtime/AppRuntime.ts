@@ -345,6 +345,8 @@ export class AppRuntime {
     const removed = this.alerts.deleteByIds(ids);
     await this.persistHistory();
     this.onChange?.();
+    // Cloud still has the rows; dismiss so the next GET /me/alerts cannot restore them.
+    void cloudClient.dismissAlerts(ids);
     return removed;
   }
 

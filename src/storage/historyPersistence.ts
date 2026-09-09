@@ -3,6 +3,7 @@ import { AlertRecord, MemoryAlertRepo, MemoryTradeRepo, TradeRecord } from './re
 
 const TRADES_KEY = 'foresight.trades.v1';
 const ALERTS_KEY = 'foresight.alerts.v1';
+const DISMISSED_ALERTS_KEY = 'foresight.alerts.dismissed.v1';
 
 export async function hydrateRepos(
   trades: MemoryTradeRepo,
@@ -16,6 +17,15 @@ export async function hydrateRepos(
       const rows = JSON.parse(t) as TradeRecord[];
       trades.clear();
       for (const row of rows.reverse()) trades.insert(row);
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const dismissed = await kv.getItem(DISMISSED_ALERTS_KEY);
+    if (dismissed) {
+      const ids = JSON.parse(dismissed) as string[];
+      if (Array.isArray(ids)) alerts.loadDismissed(ids);
     }
   } catch {
     /* ignore */
@@ -42,4 +52,5 @@ export async function persistRepos(
   const kv = getKeyValueStore();
   await kv.setItem(TRADES_KEY, JSON.stringify(trades.list(500)));
   await kv.setItem(ALERTS_KEY, JSON.stringify(alerts.list(500)));
+  await kv.setItem(DISMISSED_ALERTS_KEY, JSON.stringify(alerts.dismissedList().slice(-2000)));
 }

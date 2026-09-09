@@ -169,6 +169,43 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(src).not.toMatch(/catch \{\s*return sortAlertsDesc\(localAlertStore/);
     const api = require('fs').readFileSync(require('path').join(__dirname, '../routes/api.ts'), 'utf8');
     expect(api).toContain('Number.isFinite(raw) ? raw : 400');
+    expect(api).toContain("/me/alerts/dismiss");
+  });
+
+  test('POST /me/alerts/dismiss hides rows and the same alertId does not reappear', async () => {
+    const uid = 'user_alert_dismiss';
+    await saveAlertRecord(uid, {
+      alertId: 'fill:gone',
+      userId: uid,
+      kind: 'order_filled',
+      title: 'Order Placed · BTC YES',
+      body: '1 ctr',
+      at: '2026-09-08T21:00:00.000Z',
+      source: 'gcp',
+    });
+    const gone = await request(app)
+      .post('/me/alerts/dismiss')
+      .set('Authorization', `Bearer ${uid}`)
+      .send({ ids: ['fill:gone'] });
+    expect(gone.status).toBe(200);
+    expect(gone.body).toEqual({ ok: true, dismissed: 1 });
+
+    const listed = await request(app).get('/me/alerts').set('Authorization', `Bearer ${uid}`);
+    expect(listed.body.alerts.map((a: any) => a.alertId)).toEqual([]);
+
+    expect(
+      await saveAlertRecord(uid, {
+        alertId: 'fill:gone',
+        userId: uid,
+        kind: 'order_filled',
+        title: 'Order Placed · BTC YES',
+        body: 'retry should not resurrect',
+        at: '2026-09-08T21:01:00.000Z',
+        source: 'gcp',
+      })
+    ).toBe('exists');
+    const after = await request(app).get('/me/alerts').set('Authorization', `Bearer ${uid}`);
+    expect(after.body.alerts).toEqual([]);
   });
 
   test('this-tick settlement produces Trade won with exact phone wording and cents', async () => {

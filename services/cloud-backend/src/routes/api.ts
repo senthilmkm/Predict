@@ -7,6 +7,7 @@ import {
   upsertUserDoc,
   getTradeRecords,
   getAlertRecords,
+  dismissAlertRecords,
   getAuditLogs,
   writeAuditLog,
   getSystemConfig,
@@ -286,6 +287,14 @@ apiRouter.get('/me/alerts', async (req: Request, res: Response) => {
   const limit = Number.isFinite(raw) ? raw : 400;
   const alerts = await getAlertRecords(userId, limit);
   res.json({ ok: true, alerts });
+});
+
+// Phone Alerts delete — hide rows without letting the same alertId re-push
+apiRouter.post('/me/alerts/dismiss', async (req: Request, res: Response) => {
+  const userId = extractUserId(req);
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const dismissed = await dismissAlertRecords(userId, ids);
+  res.json({ ok: true, dismissed });
 });
 
 // Get Security Audit Logs
