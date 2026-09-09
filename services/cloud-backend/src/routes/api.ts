@@ -203,12 +203,19 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
     if (displayName) updateData.displayName = displayName;
     if (deviceName) updateData.deviceName = deviceName;
 
+    const before = await getUserDoc(userId);
     const userDoc = await upsertUserDoc(userId, updateData);
-    await writeAuditLog(
-      userId,
-      userDoc.cloudTradingEnabled ? 'CLOUD_ARMED' : 'CLOUD_DISARMED',
-      { cloudTradingEnabled: userDoc.cloudTradingEnabled, state: userDoc.state }
-    );
+    const armedChanged =
+      !before ||
+      before.cloudTradingEnabled !== userDoc.cloudTradingEnabled ||
+      before.state !== userDoc.state;
+    if (armedChanged) {
+      await writeAuditLog(
+        userId,
+        userDoc.cloudTradingEnabled ? 'CLOUD_ARMED' : 'CLOUD_DISARMED',
+        { cloudTradingEnabled: userDoc.cloudTradingEnabled, state: userDoc.state }
+      );
+    }
 
     res.json({ ok: true, userDoc, systemConfig });
   } catch (err: any) {

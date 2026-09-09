@@ -52,10 +52,11 @@ export function getETParts(date: Date = new Date()) {
 /**
  * Evaluates whether market is open for trading & signal polling in GCP Cloud Run.
  * - BTC & ETH: 24/7 (Always OPEN)
- * - WTI, Gold, Silver (CME Futures):
+ * - WTI, Gold, Silver, Copper, NG (Kalshi 15m commodities):
  *   - Friday 5:00 PM ET -> Sunday 6:00 PM ET: CLOSED (Weekend)
- *   - Mon-Thu 5:00 PM ET -> 6:00 PM ET: CLOSED (Daily CME Halt)
  *   - Holidays: CLOSED
+ *   - Weekday 5:00–6:00 PM ET stays OPEN — Kalshi lists 15m contracts
+ *     through the CME futures maintenance window.
  */
 import { AssetRegistry } from 'trading-core';
 
@@ -137,15 +138,6 @@ export function isMarketOpen(asset: string, date: Date = new Date()): MarketHour
       open: false,
       reason: 'Weekend halt',
       reopensAt: 'Sun 6:00 PM ET',
-    };
-  }
-
-  // Monday–Thursday Daily Maintenance Halt (5:00 PM ET – 6:00 PM ET)
-  if (['Mon', 'Tue', 'Wed', 'Thu'].includes(weekday) && hour === 17) {
-    return {
-      open: false,
-      reason: 'Daily CME halt',
-      reopensAt: '6:00 PM ET',
     };
   }
 

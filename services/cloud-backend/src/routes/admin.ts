@@ -10,7 +10,11 @@ import {
   writeAuditLog,
   getSystemConfig,
   setSystemConfig,
+  mergePurgeConfig,
+  countPurgeCollections,
+  type PurgeConfig,
 } from '../services/firestore';
+import { parsePurgeJobName, runConfiguredPurgeJobs } from '../services/purgeJobs';
 import { AssetRegistry, defaultAppConfig } from '../../../../packages/trading-core/src/types';
 import { windowBuyCap } from '../../../../packages/trading-core/src/gates';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
@@ -105,13 +109,45 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
   }
 });
 
-// Update System Configuration (e.g. tick_interval_seconds)
+function parseAdminPurgePatch(raw: unknown): Partial<PurgeConfig> | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('purge must be an object with audit, alerts, and/or trades');
+  }
+  const src = raw as Record<string, any>;
+  const patch: Partial<PurgeConfig> = {};
+  const readJob = (key: 'audit' | 'alerts' | 'trades') => {
+    if (src[key] == null) return;
+    if (typeof src[key] !== 'object') {
+      throw new Error(`purge.${key} must be an object`);
+    }
+    const job = src[key] as Record<string, unknown>;
+    const next: { enabled?: boolean; retainDays?: number } = {};
+    if (job.enabled !== undefined) {
+      next.enabled = job.enabled === true || job.enabled === 'true' || job.enabled === 1 || job.enabled === '1';
+    }
+    if (job.retainDays !== undefined && job.retainDays !== '') {
+      next.retainDays = Number(job.retainDays);
+    }
+    patch[key] = next as PurgeConfig['audit'];
+  };
+  readJob('audit');
+  readJob('alerts');
+  readJob('trades');
+  return patch;
+}
+
+// Update System Configuration (tick interval + purge jobs). Nested merge so a partial purge patch cannot wipe other jobs.
 adminRouter.post('/config', async (req: Request, res: Response) => {
   try {
-    const { tick_interval_seconds, stale_timeout_seconds, batch_size } = req.body || {};
-    const updateData: any = {};
+    const { tick_interval_seconds, stale_timeout_seconds, batch_size, purge } = req.body || {};
+    const updateData: Record<string, unknown> = {};
     const tickSec = Number(tick_interval_seconds);
-    if (Number.isFinite(tickSec) && tickSec >= 5 && tickSec <= 60) {
+    if (tick_interval_seconds !== undefined && tick_interval_seconds !== null && tick_interval_seconds !== '') {
+      if (!Number.isFinite(tickSec) || tickSec < 5 || tickSec > 60) {
+        res.status(400).json({ ok: false, error: 'tick_interval_seconds must be between 5 and 60' });
+        return;
+      }
       updateData.tick_interval_seconds = Math.round(tickSec);
     }
     if (typeof stale_timeout_seconds === 'number' && stale_timeout_seconds >= 10) {
@@ -120,11 +156,79 @@ adminRouter.post('/config', async (req: Request, res: Response) => {
     if (typeof batch_size === 'number' && batch_size >= 1) {
       updateData.batch_size = Math.round(batch_size);
     }
-    const updated = await setSystemConfig(updateData);
+    if (purge !== undefined) {
+      const patch = parseAdminPurgePatch(purge);
+      if (patch) {
+        const existing = await getSystemConfig({ fresh: true });
+        updateData.purge = mergePurgeConfig(existing.purge, patch);
+      }
+    }
+    const updated = await setSystemConfig(updateData as any);
     await writeAuditLog('system', 'CONFIG_CHANGE', { updated, changedBy: 'admin_portal' });
     res.json({ ok: true, systemConfig: updated });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err?.message || 'Config update error' });
+    const msg = err?.message || 'Config update error';
+    const status = String(msg).startsWith('purge') ? 400 : 500;
+    res.status(status).json({ ok: false, error: msg });
+  }
+});
+
+// Run one purge job now (uses Keep-for days even if the job is Off). Does not change On/Off.
+adminRouter.post('/purge/run', async (req: Request, res: Response) => {
+  try {
+    const job = parsePurgeJobName(req.body?.job);
+    if (!job) {
+      res.status(400).json({
+        ok: false,
+        error: 'job must be audit, alerts, trades, or all',
+      });
+      return;
+    }
+    const jobs = job === 'all' ? (['audit', 'alerts', 'trades'] as const) : [job];
+    const result = await runConfiguredPurgeJobs({
+      jobs: [...jobs],
+      ignoreEnabled: true,
+    });
+    if (!result.skipped && result.ran) {
+      await setSystemConfig({
+        purge: {
+          lastRunAt: new Date().toISOString(),
+          lastDeleted: result.deleted,
+        },
+      });
+    }
+    await writeAuditLog('system', 'CONFIG_CHANGE', {
+      changedBy: 'admin_portal',
+      purgeRun: job,
+      skipped: result.skipped,
+      ran: result.ran,
+      deleted: result.deleted,
+    });
+    res.json({
+      ok: true,
+      skipped: result.skipped,
+      ran: result.ran,
+      message: result.skipped
+        ? 'A purge is already running (Cloud Scheduler tick or another Run once). Try again in a minute.'
+        : `Deleted ${result.deleted.audit} audit, ${result.deleted.alerts} dismissed alerts, ${result.deleted.trades} closed trades.`,
+      deleted: result.deleted,
+      scannedUsers: result.scannedUsers,
+      counts: await countPurgeCollections({ fresh: true }),
+      systemConfig: await getSystemConfig(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err?.message || 'Purge run failed' });
+  }
+});
+
+// Collection document totals for the three purge cards (count aggregations, 15s cache).
+adminRouter.get('/purge/counts', async (req: Request, res: Response) => {
+  try {
+    const fresh = req.query.fresh === '1' || req.query.fresh === 'true';
+    const counts = await countPurgeCollections({ fresh });
+    res.json({ ok: true, counts });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err?.message || 'Purge counts error' });
   }
 });
 

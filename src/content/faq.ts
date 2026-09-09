@@ -45,7 +45,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Only Kalshi 15-minute up/down contracts for the assets on the Cushions tab. Predict does not trade hourly, daily, or other longer Kalshi events. There is no 15-minute forex on Kalshi right now, so those pairs are not listed.\n\n' +
             'Crypto (24/7): BTC, ETH, SOL, DOGE, XRP, BNB.\n' +
-            'Commodities: Gold, Silver, WTI, Natural Gas, Copper. Nearly 24 hours; weekend pause and a daily ~5:00–6:00 PM ET halt.\n' +
+            'Commodities: Gold, Silver, WTI, Natural Gas, Copper. Nearly 24 hours; weekend pause and listed holidays. Kalshi 15-minute contracts stay open through the CME 5:00–6:00 PM ET futures desk halt.\n' +
             'US indexes: S&P 500, Nasdaq 100. Weekdays about 9:30 AM–4:00 PM ET only.\n\n' +
             'A new 15-minute window starts every quarter hour (10:00, 10:15, 10:30) only while Kalshi is listing that book. Closed hours show skip on Home — that is not a missing market.',
         },
@@ -262,7 +262,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Crypto can run 24/7. Other groups follow exchange hours (Eastern Time):\n' +
             '• US indexes: about 9:30 AM–4:00 PM ET, weekdays\n' +
-            '• Gold, oil, and other CME commodities: weekend pause and a daily ~5:00–6:00 PM ET halt, plus listed holidays\n\n' +
+            '• Gold, oil, and other CME commodities: weekend pause and listed holidays. The Kalshi 15-minute book stays open 5:00–6:00 PM ET on weekdays\n\n' +
             'Home may show a weekend/holiday banner. Closed assets are skipped; crypto can still lean.',
         },
         {
@@ -391,7 +391,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'History = every Predict fill and alert on this phone, with filters (pending, win, loss, miss). Status dots: green settled win / still favorable, yellow checking, red unfavorable or settled loss, gray IOC miss.\n\n' +
             'Home pulls Cloud alerts after each poll so a lean can show in History without opening this tab.\n\n' +
-            'Dashboard = today’s Predict stats (ET): win rate, closed P&L from Predict fills today, W/L, pending, IOC misses, alerts logged, unread. Closed P&L is not the same as Change (24h).\n\n' +
+            'Dashboard = today’s Predict stats (ET): win rate, closed P&L from Predict fills today, W/L, pending, IOC misses, alerts logged, unread. A by-asset card lists W/L, P&L, and what you paid on wins vs losses (the fill pay price). Closed P&L is not the same as Change (24h).\n\n' +
             'Bell (top right) = new alerts since you last opened Alerts (bell page or History → Alerts). Leaving that list clears the badge. Bell mute is only the lock-screen ping (see “Mute vs Notify on lean signals”). Delete still removes rows.',
         },
         {

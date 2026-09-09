@@ -56,22 +56,143 @@ export interface AuditLogDoc {
   timestamp: string;
 }
 
+export interface PurgeJobSettings {
+  enabled: boolean;
+  retainDays: number;
+}
+
+export interface PurgeDeletedCounts {
+  audit: number;
+  alerts: number;
+  trades: number;
+}
+
+export interface PurgeConfig {
+  audit: PurgeJobSettings;
+  alerts: PurgeJobSettings;
+  trades: PurgeJobSettings;
+  lastRunAt?: string;
+  lastDeleted?: PurgeDeletedCounts;
+}
+
 export interface SystemConfig {
   tick_interval_seconds: number;
   stale_timeout_seconds: number;
   batch_size: number;
   /** ISO time of the last completed Cloud Scheduler /tick (worker heartbeat). */
   last_worker_tick_at?: string;
+  /** Age-out deletes for audit / dismissed alerts / closed trades. Nested-merged on save. */
+  purge?: PurgeConfig;
 }
 
-const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
-  tick_interval_seconds: 20,
-  stale_timeout_seconds: 120,
-  batch_size: 50,
-};
+export const MAX_PURGE_DELETES_PER_TICK = 400;
+export const AUDIT_RETENTION_DAYS = 30;
 
-// In-memory simulator & cache for system config
-let localSystemConfig: SystemConfig = { ...DEFAULT_SYSTEM_CONFIG };
+export function cloneDefaultPurgeConfig(): PurgeConfig {
+  return {
+    audit: { enabled: true, retainDays: AUDIT_RETENTION_DAYS },
+    alerts: { enabled: false, retainDays: 90 },
+    trades: { enabled: false, retainDays: 365 },
+  };
+}
+
+function cloneDefaultSystemConfig(): SystemConfig {
+  return {
+    tick_interval_seconds: 20,
+    stale_timeout_seconds: 120,
+    batch_size: 50,
+    purge: cloneDefaultPurgeConfig(),
+  };
+}
+
+function clampRetainDays(raw: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
+function parseEnabledFlag(value: unknown, fallback: boolean): boolean {
+  if (value === true || value === 'true' || value === 1 || value === '1') return true;
+  if (value === false || value === 'false' || value === 0 || value === '0') return false;
+  return fallback;
+}
+
+export function normalizePurgeConfig(raw?: Partial<PurgeConfig> | null): PurgeConfig {
+  const defaults = cloneDefaultPurgeConfig();
+  const lastDeleted = raw?.lastDeleted;
+  const out: PurgeConfig = {
+    audit: {
+      enabled: parseEnabledFlag(raw?.audit?.enabled, defaults.audit.enabled),
+      retainDays: clampRetainDays(Number(raw?.audit?.retainDays), 7, 365, defaults.audit.retainDays),
+    },
+    alerts: {
+      enabled: parseEnabledFlag(raw?.alerts?.enabled, defaults.alerts.enabled),
+      retainDays: clampRetainDays(Number(raw?.alerts?.retainDays), 7, 365, defaults.alerts.retainDays),
+    },
+    trades: {
+      enabled: parseEnabledFlag(raw?.trades?.enabled, defaults.trades.enabled),
+      retainDays: clampRetainDays(Number(raw?.trades?.retainDays), 30, 3650, defaults.trades.retainDays),
+    },
+  };
+  if (typeof raw?.lastRunAt === 'string' && raw.lastRunAt.trim()) {
+    out.lastRunAt = raw.lastRunAt;
+  }
+  if (lastDeleted && typeof lastDeleted === 'object') {
+    out.lastDeleted = {
+      audit: Math.max(0, Math.round(Number(lastDeleted.audit) || 0)),
+      alerts: Math.max(0, Math.round(Number(lastDeleted.alerts) || 0)),
+      trades: Math.max(0, Math.round(Number(lastDeleted.trades) || 0)),
+    };
+  }
+  return out;
+}
+
+export function mergePurgeConfig(
+  existing: PurgeConfig | undefined,
+  patch: Partial<PurgeConfig> | undefined
+): PurgeConfig {
+  const base = existing || cloneDefaultPurgeConfig();
+  if (!patch) return normalizePurgeConfig(base);
+  return normalizePurgeConfig({
+    audit: { ...base.audit, ...patch.audit },
+    alerts: { ...base.alerts, ...patch.alerts },
+    trades: { ...base.trades, ...patch.trades },
+    lastRunAt: patch.lastRunAt ?? base.lastRunAt,
+    lastDeleted: patch.lastDeleted ?? base.lastDeleted,
+  });
+}
+
+export function omitUndefinedDeep<T>(value: T): T {
+  if (value === undefined || value === null) return value;
+  if (Array.isArray(value)) return value.map((item) => omitUndefinedDeep(item)) as T;
+  if (typeof value !== 'object') return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (nested === undefined) continue;
+    out[key] = omitUndefinedDeep(nested);
+  }
+  return out as T;
+}
+
+export function normalizeSystemConfig(raw?: Partial<SystemConfig> | null): SystemConfig {
+  const defaults = cloneDefaultSystemConfig();
+  const tickAt =
+    typeof raw?.last_worker_tick_at === 'string' && raw.last_worker_tick_at.trim()
+      ? raw.last_worker_tick_at
+      : undefined;
+  return omitUndefinedDeep({
+    tick_interval_seconds: Number.isFinite(Number(raw?.tick_interval_seconds))
+      ? Number(raw?.tick_interval_seconds)
+      : defaults.tick_interval_seconds,
+    stale_timeout_seconds: Number.isFinite(Number(raw?.stale_timeout_seconds))
+      ? Number(raw?.stale_timeout_seconds)
+      : defaults.stale_timeout_seconds,
+    batch_size: Number.isFinite(Number(raw?.batch_size)) ? Number(raw?.batch_size) : defaults.batch_size,
+    ...(tickAt ? { last_worker_tick_at: tickAt } : {}),
+    purge: mergePurgeConfig(defaults.purge, raw?.purge),
+  });
+}
+
+let localSystemConfig: SystemConfig = cloneDefaultSystemConfig();
 let cachedSystemConfig: SystemConfig | null = null;
 let systemConfigLastFetched = 0;
 const CACHE_TTL_MS = 5000;
@@ -429,6 +550,20 @@ export async function saveAlertRecord(userId: string, alert: CloudAlertDoc): Pro
   }
 }
 
+/** Includes dismissed rows. Used by purge tests; History GET still hides dismissed. */
+export async function listAlertDocsIncludingDismissed(userId: string): Promise<CloudAlertDoc[]> {
+  const f = getDb();
+  if (!f) {
+    return [...(localAlertStore.get(userId) || [])];
+  }
+  try {
+    const snapshot = await f.collection('users').doc(userId).collection('alerts').limit(400).get();
+    return snapshot.docs.map((d: any) => d.data() as CloudAlertDoc);
+  } catch {
+    return [...(localAlertStore.get(userId) || [])];
+  }
+}
+
 export async function getAlertRecords(userId: string, limit = 400): Promise<CloudAlertDoc[]> {
   const cap = Math.max(1, Math.min(400, Math.round(Number(limit) || 200)));
   const f = getDb();
@@ -567,10 +702,20 @@ export async function getTradeRecords(userId: string): Promise<TradeRecordDoc[]>
   }
 }
 
+export function retentionCutoffIso(retainDays: number, nowMs = Date.now()): string {
+  const days = Number.isFinite(retainDays) ? retainDays : AUDIT_RETENTION_DAYS;
+  return new Date(nowMs - Math.max(1, days) * 24 * 60 * 60 * 1000).toISOString();
+}
+
+export function auditRetentionCutoffIso(nowMs = Date.now()): string {
+  return retentionCutoffIso(AUDIT_RETENTION_DAYS, nowMs);
+}
+
 export async function writeAuditLog(
   userId: string,
   eventType: AuditLogDoc['eventType'],
-  details: Record<string, any>
+  details: Record<string, any>,
+  timestamp = new Date().toISOString()
 ): Promise<void> {
   const logId = `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const logDoc: AuditLogDoc = {
@@ -578,7 +723,7 @@ export async function writeAuditLog(
     userId,
     eventType,
     details,
-    timestamp: new Date().toISOString(),
+    timestamp,
   };
 
   const logs = localAuditStore.get(userId) || [];
@@ -593,6 +738,220 @@ export async function writeAuditLog(
       /* ignore */
     }
   }
+}
+
+/** Closed trades only. Never delete open/pending fills (protect-sell / settlement still need them). */
+export function isClosedTradeSafeToPurge(trade: Pick<TradeRecordDoc, 'status'> & { outcome?: TradeRecordDoc['outcome'] | '' }): boolean {
+  const status = String(trade.status || '').toUpperCase();
+  if (status === 'SUBMITTED') return false;
+  const outcome = String(trade.outcome || '').toLowerCase().trim();
+  if (status === 'FILLED') {
+    if (outcome === 'pending' || outcome === '' || outcome === 'exiting') return false;
+    return outcome === 'win' || outcome === 'loss' || outcome === 'miss' || outcome === 'exited';
+  }
+  return status === 'SETTLED' || status === 'CANCELLED';
+}
+
+function alertIsDismissed(alert: CloudAlertDoc): boolean {
+  return Boolean(String(alert.dismissedAt || '').trim());
+}
+
+function pruneLocalAudit(cutoffIso: string): number {
+  let removed = 0;
+  for (const [userId, logs] of localAuditStore.entries()) {
+    const kept = logs.filter((l) => String(l.timestamp) >= cutoffIso);
+    removed += logs.length - kept.length;
+    localAuditStore.set(userId, kept);
+  }
+  return removed;
+}
+
+function pruneLocalDismissedAlerts(cutoffIso: string, maxDeletes: number): number {
+  let removed = 0;
+  for (const [userId, rows] of localAlertStore.entries()) {
+    if (removed >= maxDeletes) break;
+    const next: CloudAlertDoc[] = [];
+    for (const row of rows) {
+      const oldEnough = String(row.at || '') < cutoffIso;
+      if (removed < maxDeletes && alertIsDismissed(row) && oldEnough) {
+        removed += 1;
+        continue;
+      }
+      next.push(row);
+    }
+    localAlertStore.set(userId, next);
+  }
+  return removed;
+}
+
+function pruneLocalClosedTrades(cutoffIso: string, maxDeletes: number): number {
+  let removed = 0;
+  for (const [userId, rows] of localTradeStore.entries()) {
+    if (removed >= maxDeletes) break;
+    const next: TradeRecordDoc[] = [];
+    for (const row of rows) {
+      const oldEnough = String(row.executedAt || '') < cutoffIso;
+      if (removed < maxDeletes && oldEnough && isClosedTradeSafeToPurge(row)) {
+        removed += 1;
+        continue;
+      }
+      next.push(row);
+    }
+    localTradeStore.set(userId, next);
+  }
+  return removed;
+}
+
+async function deleteExpiredAuditDocs(
+  f: Firestore,
+  userId: string,
+  cutoffIso: string,
+  limit: number
+): Promise<number> {
+  if (limit <= 0) return 0;
+  const snap = await f
+    .collection('users')
+    .doc(userId)
+    .collection('audit')
+    .where('timestamp', '<', cutoffIso)
+    .limit(limit)
+    .get();
+  if (snap.empty) return 0;
+  const batch = f.batch();
+  for (const doc of snap.docs) batch.delete(doc.ref);
+  await batch.commit();
+  return snap.size;
+}
+
+async function deleteExpiredDismissedAlertDocs(
+  f: Firestore,
+  userId: string,
+  cutoffIso: string,
+  limit: number
+): Promise<number> {
+  if (limit <= 0) return 0;
+  const snap = await f
+    .collection('users')
+    .doc(userId)
+    .collection('alerts')
+    .where('at', '<', cutoffIso)
+    .limit(limit)
+    .get();
+  if (snap.empty) return 0;
+  const toDelete = snap.docs.filter((doc) => alertIsDismissed(doc.data() as CloudAlertDoc));
+  if (toDelete.length === 0) return 0;
+  const batch = f.batch();
+  for (const doc of toDelete) batch.delete(doc.ref);
+  await batch.commit();
+  return toDelete.length;
+}
+
+async function deleteExpiredClosedTradeDocs(
+  f: Firestore,
+  userId: string,
+  cutoffIso: string,
+  limit: number
+): Promise<number> {
+  if (limit <= 0) return 0;
+  const snap = await f
+    .collection('users')
+    .doc(userId)
+    .collection('trades')
+    .where('executedAt', '<', cutoffIso)
+    .limit(limit)
+    .get();
+  if (snap.empty) return 0;
+  const toDelete = snap.docs.filter((doc) => isClosedTradeSafeToPurge(doc.data() as TradeRecordDoc));
+  if (toDelete.length === 0) return 0;
+  const batch = f.batch();
+  for (const doc of toDelete) batch.delete(doc.ref);
+  await batch.commit();
+  return toDelete.length;
+}
+
+export type SubcollectionPurgePass = {
+  audit?: { retainDays: number };
+  alerts?: { retainDays: number };
+  trades?: { retainDays: number };
+  maxDeletes?: number;
+};
+
+/**
+ * One user-list pass. Disabled jobs are not queried (saves Firestore reads).
+ * Local maps are always pruned when a job is selected (tests + Cloud Run memory).
+ * Firestore deletes are capped at MAX_PURGE_DELETES_PER_TICK.
+ */
+export async function runSubcollectionPurge(
+  opts: SubcollectionPurgePass
+): Promise<{ deleted: PurgeDeletedCounts; scannedUsers: number }> {
+  const maxDeletes = Math.max(
+    1,
+    Math.min(MAX_PURGE_DELETES_PER_TICK, Math.round(Number(opts.maxDeletes) || MAX_PURGE_DELETES_PER_TICK))
+  );
+  const deleted: PurgeDeletedCounts = { audit: 0, alerts: 0, trades: 0 };
+  const auditCutoff = opts.audit ? retentionCutoffIso(opts.audit.retainDays) : '';
+  const alertsCutoff = opts.alerts ? retentionCutoffIso(opts.alerts.retainDays) : '';
+  const tradesCutoff = opts.trades ? retentionCutoffIso(opts.trades.retainDays) : '';
+
+  const f = getDb();
+  const countLocal = !f;
+  if (opts.audit) {
+    const n = pruneLocalAudit(auditCutoff);
+    if (countLocal) deleted.audit += n;
+  }
+  if (opts.alerts) {
+    const n = pruneLocalDismissedAlerts(alertsCutoff, maxDeletes);
+    if (countLocal) deleted.alerts += n;
+  }
+  if (opts.trades) {
+    const n = pruneLocalClosedTrades(tradesCutoff, Math.max(0, maxDeletes - deleted.alerts));
+    if (countLocal) deleted.trades += n;
+  }
+
+  if (!f) {
+    return { deleted, scannedUsers: 0 };
+  }
+
+  const remaining = () => maxDeletes - deleted.audit - deleted.alerts - deleted.trades;
+  if (remaining() <= 0) return { deleted, scannedUsers: 0 };
+
+  try {
+    const users = await getAllUsers();
+    const ids = [...new Set([...users.map((u) => u.userId).filter(Boolean), 'system'])];
+    let scannedUsers = 0;
+    for (const userId of ids) {
+      if (remaining() <= 0) break;
+      scannedUsers += 1;
+      try {
+        if (opts.audit && remaining() > 0) {
+          deleted.audit += await deleteExpiredAuditDocs(f, userId, auditCutoff, remaining());
+        }
+        if (opts.alerts && remaining() > 0) {
+          deleted.alerts += await deleteExpiredDismissedAlertDocs(f, userId, alertsCutoff, remaining());
+        }
+        if (opts.trades && remaining() > 0) {
+          deleted.trades += await deleteExpiredClosedTradeDocs(f, userId, tradesCutoff, remaining());
+        }
+      } catch {
+        /* skip this user; continue the pass */
+      }
+    }
+    return { deleted, scannedUsers };
+  } catch {
+    return { deleted, scannedUsers: 0 };
+  }
+}
+
+/** Deletes audit documents older than retainDays (default 30) from memory and Firestore. */
+export async function pruneExpiredAuditLogs(
+  maxDeletes = MAX_PURGE_DELETES_PER_TICK,
+  retainDays = AUDIT_RETENTION_DAYS
+): Promise<number> {
+  const result = await runSubcollectionPurge({
+    audit: { retainDays },
+    maxDeletes,
+  });
+  return result.deleted.audit;
 }
 
 export async function getAuditLogs(userId: string): Promise<AuditLogDoc[]> {
@@ -614,54 +973,75 @@ export async function getAuditLogs(userId: string): Promise<AuditLogDoc[]> {
   }
 }
 
-export async function getSystemConfig(): Promise<SystemConfig> {
+export async function getSystemConfig(opts?: { fresh?: boolean }): Promise<SystemConfig> {
   const now = Date.now();
-  if (cachedSystemConfig && now - systemConfigLastFetched < CACHE_TTL_MS) {
+  if (!opts?.fresh && cachedSystemConfig && now - systemConfigLastFetched < CACHE_TTL_MS) {
     return cachedSystemConfig;
   }
   const f = getDb();
   if (!f) {
-    cachedSystemConfig = localSystemConfig || DEFAULT_SYSTEM_CONFIG;
+    cachedSystemConfig = normalizeSystemConfig(localSystemConfig);
     systemConfigLastFetched = now;
     return cachedSystemConfig;
   }
   try {
     const doc = await f.collection('system').doc('config').get();
     if (doc.exists && doc.data()) {
-      cachedSystemConfig = {
-        ...DEFAULT_SYSTEM_CONFIG,
-        ...doc.data(),
-      };
+      cachedSystemConfig = normalizeSystemConfig(doc.data() as Partial<SystemConfig>);
     } else {
-      cachedSystemConfig = DEFAULT_SYSTEM_CONFIG;
+      cachedSystemConfig = cloneDefaultSystemConfig();
     }
   } catch {
-    cachedSystemConfig = localSystemConfig || DEFAULT_SYSTEM_CONFIG;
+    cachedSystemConfig = normalizeSystemConfig(localSystemConfig);
   }
   systemConfigLastFetched = now;
   return cachedSystemConfig;
 }
 
-export async function setSystemConfig(
-  config: Partial<SystemConfig>
-): Promise<SystemConfig> {
-  const existing = await getSystemConfig();
-  const updated: SystemConfig = {
+function buildNextSystemConfig(
+  existing: SystemConfig,
+  config: Omit<Partial<SystemConfig>, 'purge'> & { purge?: Partial<PurgeConfig> }
+): SystemConfig {
+  return normalizeSystemConfig({
     ...existing,
     ...config,
-  };
+    last_worker_tick_at: config.last_worker_tick_at ?? existing.last_worker_tick_at,
+    purge: mergePurgeConfig(existing.purge, config.purge),
+  });
+}
+
+export async function setSystemConfig(
+  config: Omit<Partial<SystemConfig>, 'purge'> & { purge?: Partial<PurgeConfig> }
+): Promise<SystemConfig> {
+  const f = getDb();
+  if (!f) {
+    const existing = await getSystemConfig({ fresh: true });
+    const updated = buildNextSystemConfig(existing, config);
+    localSystemConfig = updated;
+    cachedSystemConfig = updated;
+    systemConfigLastFetched = Date.now();
+    return updated;
+  }
+
+  const ref = f.collection('system').doc('config');
+  const updated = await f.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const existing = snap.exists
+      ? normalizeSystemConfig(snap.data() as Partial<SystemConfig>)
+      : cloneDefaultSystemConfig();
+    const next = buildNextSystemConfig(existing, config);
+    tx.set(ref, omitUndefinedDeep(next), { merge: true });
+    return next;
+  });
+
   localSystemConfig = updated;
   cachedSystemConfig = updated;
   systemConfigLastFetched = Date.now();
 
-  const f = getDb();
-  if (f) {
-    await f.collection('system').doc('config').set(updated, { merge: true });
-    const verify = await f.collection('system').doc('config').get();
-    const written = Number(verify.data()?.tick_interval_seconds);
-    if (verify.exists && Number.isFinite(written) && written !== updated.tick_interval_seconds) {
-      throw new Error('system_config_persist_mismatch');
-    }
+  const verify = await f.collection('system').doc('config').get();
+  const written = Number(verify.data()?.tick_interval_seconds);
+  if (verify.exists && Number.isFinite(written) && written !== updated.tick_interval_seconds) {
+    throw new Error('system_config_persist_mismatch');
   }
   return updated;
 }
@@ -669,7 +1049,7 @@ export async function setSystemConfig(
 export function resetSystemConfigCacheForTests(): void {
   cachedSystemConfig = null;
   systemConfigLastFetched = 0;
-  localSystemConfig = { ...DEFAULT_SYSTEM_CONFIG };
+  localSystemConfig = cloneDefaultSystemConfig();
 }
 
 export async function syncAssetCatalogToFirestore(): Promise<any[]> {
@@ -689,6 +1069,87 @@ export async function syncAssetCatalogToFirestore(): Promise<any[]> {
     }
   }
   return ASSETS_CATALOG;
+}
+
+function sumLocalStore(store: Map<string, any[]>): number {
+  let n = 0;
+  for (const rows of store.values()) n += rows.length;
+  return n;
+}
+
+async function countCollectionGroupDocs(f: Firestore, name: string): Promise<number | null> {
+  try {
+    const snap = await f.collectionGroup(name).count().get();
+    return Number(snap.data().count) || 0;
+  } catch {
+    return null;
+  }
+}
+
+async function countNamedSubcollections(f: Firestore, name: string, userIds: string[]): Promise<number> {
+  let total = 0;
+  for (const userId of userIds) {
+    try {
+      const snap = await f.collection('users').doc(userId).collection(name).count().get();
+      total += Number(snap.data().count) || 0;
+    } catch {
+      /* skip user */
+    }
+  }
+  return total;
+}
+
+export type PurgeCollectionCounts = {
+  audit: number;
+  alerts: number;
+  trades: number;
+};
+
+let purgeCountsCache: { at: number; counts: PurgeCollectionCounts } | null = null;
+const PURGE_COUNTS_TTL_MS = 15_000;
+
+export function invalidatePurgeCollectionCountsCache(): void {
+  purgeCountsCache = null;
+}
+
+/**
+ * Document totals for the three purge collections. Uses Firestore count() aggregations
+ * (not full scans). 15s cache so Refresh / tab switches do not re-bill immediately.
+ */
+export async function countPurgeCollections(opts?: { fresh?: boolean }): Promise<PurgeCollectionCounts> {
+  if (!opts?.fresh && purgeCountsCache && Date.now() - purgeCountsCache.at < PURGE_COUNTS_TTL_MS) {
+    return purgeCountsCache.counts;
+  }
+  const f = getDb();
+  if (!f) {
+    const counts = {
+      audit: sumLocalStore(localAuditStore),
+      alerts: sumLocalStore(localAlertStore),
+      trades: sumLocalStore(localTradeStore),
+    };
+    purgeCountsCache = { at: Date.now(), counts };
+    return counts;
+  }
+
+  const [auditG, alertsG, tradesG] = await Promise.all([
+    countCollectionGroupDocs(f, 'audit'),
+    countCollectionGroupDocs(f, 'alerts'),
+    countCollectionGroupDocs(f, 'trades'),
+  ]);
+  const counts: PurgeCollectionCounts = {
+    audit: auditG ?? 0,
+    alerts: alertsG ?? 0,
+    trades: tradesG ?? 0,
+  };
+  if (auditG == null || alertsG == null || tradesG == null) {
+    const users = await getAllUsers();
+    const ids = [...new Set([...users.map((u) => u.userId).filter(Boolean), 'system'])];
+    if (auditG == null) counts.audit = await countNamedSubcollections(f, 'audit', ids);
+    if (alertsG == null) counts.alerts = await countNamedSubcollections(f, 'alerts', ids);
+    if (tradesG == null) counts.trades = await countNamedSubcollections(f, 'trades', ids);
+  }
+  purgeCountsCache = { at: Date.now(), counts };
+  return counts;
 }
 
 export async function getAllUsers(): Promise<(UserStatusDoc & { config?: any; pushTokens?: string[] })[]> {

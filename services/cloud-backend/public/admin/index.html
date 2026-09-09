@@ -180,6 +180,9 @@
         <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn px-4 py-2 text-xs font-bold rounded-xl transition duration-150 text-slate-300 hover:text-white">
           📜 Audit & Errors
         </button>
+        <button onclick="switchTab('purge')" id="tab-purge" class="tab-btn px-4 py-2 text-xs font-bold rounded-xl transition duration-150 text-slate-300 hover:text-white">
+          🧹 Purge jobs
+        </button>
         <button onclick="switchTab('devdocs')" id="tab-devdocs" class="tab-btn px-4 py-2 text-xs font-bold rounded-xl transition duration-150 text-slate-300 hover:text-white">
           🛠️ Dev & GCP Infra Docs
         </button>
@@ -425,7 +428,116 @@
       </div>
     </div>
 
-    <!-- TAB 6: DEV & GCP INFRASTRUCTURE DOCS -->
+    <!-- TAB 6: PURGE JOBS -->
+    <div id="view-purge" class="hidden space-y-6">
+      <div class="glass-card rounded-2xl p-6 space-y-5">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>🧹 Firestore purge jobs</span>
+            <div class="tooltip-wrapper">
+              <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
+              <div class="tooltip-content">
+                Deletes old documents after each Cloud Scheduler /tick (same minute job as trading — no extra Cloud Run service). At most 400 deletes per minute. Off jobs are not queried.
+              </div>
+            </div>
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">
+            These jobs <strong class="text-white">permanently delete Firestore documents</strong>. That is not the same as hiding a row in the iOS app.
+            Settings are stored in <span class="font-mono text-sky-400">system/config</span> next to the tick interval.
+          </p>
+        </div>
+
+        <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs text-slate-300 space-y-2">
+          <p class="font-semibold text-slate-200">Never auto-deleted (no job for these):</p>
+          <ul class="list-disc pl-5 space-y-1">
+            <li>User profiles <span class="font-mono text-sky-400">users/{userId}</span> — login, arm state, cushions, push tokens</li>
+            <li>Kalshi API keys in Secret Manager</li>
+            <li><span class="font-mono text-sky-400">system/config</span> and <span class="font-mono text-sky-400">system/catalog</span></li>
+          </ul>
+          <p class="text-slate-400">
+            Runs <strong class="text-white">after</strong> trading sub-ticks in the same /tick request, so a fill just written cannot be deleted in that same pass.
+            A second overlapping /tick skips purge (in-process lock). Firestore delete is idempotent.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <p class="lg:col-span-3 text-[11px] text-slate-500">
+            Numbers in parentheses are current Firestore document counts across all users. They are not “how many will delete this minute.”
+          </p>
+          <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h4 class="text-sm font-bold text-white">Audit logs <span id="purgeAuditCount" class="text-sky-400 font-mono font-semibold">(—)</span></h4>
+              <label class="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer">
+                <input type="checkbox" id="purgeAuditEnabled" class="accent-sky-500" onchange="markPurgeFormDirty()" />
+                On
+              </label>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              Collection <span class="font-mono text-sky-400">users/*/audit</span>. Age field <span class="font-mono">timestamp</span>.
+              <strong class="text-white">DELETE</strong> the document. Default <strong class="text-emerald-400">On</strong>, keep 30 days.
+              This is the Audit &amp; Errors tab, not the trade stream.
+            </p>
+            <label class="block text-[11px] text-slate-400">Keep for (days)
+              <input type="number" id="purgeAuditDays" min="7" max="365" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
+            </label>
+            <button type="button" onclick="runPurgeJob('audit')" class="w-full px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">Run once now</button>
+          </div>
+
+          <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h4 class="text-sm font-bold text-white">Dismissed alerts <span id="purgeAlertsCount" class="text-sky-400 font-mono font-semibold">(—)</span></h4>
+              <label class="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer">
+                <input type="checkbox" id="purgeAlertsEnabled" class="accent-sky-500" onchange="markPurgeFormDirty()" />
+                On
+              </label>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              Collection <span class="font-mono text-sky-400">users/*/alerts</span>. Age field <span class="font-mono">at</span>.
+              <strong class="text-white">DELETE only if dismissedAt is set</strong>. Undismissed alerts are never deleted (same alertId would re-push).
+              Phone “old alerts” only <strong class="text-white">hides</strong> (sets dismissedAt). This job is the actual delete. Default <strong class="text-amber-400">Off</strong>, keep 90 days.
+            </p>
+            <label class="block text-[11px] text-slate-400">Keep for (days)
+              <input type="number" id="purgeAlertsDays" min="7" max="365" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
+            </label>
+            <button type="button" onclick="runPurgeJob('alerts')" class="w-full px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">Run once now</button>
+          </div>
+
+          <div class="bg-slate-900/60 rounded-xl p-4 border border-rose-900/60 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h4 class="text-sm font-bold text-rose-300">Closed trades <span id="purgeTradesCount" class="text-rose-200 font-mono font-semibold">(—)</span></h4>
+              <label class="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer">
+                <input type="checkbox" id="purgeTradesEnabled" class="accent-rose-500" onchange="markPurgeFormDirty()" />
+                On
+              </label>
+            </div>
+            <p class="text-[11px] text-rose-200/80 leading-relaxed">
+              Collection <span class="font-mono text-sky-400">users/*/trades</span>. Age field <span class="font-mono">executedAt</span>.
+              <strong class="text-white">DELETE</strong> — this <strong class="text-white">is</strong> Live Trade Stream, History, and Cloud P&amp;L for that fill.
+              Open/pending fills are skipped (SUBMITTED, FILLED pending/exiting). Default <strong class="text-amber-400">Off</strong>, keep 365 days.
+            </p>
+            <label class="block text-[11px] text-slate-400">Keep for (days)
+              <input type="number" id="purgeTradesDays" min="30" max="3650" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
+            </label>
+            <button type="button" onclick="runPurgeJob('trades')" class="w-full px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800">Run once now</button>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="text-[11px] text-slate-400 space-y-1">
+            <div>Last purge pass: <span id="purgeLastRunAt" class="font-mono text-slate-200">Never</span></div>
+            <div>Last deleted: <span id="purgeLastDeleted" class="font-mono text-slate-200">audit 0 · alerts 0 · trades 0</span></div>
+            <p class="text-slate-500">Ticking On does not start the job until you click <strong class="text-white">Save purge settings</strong>. The page refreshes every 10s; unsaved ticks are kept until you Save or leave. Run once uses the Keep-for days saved on the server.</p>
+          </div>
+          <button type="button" onclick="savePurgeSettings()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl border border-sky-400">
+            Save purge settings
+          </button>
+        </div>
+        <p id="purgeStatusMsg" class="text-[11px] text-slate-500"></p>
+        <p id="purgeUnsavedHint" class="hidden text-[11px] text-amber-400 font-semibold">Unsaved changes — click Save purge settings or the On switch will not persist.</p>
+      </div>
+    </div>
+
+    <!-- TAB 7: DEV & GCP INFRASTRUCTURE DOCS -->
     <div id="view-devdocs" class="hidden space-y-6">
       <div class="glass-card rounded-2xl p-6 space-y-6">
         <div>
@@ -462,6 +574,8 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
             <li>• <strong class="text-sky-400">users/{userId}</strong>: User status doc (`cloudTradingEnabled`, `state: ARMED/DISARMED`, `config`, `pushTokens`).</li>
             <li>• <strong class="text-sky-400">users/{userId}/trades/{tradeId}</strong>: Execution records (`status: FILLED/CANCELLED/SETTLED`, `notionalUsd`, `payPrice`, `fillCount`, `pnlUsd`).</li>
             <li>• <strong class="text-sky-400">users/{userId}/audit/{logId}</strong>: Audit trail (`KEY_UPLOAD`, `KILL_SWITCH`, `TRADE_TRIGGERED`, `ERROR`).</li>
+            <li>• <strong class="text-sky-400">users/{userId}/alerts/{alertId}</strong>: Cloud alerts. Phone hide sets `dismissedAt`; Purge jobs can DELETE dismissed docs only.</li>
+            <li>• <strong class="text-sky-400">system/config</strong>: Tick interval + purge job On/Off and keep-for days. User profiles and secrets are never purged.</li>
           </ul>
         </div>
 
@@ -650,19 +764,183 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       }, 300);
     }
 
+    let purgeFormDirty = false;
+
+    function setPurgeUnsavedHint(on) {
+      const hint = document.getElementById('purgeUnsavedHint');
+      if (hint) hint.classList.toggle('hidden', !on);
+    }
+
+    function markPurgeFormDirty() {
+      purgeFormDirty = true;
+      setPurgeUnsavedHint(true);
+    }
+
+    function applyPurgeCounts(counts) {
+      const fmt = (n) => {
+        if (n == null || Number.isNaN(Number(n))) return '(—)';
+        return '(' + Number(n).toLocaleString() + ')';
+      };
+      const auditEl = document.getElementById('purgeAuditCount');
+      const alertsEl = document.getElementById('purgeAlertsCount');
+      const tradesEl = document.getElementById('purgeTradesCount');
+      if (auditEl) {
+        auditEl.innerText = fmt(counts && counts.audit);
+        auditEl.title = 'Documents in users/*/audit across all users';
+      }
+      if (alertsEl) {
+        alertsEl.innerText = fmt(counts && counts.alerts);
+        alertsEl.title = 'Documents in users/*/alerts (live + dismissed). This job only deletes dismissed rows older than Keep-for.';
+      }
+      if (tradesEl) {
+        tradesEl.innerText = fmt(counts && counts.trades);
+        tradesEl.title = 'Documents in users/*/trades (open + closed). This job only deletes old closed fills.';
+      }
+    }
+
+    async function fetchPurgeCounts(fresh) {
+      try {
+        const q = fresh ? '?fresh=1' : '';
+        const res = await fetch(`${API_BASE}/purge/counts${q}`, { headers: getHeaders() });
+        const data = await res.json();
+        if (data.ok && data.counts) applyPurgeCounts(data.counts);
+      } catch (e) {
+        console.warn('Purge counts fetch error:', e);
+      }
+    }
+
+    function applyPurgeForm(systemConfig, opts) {
+      const purge = systemConfig && systemConfig.purge ? systemConfig.purge : {};
+      const force = Boolean(opts && opts.force);
+      const lastRun = document.getElementById('purgeLastRunAt');
+      if (lastRun) {
+        lastRun.innerText = purge.lastRunAt ? new Date(purge.lastRunAt).toLocaleString() : 'Never';
+      }
+      const lastDel = document.getElementById('purgeLastDeleted');
+      if (lastDel) {
+        const d = purge.lastDeleted || {};
+        lastDel.innerText = `audit ${d.audit || 0} · alerts ${d.alerts || 0} · trades ${d.trades || 0}`;
+      }
+      if (purgeFormDirty && !force) return;
+      const audit = purge.audit || { enabled: true, retainDays: 30 };
+      const alerts = purge.alerts || { enabled: false, retainDays: 90 };
+      const trades = purge.trades || { enabled: false, retainDays: 365 };
+      const auditEl = document.getElementById('purgeAuditEnabled');
+      const alertsEl = document.getElementById('purgeAlertsEnabled');
+      const tradesEl = document.getElementById('purgeTradesEnabled');
+      const auditDays = document.getElementById('purgeAuditDays');
+      const alertsDays = document.getElementById('purgeAlertsDays');
+      const tradesDays = document.getElementById('purgeTradesDays');
+      if (auditEl) auditEl.checked = audit.enabled !== false;
+      if (alertsEl) alertsEl.checked = alerts.enabled === true;
+      if (tradesEl) tradesEl.checked = trades.enabled === true;
+      if (auditDays) auditDays.value = audit.retainDays || 30;
+      if (alertsDays) alertsDays.value = alerts.retainDays || 90;
+      if (tradesDays) tradesDays.value = trades.retainDays || 365;
+    }
+
+    function readPurgeForm() {
+      return {
+        audit: {
+          enabled: document.getElementById('purgeAuditEnabled').checked,
+          retainDays: Number(document.getElementById('purgeAuditDays').value),
+        },
+        alerts: {
+          enabled: document.getElementById('purgeAlertsEnabled').checked,
+          retainDays: Number(document.getElementById('purgeAlertsDays').value),
+        },
+        trades: {
+          enabled: document.getElementById('purgeTradesEnabled').checked,
+          retainDays: Number(document.getElementById('purgeTradesDays').value),
+        },
+      };
+    }
+
+    async function savePurgeSettings() {
+      const status = document.getElementById('purgeStatusMsg');
+      const purge = readPurgeForm();
+      if (purge.trades.enabled && !confirm('Closed-trades purge is ON. After you save, each Cloud Scheduler minute can permanently delete old closed fills from Live Trade Stream, History, and Cloud P&L. Open fills are not deleted. Continue?')) {
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/config`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ purge }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          const msg = data.error || `Save failed (${res.status})`;
+          if (status) status.innerText = msg;
+          alert(msg);
+          return;
+        }
+        applyPurgeForm(data.systemConfig, { force: true });
+        purgeFormDirty = false;
+        setPurgeUnsavedHint(false);
+        if (status) status.innerText = 'Purge settings saved. On jobs run after trading on the next Cloud Scheduler minute.';
+      } catch (e) {
+        alert('Error saving purge settings: ' + (e?.message || e));
+      }
+    }
+
+    async function runPurgeJob(job) {
+      const status = document.getElementById('purgeStatusMsg');
+      if (job === 'trades') {
+        if (!confirm('This permanently deletes old CLOSED trades from Firestore using the Keep-for days currently saved on the server. Live Trade Stream, History, and Cloud P&L for those fills will disappear. Open/pending fills are not deleted. Save first if you just changed days. Continue?')) {
+          return;
+        }
+      } else if (job === 'alerts') {
+        if (!confirm('This permanently deletes old DISMISSED alerts from Firestore (Keep-for days saved on the server). Undismissed alerts are not deleted. Continue?')) {
+          return;
+        }
+      } else if (!confirm('This permanently deletes old audit log documents from Firestore (Keep-for days saved on the server). Continue?')) {
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/purge/run`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ job }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          const msg = data.error || `Run failed (${res.status})`;
+          if (status) status.innerText = msg;
+          alert(msg);
+          return;
+        }
+        if (data.systemConfig) applyPurgeForm(data.systemConfig);
+        if (data.counts) applyPurgeCounts(data.counts);
+        else await fetchPurgeCounts(true);
+        if (status) status.innerText = data.message || 'Purge finished.';
+        if (data.skipped) alert(data.message);
+      } catch (e) {
+        alert('Error running purge: ' + (e?.message || e));
+      }
+    }
+
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       const activeBtn = document.getElementById(`tab-${tabId}`);
       if (activeBtn) activeBtn.classList.add('active');
 
-      ['overview', 'users', 'cushions', 'trades', 'audit', 'devdocs'].forEach(id => {
+      ['overview', 'users', 'cushions', 'trades', 'audit', 'purge', 'devdocs'].forEach(id => {
         const el = document.getElementById(`view-${id}`);
         if (el) el.classList.toggle('hidden', id !== tabId);
       });
+      if (tabId === 'purge') fetchPurgeCounts(false);
     }
 
     async function refreshData() {
-      await Promise.all([fetchOverview(), fetchUsers(), fetchTrades(), fetchAudit()]);
+      const purgeOpen = !document.getElementById('view-purge')?.classList.contains('hidden');
+      await Promise.all([
+        fetchOverview(),
+        fetchUsers(),
+        fetchTrades(),
+        fetchAudit(),
+        ...(purgeOpen ? [fetchPurgeCounts(true)] : []),
+      ]);
     }
 
     async function setTickInterval(sec) {
@@ -692,6 +970,9 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       try {
         const res = await fetch(`${API_BASE}/overview`, { headers: getHeaders() });
         const data = await res.json();
+        if (data.ok && data.systemConfig) {
+          applyPurgeForm(data.systemConfig);
+        }
         if (data.ok && data.metrics) {
           document.getElementById('metricTotalUsers').innerText = data.metrics.totalUsers || 0;
           document.getElementById('metricActiveUsers').innerText = `${data.metrics.activeTraders || 0} Active`;

@@ -48,6 +48,8 @@ export interface LastTradeAction {
 export interface RuntimeStatus {
   running: boolean;
   lastTickAt: string | null;
+  /** Cloud Run /tick (user or worker). Home “cloud 20s” must use this, not the phone poller. */
+  cloudLastTickAt: string | null;
   /** Updated at the start of every tick so heartbeat stays Live during long polls */
   lastPulseAt: string | null;
   lastLeans: Partial<Record<AssetKey, LeanResult>>;
@@ -72,6 +74,16 @@ export interface RuntimeStatus {
 
 export { formatSkipReason };
 
+export function pickCloudHeartbeatIso(
+  userLastTickAt?: string | null,
+  workerTickAt?: string | null
+): string | null {
+  const a = Date.parse(String(userLastTickAt || ''));
+  const b = Date.parse(String(workerTickAt || ''));
+  const best = Math.max(Number.isFinite(a) ? a : 0, Number.isFinite(b) ? b : 0);
+  return best > 0 ? new Date(best).toISOString() : null;
+}
+
 /**
  * Foreground lean/settlement/alert loop. This phone never places orders —
  * Cloud Run owns Auto-trade buys and Protect money sells.
@@ -83,6 +95,7 @@ export class AppRuntime {
   readonly status: RuntimeStatus = {
     running: false,
     lastTickAt: null,
+    cloudLastTickAt: null,
     lastPulseAt: null,
     lastLeans: {},
     lastLeanAt: {},
@@ -277,6 +290,14 @@ export class AppRuntime {
       });
     if (same) return;
     this.status.lastTradeAction = next;
+    this.onChange?.();
+  }
+
+  /** Home “cloud Ns” chip — Cloud Run last tick, not the phone poller. */
+  syncCloudHeartbeat(userLastTickAt?: string | null, workerTickAt?: string | null): void {
+    const iso = pickCloudHeartbeatIso(userLastTickAt, workerTickAt);
+    if (!iso || this.status.cloudLastTickAt === iso) return;
+    this.status.cloudLastTickAt = iso;
     this.onChange?.();
   }
 
@@ -632,6 +653,7 @@ export class AppRuntime {
       }
       if (statusRes.ok) {
         this.syncCloudTradeActions(statusRes.userDoc?.lastTradeAction);
+        this.syncCloudHeartbeat(statusRes.userDoc?.lastTickAt, statusRes.systemConfig?.last_worker_tick_at);
       }
     } catch {
       /* keep local History */

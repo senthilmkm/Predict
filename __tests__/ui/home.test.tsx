@@ -149,6 +149,7 @@ describe('HomeScreen', () => {
     const s = await render(<HomeScreen />);
     expect(s.getByTestId('signal-decision-BTC').props.children).toBe('SKIP');
     expect(s.getByTestId('skip-reason-BTC').props.children).toBe('below cushion');
+    expect(s.queryByTestId('signal-time-BTC')).toBeNull();
   });
 
   test('YES with Cloud skip shows ask too rich, not below cushion', async () => {
@@ -190,5 +191,24 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('signal-decision-BTC').props.children).toBe('YES');
     expect(s.getByTestId('trade-action-BTC').props.children).toBe('skipped · ask too rich');
     expect(s.queryByTestId('skip-reason-BTC')).toBeNull();
+  });
+
+  test('heartbeat stays Live when Cloud ticked recently even if the phone poller clock is 40m old', async () => {
+    const rt = useRuntimeStore.getState().ensure();
+    rt.status.running = true;
+    rt.status.lastTickAt = new Date(Date.now() - 2441 * 1000).toISOString();
+    rt.status.lastPulseAt = rt.status.lastTickAt;
+    rt.status.cloudLastTickAt = new Date().toISOString();
+    useRuntimeStore.getState().syncFromRuntime();
+    useConfigStore.setState({
+      config: { ...defaultAppConfig(), auto_trade_enabled: true, poll_interval_seconds: 20 },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByText(/Live · cloud 20s/)).toBeTruthy();
+    expect(s.queryByText(/Stale · cloud/)).toBeNull();
+    const lastTickLabel = String(s.getByTestId('home-last-tick').props.children);
+    expect(lastTickLabel).toMatch(/Last tick /);
+    expect(lastTickLabel).not.toMatch(/40m ago/);
+    expect(lastTickLabel).toMatch(/\d+s ago/);
   });
 });

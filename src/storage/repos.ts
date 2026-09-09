@@ -117,6 +117,11 @@ export class MemoryTradeRepo {
     return this.trades.slice(0, limit);
   }
 
+  /** Full book — Dashboard today-by-asset must not depend on the History 100-row slice. */
+  all(): TradeRecord[] {
+    return this.trades.slice();
+  }
+
   pendingFilled(): TradeRecord[] {
     return this.trades.filter(
       (t) => !t.dry_run && t.outcome === 'pending' && Number(t.fill_count ?? 1) > 0

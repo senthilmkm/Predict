@@ -146,6 +146,62 @@ describe('History / Dashboard / AlertsHub', () => {
     expect(s.getByText('2')).toBeTruthy(); // alerts logged
     expect(s.getByText('1')).toBeTruthy(); // unread
     expect(s.getByText(/Latest trade: BTC pending/i)).toBeTruthy();
+    expect(s.queryByTestId('dashboard-asset-pnl')).toBeNull();
+  });
+
+  test('Dashboard by-asset card uses pay price and matches Closed P&L', async () => {
+    useRuntimeStore.setState({
+      stats: {
+        wins: 3,
+        losses: 4,
+        pending: 0,
+        misses: 1,
+        dry_runs: 0,
+        realized_pnl_usd: -13.37,
+        win_rate: 3 / 7,
+      },
+      assetPnlToday: {
+        rows: [
+          {
+            asset: 'Silver',
+            wins: 3,
+            losses: 4,
+            realized_pnl_usd: -13.37,
+            winPayMin: 0.92,
+            winPayMax: 0.92,
+            lossPayMin: 0.85,
+            lossPayMax: 0.92,
+          },
+          {
+            asset: 'BTC',
+            wins: 12,
+            losses: 0,
+            realized_pnl_usd: 7.34,
+            winPayMin: 0.73,
+            winPayMax: 0.95,
+            lossPayMin: null,
+            lossPayMax: null,
+          },
+        ],
+        wins: 15,
+        losses: 4,
+        realized_pnl_usd: -6.03,
+        winPnlAvg: 0.47,
+        lossPnlAvg: -3.84,
+        lossPayMin: 0.85,
+        lossPayMax: 0.92,
+      },
+    });
+    const s = await render(<DashboardScreen />);
+    expect(s.getByTestId('dashboard-asset-pnl')).toBeTruthy();
+    expect(s.getByTestId('dashboard-asset-pnl-Silver')).toBeTruthy();
+    expect(s.getByText('Silver')).toBeTruthy();
+    expect(s.getByTestId('dashboard-asset-pnl-Silver')).toBeTruthy();
+    expect(s.getAllByText('3W / 4L').length).toBeGreaterThan(0);
+    expect(s.getByText('-$13.37')).toBeTruthy();
+    expect(s.getByText('Wins paid $0.92 · Losses paid $0.85–$0.92')).toBeTruthy();
+    expect(s.getByText('+$7.34')).toBeTruthy();
+    expect(s.getByTestId('dashboard-asset-pnl-footer').props.children).toContain('Losses paid $0.85–$0.92');
   });
 
   test('Dashboard Kalshi card uses a shorter window label until 24h exists', async () => {

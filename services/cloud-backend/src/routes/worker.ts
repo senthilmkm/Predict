@@ -25,6 +25,7 @@ import {
   setSystemConfig,
   TradeRecordDoc,
 } from '../services/firestore';
+import { runConfiguredPurgeJobs } from '../services/purgeJobs';
 import {
   fillCollapseId,
   pruneLeanAlertsSent,
@@ -539,7 +540,20 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
     }
   }
 
-  await setSystemConfig({ last_worker_tick_at: lastResult.timestamp });
+  // Trading sub-ticks finish first. Purge last so we never delete a fill the tick just wrote.
+  const latestConfig = await getSystemConfig({ fresh: true });
+  const purgeResult = await runConfiguredPurgeJobs({ config: latestConfig });
+  await setSystemConfig({
+    last_worker_tick_at: lastResult.timestamp,
+    ...(purgeResult.skipped || !purgeResult.ran
+      ? {}
+      : {
+          purge: {
+            lastRunAt: lastResult.timestamp,
+            lastDeleted: purgeResult.deleted,
+          },
+        }),
+  });
 
   res.json({
     ok: true,
@@ -550,5 +564,12 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
     results: lastResult.results,
     tickIntervalSeconds: intervalSec,
     subTicksExecuted: tickCount,
+    auditPruned: purgeResult.deleted.audit,
+    purge: {
+      skipped: purgeResult.skipped,
+      ran: purgeResult.ran,
+      deleted: purgeResult.deleted,
+      scannedUsers: purgeResult.scannedUsers,
+    },
   });
 });

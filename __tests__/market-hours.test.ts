@@ -1,4 +1,5 @@
 import { isMarketOpen, getMarketScheduleNotice } from '../src/services/marketHours';
+import { SERIES_BY_ASSET } from '../src/services/kalshi/client';
 
 describe('Market Hours Schedule', () => {
   it('allows all 24/7 crypto assets at all times', () => {
@@ -46,13 +47,20 @@ describe('Market Hours Schedule', () => {
     expect(isMarketOpen('WTI', sunEvening).open).toBe(true);
   });
 
-  it('handles Mon-Thu 5-6 PM ET maintenance halt', () => {
-    // Monday September 7, 2026 17:15 ET (21:15 UTC) -> Labor Day in 2026 (Holiday)
-    // Tuesday September 8, 2026 17:15 ET (21:15 UTC)
-    const tueHalt = new Date('2026-09-08T21:15:00Z');
-    const r = isMarketOpen('WTI', tueHalt);
-    expect(r.open).toBe(false);
-    expect(r.reason).toBe('Daily CME halt');
+  it('keeps Kalshi 15m commodities open Mon-Thu 5-6 PM ET', () => {
+    // Tuesday September 8, 2026 17:15 ET (21:15 UTC) — CME futures halt, Kalshi 15m still live
+    const tueAfternoon = new Date('2026-09-08T21:15:00Z');
+    for (const a of ['WTI', 'Gold', 'Silver', 'COPPER', 'NG']) {
+      expect(isMarketOpen(a, tueAfternoon).open).toBe(true);
+    }
+  });
+
+  it('maps commodities to the live Kalshi 15m series tickers', () => {
+    expect(SERIES_BY_ASSET.WTI).toBe('KXWTI15M');
+    expect(SERIES_BY_ASSET.Gold).toBe('KXGOLD15M');
+    expect(SERIES_BY_ASSET.Silver).toBe('KXSILVER15M');
+    expect(SERIES_BY_ASSET.COPPER).toBe('KXCOPPER15M');
+    expect(SERIES_BY_ASSET.NG).toBe('KXNATGAS15M');
   });
 
   it('generates schedule notice banner for full-day closures', () => {

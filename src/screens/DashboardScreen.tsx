@@ -4,9 +4,15 @@ import { colors, spacing } from '../theme/tokens';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { formatChange24h, formatChangeWindowLabel } from '../util/moneyFormat';
+import {
+  formatAssetPayLine,
+  formatDayPayFooter,
+  formatSignedUsd,
+} from '../storage/assetPnlToday';
 
 export function DashboardScreen({ navigation }: { navigation?: any }) {
   const stats = useRuntimeStore((s) => s.stats);
+  const assetPnlToday = useRuntimeStore((s) => s.assetPnlToday);
   const change24hUsd = useRuntimeStore((s) => s.change24hUsd);
   const change24hPct = useRuntimeStore((s) => s.change24hPct);
   const change24hWindowMs = useRuntimeStore((s) => s.change24hWindowMs);
@@ -17,6 +23,7 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
   const [refreshing, setRefreshing] = useState(false);
+  const assetFooter = formatDayPayFooter(assetPnlToday);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -63,6 +70,46 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
       >
         <Card label="Trades" value={`${stats.wins}W / ${stats.losses}L`} />
       </Pressable>
+      {assetPnlToday.rows.length > 0 ? (
+        <View style={styles.card} testID="dashboard-asset-pnl">
+          <Text style={styles.label}>Closed P&L by asset</Text>
+          {assetPnlToday.rows.map((row) => {
+            const payLine = formatAssetPayLine(row);
+            return (
+              <Pressable
+                key={row.asset}
+                testID={`dashboard-asset-pnl-${row.asset}`}
+                onPress={() => {
+                  void tickOnce().catch(() => null);
+                  navigation?.navigate?.('History');
+                }}
+                style={styles.assetRow}
+              >
+                <View style={styles.assetTop}>
+                  <Text style={styles.assetName}>{row.asset}</Text>
+                  <Text style={styles.assetWl}>
+                    {row.wins}W / {row.losses}L
+                  </Text>
+                  <Text
+                    style={[
+                      styles.assetPnl,
+                      { color: row.realized_pnl_usd >= 0 ? colors.win : colors.loss },
+                    ]}
+                  >
+                    {formatSignedUsd(row.realized_pnl_usd)}
+                  </Text>
+                </View>
+                {payLine ? <Text style={styles.assetPay}>{payLine}</Text> : null}
+              </Pressable>
+            );
+          })}
+          {assetFooter ? (
+            <Text style={styles.assetFooter} testID="dashboard-asset-pnl-footer">
+              {assetFooter}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       <Card label="Pending fills" value={String(stats.pending)} />
       <Card label="IOC misses" value={String(stats.misses)} />
       <Card label="Alerts logged" value={String(alerts.length)} />
@@ -74,7 +121,8 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
       <Text style={styles.note}>
         Change is your Kalshi Predictions total vs a saved snapshot (24h when we have one,
         otherwise since the first snapshot on this phone). Closed P&L is only Predict orders
-        that filled today (ET). History has every fill.
+        that filled today (ET). The by-asset card uses the same fills and the price you paid
+        (not the other side’s quote). History has every fill.
       </Text>
       <SupportContactFooter compact />
     </ScrollView>
@@ -111,5 +159,12 @@ const styles = StyleSheet.create({
   },
   label: { color: colors.textSecondary },
   value: { color: colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 3 },
+  assetRow: { marginTop: spacing.sm },
+  assetTop: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  assetName: { color: colors.textPrimary, fontWeight: '700', flex: 1 },
+  assetWl: { color: colors.textSecondary, fontSize: 13 },
+  assetPnl: { fontSize: 15, fontWeight: '700', minWidth: 72, textAlign: 'right' },
+  assetPay: { color: colors.mute, fontSize: 12, marginTop: 2, lineHeight: 16 },
+  assetFooter: { color: colors.mute, fontSize: 12, marginTop: spacing.sm, lineHeight: 17 },
   note: { color: colors.mute, fontSize: 12, marginTop: spacing.sm, lineHeight: 17 },
 });

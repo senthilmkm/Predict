@@ -11,6 +11,7 @@ export interface SystemConfig {
   tick_interval_seconds: number;
   stale_timeout_seconds: number;
   batch_size: number;
+  last_worker_tick_at?: string;
 }
 
 export interface CloudStatusResult {

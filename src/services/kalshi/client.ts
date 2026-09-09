@@ -231,16 +231,13 @@ export class KalshiClient {
     place?: KalshiPlaceResult;
     market?: any;
   }> {
-    const seriesMap: Record<string, string> = {
-      WTI: 'KXWTI15M',
-      OIL: 'KXWTI15M',
-      GOLD: 'KXGOLD15M',
-      SILVER: 'KXSILVER15M',
-      BTC: 'KXBTC15M',
-      ETH: 'KXETH15M',
-    };
-    const key = String(asset || '').trim().toUpperCase();
-    const series = seriesMap[key];
+    const raw = String(asset || '').trim();
+    const keyUpper = raw.toUpperCase();
+    const catalogKey =
+      keyUpper === 'OIL'
+        ? 'WTI'
+        : AssetRegistry.keys.find((k) => k.toUpperCase() === keyUpper);
+    const series = catalogKey ? AssetRegistry.getSeriesTicker(catalogKey) : undefined;
     if (!series) return { ok: false, error: 'bad_asset' };
     const market = await this.findOpenMarket(series);
     if (!market) return { ok: false, error: 'no_open_market' };

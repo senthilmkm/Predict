@@ -213,6 +213,22 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('tradeFilterFromDate');
     expect(res.text).toContain('tradeFilterToDate');
     expect(res.text).not.toMatch(/>Apply<\/button>/);
+    expect(res.text).toContain('Purge jobs');
+    expect(res.text).toContain('users/*/audit');
+    expect(res.text).toContain('users/*/alerts');
+    expect(res.text).toContain('users/*/trades');
+    expect(res.text).toContain('dismissedAt');
+    expect(res.text).toContain('Save purge settings');
+    expect(res.text).toContain('/purge/run');
+    expect(res.text).toContain("switchTab('purge')");
+    expect(res.text).toContain('Live Trade Stream, History, and Cloud P&amp;L');
+    expect(res.text).toContain('Never auto-deleted');
+    expect(res.text).toContain('purgeAuditCount');
+    expect(res.text).toContain('purgeAlertsCount');
+    expect(res.text).toContain('purgeTradesCount');
+    expect(res.text).toContain('markPurgeFormDirty');
+    expect(res.text).toContain('purgeUnsavedHint');
+    expect(res.text).toContain('purgeFormDirty');
   });
 
   test('11. POST /admin/api/config updates tick_interval_seconds dynamically', async () => {

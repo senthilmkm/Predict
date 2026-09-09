@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { AppRuntime, getAppRuntime, resetAppRuntimeForTests, LastTradeAction } from '../runtime/AppRuntime';
 import { useConfigStore } from './configStore';
 import { DashboardStats, TradeRecord, AlertRecord } from '../storage/repos';
+import { AssetPnlToday, EMPTY_ASSET_PNL_TODAY, summarizeAssetPnlToday } from '../storage/assetPnlToday';
 import { PredictCloudClient, cloudClient } from '../services/cloud/cloudClient';
 import { getUserDisplayName } from '../services/userId';
 import { LeanResult } from '../services/lean/lean';
@@ -28,6 +29,7 @@ interface RuntimeState {
   bump: number;
   status: AppRuntime['status'] | null;
   stats: DashboardStats;
+  assetPnlToday: AssetPnlToday;
   trades: TradeRecord[];
   alerts: AlertRecord[];
   unread: number;
@@ -60,6 +62,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   bump: 0,
   status: null,
   stats: EMPTY_STATS,
+  assetPnlToday: EMPTY_ASSET_PNL_TODAY,
   trades: [],
   alerts: [],
   unread: 0,
@@ -91,6 +94,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         bump: get().bump + 1,
         status: null,
         stats: EMPTY_STATS,
+        assetPnlToday: EMPTY_ASSET_PNL_TODAY,
         trades: [],
         alerts: [],
         unread: 0,
@@ -126,6 +130,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         assetErrors: { ...rt.status.assetErrors },
       },
       stats: statsToUse,
+      assetPnlToday: summarizeAssetPnlToday(rt.trades.all()),
       trades: rt.trades.list(100),
       alerts: rt.alerts.list(500),
       unread: unreadCount,
@@ -227,7 +232,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           rt.syncCloudAlerts(cloudAlerts);
           await rt.catchUpAlertsInboxAfterCloudSync();
         }
-        if (statusRes.ok) rt.syncCloudTradeActions(statusRes.userDoc?.lastTradeAction);
+        if (statusRes.ok) {
+          rt.syncCloudTradeActions(statusRes.userDoc?.lastTradeAction);
+          rt.syncCloudHeartbeat(statusRes.userDoc?.lastTickAt, statusRes.systemConfig?.last_worker_tick_at);
+        }
         if (gen !== cloudSnapshotGen) return;
         get().syncFromRuntime();
       } catch {
@@ -255,6 +263,7 @@ export function resetRuntimeStoreForTests() {
     bump: 0,
     status: null,
     stats: EMPTY_STATS,
+    assetPnlToday: EMPTY_ASSET_PNL_TODAY,
     trades: [],
     alerts: [],
     unread: 0,

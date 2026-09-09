@@ -14,4 +14,11 @@ describe('GCP Cloud Backend Market Hours', () => {
       expect(isMarketOpen(a, sat).open).toBe(false);
     }
   });
+
+  it('keeps Kalshi 15m commodities open Mon-Thu 5-6 PM ET', () => {
+    const tueAfternoon = new Date('2026-09-08T21:15:00Z');
+    for (const a of ['WTI', 'Gold', 'Silver', 'COPPER', 'NG']) {
+      expect(isMarketOpen(a, tueAfternoon).open).toBe(true);
+    }
+  });
 });

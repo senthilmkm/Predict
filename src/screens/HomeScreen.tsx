@@ -156,7 +156,7 @@ export function HomeScreen() {
     };
   });
 
-  const lastTick = status?.lastTickAt ?? status?.lastPulseAt;
+  const lastTick = status?.cloudLastTickAt ?? status?.lastTickAt ?? status?.lastPulseAt;
   const rawIntegrationError = status?.lastError;
   let integrationError: string | null = null;
   if (rawIntegrationError) {
@@ -212,8 +212,8 @@ export function HomeScreen() {
       <View style={styles.chipRow}>
         <Chip label={modeLabel(config)} accent />
         <HeartbeatChip
-          running={Boolean(status?.running)}
-          lastPulseAt={status?.lastTickAt ?? status?.lastPulseAt}
+          running={Boolean(config.auto_trade_enabled || status?.running)}
+          lastPulseAt={status?.cloudLastTickAt ?? status?.lastTickAt ?? status?.lastPulseAt}
           intervalSec={config.poll_interval_seconds}
           nowMs={nowMs}
           onPress={() => void refreshCloudSnapshot()}
@@ -353,15 +353,15 @@ export function HomeScreen() {
                   </Text>
                 ) : null}
               </View>
-              <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
-                {!row.isOpen
-                  ? '(Market closed)'
-                  : row.noMarket
-                    ? '(No Kalshi 15m contract)'
-                    : row.at
-                      ? `(${formatSignalTime(row.at)} · ${relativeAge(row.at, nowMs)})`
-                      : '(No Kalshi 15m contract)'}
-              </Text>
+              {!row.isOpen ? (
+                <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
+                  (Market closed)
+                </Text>
+              ) : row.noMarket || !row.at ? (
+                <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
+                  (No Kalshi 15m contract)
+                </Text>
+              ) : null}
             </View>
           ))
         )}
@@ -469,7 +469,7 @@ function HeartbeatChip({
     lastPulseAt && Number.isFinite(new Date(lastPulseAt).getTime())
       ? Math.max(0, Math.floor((nowMs - new Date(lastPulseAt).getTime()) / 1000))
       : null;
-  // Poller pulses during each asset; allow 2+ slow cycles before Stale
+  // Age is Cloud Run last tick when synced. Phone JS freezes on lock; that is not a Cloud outage.
   const staleAfter = Math.max(120, intervalSec * 4 + 60);
   const stale = running && ageSec != null && ageSec > staleAfter;
   const dotColor = !running ? colors.mute : stale ? colors.warn : colors.win;
