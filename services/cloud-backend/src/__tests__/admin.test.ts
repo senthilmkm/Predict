@@ -226,7 +226,9 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain("switchTab('features')");
     expect(res.text).toContain('Feature configs');
     expect(res.text).toContain('Last signals Buy / Sell');
-    expect(res.text).toContain('Manual-buy TIF');
+    expect(res.text).toContain('Cash out');
+    expect(res.text).toContain('Bid check (seconds)');
+    expect(res.text).toContain('flagCashOut');
     expect(res.text).toContain('flagLastSignalsManualTrade');
     expect(res.text).toContain('saveFeatureSettings');
     expect(res.text).toContain('Broadcast');
@@ -295,6 +297,17 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(pauseOnly.body.systemConfig.kalshiRetry.httpCodes).toEqual([503, 504]);
     expect(pauseOnly.body.systemConfig.kalshiRetry.maxRetries).toBe(1);
     expect(pauseOnly.body.systemConfig.tick_interval_seconds).toBe(first.body.systemConfig.tick_interval_seconds);
+  });
+
+  test('11c. POST /admin/api/config enables Cash out and clamps bid-check seconds', async () => {
+    const res = await request(app)
+      .post('/admin/api/config')
+      .set('x-admin-key', ADMIN_SECRET)
+      .send({ featureFlags: { cashOut: true, cashOutBidCheckSeconds: 1 } });
+    expect(res.status).toBe(200);
+    expect(res.body.systemConfig.featureFlags.cashOut).toBe(true);
+    expect(res.body.systemConfig.featureFlags.cashOutBidCheckSeconds).toBe(2);
+    expect(res.body.systemConfig.featureFlags.lastSignalsManualTrade).toBe(true);
   });
 
   test('12. GET /admin/api/trades filters by asset, status, user, and reports realized P&L', async () => {

@@ -58,14 +58,26 @@ import {
 } from '../services/settlement';
 import { isCloudKalshiPaused, noteTransientKalshiFailure, resetKalshiPauseForTests } from '../services/kalshiPause';
 import { tryAcquirePlaceLock, releasePlaceLock } from '../services/placeLock';
+import { normalizeFeatureFlags } from '../services/featureFlags';
+import {
+  evaluateCashOutEnter,
+  isCashOutEnterPath,
+  openCashOutAssets,
+  tickerHasOpenCashOut,
+  tickerHasOpenNonCashOut,
+} from '../../../../packages/trading-core/src/cashOut';
+import { pendingCashOutTradesForMarket, runCloudCashOutExits } from '../services/cloudCashOut';
 
 export const workerRouter = Router();
 
 /** Same-process cache so 20s sub-ticks cannot re-ding before Firestore is re-read. */
 const leanAlertMemory = new Map<string, LeanAlertsSent>();
+/** Users with an open Cash out lot after the last full tick — bid-watch only these. */
+const cashOutWatchUsers = new Map<string, string[]>();
 
 export function resetLeanAlertMemoryForTests(): void {
   leanAlertMemory.clear();
+  cashOutWatchUsers.clear();
 }
 
 function loadLeanAlertsSent(userId: string, fromDoc: any): LeanAlertsSent {
@@ -93,6 +105,10 @@ function skippedTradeAction(reason: string | undefined, at: string): LastTradeAc
   return { status: 'skipped', detail: `skipped · ${formatSkipReason(reason)}`, at };
 }
 
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Helper to chunk array for parallel batch execution
 function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   const chunks: T[][] = [];
@@ -107,6 +123,7 @@ export { resetKalshiPauseForTests };
 async function runOneTick() {
   const now = new Date();
   const sysConfig = await getSystemConfig();
+  const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
   setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
   if (isCloudKalshiPaused()) {
     return {
@@ -248,8 +265,6 @@ async function runOneTick() {
           const lastTradeAction = copyLastTradeActions(user);
 
           for (const asset of assets) {
-            if (!cfg.assets_enabled?.[asset]) continue;
-
             const lean = sharedLeans[asset];
             if (!lean || !lean.market_ticker) continue;
             leansCount++;
@@ -259,6 +274,12 @@ async function runOneTick() {
               ? Number(lean.abs_gap)
               : Math.abs((lean.live || 0) - (lean.strike || 0));
             const marketTicker = lean.market_ticker;
+            const cashOutEnter = isCashOutEnterPath({
+              adminEnabled: featureFlags.cashOut,
+              userEnabled: Boolean(cfg.risk?.cash_out_enabled),
+              assets: cfg.risk?.cash_out_assets,
+              asset,
+            });
 
             if (
               protectEnabled &&
@@ -334,6 +355,75 @@ async function runOneTick() {
               }
             }
 
+            if (
+              loadTradeBook &&
+              user.kalshiConfigured &&
+              pendingCashOutTradesForMarket(userTrades, marketTicker).length > 0
+            ) {
+              if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
+              const secret = cachedSecret;
+              if (secret?.privateKeyPem && secret.keyId) {
+                const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+                const cashOutRes = await runCloudCashOutExits({
+                  userId,
+                  asset,
+                  ticker: marketTicker,
+                  lean: {
+                    decision: lean.decision,
+                    abs_gap: absGap,
+                    phase: lean.phase,
+                    yes_bid: lean.yes_bid,
+                    yes_ask: lean.yes_ask,
+                    no_bid: lean.no_bid,
+                    no_ask: lean.no_ask,
+                  },
+                  trades: userTrades,
+                  cushion: userCushion,
+                  cashOutBidUsd: Number(cfg.risk?.cash_out_bid_usd ?? 0.88),
+                  graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
+                  slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+                  dryRun: false,
+                  now,
+                  place: (input) =>
+                    client.placeOrder({
+                      ticker: input.ticker,
+                      side: input.side,
+                      count: input.count,
+                      price: input.price,
+                      time_in_force: input.time_in_force,
+                      dry_run: input.dry_run,
+                      client_order_id: input.client_order_id,
+                    }),
+                });
+                if (cashOutRes.exited > 0) {
+                  tradesCount += cashOutRes.exited;
+                  openPositions = Math.max(0, openPositions - cashOutRes.exited);
+                  await writeAuditLog(userId, 'TRADE_TRIGGERED', {
+                    cashOut: true,
+                    asset,
+                    ticker: marketTicker,
+                    exited: cashOutRes.exited,
+                  });
+                }
+                for (const alert of cashOutRes.alerts) {
+                  await emitCloudAlert({
+                    userId,
+                    alertId: protectAlertId(alert.tradeId),
+                    kind: 'protect_sell',
+                    title: alert.title,
+                    body: alert.body,
+                    cfg,
+                    tokens: userTokens,
+                    collapseId: `cout:${userId}:${alert.tradeId}`.slice(0, 64),
+                    asset,
+                    ticker: marketTicker,
+                    tradeId: alert.tradeId,
+                    at: now.toISOString(),
+                  });
+                }
+              }
+            }
+
             const leanSide = leanAlertSide(lean);
             if (leanSide) {
               const leanEmit = await maybeEmitLeanAlert({
@@ -356,7 +446,10 @@ async function runOneTick() {
               }
             }
 
-            if (absGap < userCushion) {
+            if (!cfg.assets_enabled?.[asset]) {
+              continue;
+            }
+            if (!cashOutEnter && absGap < userCushion) {
               delete lastTradeAction[asset];
               continue;
             }
@@ -366,31 +459,46 @@ async function runOneTick() {
               lastTradeAction[asset] = skippedTradeAction('max_trades_asset_window', tickIso);
               continue;
             }
+            if (!cashOutEnter && tickerHasOpenCashOut(userTrades, marketTicker)) {
+              lastTradeAction[asset] = skippedTradeAction('cash_out_holding', tickIso);
+              continue;
+            }
 
-            const gate = evaluateStaticGate(
-              {
-                asset: lean.asset,
-                market_ticker: lean.market_ticker,
-                decision: lean.decision,
-                live: lean.live || 0,
-                strike: lean.strike || 0,
-                abs_gap: absGap,
-                minutes_left: lean.minutes_left || 0,
-                minutes_elapsed: lean.minutes_elapsed || 0,
-                minutes_remaining: lean.minutes_remaining,
-                phase: lean.phase === 'live' ? 'live' : 'ended',
-                yes_ask: lean.yes_ask ?? undefined,
-                no_ask: lean.no_ask ?? undefined,
-                timeseries: lean.timeseries,
-              },
-              cfg,
-              {
-                openPositions,
-                tradesToday,
-                assetTradesInWindow: existingBuys,
-                dailyPnlUsd,
-              }
-            );
+            const leanForGate = {
+              asset: lean.asset,
+              market_ticker: lean.market_ticker,
+              decision: lean.decision,
+              live: lean.live || 0,
+              strike: lean.strike || 0,
+              abs_gap: absGap,
+              minutes_left: lean.minutes_left || 0,
+              minutes_elapsed: lean.minutes_elapsed || 0,
+              minutes_remaining: lean.minutes_remaining,
+              phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
+              yes_ask: lean.yes_ask ?? undefined,
+              no_ask: lean.no_ask ?? undefined,
+              yes_bid: lean.yes_bid ?? undefined,
+              no_bid: lean.no_bid ?? undefined,
+              timeseries: lean.timeseries,
+            };
+            const gate = cashOutEnter
+              ? evaluateCashOutEnter({
+                  lean: leanForGate,
+                  cfg,
+                  adminEnabled: featureFlags.cashOut,
+                  openPositions,
+                  tradesToday,
+                  assetTradesInWindow: existingBuys,
+                  dailyPnlUsd,
+                  hasOpenNonCashOutOnTicker: tickerHasOpenNonCashOut(userTrades, marketTicker),
+                })
+              : evaluateStaticGate(leanForGate, cfg, {
+                  openPositions,
+                  tradesToday,
+                  assetTradesInWindow: existingBuys,
+                  dailyPnlUsd,
+                });
+            const entryPath = cashOutEnter ? 'cash_out' : 'auto';
 
             if (!cfg.auto_trade_enabled || user.state !== 'ARMED') {
               delete lastTradeAction[asset];
@@ -472,7 +580,7 @@ async function runOneTick() {
                 fillCount: filled ? fillCount : 0,
                 outcome: filled || accepted ? 'pending' : 'miss',
                 pnlUsd: null,
-                entryPath: 'auto',
+                entryPath,
               };
 
               await saveTradeRecord(userId, tradeDoc);
@@ -555,6 +663,9 @@ async function runOneTick() {
           if (leanAlertsDirty) {
             leanAlertMemory.set(userId, leanAlertsSent);
           }
+          const stillOpenCashOut = openCashOutAssets(userTrades);
+          if (stillOpenCashOut.length) cashOutWatchUsers.set(userId, stillOpenCashOut);
+          else cashOutWatchUsers.delete(userId);
           await upsertUserDoc(userId, {
             lastTickAt: now.toISOString(),
             lastError: null,
@@ -579,6 +690,137 @@ async function runOneTick() {
   return { timestamp: now.toISOString(), activeUserCount: activeUsers.length, results };
 }
 
+/** Quote + exit only for users that already hold a Cash out lot. No new buys. */
+export async function runCashOutBidWatchTick(): Promise<{
+  timestamp: string;
+  watched: number;
+  paused?: boolean;
+}> {
+  if (cashOutWatchUsers.size === 0) {
+    return { timestamp: new Date().toISOString(), watched: 0 };
+  }
+  const now = new Date();
+  const sysConfig = await getSystemConfig();
+  setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
+  if (isCloudKalshiPaused()) {
+    return { timestamp: now.toISOString(), watched: 0, paused: true };
+  }
+
+  const watchAssets = [...new Set([...cashOutWatchUsers.values()].flat())] as AssetKey[];
+  const sharedLeans: Partial<Record<AssetKey, any>> = {};
+  await Promise.all(
+    watchAssets.map(async (asset) => {
+      try {
+        if (!isMarketOpen(asset, now).open) return;
+        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
+      } catch (err: any) {
+        noteTransientKalshiFailure(err);
+      }
+    })
+  );
+
+  const activeUsers = await getEnrolledActiveUsers();
+  const byId = new Map(activeUsers.map((u) => [u.userId, u]));
+  let watched = 0;
+
+  for (const [userId, assets] of [...cashOutWatchUsers.entries()]) {
+    const user = byId.get(userId);
+    if (!user) {
+      cashOutWatchUsers.delete(userId);
+      continue;
+    }
+    try {
+      const cfg = user.config || defaultAppConfig();
+      const rawTrades = await getTradeRecords(userId);
+      const quoteCache = createQuoteCache();
+      const userTrades = await settlePendingCloudTrades(userId, rawTrades, now, quoteCache);
+      if (cachedHasNoCashOut(userTrades)) {
+        cashOutWatchUsers.delete(userId);
+        continue;
+      }
+      if (cachedSecretMissing(user)) continue;
+      const secret = await getUserSecret(userId);
+      if (!secret?.privateKeyPem || !secret.keyId) continue;
+      const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+      for (const asset of assets) {
+        const lean = sharedLeans[asset];
+        if (!lean?.market_ticker) continue;
+        const marketTicker = lean.market_ticker;
+        if (pendingCashOutTradesForMarket(userTrades, marketTicker).length === 0) continue;
+        watched += 1;
+        const absGap = Number.isFinite(Number(lean.abs_gap))
+          ? Number(lean.abs_gap)
+          : Math.abs((lean.live || 0) - (lean.strike || 0));
+        const cashOutRes = await runCloudCashOutExits({
+          userId,
+          asset,
+          ticker: marketTicker,
+          lean: {
+            decision: lean.decision,
+            abs_gap: absGap,
+            phase: lean.phase,
+            yes_bid: lean.yes_bid,
+            yes_ask: lean.yes_ask,
+            no_bid: lean.no_bid,
+            no_ask: lean.no_ask,
+          },
+          trades: userTrades,
+          cushion: cfg.cushions?.[asset] ?? 25,
+          cashOutBidUsd: Number(cfg.risk?.cash_out_bid_usd ?? 0.88),
+          graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
+          slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+          dryRun: false,
+          now,
+          place: (input) =>
+            client.placeOrder({
+              ticker: input.ticker,
+              side: input.side,
+              count: input.count,
+              price: input.price,
+              time_in_force: input.time_in_force,
+              dry_run: input.dry_run,
+              client_order_id: input.client_order_id,
+            }),
+        });
+        const userTokens = [...(user.pushTokens || []), ...(user.fcmTokens || [])].filter(
+          (t, i, arr) => t && arr.indexOf(t) === i
+        );
+        for (const alert of cashOutRes.alerts) {
+          await emitCloudAlert({
+            userId,
+            alertId: protectAlertId(alert.tradeId),
+            kind: 'protect_sell',
+            title: alert.title,
+            body: alert.body,
+            cfg,
+            tokens: userTokens,
+            collapseId: `cout:${userId}:${alert.tradeId}`.slice(0, 64),
+            asset,
+            ticker: marketTicker,
+            tradeId: alert.tradeId,
+            at: now.toISOString(),
+          });
+        }
+      }
+      const still = openCashOutAssets(userTrades);
+      if (still.length) cashOutWatchUsers.set(userId, still);
+      else cashOutWatchUsers.delete(userId);
+    } catch (err: any) {
+      noteTransientKalshiFailure(err);
+    }
+  }
+
+  return { timestamp: now.toISOString(), watched };
+}
+
+function cachedHasNoCashOut(trades: TradeRecordDoc[]): boolean {
+  return openCashOutAssets(trades).length === 0;
+}
+
+function cachedSecretMissing(user: { kalshiConfigured?: boolean }): boolean {
+  return !user.kalshiConfigured;
+}
+
 // Endpoint triggered every minute by Cloud Scheduler (executes N sub-ticks per minute based on systemConfig)
 workerRouter.post('/tick', async (req: Request, res: Response) => {
   const isTest = process.env.NODE_ENV === 'test' || req.query.single === 'true';
@@ -587,6 +829,7 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
   }
   const sysConfig = await getSystemConfig();
   const intervalSec = sysConfig?.tick_interval_seconds || 20;
+  const bidCheckSec = normalizeFeatureFlags(sysConfig?.featureFlags).cashOutBidCheckSeconds;
   const tickCount = isTest ? 1 : Math.max(1, Math.floor(60 / intervalSec));
   const delayMs = intervalSec * 1000;
   let lastResult: any = { activeUserCount: 0, results: [] };
@@ -595,7 +838,16 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
     lastResult = await runOneTick();
     if (lastResult?.paused) break;
     if (i < tickCount - 1) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      const endAt = Date.now() + delayMs;
+      let nextWatch = Date.now() + bidCheckSec * 1000;
+      while (nextWatch <= endAt - 80) {
+        await sleepMs(Math.max(0, nextWatch - Date.now()));
+        if (Date.now() > endAt - 80) break;
+        const watch = await runCashOutBidWatchTick();
+        if (watch.paused) break;
+        nextWatch += bidCheckSec * 1000;
+      }
+      await sleepMs(Math.max(0, endAt - Date.now()));
     }
   }
 

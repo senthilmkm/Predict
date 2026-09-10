@@ -24,6 +24,11 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   protect_sell_grace_seconds: 45,
   smart_buy_enabled: true,
   smart_buy_min_edge_usd: 0.08,
+  cash_out_enabled: false,
+  cash_out_enter_pct: 60,
+  cash_out_max_ask_usd: 0.82,
+  cash_out_bid_usd: 0.88,
+  cash_out_assets: ['Gold'],
 };
 
 export type RiskFieldGroup = 'size' | 'caps' | 'timing';
@@ -116,6 +121,42 @@ export const RISK_FIELD_META: {
     min: 0,
     max: 120,
   },
+  {
+    key: 'cash_out_enabled',
+    label: 'Cash out',
+    group: 'timing',
+    kind: 'toggle',
+    step: 0,
+    min: 0,
+    max: 1,
+  },
+  {
+    key: 'cash_out_enter_pct',
+    label: 'Enter cushion (%)',
+    group: 'timing',
+    kind: 'int',
+    step: 5,
+    min: 40,
+    max: 100,
+  },
+  {
+    key: 'cash_out_max_ask_usd',
+    label: 'Cash out max ask ($)',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.5,
+    max: 0.99,
+  },
+  {
+    key: 'cash_out_bid_usd',
+    label: 'Cash out bid ($)',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.5,
+    max: 0.99,
+  },
 ];
 
 export const TIME_IN_FORCE_OPTIONS: { value: TimeInForce; label: string }[] = [
@@ -153,9 +194,17 @@ export const PROTECT_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'protect_sell_grace_seconds',
 ];
 
+export const CASH_OUT_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'cash_out_enabled',
+  'cash_out_enter_pct',
+  'cash_out_max_ask_usd',
+  'cash_out_bid_usd',
+];
+
 export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   ...SMART_BUY_RISK_FIELD_KEYS,
   ...PROTECT_RISK_FIELD_KEYS,
+  ...CASH_OUT_RISK_FIELD_KEYS,
 ];
 
 export function cloneDefaultRisk(): RiskConfig {

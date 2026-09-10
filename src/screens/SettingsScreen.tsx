@@ -1039,10 +1039,28 @@ function RiskHelpModal({
               at minute 12 or minute 1 — whenever lean is against you with enough gap.
             </HelpItem>
 
+            <Text style={styles.modalSection}>Risk — Cash out (Auto-trade only)</Text>
+            <HelpItem title="Cash out">
+              Admin must enable this first. Then Settings → Risk → Auto-trade.{'\n\n'}
+              Separate path for the assets you check (default Gold). Buys a cheaper ticket (enter % of
+              cushion + max ask), then sells when your side’s bid hits Cash out bid, or if the lean
+              fully flips against you. Window end settles — no dump.{'\n\n'}
+              Home Buy / Sell stay off while Cash out holds that ticker. Protect money skips these lots.
+              Smart buy does not apply.
+            </HelpItem>
+            <HelpItem title="Enter cushion (%)">
+              How much of the Cushions-tab dollar gap is required to buy. 60% of Gold $175 is $105.
+              Not 100% — a full cushion usually means the ticket is already ~90¢.
+            </HelpItem>
+            <HelpItem title="Cash out max ask / bid">
+              Max ask is the most you will pay. Cash out bid is the bid that triggers the sell (your
+              side only). Bid must be above max ask.
+            </HelpItem>
+
             <HelpItem title="Restore defaults">
               Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.
-              Restore Home Buy / Restore Auto-trade resets only that tab (Smart buy and Protect money
-              are on Auto-trade). Cushions and keys stay.
+              Restore Home Buy / Restore Auto-trade resets only that tab (Smart buy, Protect money,
+              and Cash out are on Auto-trade). Cushions and keys stay.
             </HelpItem>
 
             <Text style={styles.modalSection}>Kalshi credentials</Text>

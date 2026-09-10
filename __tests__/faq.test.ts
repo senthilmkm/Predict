@@ -31,6 +31,7 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/financial, investment, legal, or trading advice/i);
     expect(blob).toMatch(/Protect money/);
     expect(blob).toMatch(/Smart buy/);
+    expect(blob).toMatch(/Cash out/);
     expect(blob).toMatch(/Cloud Run/);
     expect(blob).toMatch(/phone never talks to Kalshi/i);
     expect(blob).toMatch(/Home Buy \/ Sell/);
@@ -43,6 +44,7 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/settlements continue after Auto-trade Off/i);
     expect(blob).toMatch(/lean below your cushion is not stored/i);
     expect(blob).toMatch(/below cushion/i);
+    expect(blob).toMatch(/next window/);
     expect(blob).toMatch(/Mute vs Notify on lean signals/i);
     expect(blob).toMatch(/silent log/i);
     expect(blob).toMatch(/400 most recent Cloud alerts/);

@@ -36,6 +36,7 @@ describe('summarizeTodayPathBuys', () => {
         rec({ id: 'h2', asset: 'BTC', entry_path: 'home' }),
         rec({ id: 'h3', asset: 'Gold', entry_path: 'home' }),
         rec({ id: 'a1', asset: 'ETH', entry_path: 'auto' }),
+        rec({ id: 'c1', asset: 'Gold', entry_path: 'cash_out' }),
         rec({ id: 'legacy', asset: 'WTI', entry_path: null }),
         rec({ id: 'miss', asset: 'BTC', entry_path: 'home', outcome: 'miss', fill_count: 0 }),
         rec({ id: 'dry', asset: 'Gold', entry_path: 'auto', dry_run: true }),
@@ -50,10 +51,16 @@ describe('summarizeTodayPathBuys', () => {
       { asset: 'Gold', count: 2 },
     ]);
     expect(summary.auto).toEqual([{ asset: 'ETH', count: 1 }]);
+    expect(summary.cashOut).toEqual([{ asset: 'Gold', count: 1 }]);
     expect(summary.homeTotal).toBe(4);
     expect(summary.autoTotal).toBe(1);
-    expect(formatHomePathBuyLines(summary)).toEqual(['Home  BTC 2 · Gold 2', 'Auto  ETH 1']);
-    expect(formatDashboardPathBuys(summary)).toBe('Home 4 · Auto 1');
+    expect(summary.cashOutTotal).toBe(1);
+    expect(formatHomePathBuyLines(summary)).toEqual([
+      'Home  BTC 2 · Gold 2',
+      'Auto  ETH 1',
+      'Cash out  Gold 1',
+    ]);
+    expect(formatDashboardPathBuys(summary)).toBe('Home 4 · Auto 1 · Cash out 1');
   });
 
   test('hides a path at 0 and the whole strip when none count', () => {
@@ -89,6 +96,7 @@ describe('history trade display', () => {
   test('chip is Home / Auto or omitted', () => {
     expect(entryPathChipLabel('home')).toBe('Home');
     expect(entryPathChipLabel('auto')).toBe('Auto');
+    expect(entryPathChipLabel('cash_out')).toBe('Cash out');
     expect(entryPathChipLabel('manual_buy')).toBe('Home');
     expect(entryPathChipLabel(null)).toBeNull();
     expect(entryPathChipLabel(undefined)).toBeNull();

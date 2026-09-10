@@ -143,6 +143,16 @@ export interface RiskConfig {
   smart_buy_enabled?: boolean;
   /** Dollars of extra chance required. Default 0.08. Range 0.04–0.15. */
   smart_buy_min_edge_usd?: number;
+  /** Auto-trade Cash out path. Missing → Off. */
+  cash_out_enabled?: boolean;
+  /** Percent of the asset cushion required to enter. Default 60. Range 40–100. */
+  cash_out_enter_pct?: number;
+  /** Do not buy if the ticket ask is above this. Default 0.82. */
+  cash_out_max_ask_usd?: number;
+  /** Sell when the bid on the held side is at least this. Default 0.88. */
+  cash_out_bid_usd?: number;
+  /** Assets on the Cash out path. Default Gold. Empty = no Cash out buys. */
+  cash_out_assets?: string[];
 }
 
 export interface AlertPref {
@@ -245,6 +255,11 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_grace_seconds: 45,
       smart_buy_enabled: true,
       smart_buy_min_edge_usd: 0.08,
+      cash_out_enabled: false,
+      cash_out_enter_pct: 60,
+      cash_out_max_ask_usd: 0.82,
+      cash_out_bid_usd: 0.88,
+      cash_out_assets: ['Gold'],
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

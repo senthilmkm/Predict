@@ -8,3 +8,4 @@ export * from './kalshiRetry';
 export * from './orderFill';
 export * from './pathRisk';
 export * from './smartBuy';
+export * from './cashOut';

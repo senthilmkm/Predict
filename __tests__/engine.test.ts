@@ -230,6 +230,8 @@ describe('evaluateStaticGate edge cases', () => {
     expect(formatSkipReason('smart_buy_edge_too_small')).toBe('ticket not a good deal');
     expect(formatSkipReason('smart_buy_gap_dying')).toBe('gap shrinking');
     expect(formatSkipReason('smart_buy_no_path')).toBe('need a longer price path');
+    expect(formatSkipReason('cash_out_holding')).toBe('cash out is holding this ticket');
+    expect(formatSkipReason('cash_out_spread_wide')).toBe('spread too wide');
   });
 });
 

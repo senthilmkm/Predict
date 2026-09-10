@@ -43,6 +43,7 @@ interface RuntimeState {
   change24hPct: number | null;
   change24hWindowMs: number | null;
   lastSignalsManualTrade: boolean;
+  cashOutFeatureOn: boolean;
   activeBroadcast: ActiveBroadcast | null;
   cloudKillSwitch: boolean;
   ensure: () => AppRuntime;
@@ -79,6 +80,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   change24hPct: null,
   change24hWindowMs: null,
   lastSignalsManualTrade: true,
+  cashOutFeatureOn: false,
   activeBroadcast: null,
   cloudKillSwitch: false,
   ensure: () => {
@@ -114,6 +116,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         change24hPct: null,
         change24hWindowMs: null,
         lastSignalsManualTrade: get().lastSignalsManualTrade,
+        cashOutFeatureOn: get().cashOutFeatureOn,
         activeBroadcast: get().activeBroadcast,
         cloudKillSwitch: get().cloudKillSwitch,
       });
@@ -250,6 +253,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           rt.syncCloudHeartbeat(statusRes.userDoc?.lastTickAt, statusRes.systemConfig?.last_worker_tick_at);
           set({
             lastSignalsManualTrade: statusRes.systemConfig?.featureFlags?.lastSignalsManualTrade !== false,
+            cashOutFeatureOn: statusRes.systemConfig?.featureFlags?.cashOut === true,
             activeBroadcast: statusRes.activeBroadcast ?? null,
             cloudKillSwitch: statusRes.userDoc?.state === 'KILL_SWITCH',
           });
@@ -295,6 +299,7 @@ export function resetRuntimeStoreForTests() {
     change24hPct: null,
     change24hWindowMs: null,
     lastSignalsManualTrade: true,
+    cashOutFeatureOn: false,
     activeBroadcast: null,
     cloudKillSwitch: false,
   });

@@ -361,7 +361,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Settings → Risk → Show opens Shared limits plus Home Buy and Auto-trade tabs.\n\n' +
             'Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.\n\n' +
-            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy + Protect money on Auto-trade). Cushions and keys are not wiped.',
+            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, and Cash out on Auto-trade). Cushions and keys are not wiped.',
         },
         {
           id: 'smart-buy',
@@ -395,6 +395,26 @@ export function getFaqCategories(): FaqCategory[] {
             'Higher (1.50×) = harder to trigger.\n' +
             'Lower (0.75×) = easier to trigger.\n\n' +
             'Example: BTC cushion $175 and 1.00×. You hold YES. Sell if lean is NO and live is at least $175 below the strike.',
+        },
+      ],
+    },
+    {
+      id: 'cashout',
+      title: 'Cash out',
+      items: [
+        {
+          id: 'cashout-how',
+          q: 'What is Cash out?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Cash out.\n\n' +
+            'Checked assets use Cash out instead of normal Auto. It buys when the gap is your Enter cushion % of the Cushions dollar (default 60%), the ask is at or under Max ask (default $0.82), and the book is tight. It then tries to sell when the bid on your side is at least Cash out bid (default $0.88). If the lean fully flips by a full cushion, it sells to get out. If neither happens, the ticket settles $1 or $0 — no last-second dump.\n\n' +
+            'Home Buy and Cash out never share a ticker. Protect money does not sell Cash out lots.',
+        },
+        {
+          id: 'cashout-admin',
+          q: 'Why don’t I see Cash out on Risk?',
+          a:
+            'The Admin portal Feature configs switch “Cash out” is Off (default). When an admin turns it On, the block appears on Auto-trade. Bid check seconds (how often Cloud reads the bid after a fill) is also Admin-only.',
         },
       ],
     },
@@ -491,7 +511,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'Home says “no order” — is that a bug?',
           a:
             'Last signals shows at most one extra line so Auto-trade and Home Buy do not fight on the same card:\n\n' +
-            '• SKIP (amber) — live price is not far enough past the strike. The line under it says “below cushion.” That is not a skipped order.\n\n' +
+            '• SKIP (amber) — not a buy. The line under it is the reason: “below cushion” only when this 15-minute market is live and the gap is still inside your cushion. “next window” = the next 15-minute market is not open yet. “window ended” = this 15-minute market already closed. A large gap can still show on those last two; that is not a cushion miss.\n\n' +
             '• YES/NO with a Home skip under it (Buy hidden) — Cloud would reject the same Home Buy gate (ask too rich, too early, too little time, size too small, shared cap). Auto-trade’s skip is not shown on that row.\n\n' +
             '• YES/NO with Buy showing and no skip — a tap would place under Home Buy rules. Auto-trade may have skipped; that is not shown next to Buy.\n\n' +
             '• No Buy/Sell button and no Home skip — Auto-trade’s last skip or fill can show.\n\n' +

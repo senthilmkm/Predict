@@ -130,6 +130,20 @@ describe('normalize / cushions', () => {
     expect(hi.risk.smart_buy_min_edge_usd).toBe(0.15);
   });
 
+  test('normalizeRiskConfig defaults Cash out Off and keeps bid above max ask', () => {
+    const d = normalizeAppConfig({} as any).risk;
+    expect(d.cash_out_enabled).toBe(false);
+    expect(d.cash_out_enter_pct).toBe(60);
+    expect(d.cash_out_max_ask_usd).toBe(0.82);
+    expect(d.cash_out_bid_usd).toBe(0.88);
+    expect(d.cash_out_assets).toEqual(['Gold']);
+    const fixed = normalizeAppConfig({
+      risk: { cash_out_max_ask_usd: 0.9, cash_out_bid_usd: 0.88, cash_out_enter_pct: 10 },
+    } as any).risk;
+    expect(Number(fixed.cash_out_bid_usd)).toBeGreaterThan(Number(fixed.cash_out_max_ask_usd));
+    expect(fixed.cash_out_enter_pct).toBe(40);
+  });
+
   test('missing manual_risk is seeded from risk, including legacy Home TIF', () => {
     const cfg = normalizeAppConfig({
       risk: {

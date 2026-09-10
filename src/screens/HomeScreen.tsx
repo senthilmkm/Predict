@@ -261,12 +261,15 @@ export function HomeScreen() {
   const featureOn = lastSignalsManualTrade !== false;
   const decoratedRows = signalRows.map((row) => {
     const held = heldOpenFillForTicker(trades, row.marketTicker);
-    const manualKind = lastSignalManualKind({
-      featureOn,
-      killSwitch: Boolean(cloudKillSwitch),
-      row,
-      held: held ? { side: held.side } : null,
-    });
+    const cashOutHeld = held?.entry_path === 'cash_out';
+    const manualKind = cashOutHeld
+      ? 'none'
+      : lastSignalManualKind({
+          featureOn,
+          killSwitch: Boolean(cloudKillSwitch),
+          row,
+          held: held ? { side: held.side } : null,
+        });
     const tapSkipReason =
       manualKind === 'buy'
         ? homeBuySkipReason({ cfg: config, lean: leans[row.asset] as any, trades })
@@ -281,6 +284,8 @@ export function HomeScreen() {
       noMarket: row.noMarket,
       err: row.err,
       tapSkipReason,
+      phase: (leans[row.asset] as { phase?: string } | undefined)?.phase,
+      cashOutHolding: cashOutHeld,
     });
     const offerKind = lastSignalOfferKind(manualKind, tapSkipReason);
     return { ...row, held, manualKind: offerKind, placing: Boolean(placing[row.asset]), extraLine };

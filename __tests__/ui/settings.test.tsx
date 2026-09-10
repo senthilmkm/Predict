@@ -9,7 +9,7 @@ import {
   setSecureStore,
 } from '../../src/platform/storage';
 import { useConfigStore } from '../../src/state/configStore';
-import { resetRuntimeStoreForTests } from '../../src/state/runtimeStore';
+import { resetRuntimeStoreForTests, useRuntimeStore } from '../../src/state/runtimeStore';
 import { defaultAppConfig } from '../../src/config/types';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { SettingsMoreScreen } from '../../src/screens/SettingsMoreScreen';
@@ -287,6 +287,13 @@ describe('Settings credentials', () => {
     await fireEvent.press(s.getByTestId('risk-tab-auto'));
     await waitFor(() => expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-toggle-smart_buy_enabled')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-cash_out_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ cashOutFeatureOn: true });
+    });
+    await waitFor(() => expect(s.getByTestId('risk-toggle-cash_out_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-value-auto-cash_out_enter_pct').props.children).toBe('60%');
+    expect(s.getByTestId('cash-out-asset-Gold')).toBeTruthy();
     expect(s.getByTestId('risk-field-auto-smart_buy_enabled')).toBeTruthy();
     expect(s.getByTestId('risk-value-auto-smart_buy_min_edge_usd').props.children).toMatch(/\$0\.08/);
     expect(useConfigStore.getState().config.risk.smart_buy_enabled).toBe(true);

@@ -8,8 +8,10 @@ export type PathBuyRow = { asset: string; count: number };
 export type PathBuyCounts = {
   home: PathBuyRow[];
   auto: PathBuyRow[];
+  cashOut: PathBuyRow[];
   homeTotal: number;
   autoTotal: number;
+  cashOutTotal: number;
 };
 
 function assetSortIndex(asset: string): number {
@@ -28,6 +30,7 @@ function grouped(counts: Record<string, number>): PathBuyRow[] {
 export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()): PathBuyCounts {
   const home: Record<string, number> = {};
   const auto: Record<string, number> = {};
+  const cashOut: Record<string, number> = {};
   for (const t of trades || []) {
     if (!isEtToday(t.at, now)) continue;
     if (!isCountableWindowBuy(t)) continue;
@@ -35,15 +38,19 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     if (!path) continue;
     const asset = String(t.asset || '').trim() || 'Unknown';
     if (path === 'home') home[asset] = (home[asset] || 0) + 1;
+    else if (path === 'cash_out') cashOut[asset] = (cashOut[asset] || 0) + 1;
     else auto[asset] = (auto[asset] || 0) + 1;
   }
   const homeRows = grouped(home);
   const autoRows = grouped(auto);
+  const cashOutRows = grouped(cashOut);
   return {
     home: homeRows,
     auto: autoRows,
+    cashOut: cashOutRows,
     homeTotal: homeRows.reduce((s, r) => s + r.count, 0),
     autoTotal: autoRows.reduce((s, r) => s + r.count, 0),
+    cashOutTotal: cashOutRows.reduce((s, r) => s + r.count, 0),
   };
 }
 
@@ -56,6 +63,7 @@ export function formatHomePathBuyLines(summary: PathBuyCounts): string[] {
   const lines: string[] = [];
   if (summary.homeTotal > 0) lines.push(`Home  ${formatAssetCounts(summary.home)}`);
   if (summary.autoTotal > 0) lines.push(`Auto  ${formatAssetCounts(summary.auto)}`);
+  if (summary.cashOutTotal > 0) lines.push(`Cash out  ${formatAssetCounts(summary.cashOut)}`);
   return lines;
 }
 
@@ -64,5 +72,6 @@ export function formatDashboardPathBuys(summary: PathBuyCounts): string | null {
   const parts: string[] = [];
   if (summary.homeTotal > 0) parts.push(`Home ${summary.homeTotal}`);
   if (summary.autoTotal > 0) parts.push(`Auto ${summary.autoTotal}`);
+  if (summary.cashOutTotal > 0) parts.push(`Cash out ${summary.cashOutTotal}`);
   return parts.length ? parts.join(' · ') : null;
 }

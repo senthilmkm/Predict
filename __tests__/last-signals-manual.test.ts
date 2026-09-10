@@ -65,6 +65,21 @@ describe('last signals manual kind', () => {
 });
 
 describe('last signal extra line', () => {
+  test('Cash out holding hides Home buttons and says so', () => {
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        autoDetail: 'placed YES · 7 @ $0.70',
+        autoStatus: 'placed',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        cashOutHolding: true,
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'cash out is holding this ticket' });
+  });
+
   test('Buy showing with Auto skip hides Auto and shows nothing if Home would place', () => {
     expect(
       lastSignalExtraLine({
@@ -128,7 +143,7 @@ describe('last signal extra line', () => {
     });
   });
 
-  test('no button shows Auto last action, or below cushion on SKIP', () => {
+  test('no button shows Auto last action, or the SKIP reason for this phase', () => {
     expect(
       lastSignalExtraLine({
         manualKind: 'none',
@@ -152,8 +167,29 @@ describe('last signal extra line', () => {
         decision: 'SKIP',
         isOpen: true,
         noMarket: false,
+        phase: 'live',
       })
     ).toEqual({ testID: 'skip-reason', text: 'below cushion' });
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: false,
+        decision: 'SKIP',
+        isOpen: true,
+        noMarket: false,
+        phase: 'upcoming',
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'next window' });
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: false,
+        decision: 'SKIP',
+        isOpen: true,
+        noMarket: false,
+        phase: 'ended',
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'window ended' });
   });
 });
 

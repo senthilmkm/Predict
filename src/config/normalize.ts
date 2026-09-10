@@ -16,6 +16,13 @@ import {
 } from './types';
 import { DEFAULT_RISK_CONFIG } from './riskDefaults';
 import {
+  normalizeCashOutAssets,
+  normalizeCashOutBid,
+  normalizeCashOutEnterPct,
+  normalizeCashOutMaxAsk,
+  reconcileCashOutTargets,
+} from '../../packages/trading-core/src/cashOut';
+import {
   configForHomeBuy as mergeHomeBuyRisk,
   normalizeManualPathRisk,
 } from '../../packages/trading-core/src/pathRisk';
@@ -114,7 +121,20 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
       clamp(Number(r.smart_buy_min_edge_usd ?? d.smart_buy_min_edge_usd), 0.04, 0.15),
       0.01
     ),
+    cash_out_enabled: Boolean(r.cash_out_enabled ?? d.cash_out_enabled),
+    cash_out_enter_pct: normalizeCashOutEnterPct(r.cash_out_enter_pct ?? d.cash_out_enter_pct),
+    cash_out_max_ask_usd: normalizeCashOutMaxAsk(r.cash_out_max_ask_usd ?? d.cash_out_max_ask_usd),
+    cash_out_bid_usd: normalizeCashOutBid(r.cash_out_bid_usd ?? d.cash_out_bid_usd),
+    cash_out_assets: normalizeCashOutAssets(
+      r.cash_out_assets !== undefined ? r.cash_out_assets : d.cash_out_assets
+    ),
   };
+  const targets = reconcileCashOutTargets(
+    Number(risk.cash_out_max_ask_usd),
+    Number(risk.cash_out_bid_usd)
+  );
+  risk.cash_out_max_ask_usd = targets.maxAsk;
+  risk.cash_out_bid_usd = targets.bid;
   if (risk.fixed_dollars_per_trade > risk.max_dollars_per_trade) {
     risk.fixed_dollars_per_trade = risk.max_dollars_per_trade;
   }

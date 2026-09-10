@@ -163,6 +163,12 @@ function parseAdminFeatureFlagsPatch(raw: unknown): Partial<FeatureFlags> | unde
   if (body.lastSignalsManualTrade !== undefined) {
     patch.lastSignalsManualTrade = body.lastSignalsManualTrade !== false;
   }
+  if (body.cashOut !== undefined) {
+    patch.cashOut = body.cashOut === true;
+  }
+  if (body.cashOutBidCheckSeconds !== undefined) {
+    patch.cashOutBidCheckSeconds = Number(body.cashOutBidCheckSeconds);
+  }
   return Object.keys(patch).length ? patch : undefined;
 }
 

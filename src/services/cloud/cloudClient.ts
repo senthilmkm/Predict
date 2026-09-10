@@ -21,6 +21,8 @@ export interface SystemConfig {
   };
   featureFlags?: {
     lastSignalsManualTrade?: boolean;
+    cashOut?: boolean;
+    cashOutBidCheckSeconds?: number;
   };
   broadcast?: {
     templates?: Array<{

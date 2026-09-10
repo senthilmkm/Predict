@@ -2,15 +2,16 @@ import { etDateKey } from '../util/time';
 
 export type TradeSide = 'YES' | 'NO';
 export type TradeOutcome = 'win' | 'loss' | 'pending' | 'miss' | 'dry_run' | 'exited';
-export type TradeEntryPath = 'home' | 'auto';
+export type TradeEntryPath = 'home' | 'auto' | 'cash_out';
 
-/** Home tap vs Auto-trade worker. Missing on legacy fills — do not guess. */
+/** Home tap vs Auto-trade vs Cash out. Missing on legacy fills — do not guess. */
 export function parseEntryPath(raw: unknown): TradeEntryPath | undefined {
   const v = String(raw ?? '')
     .toLowerCase()
     .trim();
   if (v === 'home' || v === 'manual_buy' || v === 'manual') return 'home';
   if (v === 'auto' || v === 'auto_trade' || v === 'worker') return 'auto';
+  if (v === 'cash_out' || v === 'cashout') return 'cash_out';
   return undefined;
 }
 

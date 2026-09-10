@@ -131,6 +131,37 @@ describe('HomeScreen', () => {
     expect(s.queryByTestId('signal-time-BTC')).toBeNull();
   });
 
+  test('SKIP with a large gap on an upcoming window is not below cushion', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        assets_enabled: { BTC: true } as any,
+      },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'SKIP',
+          live: 100400,
+          strike: 100000,
+          abs_gap: 400,
+          minutes_left: 14,
+          phase: 'upcoming',
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('signal-decision-BTC').props.children).toBe('SKIP');
+    expect(s.getByText(/gap \$400/)).toBeTruthy();
+    expect(s.getByTestId('skip-reason-BTC').props.children).toBe('next window');
+  });
+
   test('YES with Auto skip does not show that skip next to Buy', async () => {
     useConfigStore.setState({
       config: {

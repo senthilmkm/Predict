@@ -31,6 +31,7 @@ export interface LeanResult {
   decision: 'YES' | 'NO' | 'SKIP';
   yes_bid?: number | null;
   yes_ask?: number | null;
+  no_bid?: number | null;
   no_ask?: number | null;
   price_source?: string;
   cushion?: number;
@@ -311,6 +312,7 @@ export async function computeLean(
 
   let yes_bid: number | null = null;
   let yes_ask: number | null = null;
+  let no_bid: number | null = null;
   let no_ask: number | null = null;
   try {
     if (quote?.yes_bid_dollars != null) yes_bid = Number(quote.yes_bid_dollars);
@@ -319,6 +321,13 @@ export async function computeLean(
   }
   try {
     if (quote?.yes_ask_dollars != null) yes_ask = Number(quote.yes_ask_dollars);
+  } catch {
+    /* */
+  }
+  try {
+    if ((quote as { no_bid_dollars?: number } | null)?.no_bid_dollars != null) {
+      no_bid = Number((quote as { no_bid_dollars?: number }).no_bid_dollars);
+    }
   } catch {
     /* */
   }
@@ -343,6 +352,7 @@ export async function computeLean(
     decision,
     yes_bid,
     yes_ask,
+    no_bid,
     no_ask,
     price_source: priceSource,
     cushion,

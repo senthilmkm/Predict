@@ -5,10 +5,11 @@ function moneyUsd(n: unknown): string {
   return Number.isFinite(v) ? v.toFixed(2) : '—';
 }
 
-export function entryPathChipLabel(path: unknown): 'Home' | 'Auto' | null {
+export function entryPathChipLabel(path: unknown): 'Home' | 'Auto' | 'Cash out' | null {
   const parsed = parseEntryPath(path);
   if (parsed === 'home') return 'Home';
   if (parsed === 'auto') return 'Auto';
+  if (parsed === 'cash_out') return 'Cash out';
   return null;
 }
 

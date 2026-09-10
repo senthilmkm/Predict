@@ -31,7 +31,9 @@ export function isOpenHeldFill(
 }
 
 export function heldOpenFillForTicker(
-  trades: Array<Pick<TradeRecord, 'market_ticker' | 'dry_run' | 'outcome' | 'fill_count' | 'side'>>,
+  trades: Array<
+    Pick<TradeRecord, 'market_ticker' | 'dry_run' | 'outcome' | 'fill_count' | 'side' | 'entry_path'>
+  >,
   ticker: string | null | undefined
 ) {
   const tkr = String(ticker || '').trim();
@@ -124,11 +126,20 @@ export function homeBuySkipReason(opts: {
   }
 }
 
+/** SKIP line on Last signals — only "below cushion" when the 15m book is live. */
+export function skipSignalReason(phase?: string | null): string {
+  const p = String(phase || 'live').toLowerCase();
+  if (p === 'upcoming') return 'next window';
+  if (p === 'ended') return 'window ended';
+  if (p === 'unknown') return 'window not live';
+  return 'below cushion';
+}
+
 /**
  * One extra line on a Last signals row.
  * Home Buy skip → that skip only (never Auto-trade's skip), even if Buy is hidden.
  * Sell showing → Cloud place/resting detail only (never Auto skip).
- * No Home skip and no button → Auto-trade last action, or "below cushion" on SKIP.
+ * No Home skip and no button → Auto-trade last action, or the SKIP reason for this phase.
  */
 export function lastSignalExtraLine(opts: {
   manualKind: 'buy' | 'sell' | 'none';
@@ -140,8 +151,13 @@ export function lastSignalExtraLine(opts: {
   noMarket: boolean;
   err?: string;
   tapSkipReason?: string | null;
+  phase?: string | null;
+  cashOutHolding?: boolean;
 }): { testID: 'trade-action' | 'skip-reason'; text: string; placed?: boolean; failed?: boolean } | null {
   if (opts.err || !opts.isOpen || opts.noMarket) return null;
+  if (opts.cashOutHolding) {
+    return { testID: 'skip-reason', text: 'cash out is holding this ticket' };
+  }
   if (opts.manualKind === 'buy') {
     if (opts.tapSkipReason) return { testID: 'skip-reason', text: opts.tapSkipReason };
     return null;
@@ -165,7 +181,7 @@ export function lastSignalExtraLine(opts: {
     };
   }
   if (opts.decision === 'SKIP') {
-    return { testID: 'skip-reason', text: 'below cushion' };
+    return { testID: 'skip-reason', text: skipSignalReason(opts.phase) };
   }
   return null;
 }

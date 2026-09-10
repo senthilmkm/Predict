@@ -634,6 +634,25 @@
             </span>
           </span>
         </label>
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagCashOut" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">Cash out</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                Separate Auto path. Default Off. When On, users see Settings → Risk → Auto-trade → Cash out.
+                Cloud buys tagged lots and sells them at the Cash out bid (or a full opposite-cushion flip).
+                Home Buy / Protect never mix with those lots. Off hides the phone block and blocks new Cash out
+                buys. Open Cash out lots still exit.
+              </span>
+            </span>
+          </label>
+          <label class="block text-[11px] text-slate-400">
+            Bid check (seconds)
+            <input type="number" id="flagCashOutBidCheckSeconds" min="2" max="10" value="3" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markFeatureFormDirty()" oninput="markFeatureFormDirty()" />
+            <span class="text-slate-500">After a Cash out fill (and the 45s wait), Cloud reads that ticket’s bid this often (2–10). Default 3. Not the Cloud tick interval.</span>
+          </label>
+        </div>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p id="featureUnsavedHint" class="hidden text-[11px] text-amber-400 font-semibold">Unsaved changes — click Save feature configs.</p>
           <button type="button" onclick="saveFeatureSettings()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl border border-sky-400">
@@ -1092,16 +1111,26 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       const flags = (systemConfig && systemConfig.featureFlags) || {};
       const el = document.getElementById('flagLastSignalsManualTrade');
       if (el) el.checked = flags.lastSignalsManualTrade !== false;
+      const cash = document.getElementById('flagCashOut');
+      if (cash) cash.checked = flags.cashOut === true;
+      const bidSec = document.getElementById('flagCashOutBidCheckSeconds');
+      if (bidSec) {
+        const n = Number(flags.cashOutBidCheckSeconds);
+        bidSec.value = String(Number.isFinite(n) ? Math.min(10, Math.max(2, Math.round(n))) : 3);
+      }
     }
     async function saveFeatureSettings() {
       const status = document.getElementById('featureStatusMsg');
       try {
+        const bidRaw = Number(document.getElementById('flagCashOutBidCheckSeconds').value);
         const res = await fetch(`${API_BASE}/config`, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify({
             featureFlags: {
               lastSignalsManualTrade: document.getElementById('flagLastSignalsManualTrade').checked,
+              cashOut: document.getElementById('flagCashOut').checked,
+              cashOutBidCheckSeconds: bidRaw,
             },
           }),
         });

@@ -164,6 +164,11 @@ export interface RiskConfig {
   smart_buy_enabled?: boolean;
   /** Dollars of extra chance (our guess − ask). Default $0.08. Range $0.04–$0.15. */
   smart_buy_min_edge_usd?: number;
+  cash_out_enabled?: boolean;
+  cash_out_enter_pct?: number;
+  cash_out_max_ask_usd?: number;
+  cash_out_bid_usd?: number;
+  cash_out_assets?: string[];
 }
 
 export interface AlertPref {
@@ -268,6 +273,11 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_grace_seconds: 45,
       smart_buy_enabled: true,
       smart_buy_min_edge_usd: 0.08,
+      cash_out_enabled: false,
+      cash_out_enter_pct: 60,
+      cash_out_max_ask_usd: 0.82,
+      cash_out_bid_usd: 0.88,
+      cash_out_assets: ['Gold'],
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

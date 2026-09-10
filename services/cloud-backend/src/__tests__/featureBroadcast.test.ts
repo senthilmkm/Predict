@@ -16,6 +16,10 @@ describe('feature flags', () => {
     expect(normalizeFeatureFlags(null).lastSignalsManualTrade).toBe(true);
     expect(normalizeFeatureFlags({}).lastSignalsManualTrade).toBe(true);
     expect(normalizeFeatureFlags({ lastSignalsManualTrade: false }).lastSignalsManualTrade).toBe(false);
+    expect(normalizeFeatureFlags(null).cashOut).toBe(false);
+    expect(normalizeFeatureFlags({}).cashOutBidCheckSeconds).toBe(3);
+    expect(normalizeFeatureFlags({ cashOut: true, cashOutBidCheckSeconds: 1 }).cashOut).toBe(true);
+    expect(normalizeFeatureFlags({ cashOutBidCheckSeconds: 1 }).cashOutBidCheckSeconds).toBe(2);
   });
 
   test('merge does not flip unspecified flags off', () => {
@@ -77,7 +81,7 @@ describe('systemConfig nested merge', () => {
   test('normalize keeps tick/purge/retry when flags+broadcast present', () => {
     const cfg = normalizeSystemConfig({
       tick_interval_seconds: 15,
-      featureFlags: { lastSignalsManualTrade: false },
+      featureFlags: { lastSignalsManualTrade: false, cashOut: false, cashOutBidCheckSeconds: 3 },
       broadcast: { templates: [{ id: 'system_maintenance', show: true, message: 'Hi' } as any] },
     });
     expect(cfg.tick_interval_seconds).toBe(15);

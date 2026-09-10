@@ -37,6 +37,7 @@ import { tryAcquirePlaceLock, releasePlaceLock } from './placeLock';
 import { isCloudKalshiPaused, noteTransientKalshiFailure } from './kalshiPause';
 import { economicPayPrice, fillCountOf, liveCloudTradesToday, cloudDailyRealizedPnl } from './settlement';
 import { normalizeFeatureFlags } from './featureFlags';
+import { isCashOutEntryPath } from '../../../../packages/trading-core/src/cashOut';
 
 export type ManualTradeAction = 'buy' | 'sell';
 
@@ -252,6 +253,9 @@ async function executeManualBuy(opts: {
 }): Promise<ManualOrderResult> {
   const { userId, asset, requestId, now, cfg, user, lean, ticker, held, rawTrades } = opts;
   if (held) {
+    if (isCashOutEntryPath(held.entryPath)) {
+      return fail(userId, 409, 'cash_out_holding', 'cash_out_holding', { asset, action: 'buy', ticker });
+    }
     return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
   }
   if (lean.decision !== 'YES' && lean.decision !== 'NO') {
@@ -465,6 +469,9 @@ async function executeManualSell(opts: {
   const { userId, asset, requestId, now, lean, ticker, held } = opts;
   if (!held) {
     return fail(userId, 409, 'no_open_fill', 'no_open_fill', { asset, action: 'sell', ticker });
+  }
+  if (isCashOutEntryPath(held.entryPath)) {
+    return fail(userId, 409, 'cash_out_holding', 'cash_out_holding', { asset, action: 'sell', ticker });
   }
 
   const order = buildProtectSellOrder({

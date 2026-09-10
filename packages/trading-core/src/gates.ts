@@ -18,6 +18,8 @@ export interface LeanSignal {
   phase: 'live' | 'ended';
   yes_ask?: number;
   no_ask?: number;
+  yes_bid?: number;
+  no_bid?: number;
   /** Kalshi live path for Auto Smart buy. Home Buy ignores this. */
   timeseries?: SpotTick[];
   /** Exact minutes until close (not floored). Falls back to minutes_left. */
@@ -90,6 +92,22 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Kalshi paused after timeout/5xx';
     case 'already_holding':
       return 'already holding this window';
+    case 'cash_out_admin_off':
+      return 'cash out off';
+    case 'cash_out_off':
+      return 'cash out off';
+    case 'cash_out_asset_off':
+      return 'cash out asset off';
+    case 'cash_out_invalid_targets':
+      return 'cash out bid must beat max ask';
+    case 'cash_out_holding_other_path':
+      return 'Home or Auto already holding';
+    case 'cash_out_no_bid':
+      return 'no bid';
+    case 'cash_out_spread_wide':
+      return 'spread too wide';
+    case 'cash_out_holding':
+      return 'cash out is holding this ticket';
     case 'no_open_fill':
       return 'no open fill to sell';
     case 'market_closed':

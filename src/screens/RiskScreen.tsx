@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
-import { ManualPathRisk, RiskConfig, TimeInForce } from '../config/types';
+import { AssetRegistry, ManualPathRisk, RiskConfig, TimeInForce } from '../config/types';
 import {
+  CASH_OUT_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
   PROTECT_RISK_FIELD_KEYS,
   RISK_FIELD_META,
@@ -11,6 +12,8 @@ import {
   TIME_IN_FORCE_OPTIONS,
 } from '../config/riskDefaults';
 import { useConfigStore } from '../state/configStore';
+import { useRuntimeStore } from '../state/runtimeStore';
+import { cashOutEdgeWarn, normalizeCashOutAssets } from '../../packages/trading-core/src/cashOut';
 
 type TabId = 'home' | 'auto';
 
@@ -25,6 +28,7 @@ export function RiskScreen() {
   const restoreSharedRiskLimits = useConfigStore((s) => s.restoreSharedRiskLimits);
   const restoreAutoRiskTab = useConfigStore((s) => s.restoreAutoRiskTab);
   const restoreHomeBuyRiskTab = useConfigStore((s) => s.restoreHomeBuyRiskTab);
+  const cashOutFeatureOn = useRuntimeStore((s) => s.cashOutFeatureOn);
   const [tab, setTab] = useState<TabId>('home');
   const [busy, setBusy] = useState(false);
 
@@ -112,7 +116,7 @@ export function RiskScreen() {
         <>
           <Text style={styles.hint} testID="risk-auto-hint">
             Used only when Auto-trade is On. Smart buy is Auto-only. Protect money can still exit a
-            Home Buy fill.
+            Home Buy fill. Cash out is a separate path for the assets you check.
           </Text>
           <PathFields
             values={{
@@ -196,6 +200,7 @@ export function RiskScreen() {
               />
             );
           })}
+          {cashOutFeatureOn ? <CashOutFields /> : null}
         </>
       )}
 
@@ -210,6 +215,80 @@ export function RiskScreen() {
         </Text>
       </Pressable>
     </ScrollView>
+  );
+}
+
+function CashOutFields() {
+  const config = useConfigStore((s) => s.config);
+  const setRiskField = useConfigStore((s) => s.setRiskField);
+  const on = Boolean(config.risk.cash_out_enabled);
+  const assets = normalizeCashOutAssets(config.risk.cash_out_assets);
+  const warn = cashOutEdgeWarn(Number(config.risk.cash_out_max_ask_usd), Number(config.risk.cash_out_bid_usd));
+  return (
+    <>
+      {metaFor(CASH_OUT_RISK_FIELD_KEYS).map((meta) => {
+        if (meta.kind === 'toggle') {
+          return (
+            <View key={meta.key} style={styles.field} testID={`risk-field-auto-${meta.key}`}>
+              <View style={styles.toggleRow}>
+                <Text style={[styles.label, { flex: 1 }]}>{meta.label}</Text>
+                <Switch
+                  testID="risk-toggle-cash_out_enabled"
+                  value={on}
+                  onValueChange={(v) => setRiskField('cash_out_enabled', v)}
+                  trackColor={{ true: colors.accent, false: colors.mute }}
+                />
+              </View>
+              <Text style={styles.hint}>
+                {on
+                  ? 'On — Cloud buys and sells only the checked assets on this path'
+                  : 'Off — those assets stay on normal Auto-trade'}
+              </Text>
+            </View>
+          );
+        }
+        const isPct = meta.key === 'cash_out_enter_pct';
+        return (
+          <RiskStepper
+            key={meta.key}
+            meta={meta}
+            value={config.risk[meta.key]}
+            testPrefix="auto"
+            disabled={!on}
+            displayOverride={isPct ? `${Number(config.risk.cash_out_enter_pct)}%` : undefined}
+            onChange={(next) => setRiskField(meta.key, next as never)}
+          />
+        );
+      })}
+      {warn && on ? (
+        <Text style={styles.hint} testID="cash-out-edge-warn">
+          Cash out bid is less than 4¢ above max ask — little room to sell higher than you buy.
+        </Text>
+      ) : null}
+      <View style={[styles.field, !on && { opacity: 0.45 }]} testID="risk-field-auto-cash_out_assets">
+        <Text style={styles.label}>Cash out assets</Text>
+        <Text style={styles.hint}>Default Gold. Empty means no Cash out buys.</Text>
+        <View style={styles.tifRow}>
+          {AssetRegistry.keys.map((key) => {
+            const selected = assets.includes(key);
+            return (
+              <Pressable
+                key={key}
+                testID={`cash-out-asset-${key}`}
+                disabled={!on}
+                style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 72 }]}
+                onPress={() => {
+                  const next = selected ? assets.filter((a) => a !== key) : [...assets, key];
+                  setRiskField('cash_out_assets', next);
+                }}
+              >
+                <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    </>
   );
 }
 
@@ -265,21 +344,24 @@ function RiskStepper({
   testPrefix,
   onChange,
   disabled,
+  displayOverride,
 }: {
   meta: (typeof RISK_FIELD_META)[number];
   value: unknown;
   testPrefix: string;
   onChange: (next: number) => void;
   disabled?: boolean;
+  displayOverride?: string;
 }) {
   const display =
-    meta.kind === 'chase' || meta.kind === 'money'
+    displayOverride ??
+    (meta.kind === 'chase' || meta.kind === 'money'
       ? `$${Number(value).toFixed(meta.kind === 'chase' ? 2 : 0)}`
       : meta.kind === 'ratio'
         ? `${Number(value).toFixed(2)}×`
         : meta.kind === 'seconds'
           ? `${Number(value)}s`
-          : String(value);
+          : String(value));
   return (
     <View
       style={[styles.field, disabled && { opacity: 0.45 }]}
@@ -339,7 +421,7 @@ const styles = StyleSheet.create({
   chipText: { color: colors.textPrimary, fontWeight: '800', fontSize: 16 },
   value: { color: colors.textPrimary, fontWeight: '800', minWidth: 64, textAlign: 'center' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  tifRow: { flexDirection: 'row', gap: 8 },
+  tifRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tifChip: {
     flex: 1,
     borderWidth: 1,
