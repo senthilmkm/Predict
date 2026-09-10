@@ -53,6 +53,15 @@ export function lastSignalManualKind(opts: {
   return 'none';
 }
 
+/** Buy is only offered when Cloud Home Buy gates would also pass. Sell stays. */
+export function lastSignalOfferKind(
+  kind: 'buy' | 'sell' | 'none',
+  tapSkipReason?: string | null
+): 'buy' | 'sell' | 'none' {
+  if (kind === 'buy' && tapSkipReason) return 'none';
+  return kind;
+}
+
 function openLiveFills(
   trades: Array<Pick<TradeRecord, 'dry_run' | 'outcome' | 'fill_count'>>
 ): number {
@@ -117,9 +126,9 @@ export function homeBuySkipReason(opts: {
 
 /**
  * One extra line on a Last signals row.
- * Buy showing → only a Home Buy skip (never Auto-trade's skip).
+ * Home Buy skip → that skip only (never Auto-trade's skip), even if Buy is hidden.
  * Sell showing → Cloud place/resting detail only (never Auto skip).
- * No button → Auto-trade last action, or "below cushion" on SKIP.
+ * No Home skip and no button → Auto-trade last action, or "below cushion" on SKIP.
  */
 export function lastSignalExtraLine(opts: {
   manualKind: 'buy' | 'sell' | 'none';

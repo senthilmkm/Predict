@@ -4,6 +4,7 @@ import {
   homeBuySkipReason,
   lastSignalExtraLine,
   lastSignalManualKind,
+  lastSignalOfferKind,
 } from '../src/screens/lastSignalsManual';
 
 describe('last signals manual kind', () => {
@@ -40,6 +41,12 @@ describe('last signals manual kind', () => {
         held: { side: 'NO' },
       })
     ).toBe('sell');
+  });
+
+  test('Home Buy skip hides Buy; Sell still offered', () => {
+    expect(lastSignalOfferKind('buy', 'ask too rich')).toBe('none');
+    expect(lastSignalOfferKind('buy', null)).toBe('buy');
+    expect(lastSignalOfferKind('sell', 'ask too rich')).toBe('sell');
   });
 
   test('heldOpenFillForTicker ignores dry run and misses', () => {

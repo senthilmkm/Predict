@@ -23,7 +23,13 @@ import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/moneyFormat';
 import { cloudClient } from '../services/cloud/cloudClient';
 import { formatHomePathBuyLines, summarizeTodayPathBuys } from '../storage/todayPathBuys';
-import { heldOpenFillForTicker, homeBuySkipReason, lastSignalExtraLine, lastSignalManualKind } from './lastSignalsManual';
+import {
+  heldOpenFillForTicker,
+  homeBuySkipReason,
+  lastSignalExtraLine,
+  lastSignalManualKind,
+  lastSignalOfferKind,
+} from './lastSignalsManual';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -276,9 +282,10 @@ export function HomeScreen() {
       err: row.err,
       tapSkipReason,
     });
-    return { ...row, held, manualKind, placing: Boolean(placing[row.asset]), extraLine };
+    const offerKind = lastSignalOfferKind(manualKind, tapSkipReason);
+    return { ...row, held, manualKind: offerKind, placing: Boolean(placing[row.asset]), extraLine };
   });
-  const readyRows = decoratedRows.filter((r) => r.manualKind !== 'none');
+  const actionRows = decoratedRows.filter((r) => r.manualKind === 'buy' || r.manualKind === 'sell');
   const otherRows = decoratedRows.filter((r) => r.manualKind === 'none');
   const todayPathBuyLines = useMemo(
     () => formatHomePathBuyLines(summarizeTodayPathBuys(trades)),
@@ -410,19 +417,19 @@ export function HomeScreen() {
           <Text style={styles.valueSmall}>—</Text>
         ) : (
           <>
-            {readyRows.length > 0 ? (
-              <Text style={styles.signalSection} testID="home-ready-to-buy-label">
-                Ready to buy
+            {actionRows.length > 0 ? (
+              <Text style={styles.signalSection} testID="home-buy-sell-label">
+                Home Buy / Sell
               </Text>
             ) : null}
-            {readyRows.map((row) => (
+            {actionRows.map((row) => (
               <LastSignalRow
                 key={row.asset}
                 row={row}
                 onPlace={(action, origin) => void placeManual(row.asset, action, origin)}
               />
             ))}
-            {otherRows.length > 0 && readyRows.length > 0 ? (
+            {otherRows.length > 0 && actionRows.length > 0 ? (
               <Text style={styles.signalSection} testID="home-other-signals-label">
                 Other signals
               </Text>
@@ -438,9 +445,12 @@ export function HomeScreen() {
         )}
         {featureOn ? (
           <Text style={styles.tradeHint}>
-            Lean YES/NO here is a signal. Buy YES / Buy NO places now on Cloud Run (this phone never
-            talks to Kalshi). A tap uses Settings → Risk → Home Buy. Shared limits apply to both
-            paths. Kill-Switch and the Last signals Buy / Sell flag hide these buttons.
+            Lean YES/NO here is a signal. Home Buy / Sell is the Home tap path — Buy YES / Buy NO
+            or Sell. A tap places now on Cloud Run (this phone never talks to Kalshi). If Auto-trade
+            is On and its Risk tab also passes, Cloud can buy that same lean too, as long as shared
+            caps allow (max trades / asset / 15m window, max trades / day, max open, daily loss).
+            Ask too rich and other Home skips hide Buy. Kill-Switch and the Last signals Buy / Sell
+            flag hide these buttons.
           </Text>
         ) : autoTradeOn ? (
           <Text style={styles.tradeHint}>

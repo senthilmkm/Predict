@@ -13,6 +13,19 @@ import { defaultAppConfig } from '../../src/config/types';
 import { HomeScreen } from '../../src/screens/HomeScreen';
 import { heldOpenFillForTicker } from '../../src/screens/lastSignalsManual';
 
+const homeBuyReadyLean = {
+  asset: 'BTC',
+  market_ticker: 'KXBTC15M-X',
+  decision: 'YES' as const,
+  live: 500,
+  strike: 100,
+  abs_gap: 400,
+  minutes_left: 8,
+  minutes_elapsed: 5,
+  phase: 'live' as const,
+  yes_ask: 0.55,
+};
+
 beforeEach(() => {
   setKeyValueStore(new MemoryKeyValueStore());
   setSecureStore(new MemoryKeyValueStore());
@@ -164,12 +177,13 @@ describe('HomeScreen', () => {
     });
     const s = await render(<HomeScreen />);
     expect(s.getByTestId('signal-decision-BTC').props.children).toBe('YES');
+    expect(s.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
     expect(s.queryByTestId('skip-reason-BTC')).toBeNull();
   });
 
-  test('YES with Home Buy skip shows that skip next to Buy, not Auto-trade', async () => {
+  test('YES with Home Buy skip hides Buy and keeps that skip, not Auto-trade', async () => {
     useConfigStore.setState({
       config: {
         ...defaultAppConfig(),
@@ -214,7 +228,9 @@ describe('HomeScreen', () => {
       },
     });
     const s = await render(<HomeScreen />);
-    expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
+    expect(s.getByTestId('signal-decision-BTC').props.children).toBe('YES');
+    expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+    expect(s.queryByTestId('home-buy-sell-label')).toBeNull();
     expect(s.getByTestId('skip-reason-BTC').props.children).toBe('ask too rich');
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
   });
@@ -281,23 +297,14 @@ describe('HomeScreen', () => {
       lastSignalsManualTrade: true,
       cloudKillSwitch: false,
       leans: {
-        BTC: {
-          asset: 'BTC',
-          market_ticker: 'KXBTC15M-X',
-          decision: 'YES',
-          live: 200,
-          strike: 100,
-          abs_gap: 100,
-          minutes_left: 8,
-          phase: 'live',
-        },
+        BTC: homeBuyReadyLean,
       } as any,
       leanAt: { BTC: new Date().toISOString() },
     });
     const on = await render(<HomeScreen />);
     expect(on.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
     expect(on.getByText('Buy YES')).toBeTruthy();
-    expect(on.getByTestId('home-ready-to-buy-label')).toBeTruthy();
+    expect(on.getByTestId('home-buy-sell-label')).toBeTruthy();
   });
 
   test('feature flag off hides Buy YES', async () => {
@@ -371,6 +378,7 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
     expect(s.getByText('Sell YES')).toBeTruthy();
     expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+    expect(s.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
   });
 
@@ -486,6 +494,7 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('home-today-path-buys-auto').props.children).toBe('Auto  ETH 1');
     expect(s.queryByText(/Manual/i)).toBeNull();
     await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
+    expect(s.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(s.getByTestId('trade-action-BTC').props.children).toBe('placed YES · 5 @ $0.55');
   });
 
@@ -508,16 +517,7 @@ describe('HomeScreen', () => {
         refreshCloudSnapshot: async () => {},
         lastSignalsManualTrade: true,
         leans: {
-          BTC: {
-            asset: 'BTC',
-            market_ticker: 'KXBTC15M-X',
-            decision: 'YES',
-            live: 200,
-            strike: 100,
-            abs_gap: 100,
-            minutes_left: 8,
-            phase: 'live',
-          },
+          BTC: homeBuyReadyLean,
         } as any,
         leanAt: { BTC: new Date().toISOString() },
       });
@@ -554,16 +554,7 @@ describe('HomeScreen', () => {
         lastSignalsManualTrade: true,
         cloudKillSwitch: false,
         leans: {
-          BTC: {
-            asset: 'BTC',
-            market_ticker: 'KXBTC15M-X',
-            decision: 'YES',
-            live: 200,
-            strike: 100,
-            abs_gap: 100,
-            minutes_left: 8,
-            phase: 'live',
-          },
+          BTC: homeBuyReadyLean,
         } as any,
         leanAt: { BTC: new Date().toISOString() },
       });

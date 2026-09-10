@@ -194,10 +194,12 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'home-buy-sell',
           q: 'What does tapping Buy or Sell on Home do?',
           a:
-            'When Last signals Buy / Sell is On, a green Buy YES / Buy NO (or Sell) appears on a live lean. One tap tells Cloud Run to place now. The phone never talks to Kalshi. There is no confirm sheet.\n\n' +
+            'When Last signals Buy / Sell is On, Home shows one Home Buy / Sell block. Buy YES / Buy NO is a Home tap only; it appears only if Home Buy gates would pass (the same gates Cloud uses on a tap). If the row says ask too rich, too little time left, and so on, there is no Buy button. Sell is in that same block when you already hold that 15-minute window.\n\n' +
+            'If Auto-trade is On and its Risk tab also passes, Cloud Run can still buy that same lean on the worker tick — even while Home shows Buy. Shared caps apply to both paths (max open, max trades / day, max trades / asset / 15m window, daily loss). If the 15m window cap is 1, the first fill (Home or Auto) uses the slot.\n\n' +
+            'One tap tells Cloud Run to place now. The phone never talks to Kalshi. There is no confirm sheet.\n\n' +
             'Purpose: trade without Auto-trade, or take a contract you see while the app is open even if Auto-trade is On.\n\n' +
             'A tap uses Settings → Risk → Home Buy: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, and chase. Shared limits (max open, trades/day, 15m window, daily loss) and cushions apply to both Home Buy and Auto-trade. Auto-trade uses the Auto-trade tab, including Protect money.\n\n' +
-            'Last signals shows one extra line: if Buy is on the row, it is a Home Buy skip (or nothing if the tap would place). Auto-trade skips are not shown next to Buy. If there is no Buy/Sell, Auto-trade’s last skip/place can show.\n\n' +
+            'Last signals shows one extra line: a Home Buy skip stays on that YES/NO row (Buy is hidden). Auto-trade skips are not shown on that row. If there is no Home skip and no Buy/Sell, Auto-trade’s last skip/place can show.\n\n' +
             'Success shows a gold “Gold buy success” chip flying up from the button — not a popup. Failures show an error popup.\n\n' +
             'You can lose the full amount of that order. GTC can rest on the book. IOC can miss. If the Admin flag Last signals Buy / Sell is Off, buttons disappear and Cloud rejects taps.',
         },
@@ -350,7 +352,8 @@ export function getFaqCategories(): FaqCategory[] {
             '• cushions and asset on/off (Cushions tab)\n\n' +
             'Home Buy tab only: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, chase. Used when you tap Buy on Home. Home Sell stays IOC; its slippage is Home Buy chase.\n\n' +
             'Auto-trade tab only: the same size/timing fields for Cloud’s scheduled buys, plus Protect money (early sell). Protect can still exit a fill that started as a Home Buy.\n\n' +
-            'Last signals never shows both skips at once. If Buy/Sell is on the row, you only see a Home Buy skip (or nothing if the tap would place). Auto-trade’s last skip/place shows only when there is no Buy/Sell button.',
+            'Home Buy / Sell on Last signals is the Home tap path. If Auto-trade is also On and its tab passes, the worker can buy that same lean as long as shared caps still have room (15m window, trades/day, max open, daily loss).\n\n' +
+            'Last signals never shows both skips at once. If Home Buy would skip (ask too rich, timing, size, shared cap), Buy is hidden and that Home skip stays on the row. Auto-trade’s last skip/place shows only when there is no Home skip and no Buy/Sell button.',
         },
         {
           id: 'restore-risk',
@@ -480,9 +483,9 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Last signals shows at most one extra line so Auto-trade and Home Buy do not fight on the same card:\n\n' +
             '• SKIP (amber) — live price is not far enough past the strike. The line under it says “below cushion.” That is not a skipped order.\n\n' +
-            '• YES/NO with Buy showing, and a skip under it — that skip is from Settings → Risk → Home Buy (ask too rich, too early, too little time, size too small, shared cap). Auto-trade’s skip is hidden so you are not told two different stories. A tap uses those same Home Buy rules; Cloud can still reject with an error popup.\n\n' +
+            '• YES/NO with a Home skip under it (Buy hidden) — Cloud would reject the same Home Buy gate (ask too rich, too early, too little time, size too small, shared cap). Auto-trade’s skip is not shown on that row.\n\n' +
             '• YES/NO with Buy showing and no skip — a tap would place under Home Buy rules. Auto-trade may have skipped; that is not shown next to Buy.\n\n' +
-            '• No Buy/Sell button — Auto-trade’s last skip or fill can show.\n\n' +
+            '• No Buy/Sell button and no Home skip — Auto-trade’s last skip or fill can show.\n\n' +
             'Open Settings → Risk → i for what each limit means.',
         },
         {

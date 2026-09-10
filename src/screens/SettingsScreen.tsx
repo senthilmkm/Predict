@@ -857,15 +857,19 @@ function RiskHelpModal({
               separate path and can still place when Auto-trade is Off.
             </HelpItem>
             <HelpItem title="Home Buy / Sell (Last signals)">
-              When the Last signals Buy / Sell flag is On, Home shows Buy YES / Buy NO (or Sell if
-              you already hold that 15-minute window). One tap tells Cloud Run to place now. The
-              phone never talks to Kalshi. No confirm sheet. Kill Switch hides the buttons. If the
-              Admin flag is Off, buttons disappear and Cloud rejects taps.{'\n\n'}
+              When the Last signals Buy / Sell flag is On, Home shows one Home Buy / Sell block for
+              Buy YES / Buy NO and Sell. Buy is a Home tap only and shows only if Home Buy gates
+              would pass. Ask too rich and other Home skips hide it. If Auto-trade is On and its
+              Risk tab also passes, Cloud can still buy that same lean on the worker tick, as long
+              as shared caps allow (max trades / asset / 15m window, max trades / day, max open,
+              daily loss). Sell is in that same block if you already hold that 15-minute window. One
+              tap tells Cloud Run to place now. The phone never talks to Kalshi. No confirm sheet.
+              Kill Switch hides the buttons. If the Admin flag is Off, buttons disappear and Cloud
+              rejects taps.{'\n\n'}
               A tap uses Settings → Risk → Home Buy (size, minutes left/elapsed, max ask, time in
-              force, chase). Shared limits (max open, trades/day, 15m window, daily loss) apply to
-              both Home Buy and Auto-trade. Last signals shows one skip line for the tap when Buy is
-              visible — not Auto-trade’s skip. You can lose the full notional. GTC can rest. IOC can
-              miss.
+              force, chase). Shared limits apply to both Home Buy and Auto-trade. A Home Buy skip
+              stays on the row when Buy is hidden — not Auto-trade’s skip. You can lose the full
+              notional. GTC can rest. IOC can miss.
             </HelpItem>
             <HelpItem title="Notify on lean vs mute on the bell" testID="help-notify-vs-mute">
               Settings → Notify on lean signals Off stops new lean rows and all lock-screen pings
