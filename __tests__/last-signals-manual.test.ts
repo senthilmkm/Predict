@@ -1,4 +1,10 @@
-import { heldOpenFillForTicker, lastSignalManualKind } from '../src/screens/lastSignalsManual';
+import { defaultAppConfig } from '../src/config/types';
+import {
+  heldOpenFillForTicker,
+  homeBuySkipReason,
+  lastSignalExtraLine,
+  lastSignalManualKind,
+} from '../src/screens/lastSignalsManual';
 
 describe('last signals manual kind', () => {
   const yesRow = {
@@ -48,5 +54,103 @@ describe('last signals manual kind', () => {
         ticker
       )?.side
     ).toBe('NO');
+  });
+});
+
+describe('last signal extra line', () => {
+  test('Buy showing with Auto skip hides Auto and shows nothing if Home would place', () => {
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'buy',
+        autoTradeOn: true,
+        autoDetail: 'skipped · ask too rich',
+        autoStatus: 'skipped',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        tapSkipReason: null,
+      })
+    ).toBeNull();
+  });
+
+  test('Buy showing with Home skip shows only that skip', () => {
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'buy',
+        autoTradeOn: true,
+        autoDetail: 'skipped · ask too rich',
+        autoStatus: 'skipped',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        tapSkipReason: 'too little time left',
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'too little time left' });
+  });
+
+  test('Sell showing hides Auto skip', () => {
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'sell',
+        autoTradeOn: true,
+        autoDetail: 'skipped · ask too rich',
+        autoStatus: 'skipped',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        tapSkipReason: 'ask too rich',
+      })
+    ).toBeNull();
+  });
+
+  test('no button shows Auto last action, or below cushion on SKIP', () => {
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        autoDetail: 'skipped · ask too rich',
+        autoStatus: 'skipped',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+      })
+    ).toEqual({
+      testID: 'trade-action',
+      text: 'skipped · ask too rich',
+      placed: false,
+      failed: false,
+    });
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: false,
+        decision: 'SKIP',
+        isOpen: true,
+        noMarket: false,
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'below cushion' });
+  });
+});
+
+describe('homeBuySkipReason', () => {
+  test('uses Home Buy max ask, not Auto-trade', () => {
+    const cfg = defaultAppConfig();
+    cfg.risk.max_entry_ask_usd = 0.5;
+    cfg.manual_risk = { ...cfg.manual_risk, max_entry_ask_usd: 0.99, min_minutes_elapsed: 0, min_minutes_left: 0 };
+    const lean = {
+      asset: 'BTC',
+      market_ticker: 'KXBTC15M-X',
+      decision: 'YES',
+      live: 500,
+      strike: 100,
+      abs_gap: 400,
+      minutes_left: 8,
+      minutes_elapsed: 5,
+      phase: 'live',
+      yes_ask: 0.94,
+    };
+    expect(homeBuySkipReason({ cfg, lean, trades: [] })).toBeNull();
+    cfg.manual_risk = { ...cfg.manual_risk, max_entry_ask_usd: 0.5 };
+    expect(homeBuySkipReason({ cfg, lean, trades: [] })).toBe('ask too rich');
   });
 });

@@ -1,5 +1,14 @@
 import { signKalshiRequest } from './sign';
 import { getActiveKalshiRetryPolicy, nextImmediateRetryWaitMs } from '../../../packages/trading-core/src/kalshiRetry';
+import {
+  extractKalshiOrderFields,
+  KalshiOrderFields,
+  orderFillIsTerminal,
+  placeFillConfirmWaitMsList,
+  placeFillLooksComplete,
+  preferOrderFields,
+  sleepMs,
+} from '../../../packages/trading-core/src/orderFill';
 
 export type KalshiEnv = 'production' | 'demo';
 
@@ -44,6 +53,7 @@ export interface KalshiPlaceResult {
   fill_count?: string | null;
   remaining_count?: string | null;
   average_fill_price?: string | null;
+  order_status?: string | null;
 }
 
 export class KalshiClient {
@@ -202,6 +212,10 @@ export class KalshiClient {
       data && typeof data === 'object' && data.error && typeof data.error === 'object'
         ? data.error.code
         : null;
+    let fields = extractKalshiOrderFields(data);
+    if (ok && fields.order_id && !placeFillLooksComplete(fields)) {
+      fields = await this.confirmPlaceFill(fields);
+    }
     return {
       ok,
       http_status: status,
@@ -209,11 +223,48 @@ export class KalshiClient {
       payload,
       response: data,
       error: errCode,
-      order_id: data?.order_id ?? null,
-      fill_count: data?.fill_count ?? null,
-      remaining_count: data?.remaining_count ?? null,
-      average_fill_price: data?.average_fill_price ?? null,
+      order_id: fields.order_id,
+      fill_count: fields.fill_count,
+      remaining_count: fields.remaining_count,
+      average_fill_price: fields.average_fill_price,
+      order_status: fields.status,
     };
+  }
+
+  async getOrder(orderId: string): Promise<{ ok: boolean; http_status: number; fields: KalshiOrderFields }> {
+    const id = String(orderId || '').trim();
+    if (!id) {
+      return {
+        ok: false,
+        http_status: 0,
+        fields: extractKalshiOrderFields(null),
+      };
+    }
+    const { status, data } = await this.request('GET', `/portfolio/orders/${encodeURIComponent(id)}`);
+    return {
+      ok: status === 200,
+      http_status: status,
+      fields: extractKalshiOrderFields(data),
+    };
+  }
+
+  private async confirmPlaceFill(initial: KalshiOrderFields): Promise<KalshiOrderFields> {
+    let fields = initial;
+    const orderId = fields.order_id;
+    if (!orderId) return fields;
+    for (const waitMs of placeFillConfirmWaitMsList()) {
+      await sleepMs(waitMs);
+      try {
+        const got = await this.getOrder(orderId);
+        if (got.ok) {
+          fields = preferOrderFields(fields, got.fields);
+          if (placeFillLooksComplete(fields) || orderFillIsTerminal(fields)) break;
+        }
+      } catch {
+        /* keep polling — GET can 404 before the order is visible */
+      }
+    }
+    return fields;
   }
 
   async findOpenMarket(seriesTicker: string): Promise<any | null> {

@@ -48,7 +48,6 @@ export function evaluateStaticGate(
     tradesToday?: number;
     assetTradesInWindow?: number;
     allowWhenAutoTradeOff?: boolean;
-    skipTimingAndMaxAsk?: boolean;
   }
 ): GateResult {
   const cfg = snapshotConfig(cfgIn);
@@ -69,12 +68,11 @@ export function evaluateStaticGate(
   if (lean.decision !== 'YES' && lean.decision !== 'NO') {
     return { ok: false, skip_reason: 'skip_decision' };
   }
-  const skipTiming = opts?.skipTimingAndMaxAsk === true;
-  if (!skipTiming && lean.minutes_left < cfg.risk.min_minutes_left) {
+  if (lean.minutes_left < cfg.risk.min_minutes_left) {
     return { ok: false, skip_reason: 'minutes_left' };
   }
   const elapsed = Number(lean.minutes_elapsed ?? 0);
-  if (!skipTiming && elapsed < cfg.risk.min_minutes_elapsed) {
+  if (elapsed < cfg.risk.min_minutes_elapsed) {
     return { ok: false, skip_reason: 'minutes_elapsed' };
   }
 
@@ -101,15 +99,13 @@ export function evaluateStaticGate(
   if (lean.decision === 'NO' && lean.no_ask != null) ask = Number(lean.no_ask);
   ask = Math.min(0.99, Math.max(0.01, ask));
 
-  if (!skipTiming && ask > cfg.risk.max_entry_ask_usd + 1e-9) {
+  if (ask > cfg.risk.max_entry_ask_usd + 1e-9) {
     return { ok: false, skip_reason: 'ask_too_rich' };
   }
 
   const chase = Math.max(0, Math.min(0.05, Number(cfg.risk.chase_above_ask_usd) || 0));
   let pay = ask + chase;
-  if (!skipTiming) {
-    pay = Math.min(cfg.risk.max_entry_ask_usd, pay);
-  }
+  pay = Math.min(cfg.risk.max_entry_ask_usd, pay);
   pay = Math.min(0.99, Math.max(0.01, pay));
 
   const dollars = Math.min(
@@ -148,9 +144,7 @@ export function evaluateStaticGate(
     count: String(countNum),
     pay_price: pay,
     notional_usd: notional,
-    time_in_force: skipTiming
-      ? cfg.risk.manual_buy_time_in_force || 'immediate_or_cancel'
-      : cfg.risk.time_in_force,
+    time_in_force: cfg.risk.time_in_force,
     config_snapshot: cfg,
   };
 }

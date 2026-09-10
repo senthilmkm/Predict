@@ -67,9 +67,8 @@ export const RISK_FIELD_META: {
     max: 10,
   },
   { key: 'max_entry_ask_usd', label: 'Max entry ask ($) (Buy limit)', group: 'timing', kind: 'chase', step: 0.01, min: 0.5, max: 0.99 },
-  { key: 'time_in_force', label: 'Time in force (Auto-trade buys)', group: 'timing', kind: 'tif', step: 0, min: 0, max: 0 },
-  { key: 'manual_buy_time_in_force', label: 'Time in force (Manual buy)', group: 'timing', kind: 'tif', step: 0, min: 0, max: 0 },
-  { key: 'chase_above_ask_usd', label: 'Chase above ask ($) (Buy & Sell)', group: 'timing', kind: 'chase', step: 0.01, min: 0, max: 0.05 },
+  { key: 'time_in_force', label: 'Time in force', group: 'timing', kind: 'tif', step: 0, min: 0, max: 0 },
+  { key: 'chase_above_ask_usd', label: 'Chase above ask ($)', group: 'timing', kind: 'chase', step: 0.01, min: 0, max: 0.05 },
   {
     key: 'protect_sell_enabled',
     label: 'Protect money (early sell)',
@@ -103,6 +102,30 @@ export const TIME_IN_FORCE_OPTIONS: { value: TimeInForce; label: string }[] = [
   { value: 'immediate_or_cancel', label: 'IOC' },
   { value: 'good_till_canceled', label: 'GTC' },
   { value: 'fill_or_kill', label: 'FOK' },
+];
+
+export const SHARED_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'max_open_positions',
+  'max_trades_per_day',
+  'max_trades_per_asset_per_window',
+  'daily_loss_stop_usd',
+];
+
+export const PATH_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'fixed_dollars_per_trade',
+  'max_dollars_per_trade',
+  'min_dollars_per_trade',
+  'min_minutes_left',
+  'min_minutes_elapsed',
+  'max_entry_ask_usd',
+  'time_in_force',
+  'chase_above_ask_usd',
+];
+
+export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'protect_sell_enabled',
+  'protect_sell_gap_ratio',
+  'protect_sell_grace_seconds',
 ];
 
 export function cloneDefaultRisk(): RiskConfig {

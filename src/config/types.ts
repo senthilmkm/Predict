@@ -135,12 +135,12 @@ export interface RiskConfig {
    * 0 = allow from the open. Example: 2 = skip the first ~2 noisy minutes.
    */
   min_minutes_elapsed: number;
-  /** Do not buy if side ask is above this. Auto-trade only. */
+  /** Auto-trade max ask. Home Buy uses `manual_risk.max_entry_ask_usd`. */
   max_entry_ask_usd: number;
   time_in_force: TimeInForce;
-  /** Home Last-signals Buy tap only. Auto-trade still uses time_in_force. */
+  /** Kept in sync with manual_risk.time_in_force for older Cloud revisions. */
   manual_buy_time_in_force: TimeInForce;
-  /** Add to ask for fill aid. Auto-trade still caps pay by max_entry_ask; Home Buy does not. */
+  /** Add to ask for fill aid. Each path caps pay by that path's max_entry_ask. */
   chase_above_ask_usd: number;
   /**
    * When ON: if a held trade faces a strong opposite lean, sell early to protect money
@@ -172,6 +172,17 @@ export const ALERT_RETENTION_MIN_DAYS = 1;
 export const ALERT_RETENTION_DEFAULT_DAYS = 30;
 export const ALERT_RETENTION_MAX_DAYS = 365;
 
+export interface ManualPathRisk {
+  fixed_dollars_per_trade: number;
+  max_dollars_per_trade: number;
+  min_dollars_per_trade: number;
+  min_minutes_left: number;
+  min_minutes_elapsed: number;
+  max_entry_ask_usd: number;
+  time_in_force: TimeInForce;
+  chase_above_ask_usd: number;
+}
+
 export interface AppConfig {
   version: number;
   alerts_enabled: boolean;
@@ -186,6 +197,8 @@ export interface AppConfig {
   cushions: CushionConfig;
   assets_enabled: AssetEnabled;
   risk: RiskConfig;
+  /** Home Buy size/timing. Shared caps live on `risk`. */
+  manual_risk: ManualPathRisk;
   alert_prefs: Record<AlertKind, AlertPref>;
 }
 
@@ -246,6 +259,16 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_enabled: false,
       protect_sell_gap_ratio: 1,
       protect_sell_grace_seconds: 45,
+    },
+    manual_risk: {
+      fixed_dollars_per_trade: 5,
+      max_dollars_per_trade: 5,
+      min_dollars_per_trade: 1,
+      min_minutes_left: 2,
+      min_minutes_elapsed: 2,
+      max_entry_ask_usd: 0.9,
+      time_in_force: 'immediate_or_cancel',
+      chase_above_ask_usd: 0.02,
     },
     alert_prefs: defaultAlertPrefs(),
   };

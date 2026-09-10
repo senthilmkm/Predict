@@ -11,6 +11,7 @@ import { HistoryScreen } from '../screens/HistoryScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SettingsMoreScreen } from '../screens/SettingsMoreScreen';
+import { RiskScreen } from '../screens/RiskScreen';
 import { AlertsHubScreen } from '../screens/AlertsHubScreen';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { exportAndShareHistory } from '../services/exportHistory';
@@ -129,6 +130,7 @@ function MainTabs({ navigation }: any) {
         {() => (
           <SettingsScreen
             onOpenAccountAndMore={() => navigation.navigate('SettingsMore')}
+            onOpenRisk={() => navigation.navigate('RiskSettings')}
           />
         )}
       </Tab.Screen>
@@ -150,6 +152,16 @@ export function RootNavigator() {
           options={{
             title: 'Alerts',
             presentation: 'modal',
+            headerStyle: { backgroundColor: colors.surface },
+            headerTintColor: colors.textPrimary,
+          }}
+        />
+        <Stack.Screen
+          name="RiskSettings"
+          component={RiskScreen}
+          options={{
+            title: 'Risk',
+            headerBackTitle: 'Settings',
             headerStyle: { backgroundColor: colors.surface },
             headerTintColor: colors.textPrimary,
           }}

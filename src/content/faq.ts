@@ -94,6 +94,7 @@ export function getFaqCategories(): FaqCategory[] {
             'You are. That includes:\n' +
             '• trades you place yourself on Kalshi after seeing a Predict alert\n' +
             '• trades Cloud Run places when Auto-trade is On\n' +
+            '• trades Cloud Run places when you tap Buy or Sell on Home\n' +
             '• early exits when Protect money is On\n\n' +
             'The app owner is not liable for your losses. The full wording is in Settings → Legal, and on the public Risk Disclaimer page.',
         },
@@ -186,7 +187,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Signal alerts On = you can be notified when a lean appears. No order is placed just because an alert fired.\n\n' +
             'Auto-trade On = Cloud Run may place real Kalshi buy orders when cushions and Risk rules pass. Face ID is required to turn this On.\n\n' +
-            'Home Buy / Sell (when the Last signals Buy / Sell flag is On) = you tap to place now, even if Auto-trade is Off. Timing and max-ask do not block a tap.\n\n' +
+            'Home Buy / Sell (when the Last signals Buy / Sell flag is On) = you tap to place now, even if Auto-trade is Off. The tap uses Settings → Risk → Home Buy. Shared limits apply to both paths.\n\n' +
             'They are independent. Example: alerts On + Auto-trade Off = research pings, plus optional Home taps if the buttons are shown.',
         },
         {
@@ -195,9 +196,10 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'When Last signals Buy / Sell is On, a green Buy YES / Buy NO (or Sell) appears on a live lean. One tap tells Cloud Run to place now. The phone never talks to Kalshi. There is no confirm sheet.\n\n' +
             'Purpose: trade without Auto-trade, or take a contract you see while the app is open even if Auto-trade is On.\n\n' +
-            'A tap still uses Size and Caps (dollars, max open, daily loss, trades/day, 1-per-window), cushion, chase above ask, and Time in force (Manual buy). It does not use min minutes left, min minutes elapsed, or max entry ask — so a tap can buy a rich ticket or a late window that Auto-trade would skip.\n\n' +
-            'Success shows a gold “Gold buy success” chip flying up from the button — not a popup. Failures show an error popup (ask too small after size math, daily loss stop, no fill, network, Kill Switch, or the feature flag Off).\n\n' +
-            'You can lose the full amount of that order. GTC can rest on the book. IOC can miss. Chase can pay a few cents above the ask. If the Admin flag Last signals Buy / Sell is Off, buttons disappear and Cloud rejects taps.',
+            'A tap uses Settings → Risk → Home Buy: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, and chase. Shared limits (max open, trades/day, 15m window, daily loss) and cushions apply to both Home Buy and Auto-trade. Auto-trade uses the Auto-trade tab, including Protect money.\n\n' +
+            'Last signals shows one extra line: if Buy is on the row, it is a Home Buy skip (or nothing if the tap would place). Auto-trade skips are not shown next to Buy. If there is no Buy/Sell, Auto-trade’s last skip/place can show.\n\n' +
+            'Success shows a gold “Gold buy success” chip flying up from the button — not a popup. Failures show an error popup.\n\n' +
+            'You can lose the full amount of that order. GTC can rest on the book. IOC can miss. If the Admin flag Last signals Buy / Sell is Off, buttons disappear and Cloud rejects taps.',
         },
         {
           id: 'need-keys-for-alerts',
@@ -213,7 +215,7 @@ export function getFaqCategories(): FaqCategory[] {
             'It is the red “!” panic icon in the top-right header (left of Export). Tap confirms, then turns Auto-trade Off right away on this phone and syncs that Off state to Cloud Run, so new automatic buys should stop. It also hides Home Buy / Sell.\n\n' +
             'It does not turn Protect money Off. If Protect money is still On, Cloud Run may still try to sell open trades.\n\n' +
             'Cloud Run still settles fills you already have and can still write Trade won / Trade lost.\n\n' +
-            'To stop new buys and early sells: Auto-trade Off, Last signals Buy / Sell off (or Kill Switch), and turn Protect money Off under Settings → Risk.',
+            'To stop new buys and early sells: Auto-trade Off, Last signals Buy / Sell off (or Kill Switch), and turn Protect money Off under Settings → Risk → Auto-trade.',
         },
         {
           id: 'phone-in-background',
@@ -239,7 +241,7 @@ export function getFaqCategories(): FaqCategory[] {
             '• place a Home Buy / Sell when you tap (if Last signals Buy / Sell is On)\n' +
             '• place Protect money sells when that switch is On\n' +
             '• record fills and settlements on your user in Firestore (settlements continue after Auto-trade Off if keys are saved)\n\n' +
-            'Your Risk numbers and asset on/off flags are stored with your user so the server uses the same rules as Settings.',
+            'Your Home Buy numbers, Auto-trade numbers, shared limits, and asset on/off flags are stored with your user so the server uses the same rules as Settings.',
         },
         {
           id: 'who-sells',
@@ -294,8 +296,8 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'where-risk',
           q: 'Where do I change trade size and limits?',
           a:
-            'Settings → Risk → Show. Fields are grouped as Size, Caps, and Timing & protect. Tap the i next to Risk for a label-by-label guide.\n\n' +
-            'Defaults: $5 per trade, max $5, min $1, max 5 open positions, 100 new buys per day, 1 buy per asset per 15-minute window, $50 daily loss stop, wait 2 minutes after the window opens, need 2 minutes left, max ask $0.90, Auto-trade IOC, Manual buy IOC, chase $0.02, Protect money Off.',
+            'Settings → Risk → Show. Shared limits sit above the tabs. Then pick Home Buy or Auto-trade for that path’s size and timing. Tap the i next to Risk for a label-by-label guide.\n\n' +
+            'Defaults: $5 per trade, max $5, min $1, max 5 open positions, 100 new buys per day, 1 buy per asset per 15-minute window, $50 daily loss stop, wait 2 minutes after the window opens, need 2 minutes left, max ask $0.90, Auto-trade IOC, Home Buy IOC, chase $0.02, Protect money Off. Size/timing start the same on both Risk tabs until you change one.',
         },
         {
           id: 'window-cap',
@@ -317,30 +319,46 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'timing-and-ask',
           q: 'Why did it skip with “too early,” “too little time,” or “size too small”?',
           a:
-            'These Auto-trade-only rules do not block a Home Buy tap. A tap can still buy when Auto-trade would skip as too early, too little time, or ask too rich.\n\n' +
-            'Min minutes elapsed (default 2) = Auto-trade don’t buy in the noisy open. “Too early in window” means this clock has not been reached.\n\n' +
-            'Min minutes left (default 2) = Auto-trade don’t buy in the last minutes. “Too little time left” means the window is too close to expiry. These two buy-timing rules do not block Protect money sells.\n\n' +
-            'Max entry ask (default $0.90) = Auto-trade don’t buy a very expensive ticket.\n\n' +
-            'Min $ / trade (default $1) = if the order would be smaller than this (often when the contract price is high), it skips “size too small.” Keep min below $ per trade. This size rule still applies to Home taps.',
+            'Each path has its own minutes left, minutes elapsed, and max entry ask under Settings → Risk.\n\n' +
+            'If Buy is showing, Last signals uses the Home Buy tab (so Auto-trade’s “ask too rich” is not shown next to a tap that would still place).\n\n' +
+            'Min minutes elapsed (default 2) = don’t buy in the noisy open for that path.\n\n' +
+            'Min minutes left (default 2) = don’t buy in the last minutes for that path. These two buy-timing rules do not block Protect money sells.\n\n' +
+            'Max entry ask (default $0.90) = don’t buy a very expensive ticket for that path.\n\n' +
+            'Min $ / trade (default $1) = if the order would be smaller than this, it skips “size too small.” Shared caps (max open, trades/day, 15m window, daily loss) stop both paths.',
         },
         {
           id: 'tif-and-chase',
           q: 'What are IOC / FOK / GTC and chase above ask?',
           a:
             'Time in force is how long a buy stays on Kalshi.\n\n' +
-            'Auto-trade buys use Time in force (Auto-trade buys). Home Buy taps use Time in force (Manual buy). Same three choices:\n' +
+            'Auto-trade uses Settings → Risk → Auto-trade. Home Buy uses Settings → Risk → Home Buy. Same three choices:\n' +
             '• IOC (default) = fill what you can now, cancel the rest\n' +
             '• FOK = fill all now or cancel all\n' +
             '• GTC = leave it working until filled or canceled\n\n' +
-            'Most people keep IOC on these short windows. GTC on a Home tap can rest until the 15-minute window ends. Protect money sells always use IOC.\n\n' +
-            'Chase above ask (default $0.02) is a tiny extra you allow above the ask to help a fill. Auto-trade still caps pay by Max entry ask. A Home Buy tap uses chase without that cap (pay is ask + chase, max $0.99). The same idea is used as sell slippage on protect-sell.',
+            'Most people keep IOC on these short windows. GTC on a Home tap can rest until the 15-minute window ends. Protect money sells and Home Sell taps always use IOC.\n\n' +
+            'Chase above ask (default $0.02) is a tiny extra above the ask. Each path caps pay by that path’s max entry ask (max $0.99). Auto-trade chase is also protect-sell slippage.',
+        },
+        {
+          id: 'risk-shared-vs-path',
+          q: 'Which Risk settings are shared vs only Home Buy or Auto-trade?',
+          a:
+            'Shared (one Kalshi account, both paths):\n' +
+            '• max open positions\n' +
+            '• max trades / day\n' +
+            '• max trades / asset / 15m window\n' +
+            '• daily loss stop\n' +
+            '• cushions and asset on/off (Cushions tab)\n\n' +
+            'Home Buy tab only: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, chase. Used when you tap Buy on Home. Home Sell stays IOC; its slippage is Home Buy chase.\n\n' +
+            'Auto-trade tab only: the same size/timing fields for Cloud’s scheduled buys, plus Protect money (early sell). Protect can still exit a fill that started as a Home Buy.\n\n' +
+            'Last signals never shows both skips at once. If Buy/Sell is on the row, you only see a Home Buy skip (or nothing if the tap would place). Auto-trade’s last skip/place shows only when there is no Buy/Sell button.',
         },
         {
           id: 'restore-risk',
-          q: 'What does Restore default values do?',
+          q: 'What do Restore shared limits and Restore this tab do?',
           a:
-            'It puts all Risk numbers back to the app’s starting set stored on this phone, including Protect money Off.\n\n' +
-            'It does not wipe Kalshi keys, subscription, or Cushions (cushions have their own restore on the Cushions tab).',
+            'Settings → Risk → Show opens Shared limits plus Home Buy and Auto-trade tabs.\n\n' +
+            'Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.\n\n' +
+            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Protect money on Auto-trade). Cushions and keys are not wiped.',
         },
       ],
     },
@@ -352,7 +370,7 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'protect-how',
           q: 'How does Protect money work?',
           a:
-            'When On, if you already hold a fill and the live lean flips strongly against you, Cloud Run sends an IOC sell after the wait-after-fill.\n\n' +
+            'When On (Settings → Risk → Auto-trade), if you already hold a fill and the live lean flips strongly against you, Cloud Run sends an IOC sell after the wait-after-fill.\n\n' +
             'Default wait is 45 seconds so the first noisy ticks after a buy don’t instantly sell. After that wait, a sell can fire at any remaining time in the window — not only in the last minutes.\n\n' +
             'When Off (default), open trades ride until the 15-minute contract settles win or loss.',
         },
@@ -460,9 +478,11 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'no-order',
           q: 'Home says “no order” — is that a bug?',
           a:
-            'Two different lines on Home → Last signals:\n\n' +
+            'Last signals shows at most one extra line so Auto-trade and Home Buy do not fight on the same card:\n\n' +
             '• SKIP (amber) — live price is not far enough past the strike. The line under it says “below cushion.” That is not a skipped order.\n\n' +
-            '• YES or NO with a second amber line — Cloud Auto-trade tried a buy and a Risk gate stopped it (ask too rich, too early, too little time left, size too small, and so on). You can still tap Home Buy if the button is shown; a tap skips those timing / max-ask gates.\n\n' +
+            '• YES/NO with Buy showing, and a skip under it — that skip is from Settings → Risk → Home Buy (ask too rich, too early, too little time, size too small, shared cap). Auto-trade’s skip is hidden so you are not told two different stories. A tap uses those same Home Buy rules; Cloud can still reject with an error popup.\n\n' +
+            '• YES/NO with Buy showing and no skip — a tap would place under Home Buy rules. Auto-trade may have skipped; that is not shown next to Buy.\n\n' +
+            '• No Buy/Sell button — Auto-trade’s last skip or fill can show.\n\n' +
             'Open Settings → Risk → i for what each limit means.',
         },
         {

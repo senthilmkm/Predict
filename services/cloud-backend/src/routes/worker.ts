@@ -12,6 +12,7 @@ import {
   formatSkipReason,
   windowBuyCap,
 } from '../../../../packages/trading-core/src/gates';
+import { isGoodTillCanceled, resolvedPlaceFillCount } from '../../../../packages/trading-core/src/orderFill';
 import { LastTradeAction } from '../../../../packages/trading-core/src/types';
 import { getUserSecret } from '../services/secretManager';
 import {
@@ -437,9 +438,15 @@ async function runOneTick() {
             if (placeRes.ok) {
               tradesCount++;
               const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-              const fillCount = Number(placeRes.fill_count ?? gate.count ?? 0);
-              const filled = Number.isFinite(fillCount) && fillCount > 0;
+              const tif = placeRes.payload?.time_in_force || gate.time_in_force;
+              const gtcResting = isGoodTillCanceled(tif);
+              const { fillCount, filled } = resolvedPlaceFillCount({
+                dryRun: Boolean(placeRes.dry_run) || !isLive,
+                fillCount: placeRes.fill_count,
+                intendedCount: gate.count,
+              });
               const payPrice = Number(gate.pay_price ?? 0) || null;
+              const accepted = filled || (gtcResting && Boolean(placeRes.order_id));
 
               const tradeDoc: TradeRecordDoc = {
                 tradeId,
@@ -453,7 +460,7 @@ async function runOneTick() {
                   ? Math.round(fillCount * payPrice * 100) / 100
                   : gate.notional_usd || 0,
                 dryRun: !isLive,
-                status: filled ? 'FILLED' : 'CANCELLED',
+                status: filled ? 'FILLED' : accepted ? 'SUBMITTED' : 'CANCELLED',
                 leanDiff: absGap,
                 liveSpot: lean.live,
                 strike: lean.strike,
@@ -461,7 +468,7 @@ async function runOneTick() {
                 orderId: placeRes.order_id ?? null,
                 payPrice,
                 fillCount: filled ? fillCount : 0,
-                outcome: filled ? 'pending' : 'miss',
+                outcome: filled || accepted ? 'pending' : 'miss',
                 pnlUsd: null,
               };
 
@@ -487,6 +494,12 @@ async function runOneTick() {
                     detail: `placed ${lean.decision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
                     at: tickIso,
                   }
+                : accepted
+                  ? {
+                      status: 'placed',
+                      detail: `resting ${lean.decision} · waiting for fill`,
+                      at: tickIso,
+                    }
                 : { status: 'failed', detail: 'IOC no fill', at: tickIso };
               if (filled) {
                 const fillTitle = isLive
@@ -508,7 +521,7 @@ async function runOneTick() {
                   decision: lean.decision,
                   at: now.toISOString(),
                 });
-              } else {
+              } else if (!accepted) {
                 await emitCloudAlert({
                   userId,
                   alertId: missAlertId(tradeId),

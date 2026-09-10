@@ -27,8 +27,9 @@ export function DisclaimerReacceptScreen({ onAccepted }: { onAccepted: () => voi
     <View style={styles.root} testID="screen-disclaimer-reaccept">
       <Text style={styles.title}>{DISCLAIMER_TITLE}</Text>
       <Text style={styles.lead}>
-        Predict added Home Buy / Sell. Please read this updated warning and confirm before you
-        continue.
+        Predict updated Home Buy / Sell and Risk. Home Buy and Auto-trade now have separate size
+        and timing. Shared limits still apply to both. Please read this updated warning and confirm
+        before you continue.
       </Text>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollInner}>
         <Text style={styles.short}>{DISCLAIMER_SHORT}</Text>

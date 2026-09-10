@@ -13,22 +13,35 @@ import { resetRuntimeStoreForTests } from '../../src/state/runtimeStore';
 import { defaultAppConfig } from '../../src/config/types';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { SettingsMoreScreen } from '../../src/screens/SettingsMoreScreen';
+import { RiskScreen } from '../../src/screens/RiskScreen';
 import { generateKeyPairSync } from 'crypto';
 import { saveCredentials, hasCredentials, clearCredentials } from '../../src/services/credentials';
 import { KalshiClient } from '../../src/services/kalshi/client';
 
 function SettingsHost() {
   const [more, setMore] = useState(false);
+  const [risk, setRisk] = useState(false);
   return (
     <View testID="settings-host">
       <View
         testID="settings-home-slot"
-        // Keep Settings mounted while More is open (mirrors root stack).
-        style={more ? { height: 0, overflow: 'hidden' } : undefined}
-        pointerEvents={more ? 'none' : 'auto'}
+        // Keep Settings mounted while More/Risk is open (mirrors root stack).
+        style={more || risk ? { height: 0, overflow: 'hidden' } : undefined}
+        pointerEvents={more || risk ? 'none' : 'auto'}
       >
-        <SettingsScreen onOpenAccountAndMore={() => setMore(true)} />
+        <SettingsScreen
+          onOpenAccountAndMore={() => setMore(true)}
+          onOpenRisk={() => setRisk(true)}
+        />
       </View>
+      {risk ? (
+        <View>
+          <Pressable testID="btn-risk-back" onPress={() => setRisk(false)}>
+            <Text>Back</Text>
+          </Pressable>
+          <RiskScreen />
+        </View>
+      ) : null}
       {more ? (
         <View>
           <Pressable testID="btn-settings-more-back" onPress={() => setMore(false)}>
@@ -101,27 +114,9 @@ describe('Settings toggles', () => {
 
     expect(s.queryByTestId('risk-field-max_dollars_per_trade')).toBeNull();
     await fireEvent.press(s.getByTestId('btn-toggle-risk'));
-    expect(s.getByTestId('risk-group-size')).toBeTruthy();
-    expect(s.getByTestId('risk-group-caps')).toBeTruthy();
-    expect(s.getByTestId('risk-group-timing')).toBeTruthy();
-    expect(s.getByText('Size')).toBeTruthy();
-    expect(s.getByText('Caps')).toBeTruthy();
-    expect(s.getByText('Timing & protect')).toBeTruthy();
-    await fireEvent.press(s.getByTestId('risk-up-max_dollars_per_trade'));
-    await fireEvent.press(s.getByTestId('risk-up-fixed_dollars_per_trade'));
-    expect(useConfigStore.getState().config.risk.fixed_dollars_per_trade).toBeGreaterThan(5);
-    await fireEvent.press(s.getByTestId('btn-restore-risk-defaults'));
-    await waitFor(() =>
-      expect(useConfigStore.getState().config.risk.fixed_dollars_per_trade).toBe(5)
-    );
-    await waitFor(() =>
-      expect(String(s.getByTestId('settings-message').props.children)).toMatch(/risk defaults/i)
-    );
-    expect(useConfigStore.getState().config.risk.chase_above_ask_usd).toBe(0.02);
-    expect(useConfigStore.getState().config.risk.time_in_force).toBe('immediate_or_cancel');
-    expect(useConfigStore.getState().config.risk.manual_buy_time_in_force).toBe(
-      'immediate_or_cancel'
-    );
+    // Show opens the Risk screen via navigation; fields live there.
+    expect(s.queryByTestId('risk-group-size')).toBeNull();
+    expect(s.queryByTestId('screen-risk')).toBeNull();
   });
 
   test('daily Settings parks subscription legal identity FAQ one tap away', async () => {
@@ -268,6 +263,7 @@ describe('Settings credentials', () => {
     await fireEvent.press(s.getByTestId('btn-risk-help'));
     await waitFor(() => expect(s.getByTestId('modal-risk-help')).toBeTruthy());
     expect(s.getByText('Protect money (early sell)')).toBeTruthy();
+    expect(s.getByText('Shared vs each tab')).toBeTruthy();
     expect(s.getByText('Max trades / asset / 15m window')).toBeTruthy();
     expect(s.queryByText('Max trades / asset / day')).toBeNull();
     expect(s.getByTestId('help-notify-vs-mute')).toBeTruthy();
@@ -276,18 +272,33 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(s.queryByTestId('modal-risk-help')).toBeNull());
   });
 
-  test('protect money toggle appears under Risk', async () => {
-    const s = await render(<SettingsScreen />);
+  test('protect money toggle appears under Risk Auto-trade tab', async () => {
+    const s = await render(<SettingsHost />);
     await fireEvent.press(s.getByTestId('btn-toggle-risk'));
-    await waitFor(() => expect(s.getByTestId('risk-field-protect_sell_enabled')).toBeTruthy());
-    expect(s.getByTestId('risk-field-max_trades_per_asset_per_window')).toBeTruthy();
-    expect(s.getByTestId('risk-value-max_trades_per_asset_per_window').props.children).toBe('1');
+    await waitFor(() => expect(s.getByTestId('screen-risk')).toBeTruthy());
+    expect(s.getByTestId('risk-tab-home')).toBeTruthy();
+    expect(s.getByTestId('risk-field-shared-max_trades_per_asset_per_window')).toBeTruthy();
+    expect(s.getByTestId('risk-value-shared-max_trades_per_asset_per_window').props.children).toBe('1');
+    expect(s.getByTestId('tif-home-immediate_or_cancel')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-protect_sell_enabled')).toBeNull();
+    await fireEvent.press(s.getByTestId('risk-tab-auto'));
+    await waitFor(() => expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-field-auto-protect_sell_enabled')).toBeTruthy();
     expect(s.queryByTestId('risk-field-max_trades_per_asset_per_day')).toBeNull();
-    expect(s.getByTestId('risk-hint-protect-sell-auto-off').props.children).toBe(
-      'Still runs 24/7 on Cloud Run if Auto-trade is Off.'
+    expect(s.getByTestId('risk-value-auto-protect_sell_gap_ratio').props.children).toMatch(/1\.00×/);
+    expect(s.getByTestId('risk-value-auto-protect_sell_grace_seconds').props.children).toMatch(/45s/);
+    await fireEvent.press(s.getByTestId('tif-auto-good_till_canceled'));
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.risk.time_in_force).toBe('good_till_canceled')
     );
-    expect(s.getByTestId('risk-value-protect_sell_gap_ratio').props.children).toMatch(/1\.00×/);
-    expect(s.getByTestId('risk-value-protect_sell_grace_seconds').props.children).toMatch(/45s/);
+    expect(useConfigStore.getState().config.manual_risk.time_in_force).toBe('immediate_or_cancel');
+    await fireEvent.press(s.getByTestId('risk-tab-home'));
+    await waitFor(() => expect(s.getByTestId('risk-up-home-min_minutes_left')).toBeTruthy());
+    await fireEvent.press(s.getByTestId('risk-up-home-min_minutes_left'));
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.manual_risk.min_minutes_left).toBe(3)
+    );
+    expect(useConfigStore.getState().config.risk.min_minutes_left).toBe(2);
   });
 
   test('test connection shows successful banner', async () => {
@@ -398,14 +409,14 @@ describe('Settings credentials', () => {
     }
   });
 
-  test('Account & more Back keeps expanded Risk', async () => {
+  test('Risk Show opens the Risk screen; Back returns to Settings', async () => {
     const s = await render(<SettingsHost />);
     await fireEvent.press(s.getByTestId('btn-toggle-risk'));
-    await waitFor(() => expect(s.getByTestId('risk-field-protect_sell_enabled')).toBeTruthy());
-    await fireEvent.press(s.getByTestId('btn-open-settings-more'));
-    await waitFor(() => expect(s.getByTestId('screen-settings-more')).toBeTruthy());
-    await fireEvent.press(s.getByTestId('btn-settings-more-back'));
-    await waitFor(() => expect(s.queryByTestId('screen-settings-more')).toBeNull());
-    expect(s.getByTestId('risk-field-protect_sell_enabled')).toBeTruthy();
+    await waitFor(() => expect(s.getByTestId('screen-risk')).toBeTruthy());
+    expect(s.getByTestId('btn-restore-shared-risk')).toBeTruthy();
+    expect(s.getByTestId('btn-restore-risk-tab')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('btn-risk-back'));
+    await waitFor(() => expect(s.queryByTestId('screen-risk')).toBeNull());
+    expect(s.getByTestId('screen-settings')).toBeTruthy();
   });
 });

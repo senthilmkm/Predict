@@ -627,9 +627,10 @@
             <span class="text-sm font-bold text-white">Last signals Buy / Sell</span>
             <span class="block text-xs text-slate-400 mt-1">
               Home Last signals shows Buy YES / Buy NO (and Sell when already holding that 15m window).
-              One tap places now on Cloud Run. Auto-trade Off still places. Timing and max-ask do not
-              block a tap; size, caps, cushion, chase, and Manual-buy TIF still apply. Off hides buttons
-              and Cloud rejects taps. Kill-Switch also hides the buttons. POST /place is never immediately retried.
+              One tap places now on Cloud Run. Auto-trade Off still places. Home Buy uses the user's
+              Home Buy Risk tab (size, timing, max ask, TIF, chase). Shared caps apply to both paths.
+              Off hides buttons and Cloud rejects taps. Kill-Switch also hides the buttons. POST /place
+              is never immediately retried.
             </span>
           </span>
         </label>

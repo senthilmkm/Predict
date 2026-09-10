@@ -15,6 +15,11 @@ import {
   TimeInForce,
 } from './types';
 import { DEFAULT_RISK_CONFIG } from './riskDefaults';
+import {
+  configForHomeBuy as mergeHomeBuyRisk,
+  normalizeManualPathRisk,
+} from '../../packages/trading-core/src/pathRisk';
+import { ManualPathRisk } from './types';
 
 function clamp(n: number, min: number, max: number): number {
   if (Number.isNaN(n)) return min;
@@ -132,6 +137,8 @@ export function normalizeAppConfig(raw: Partial<AppConfig> | null | undefined): 
   }
 
   const risk = normalizeRiskConfig(raw.risk);
+  const manual_risk = normalizeManualPathRisk(raw.manual_risk, risk);
+  risk.manual_buy_time_in_force = manual_risk.time_in_force;
 
   const alert_prefs = { ...d.alert_prefs };
   if (raw.alert_prefs) {
@@ -165,6 +172,7 @@ export function normalizeAppConfig(raw: Partial<AppConfig> | null | undefined): 
     cushions,
     assets_enabled,
     risk,
+    manual_risk,
     alert_prefs,
   };
 }
@@ -172,6 +180,13 @@ export function normalizeAppConfig(raw: Partial<AppConfig> | null | undefined): 
 export function snapshotConfig(cfg: AppConfig): AppConfig {
   return JSON.parse(JSON.stringify(cfg)) as AppConfig;
 }
+
+export function configForHomeBuy(cfg: AppConfig): AppConfig {
+  return mergeHomeBuyRisk(cfg) as AppConfig;
+}
+
+export { normalizeManualPathRisk };
+export type { ManualPathRisk };
 
 /** Trading sounds come from GCP only — phone must not ding the same event. */
 export function isCloudOwnedAlertSound(kind: string): boolean {

@@ -3,6 +3,7 @@ import { evaluateStaticGate, LeanSignal } from '../src/engine/gates';
 import { formatSkipReason } from '../packages/trading-core/src/gates';
 import { TradingEngine } from '../src/engine/TradingEngine';
 import { defaultAppConfig } from '../src/config/types';
+import { configForHomeBuy } from '../src/config/normalize';
 import { KalshiClient } from '../src/services/kalshi/client';
 import { generateKeyPairSync } from 'crypto';
 import { MemoryTradeRepo } from '../src/storage/repos';
@@ -176,7 +177,7 @@ describe('evaluateStaticGate edge cases', () => {
     ).toBe('ask_too_rich');
   });
 
-  test('Home Buy tap skips timing and max-ask, uses chase and manual TIF', () => {
+  test('Home Buy uses manual_risk timing and TIF, not Auto-trade', () => {
     const cfg = base();
     cfg.auto_trade_enabled = false;
     cfg.risk.min_minutes_left = 5;
@@ -184,28 +185,36 @@ describe('evaluateStaticGate edge cases', () => {
     cfg.risk.max_entry_ask_usd = 0.5;
     cfg.risk.chase_above_ask_usd = 0.02;
     cfg.risk.time_in_force = 'fill_or_kill';
-    cfg.risk.manual_buy_time_in_force = 'good_till_canceled';
-    const g = evaluateStaticGate(lean({ minutes_left: 1, minutes_elapsed: 0, yes_ask: 0.8, abs_gap: 10 }), cfg, {
-      allowWhenAutoTradeOff: true,
-      skipTimingAndMaxAsk: true,
-    });
+    cfg.manual_risk = {
+      fixed_dollars_per_trade: 5,
+      max_dollars_per_trade: 5,
+      min_dollars_per_trade: 1,
+      min_minutes_left: 0,
+      min_minutes_elapsed: 0,
+      max_entry_ask_usd: 0.99,
+      time_in_force: 'good_till_canceled',
+      chase_above_ask_usd: 0.02,
+    };
+    const g = evaluateStaticGate(
+      lean({ minutes_left: 1, minutes_elapsed: 0, yes_ask: 0.8, abs_gap: 10 }),
+      configForHomeBuy(cfg),
+      { allowWhenAutoTradeOff: true }
+    );
     expect(g.ok).toBe(true);
     expect(g.pay_price).toBeCloseTo(0.82, 4);
     expect(g.time_in_force).toBe('good_till_canceled');
   });
 
-  test('Home Buy tap still respects cushion and caps', () => {
+  test('Home Buy tap still respects cushion and shared caps', () => {
     const cfg = base();
     expect(
       evaluateStaticGate(lean({ abs_gap: 1 }), cfg, {
         allowWhenAutoTradeOff: true,
-        skipTimingAndMaxAsk: true,
       }).skip_reason
     ).toBe('below_cushion');
     expect(
       evaluateStaticGate(lean({ abs_gap: 10 }), cfg, {
         allowWhenAutoTradeOff: true,
-        skipTimingAndMaxAsk: true,
         assetTradesInWindow: 1,
       }).skip_reason
     ).toBe('max_trades_asset_window');

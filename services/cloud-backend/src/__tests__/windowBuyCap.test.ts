@@ -101,6 +101,45 @@ describe('max trades / asset / 15m window', () => {
     expect(res.body.userDoc.config.risk.max_trades_per_asset_per_day).toBeUndefined();
   });
 
+  test('POST /me/status keeps Home Buy manual_risk when the phone omits it', async () => {
+    const uid = 'user_manual_risk_keep';
+    await request(app)
+      .post('/me/status')
+      .set('Authorization', `Bearer ${uid}`)
+      .send({
+        cloudTradingEnabled: false,
+        state: 'DISARMED',
+        config: {
+          risk: { time_in_force: 'fill_or_kill', max_entry_ask_usd: 0.7 },
+          manual_risk: {
+            fixed_dollars_per_trade: 5,
+            max_dollars_per_trade: 5,
+            min_dollars_per_trade: 1,
+            min_minutes_left: 0,
+            min_minutes_elapsed: 0,
+            max_entry_ask_usd: 0.95,
+            time_in_force: 'good_till_canceled',
+            chase_above_ask_usd: 0.02,
+          },
+        },
+      });
+    const res = await request(app)
+      .post('/me/status')
+      .set('Authorization', `Bearer ${uid}`)
+      .send({
+        cloudTradingEnabled: false,
+        state: 'DISARMED',
+        config: {
+          risk: { time_in_force: 'fill_or_kill', max_entry_ask_usd: 0.7 },
+        },
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.userDoc.config.manual_risk.max_entry_ask_usd).toBe(0.95);
+    expect(res.body.userDoc.config.manual_risk.time_in_force).toBe('good_till_canceled');
+    expect(res.body.userDoc.config.risk.manual_buy_time_in_force).toBe('good_till_canceled');
+    expect(res.body.userDoc.config.risk.time_in_force).toBe('fill_or_kill');
+  });
+
   test('evaluateStaticGate uses window cap not daily per-asset', () => {
     const cfg: any = {
       auto_trade_enabled: true,

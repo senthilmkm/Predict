@@ -117,7 +117,7 @@ describe('HomeScreen', () => {
     expect(s.queryByTestId('signal-time-BTC')).toBeNull();
   });
 
-  test('YES with Cloud skip shows ask too rich, not below cushion', async () => {
+  test('YES with Auto skip does not show that skip next to Buy', async () => {
     useConfigStore.setState({
       config: {
         ...defaultAppConfig(),
@@ -125,22 +125,31 @@ describe('HomeScreen', () => {
         execution_mode: 'live',
         live_armed: true,
         assets_enabled: { BTC: true } as any,
+        manual_risk: {
+          ...defaultAppConfig().manual_risk,
+          max_entry_ask_usd: 0.99,
+          min_minutes_elapsed: 0,
+          min_minutes_left: 0,
+        },
       },
       hydrated: true,
     });
     useRuntimeStore.setState({
       refreshPredictionsBalance: async () => {},
       refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
       leans: {
         BTC: {
           asset: 'BTC',
           market_ticker: 'KXBTC15M-X',
           decision: 'YES',
-          live: 200,
+          live: 500,
           strike: 100,
-          abs_gap: 100,
+          abs_gap: 400,
           minutes_left: 8,
+          minutes_elapsed: 5,
           phase: 'live',
+          yes_ask: 0.94,
         },
       } as any,
       leanAt: { BTC: new Date().toISOString() },
@@ -154,8 +163,59 @@ describe('HomeScreen', () => {
     });
     const s = await render(<HomeScreen />);
     expect(s.getByTestId('signal-decision-BTC').props.children).toBe('YES');
-    expect(s.getByTestId('trade-action-BTC').props.children).toBe('skipped · ask too rich');
+    expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
+    expect(s.queryByTestId('trade-action-BTC')).toBeNull();
     expect(s.queryByTestId('skip-reason-BTC')).toBeNull();
+  });
+
+  test('YES with Home Buy skip shows that skip next to Buy, not Auto-trade', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        auto_trade_enabled: true,
+        execution_mode: 'live',
+        live_armed: true,
+        assets_enabled: { BTC: true } as any,
+        manual_risk: {
+          ...defaultAppConfig().manual_risk,
+          max_entry_ask_usd: 0.5,
+          min_minutes_elapsed: 0,
+          min_minutes_left: 0,
+        },
+      },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'YES',
+          live: 500,
+          strike: 100,
+          abs_gap: 400,
+          minutes_left: 8,
+          minutes_elapsed: 5,
+          phase: 'live',
+          yes_ask: 0.94,
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+      tradeActions: {
+        BTC: {
+          status: 'skipped',
+          detail: 'skipped · too early in window',
+          at: new Date().toISOString(),
+        },
+      },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
+    expect(s.getByTestId('skip-reason-BTC').props.children).toBe('ask too rich');
+    expect(s.queryByTestId('trade-action-BTC')).toBeNull();
   });
 
   test('heartbeat stays Live when Cloud ticked recently even if the phone poller clock is 40m old', async () => {

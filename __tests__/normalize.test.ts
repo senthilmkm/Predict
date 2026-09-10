@@ -73,6 +73,8 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.min_dollars_per_trade).toBe(1);
     expect(cfg.risk.time_in_force).toBe('immediate_or_cancel');
     expect(cfg.risk.manual_buy_time_in_force).toBe('immediate_or_cancel');
+    expect(cfg.manual_risk.time_in_force).toBe('immediate_or_cancel');
+    expect(cfg.manual_risk.max_entry_ask_usd).toBe(0.9);
     expect(cfg.risk.protect_sell_enabled).toBe(false);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(1);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(45);
@@ -109,6 +111,49 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.protect_sell_enabled).toBe(true);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(3);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(120);
+  });
+
+  test('missing manual_risk is seeded from risk, including legacy Home TIF', () => {
+    const cfg = normalizeAppConfig({
+      risk: {
+        fixed_dollars_per_trade: 8,
+        max_dollars_per_trade: 10,
+        min_minutes_left: 4,
+        max_entry_ask_usd: 0.8,
+        time_in_force: 'fill_or_kill',
+        manual_buy_time_in_force: 'good_till_canceled',
+      },
+    } as any);
+    expect(cfg.manual_risk.fixed_dollars_per_trade).toBe(8);
+    expect(cfg.manual_risk.min_minutes_left).toBe(4);
+    expect(cfg.manual_risk.max_entry_ask_usd).toBe(0.8);
+    expect(cfg.manual_risk.time_in_force).toBe('good_till_canceled');
+    expect(cfg.risk.manual_buy_time_in_force).toBe('good_till_canceled');
+    expect(cfg.risk.time_in_force).toBe('fill_or_kill');
+  });
+
+  test('existing manual_risk stays independent of Auto-trade TIF', () => {
+    const cfg = normalizeAppConfig({
+      risk: {
+        time_in_force: 'fill_or_kill',
+        max_entry_ask_usd: 0.7,
+      },
+      manual_risk: {
+        time_in_force: 'good_till_canceled',
+        max_entry_ask_usd: 0.95,
+        fixed_dollars_per_trade: 5,
+        max_dollars_per_trade: 5,
+        min_dollars_per_trade: 1,
+        min_minutes_left: 0,
+        min_minutes_elapsed: 0,
+        chase_above_ask_usd: 0.02,
+      },
+    } as any);
+    expect(cfg.manual_risk.time_in_force).toBe('good_till_canceled');
+    expect(cfg.manual_risk.max_entry_ask_usd).toBe(0.95);
+    expect(cfg.risk.time_in_force).toBe('fill_or_kill');
+    expect(cfg.risk.max_entry_ask_usd).toBe(0.7);
+    expect(cfg.risk.manual_buy_time_in_force).toBe('good_till_canceled');
   });
 
   test('snapshotConfig is deep copy', () => {

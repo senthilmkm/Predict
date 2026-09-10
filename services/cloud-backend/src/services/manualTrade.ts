@@ -17,6 +17,8 @@ import {
   computeProtectSellPnlUsd,
 } from '../../../../packages/trading-core/src/protectSell';
 import { setActiveKalshiRetryPolicy } from '../../../../packages/trading-core/src/kalshiRetry';
+import { isGoodTillCanceled, resolvedPlaceFillCount } from '../../../../packages/trading-core/src/orderFill';
+import { configForHomeBuy } from '../../../../packages/trading-core/src/pathRisk';
 import { isMarketOpen } from './marketHours';
 import {
   claimProtectSell,
@@ -173,7 +175,7 @@ export async function executeManualOrder(
     return fail(userId, 409, 'market_closed', 'market_closed', { asset, action });
   }
 
-  const cfg = user?.config || defaultAppConfig();
+  const cfg = configForHomeBuy(user?.config || defaultAppConfig());
   if (!cfg.assets_enabled?.[asset]) {
     return fail(userId, 409, 'asset_disabled', 'asset_disabled', { asset, action });
   }
@@ -287,7 +289,6 @@ async function executeManualBuy(opts: {
       assetTradesInWindow: existingBuys,
       dailyPnlUsd: cloudDailyRealizedPnl(tradesTodayList),
       allowWhenAutoTradeOff: true,
-      skipTimingAndMaxAsk: true,
     }
   );
 
@@ -342,8 +343,14 @@ async function executeManualBuy(opts: {
       });
     }
 
-    const fillCount = Number(placeRes.fill_count ?? gate.count ?? 0);
-    const filled = Number.isFinite(fillCount) && fillCount > 0;
+    const tif = placeRes.payload?.time_in_force || gate.time_in_force;
+    const gtcResting = isGoodTillCanceled(tif);
+    const { fillCount, filled } = resolvedPlaceFillCount({
+      dryRun: Boolean(placeRes.dry_run) || !isLive,
+      fillCount: placeRes.fill_count,
+      intendedCount: gate.count,
+    });
+    const accepted = filled || (gtcResting && Boolean(placeRes.order_id));
     const payPrice = Number(gate.pay_price ?? 0) || null;
     const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const tradeDoc: TradeRecordDoc = {
@@ -357,7 +364,7 @@ async function executeManualBuy(opts: {
       notionalUsd:
         filled && payPrice ? Math.round(fillCount * payPrice * 100) / 100 : gate.notional_usd || 0,
       dryRun: !isLive,
-      status: filled ? 'FILLED' : 'CANCELLED',
+      status: filled ? 'FILLED' : accepted ? 'SUBMITTED' : 'CANCELLED',
       leanDiff: absGap,
       liveSpot: lean.live,
       strike: lean.strike,
@@ -365,7 +372,7 @@ async function executeManualBuy(opts: {
       orderId: placeRes.order_id ?? null,
       payPrice,
       fillCount: filled ? fillCount : 0,
-      outcome: filled ? 'pending' : 'miss',
+      outcome: filled || accepted ? 'pending' : 'miss',
       pnlUsd: null,
     };
     await saveTradeRecord(userId, tradeDoc);
@@ -377,6 +384,7 @@ async function executeManualBuy(opts: {
       decision: lean.decision,
       mode: isLive ? 'live' : 'demo',
       filled,
+      accepted,
     });
     const priceVal = parseFloat(String(gate.price || 0));
     await upsertUserDoc(userId, {
@@ -388,11 +396,17 @@ async function executeManualBuy(opts: {
               detail: `placed ${lean.decision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
               at: now.toISOString(),
             }
-          : { status: 'failed', detail: 'IOC no fill', at: now.toISOString() },
+          : accepted
+            ? {
+                status: 'placed',
+                detail: `resting ${lean.decision} · waiting for fill`,
+                at: now.toISOString(),
+              }
+            : { status: 'failed', detail: 'IOC no fill', at: now.toISOString() },
       },
     } as any);
 
-    if (!filled) {
+    if (!filled && !accepted) {
       await auditError(userId, {
         source: 'manual_buy',
         error: 'ioc_miss',
@@ -414,9 +428,11 @@ async function executeManualBuy(opts: {
     return {
       ok: true,
       httpStatus: 200,
-      message: `Bought ${lean.decision} · ${fillCount} contracts`,
+      message: filled
+        ? `Bought ${lean.decision} · ${fillCount} contracts`
+        : `Submitted ${lean.decision} · resting on Kalshi`,
       tradeId,
-      filled: true,
+      filled,
       ticker,
     };
   } catch (err) {

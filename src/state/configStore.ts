@@ -3,6 +3,7 @@ import {
   AppConfig,
   AssetKey,
   AlertKind,
+  ManualPathRisk,
   RiskConfig,
   defaultAppConfig,
   POLL_INTERVAL_DEFAULT_SEC,
@@ -15,6 +16,8 @@ import {
   normalizeRiskConfig,
   snapshotConfig,
 } from '../config/normalize';
+import { cloneDefaultRisk } from '../config/riskDefaults';
+import { normalizeManualPathRisk } from '../../packages/trading-core/src/pathRisk';
 import { loadPersistedConfig, savePersistedConfig, schedulePersistConfig } from '../storage/configPersistence';
 import {
   ensureRiskDefaultsOnDevice,
@@ -33,7 +36,11 @@ interface ConfigState {
   setPollIntervalSeconds: (seconds: number) => void;
   setAlertRetentionDays: (days: number) => void;
   setRiskField: <K extends keyof RiskConfig>(key: K, value: RiskConfig[K]) => void;
+  setManualRiskField: <K extends keyof ManualPathRisk>(key: K, value: ManualPathRisk[K]) => void;
   restoreRiskDefaults: () => Promise<void>;
+  restoreSharedRiskLimits: () => Promise<void>;
+  restoreAutoRiskTab: () => Promise<void>;
+  restoreHomeBuyRiskTab: () => Promise<void>;
   setAutoTrade: (enabled: boolean) => Promise<{ ok: boolean; error?: string }>;
   killSwitchDisarm: () => void;
   resetDefaults: () => void;
@@ -120,11 +127,65 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     set({ config });
     schedulePersistConfig(config);
   },
+  setManualRiskField: (key, value) => {
+    const prev = get().config;
+    const manual = normalizeManualPathRisk({ ...prev.manual_risk, [key]: value }, prev.risk);
+    const config = normalizeAppConfig({
+      ...prev,
+      manual_risk: manual,
+      risk: { ...prev.risk, manual_buy_time_in_force: manual.time_in_force },
+    });
+    set({ config });
+    schedulePersistConfig(config);
+  },
   restoreRiskDefaults: async () => {
     const defaults = await resetRiskDefaultsFile();
     const config = normalizeAppConfig({
       ...get().config,
       risk: defaults,
+      manual_risk: undefined,
+    });
+    set({ config });
+    void savePersistedConfig(config);
+  },
+  restoreSharedRiskLimits: async () => {
+    const defaults = cloneDefaultRisk();
+    const prev = get().config.risk;
+    const config = normalizeAppConfig({
+      ...get().config,
+      risk: {
+        ...prev,
+        max_open_positions: defaults.max_open_positions,
+        max_trades_per_day: defaults.max_trades_per_day,
+        max_trades_per_asset_per_window: defaults.max_trades_per_asset_per_window,
+        daily_loss_stop_usd: defaults.daily_loss_stop_usd,
+      },
+    });
+    set({ config });
+    void savePersistedConfig(config);
+  },
+  restoreAutoRiskTab: async () => {
+    const defaults = cloneDefaultRisk();
+    const prev = get().config.risk;
+    const config = normalizeAppConfig({
+      ...get().config,
+      risk: {
+        ...defaults,
+        max_open_positions: prev.max_open_positions,
+        max_trades_per_day: prev.max_trades_per_day,
+        max_trades_per_asset_per_window: prev.max_trades_per_asset_per_window,
+        daily_loss_stop_usd: prev.daily_loss_stop_usd,
+        manual_buy_time_in_force: prev.manual_buy_time_in_force,
+      },
+    });
+    set({ config });
+    void savePersistedConfig(config);
+  },
+  restoreHomeBuyRiskTab: async () => {
+    const defaults = cloneDefaultRisk();
+    const config = normalizeAppConfig({
+      ...get().config,
+      manual_risk: normalizeManualPathRisk(undefined, defaults),
     });
     set({ config });
     void savePersistedConfig(config);

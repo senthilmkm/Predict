@@ -130,7 +130,7 @@ export interface RiskConfig {
   min_minutes_elapsed: number;
   max_entry_ask_usd: number;
   time_in_force: TimeInForce;
-  /** Home Last-signals Buy tap only. Auto-trade still uses time_in_force. */
+  /** Kept in sync with manual_risk.time_in_force for older Cloud revisions. */
   manual_buy_time_in_force: TimeInForce;
   chase_above_ask_usd: number;
   protect_sell_enabled: boolean;
@@ -158,6 +158,18 @@ export interface AppConfig {
   cushions: CushionConfig;
   assets_enabled: AssetEnabled;
   risk: RiskConfig;
+  /** Home Buy size/timing. Shared caps live on `risk`. Missing → copied from `risk`. */
+  manual_risk?: {
+    fixed_dollars_per_trade: number;
+    max_dollars_per_trade: number;
+    min_dollars_per_trade: number;
+    min_minutes_left: number;
+    min_minutes_elapsed: number;
+    max_entry_ask_usd: number;
+    /** Home Last-signals Buy tap. Auto-trade uses time_in_force. Kept in sync with manual_risk. */
+    time_in_force: TimeInForce;
+    chase_above_ask_usd: number;
+  };
   alert_prefs: Record<AlertKind, AlertPref>;
 }
 
@@ -224,6 +236,16 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_enabled: false,
       protect_sell_gap_ratio: 1,
       protect_sell_grace_seconds: 45,
+    },
+    manual_risk: {
+      fixed_dollars_per_trade: 5,
+      max_dollars_per_trade: 5,
+      min_dollars_per_trade: 1,
+      min_minutes_left: 2,
+      min_minutes_elapsed: 2,
+      max_entry_ask_usd: 0.9,
+      time_in_force: 'immediate_or_cancel',
+      chase_above_ask_usd: 0.02,
     },
     alert_prefs: defaultAlertPrefs(),
   };

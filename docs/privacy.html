@@ -32,11 +32,13 @@
     </div>
 
     <h2>Overview</h2>
-    <p>Predict stores your Kalshi API credentials on-device using the iOS Secure Store / Keychain. Trading history and alerts are stored locally on your device.</p>
+    <p>Predict is an iPhone app plus a Google Cloud Run service. The phone stores your settings locally. When you are signed in, Cloud Run also stores a copy of those settings on your user in Firestore so Auto-trade, Home Buy / Sell, and Protect money use the same rules as Settings.</p>
 
     <h2>What we collect</h2>
     <ul>
-      <li><strong>On device:</strong> Kalshi key ID &amp; PEM, app settings, trade/alert history.</li>
+      <li><strong>On device:</strong> Kalshi key ID &amp; PEM (iOS Secure Store / Keychain), app settings, trade/alert history.</li>
+      <li><strong>Cloud (your user in Firestore):</strong> Settings you choose in the app, including Shared Risk limits (max open, trades/day, 15-minute window, daily loss stop), Home Buy tab values (size, minutes, max ask, time in force, chase), Auto-trade tab values (the same size/timing fields plus Protect money), cushions, asset on/off, Auto-trade On/Off, and related flags. Trade and alert records that Cloud Run writes for fills, skips, and settlements.</li>
+      <li><strong>Cloud (Secret Manager):</strong> If you save Kalshi API credentials, Cloud Run stores the key so it can place Auto-trade, Home Buy / Sell, and Protect money orders. The phone never talks to Kalshi.</li>
       <li><strong>Subscriptions:</strong> Apple and RevenueCat process purchase receipts and entitlement status associated with your Apple ID. We do not receive your full card number.</li>
       <li><strong>Support email:</strong> If you contact us, we receive the email content you send.</li>
     </ul>
@@ -45,17 +47,17 @@
     <ul>
       <li>No advertising trackers</li>
       <li>No sale of personal data</li>
-      <li>Kalshi private keys are not uploaded to Predict servers (there is no Predict trading backend)</li>
+      <li>We do not hold your Kalshi cash. Money stays in your Kalshi account.</li>
     </ul>
 
     <h2>Third parties</h2>
-    <p>Kalshi (market data &amp; orders), Apple (App Store / subscriptions), and RevenueCat (entitlement validation). Their policies apply to their processing. Predict does not control Kalshi order outcomes or guarantee profitable results from any data shown in the app.</p>
+    <p>Kalshi (market data &amp; orders), Google Cloud (Cloud Run, Firestore, Secret Manager), Apple (App Store / subscriptions), and RevenueCat (entitlement validation). Their policies apply to their processing. Predict does not control Kalshi order outcomes or guarantee profitable results from any data shown in the app.</p>
 
     <h2>Data retention</h2>
-    <p>Local app data remains until you delete it in-app or uninstall. Subscription records are retained by Apple/RevenueCat per their policies.</p>
+    <p>Local app data remains until you delete it in-app or uninstall. Cloud user documents, trades, and alerts are retained until you delete the account or they age out of server purge settings. Subscription records are retained by Apple/RevenueCat per their policies.</p>
 
     <h2>Trading responsibility (related notice)</h2>
-    <p>Privacy practices do not change trading risk. Before you place a trade outside Predict using an alert, or before you enable Auto-trade, understand that you are solely responsible for those actions and any gains or losses. The app owner has no liability for trading losses. Full details: <a href="./disclaimer.html">Risk Disclaimer</a>.</p>
+    <p>Privacy practices do not change trading risk. Home Buy uses the Home Buy Risk tab. Auto-trade uses the Auto-trade tab. Shared limits apply to both. You are solely responsible for taps, Auto-trade, and Protect money, and for any gains or losses. The app owner has no liability for trading losses. Full details: <a href="./disclaimer.html">Risk Disclaimer</a>.</p>
 
     <h2>Contact</h2>
     <p><a href="mailto:senthil930@gmail.com">senthil930@gmail.com</a></p>

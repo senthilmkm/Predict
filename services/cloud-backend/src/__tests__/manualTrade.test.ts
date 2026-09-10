@@ -142,7 +142,7 @@ describe('manual buy/sell place-now', () => {
     );
   });
 
-  test('manual buy skips timing and max-ask; uses chase and manual TIF', async () => {
+  test('manual buy uses Home Buy path risk, not Auto-trade timing', async () => {
     const uid = 'usr_manual_timing';
     const cfg = liveCfg();
     cfg.risk.min_minutes_left = 5;
@@ -150,7 +150,16 @@ describe('manual buy/sell place-now', () => {
     cfg.risk.max_entry_ask_usd = 0.5;
     cfg.risk.chase_above_ask_usd = 0.02;
     cfg.risk.time_in_force = 'fill_or_kill';
-    cfg.risk.manual_buy_time_in_force = 'good_till_canceled';
+    cfg.manual_risk = {
+      fixed_dollars_per_trade: 5,
+      max_dollars_per_trade: 5,
+      min_dollars_per_trade: 1,
+      min_minutes_left: 0,
+      min_minutes_elapsed: 0,
+      max_entry_ask_usd: 0.99,
+      time_in_force: 'good_till_canceled',
+      chase_above_ask_usd: 0.02,
+    };
     await upsertUserDoc(uid, { state: 'DISARMED', kalshiConfigured: true, config: cfg });
     const place = jest.fn(async () => ({
       ok: true,
@@ -178,6 +187,63 @@ describe('manual buy/sell place-now', () => {
         price: expect.stringMatching(/^0\.96/),
       })
     );
+  });
+
+  test('IOC fill_count 0 after place is a miss, not the intended size', async () => {
+    const uid = 'usr_manual_ioc_zero';
+    await upsertUserDoc(uid, { state: 'DISARMED', kalshiConfigured: true, config: liveCfg() });
+    const res = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'buy', requestId: 'ioc_zero' },
+      {
+        computeLeanFn: async () => richLean() as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: async () =>
+          ({
+            ok: true,
+            http_status: 201,
+            dry_run: false,
+            payload: { time_in_force: 'immediate_or_cancel' },
+            fill_count: '0',
+            order_id: 'ord_zero',
+          }) as any,
+      }
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('ioc_miss');
+    expect(res.message).toMatch(/IOC no fill/i);
+  });
+
+  test('GTC with no immediate fill is resting, not IOC miss', async () => {
+    const uid = 'usr_manual_gtc_rest';
+    const cfg = liveCfg();
+    cfg.risk.manual_buy_time_in_force = 'good_till_canceled';
+    cfg.manual_risk = {
+      ...(defaultAppConfig().manual_risk as NonNullable<typeof cfg.manual_risk>),
+      time_in_force: 'good_till_canceled',
+    };
+    await upsertUserDoc(uid, { state: 'DISARMED', kalshiConfigured: true, config: cfg });
+    const res = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'buy', requestId: 'gtc_rest' },
+      {
+        computeLeanFn: async () => richLean() as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: async () =>
+          ({
+            ok: true,
+            http_status: 201,
+            dry_run: false,
+            payload: { time_in_force: 'good_till_canceled' },
+            fill_count: '0',
+            remaining_count: '8',
+            order_id: 'ord_rest',
+          }) as any,
+      }
+    );
+    expect(res.ok).toBe(true);
+    expect(res.filled).toBe(false);
+    expect(res.message).toMatch(/resting/i);
   });
 
   test('gate skip returns message and ERROR audit without placing', async () => {

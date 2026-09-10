@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { assertPemLooksValid, defaultAppConfig } from 'trading-core';
 import { windowBuyCap } from '../../../../packages/trading-core/src/gates';
+import { hasPathShape, normalizeManualPathRisk } from '../../../../packages/trading-core/src/pathRisk';
 import { saveUserSecret, deleteUserSecret } from '../services/secretManager';
 import {
   getUserDoc,
@@ -203,13 +204,23 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
     if (config) {
       const risk = config.risk || {};
       const { max_trades_per_asset_per_day: _removedPerDay, ...restRisk } = risk;
+      const prevCfg = existing?.config || {};
+      const mergedRisk = {
+        ...(prevCfg.risk || {}),
+        ...restRisk,
+        max_trades_per_asset_per_window: windowBuyCap(risk),
+      };
+      const incomingManual = hasPathShape(config.manual_risk) ? config.manual_risk : prevCfg.manual_risk;
+      const manual_risk = normalizeManualPathRisk(incomingManual, mergedRisk);
       updateData.config = {
+        ...prevCfg,
         ...config,
         poll_interval_seconds: systemConfig.tick_interval_seconds,
         risk: {
-          ...restRisk,
-          max_trades_per_asset_per_window: windowBuyCap(risk),
+          ...mergedRisk,
+          manual_buy_time_in_force: manual_risk.time_in_force,
         },
+        manual_risk,
       };
     }
     if (onboardingRecord) updateData.onboardingRecord = onboardingRecord;

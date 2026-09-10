@@ -22,7 +22,7 @@ import { ManualSuccessFly } from '../components/ManualSuccessFly';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/moneyFormat';
 import { cloudClient } from '../services/cloud/cloudClient';
-import { heldOpenFillForTicker, lastSignalManualKind } from './lastSignalsManual';
+import { heldOpenFillForTicker, homeBuySkipReason, lastSignalExtraLine, lastSignalManualKind } from './lastSignalsManual';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -260,7 +260,22 @@ export function HomeScreen() {
       row,
       held: held ? { side: held.side } : null,
     });
-    return { ...row, held, manualKind, placing: Boolean(placing[row.asset]) };
+    const tapSkipReason =
+      manualKind === 'buy'
+        ? homeBuySkipReason({ cfg: config, lean: leans[row.asset] as any, trades })
+        : null;
+    const extraLine = lastSignalExtraLine({
+      manualKind,
+      autoTradeOn,
+      autoDetail: row.trade?.detail,
+      autoStatus: row.trade?.status,
+      decision: row.decision,
+      isOpen: row.isOpen,
+      noMarket: row.noMarket,
+      err: row.err,
+      tapSkipReason,
+    });
+    return { ...row, held, manualKind, placing: Boolean(placing[row.asset]), extraLine };
   });
   const readyRows = decoratedRows.filter((r) => r.manualKind !== 'none');
   const otherRows = decoratedRows.filter((r) => r.manualKind === 'none');
@@ -395,7 +410,6 @@ export function HomeScreen() {
               <LastSignalRow
                 key={row.asset}
                 row={row}
-                autoTradeOn={autoTradeOn}
                 onPlace={(action, origin) => void placeManual(row.asset, action, origin)}
               />
             ))}
@@ -408,7 +422,6 @@ export function HomeScreen() {
               <LastSignalRow
                 key={row.asset}
                 row={row}
-                autoTradeOn={autoTradeOn}
                 onPlace={(action, origin) => void placeManual(row.asset, action, origin)}
               />
             ))}
@@ -417,9 +430,8 @@ export function HomeScreen() {
         {featureOn ? (
           <Text style={styles.tradeHint}>
             Lean YES/NO here is a signal. Buy YES / Buy NO places now on Cloud Run (this phone never
-            talks to Kalshi). Timing and max-ask do not block a tap; size, caps, cushion, chase, and
-            Manual-buy time-in-force still apply. Kill-Switch and the Last signals Buy / Sell flag
-            hide these buttons.
+            talks to Kalshi). A tap uses Settings → Risk → Home Buy. Shared limits apply to both
+            paths. Kill-Switch and the Last signals Buy / Sell flag hide these buttons.
           </Text>
         ) : autoTradeOn ? (
           <Text style={styles.tradeHint}>
@@ -578,7 +590,6 @@ function Chip({ label, accent }: { label: string; accent?: boolean }) {
 
 function LastSignalRow({
   row,
-  autoTradeOn,
   onPlace,
 }: {
   row: {
@@ -593,8 +604,13 @@ function LastSignalRow({
     manualKind: 'buy' | 'sell' | 'none';
     placing: boolean;
     held?: { side: 'YES' | 'NO' } | null;
+    extraLine?: {
+      testID: 'trade-action' | 'skip-reason';
+      text: string;
+      placed?: boolean;
+      failed?: boolean;
+    } | null;
   };
-  autoTradeOn: boolean;
   onPlace: (action: 'buy' | 'sell', origin?: { x: number; y: number }) => void;
 }) {
   const btnRef = React.useRef<View>(null);
@@ -663,24 +679,21 @@ function LastSignalRow({
             {row.err}
           </Text>
         ) : null}
-        {autoTradeOn && row.trade && row.trade.status !== 'idle' ? (
+        {row.extraLine ? (
           <Text
             style={[
               styles.tradeAction,
-              row.trade.status === 'placed' && { color: colors.win },
-              row.trade.status === 'failed' && { color: colors.loss },
-              row.trade.status === 'skipped' && { color: colors.warn },
+              row.extraLine.placed && { color: colors.win },
+              row.extraLine.failed && { color: colors.loss },
+              !row.extraLine.placed && !row.extraLine.failed && { color: colors.warn },
             ]}
-            testID={`trade-action-${row.asset}`}
+            testID={
+              row.extraLine.testID === 'trade-action'
+                ? `trade-action-${row.asset}`
+                : `skip-reason-${row.asset}`
+            }
           >
-            {row.trade.detail}
-          </Text>
-        ) : row.decision === 'SKIP' && row.isOpen && !row.noMarket && !row.err ? (
-          <Text
-            style={[styles.tradeAction, { color: colors.warn }]}
-            testID={`skip-reason-${row.asset}`}
-          >
-            below cushion
+            {row.extraLine.text}
           </Text>
         ) : null}
       </View>

@@ -19,10 +19,7 @@ import {
   ALERT_RETENTION_MIN_DAYS,
   modeHint,
   modeLabel,
-  RiskConfig,
-  TimeInForce,
 } from '../config/types';
-import { RISK_FIELD_META, RISK_GROUPS, TIME_IN_FORCE_OPTIONS } from '../config/riskDefaults';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { AutoTradeRiskAcceptModal } from '../components/AutoTradeRiskAcceptModal';
@@ -67,7 +64,6 @@ type BusyKey =
   | 'retention'
   | 'poll'
   | 'poller'
-  | 'restore'
   | 'unlock'
   | 'save'
   | 'import'
@@ -80,16 +76,16 @@ const MIN_BUSY_MS =
 
 export function SettingsScreen({
   onOpenAccountAndMore,
+  onOpenRisk,
 }: {
   onOpenAccountAndMore?: () => void;
+  onOpenRisk?: () => void;
 } = {}) {
   const config = useConfigStore((s) => s.config);
   const setConfig = useConfigStore((s) => s.setConfig);
   const setAutoTrade = useConfigStore((s) => s.setAutoTrade);
   const setPollIntervalSeconds = useConfigStore((s) => s.setPollIntervalSeconds);
   const setAlertRetentionDays = useConfigStore((s) => s.setAlertRetentionDays);
-  const setRiskField = useConfigStore((s) => s.setRiskField);
-  const restoreRiskDefaults = useConfigStore((s) => s.restoreRiskDefaults);
   const start = useRuntimeStore((s) => s.start);
   const stop = useRuntimeStore((s) => s.stop);
   const tickOnce = useRuntimeStore((s) => s.tickOnce);
@@ -138,7 +134,6 @@ export function SettingsScreen({
   } | null>(null);
   const [busyKey, setBusyKey] = useState<BusyKey>(null);
   const busyLock = React.useRef(false);
-  const [riskOpen, setRiskOpen] = useState(false);
   const [riskHelpOpen, setRiskHelpOpen] = useState(false);
   const [credsHelpOpen, setCredsHelpOpen] = useState(false);
 
@@ -357,17 +352,6 @@ export function SettingsScreen({
     }
   }
 
-  async function restoreRisk() {
-    try {
-      await withBusy('restore', async () => {
-        await restoreRiskDefaults();
-        note('Risk defaults restored');
-      });
-    } catch {
-      /* busy */
-    }
-  }
-
   async function importPemFile() {
     try {
       await withBusy('import', async () => {
@@ -548,134 +532,14 @@ export function SettingsScreen({
               <Text style={styles.infoBtnText}>i</Text>
             </Pressable>
           </View>
-          <Pressable onPress={() => setRiskOpen((v) => !v)} testID="btn-toggle-risk" hitSlop={8}>
-            <Text style={styles.collapseHint}>{riskOpen ? 'Hide' : 'Show'}</Text>
+          <Pressable
+            onPress={() => onOpenRisk?.()}
+            testID="btn-toggle-risk"
+            hitSlop={8}
+          >
+            <Text style={styles.collapseHint}>Show</Text>
           </Pressable>
         </View>
-        {riskOpen ? (
-          <>
-            {RISK_GROUPS.map((group) => (
-              <View key={group.id} testID={`risk-group-${group.id}`}>
-                <Text style={styles.riskGroupTitle}>{group.label}</Text>
-                {RISK_FIELD_META.filter((m) => m.group === group.id).map((meta) => {
-              if (meta.kind === 'tif') {
-                const key = meta.key as 'time_in_force' | 'manual_buy_time_in_force';
-                const cur = config.risk[key];
-                return (
-                  <View key={meta.key} style={styles.riskField} testID={`risk-field-${meta.key}`}>
-                    <Text style={styles.riskLabel}>{meta.label}</Text>
-                    <View style={styles.tifRow}>
-                      {TIME_IN_FORCE_OPTIONS.map((opt) => (
-                        <Pressable
-                          key={opt.value}
-                          testID={`tif-${key}-${opt.value}`}
-                          style={[styles.tifChip, cur === opt.value && styles.tifChipOn]}
-                          onPress={() => setRiskField(key, opt.value as TimeInForce)}
-                        >
-                          <Text style={[styles.tifText, cur === opt.value && styles.tifTextOn]}>
-                            {opt.label}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                );
-              }
-              if (meta.kind === 'toggle') {
-                const on = Boolean(config.risk[meta.key as keyof RiskConfig]);
-                return (
-                  <View
-                    key={meta.key}
-                    style={[styles.riskField, styles.riskFieldStack]}
-                    testID={`risk-field-${meta.key}`}
-                  >
-                    <View style={styles.riskToggleRow}>
-                      <Text style={[styles.riskLabel, { flex: 1 }]}>{meta.label}</Text>
-                      <Switch
-                        testID={`risk-toggle-${meta.key}`}
-                        value={on}
-                        onValueChange={(v) => setRiskField(meta.key as any, v as any)}
-                        trackColor={{ true: colors.accent, false: colors.mute }}
-                      />
-                    </View>
-                    <Text style={styles.riskHint}>
-                      {on
-                        ? 'On — sell anytime lean flips against you (after the wait-after-fill)'
-                        : 'Off — holds until the window settles (win or loss)'}
-                    </Text>
-                    <Text style={styles.riskHint} testID="risk-hint-protect-sell-auto-off">
-                      Still runs 24/7 on Cloud Run if Auto-trade is Off.
-                    </Text>
-                  </View>
-                );
-              }
-              const raw = config.risk[meta.key as keyof RiskConfig];
-              const display =
-                meta.kind === 'chase' || meta.kind === 'money'
-                  ? `$${Number(raw).toFixed(meta.kind === 'chase' ? 2 : 0)}`
-                  : meta.kind === 'ratio'
-                    ? `${Number(raw).toFixed(2)}×`
-                    : meta.kind === 'seconds'
-                      ? `${Number(raw)}s`
-                      : String(raw);
-              const disabledProtect =
-                (meta.key === 'protect_sell_gap_ratio' ||
-                  meta.key === 'protect_sell_grace_seconds') &&
-                !config.risk.protect_sell_enabled;
-              return (
-                <View
-                  key={meta.key}
-                  style={[styles.riskField, disabledProtect && { opacity: 0.45 }]}
-                  testID={`risk-field-${meta.key}`}
-                >
-                  <Text style={styles.riskLabel}>{meta.label}</Text>
-                  <View style={styles.pollControls}>
-                    <Pressable
-                      testID={`risk-down-${meta.key}`}
-                      style={styles.chip}
-                      disabled={disabledProtect}
-                      onPress={() => {
-                        const next = Number(raw) - meta.step;
-                        setRiskField(meta.key as any, next as any);
-                      }}
-                    >
-                      <Text style={styles.chipText}>−</Text>
-                    </Pressable>
-                    <Text style={styles.pollValue} testID={`risk-value-${meta.key}`}>
-                      {display}
-                    </Text>
-                    <Pressable
-                      testID={`risk-up-${meta.key}`}
-                      style={styles.chip}
-                      disabled={disabledProtect}
-                      onPress={() => {
-                        const next = Number(raw) + meta.step;
-                        setRiskField(meta.key as any, next as any);
-                      }}
-                    >
-                      <Text style={styles.chipText}>+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })}
-              </View>
-            ))}
-            <ActionButton
-              testID="btn-restore-risk-defaults"
-              variant="slim"
-              label="Restore default values"
-              busyLabel="Restoring risk defaults…"
-              busy={busyKey === 'restore'}
-              disabled={anyBusy && busyKey !== 'restore'}
-              onPress={() => void restoreRisk()}
-            />
-            <Text style={styles.hint}>
-              Defaults: Protect money Off · gap 1.00× · wait 45s after fill. Stored on this phone for
-              restore.
-            </Text>
-          </>
-        ) : null}
 
         <Text style={styles.section}>Alerts</Text>
         <View style={styles.controlCard}>
@@ -969,9 +833,9 @@ function RiskHelpModal({
           </View>
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             <Text style={styles.modalLead}>
-              Plain-English guide to every setting in this app. Risk limits below decide how much
-              money may be used and when the app may place or exit a real Kalshi order. If a new
-              signal fails a limit, Home shows “no order · …” instead of trading.
+              Plain-English guide to every setting in this app. Settings → Risk → Show opens Shared
+              limits (one Kalshi account) plus Home Buy and Auto-trade tabs. If a path fails a limit,
+              Last signals shows one skip line for the button you can tap — not two competing skips.
             </Text>
             <Text style={styles.modalLead}>
               Important: Trading involves risk of loss. Predict does not guarantee profits or
@@ -997,10 +861,11 @@ function RiskHelpModal({
               you already hold that 15-minute window). One tap tells Cloud Run to place now. The
               phone never talks to Kalshi. No confirm sheet. Kill Switch hides the buttons. If the
               Admin flag is Off, buttons disappear and Cloud rejects taps.{'\n\n'}
-              A tap skips Auto-trade timing: min minutes left, min minutes elapsed, and max entry
-              ask. Size, caps, cushion, chase, and Time in force (Manual buy) still apply. Chase is
-              not capped by max entry ask (pay = ask + chase, max $0.99). You can lose the full
-              notional. GTC can rest. IOC can miss.
+              A tap uses Settings → Risk → Home Buy (size, minutes left/elapsed, max ask, time in
+              force, chase). Shared limits (max open, trades/day, 15m window, daily loss) apply to
+              both Home Buy and Auto-trade. Last signals shows one skip line for the tap when Buy is
+              visible — not Auto-trade’s skip. You can lose the full notional. GTC can rest. IOC can
+              miss.
             </HelpItem>
             <HelpItem title="Notify on lean vs mute on the bell" testID="help-notify-vs-mute">
               Settings → Notify on lean signals Off stops new lean rows and all lock-screen pings
@@ -1027,22 +892,29 @@ function RiskHelpModal({
               cushion = fewer, higher-confidence signals.
             </HelpItem>
 
-            <Text style={styles.modalSection}>Risk — position size</Text>
-            <HelpItem title="$ per trade">
-              How many dollars you want to spend on each new trade. Think of it as your normal bet
-              size (example: $5).
-            </HelpItem>
-            <HelpItem title="Max $ / trade">
-              Hard cap for one trade. The app never spends more than this on a single order, even if
-              “$ per trade” is higher.
-            </HelpItem>
-            <HelpItem title="Min $ / trade">
-              Smallest order size allowed. If the calculated order would be cheaper than this (often
-              when contract prices are high), the app skips with “size too small.” Tip: keep this
-              lower than “$ per trade” (example: $1 min with $5 per trade).
+            <Text style={styles.modalSection}>Risk — Shared limits</Text>
+            <HelpItem title="Shared vs each tab">
+              Shared limits (max open, trades/day, 15m window, daily loss) always apply to Home Buy
+              and Auto-trade. Size, minutes, max ask, time in force, and chase are per tab. Protect
+              money lives only on Auto-trade. Cushions stay on the Cushions tab.
             </HelpItem>
 
-            <Text style={styles.modalSection}>Risk — how often / how many</Text>
+            <Text style={styles.modalSection}>Risk — position size (per tab)</Text>
+            <HelpItem title="$ per trade">
+              How many dollars you want to spend on each new trade for that tab. Think of it as your
+              normal bet size (example: $5). Home Buy and Auto-trade can differ.
+            </HelpItem>
+            <HelpItem title="Max $ / trade">
+              Hard cap for one trade on that tab. The app never spends more than this on a single
+              order, even if “$ per trade” is higher.
+            </HelpItem>
+            <HelpItem title="Min $ / trade">
+              Smallest order size allowed on that tab. If the calculated order would be cheaper than
+              this (often when contract prices are high), that path skips with “size too small.” Tip:
+              keep this lower than “$ per trade” (example: $1 min with $5 per trade).
+            </HelpItem>
+
+            <Text style={styles.modalSection}>Risk — how often / how many (shared)</Text>
             <HelpItem title="Max open positions">
               How many unsettled trades you can have at once. “Open” means placed but not finished
               yet (still pending).{'\n\n'}
@@ -1073,41 +945,43 @@ function RiskHelpModal({
               for the day. A safety brake.
             </HelpItem>
 
-            <Text style={styles.modalSection}>Risk — entry timing & price</Text>
+            <Text style={styles.modalSection}>Risk — entry timing & price (per tab)</Text>
             <HelpItem title="Min minutes left (Buy only)">
-              Auto-trade only: enter if the 15‑minute window still has at least this many minutes left.
-              Example: 2 means “don’t enter in the last 2 minutes.” If you see “too little time left,”
-              the clock is under this number. Does not block a Home Buy tap. Does not block Protect Sell.
+              Per tab. Enter if the 15‑minute window still has at least this many minutes left for
+              that path. Example: 2 means “don’t enter in the last 2 minutes.” If Buy is showing and
+              Last signals says “too little time left,” that is the Home Buy tab. Auto-trade’s clock
+              is separate. Does not block Protect Sell.
             </HelpItem>
             <HelpItem title="Min minutes elapsed (Buy only)">
-              Auto-trade only: enter after this many whole minutes have already passed in the
-              15‑minute window. Skips the noisy open.{'\n\n'}
-              • 0 = allow Auto-trade buys from the window open{'\n'}
-              • 2 (default) = wait ~2 minutes before Auto-trade buying{'\n'}
-              • 3–5 = stricter — fewer early Auto-trade entries{'\n\n'}
-              Does not block a Home Buy tap. If you see “too early in window,” Auto-trade has not
-              reached this clock yet.
+              Per tab. Enter after this many whole minutes have already passed in the 15‑minute
+              window. Skips the noisy open for that path.{'\n\n'}
+              • 0 = allow buys from the window open{'\n'}
+              • 2 (default) = wait ~2 minutes{'\n'}
+              • 3–5 = stricter — fewer early entries{'\n\n'}
+              If Buy is showing and Last signals says “too early in window,” that is the Home Buy
+              tab, not Auto-trade.
             </HelpItem>
             <HelpItem title="Max entry ask ($) (Buy limit)">
-              Auto-trade only: do not buy if the contract ask is above this (example: $0.90).
-              Home Buy taps skip this cap so a tap can still fill a richer ticket.
+              Per path. Auto-trade uses the Auto-trade tab; Home Buy uses the Home Buy tab. If the
+              ask is above that tab’s cap, that path skips “ask too rich.”
             </HelpItem>
-            <HelpItem title="Time in force (Auto-trade buys)">
-              How long an Auto-trade buy stays live on Kalshi:{'\n'}
+            <HelpItem title="Time in force (Auto-trade)">
+              Settings → Risk → Auto-trade. How long a robot buy stays live on Kalshi:{'\n'}
               • IOC — try to fill now; cancel anything not filled{'\n'}
               • FOK — fill all of it now, or cancel everything{'\n'}
               • GTC — leave the order open until filled or you cancel{'\n\n'}
-              Most people use IOC for these short windows. Home Buy taps use the separate Manual buy
-              TIF. Protect Sell exits always use IOC.
+              Protect Sell exits always use IOC.
             </HelpItem>
-            <HelpItem title="Time in force (Manual buy)">
-              How long a Home Buy tap stays live on Kalshi (IOC / FOK / GTC). Default IOC. GTC can
-              rest until the 15-minute window ends. Does not apply to Auto-trade or Protect Sell.
+            <HelpItem title="Time in force (Home Buy)">
+              Settings → Risk → Home Buy. How long a tap stays live on Kalshi (IOC / FOK / GTC).
+              Default IOC. GTC can rest until the 15-minute window ends. Does not apply to Auto-trade
+              or Protect Sell. Sell taps stay IOC.
             </HelpItem>
-            <HelpItem title="Chase above ask ($) (Buy & Sell)">
-              Tiny extra you’re willing to pay above the current ask to help a fill (example:
-              $0.02). Auto-trade still limited by Max entry ask. Home Buy uses chase without that
-              cap (ask + chase, max $0.99). Same idea is used as slippage when protect-selling.
+            <HelpItem title="Chase above ask ($)">
+              Tiny extra you’re willing to pay above the current ask (example: $0.02). Each path uses
+              its own chase and still caps pay by that path’s max entry ask (max $0.99). Auto-trade
+              chase is also used as protect-sell slippage. Home Buy chase is used as Home Sell
+              slippage.
             </HelpItem>
 
             <Text style={styles.modalSection}>Risk — protect money (early sell)</Text>
@@ -1140,15 +1014,17 @@ function RiskHelpModal({
               at minute 12 or minute 1 — whenever lean is against you with enough gap.
             </HelpItem>
 
-            <HelpItem title="Restore default values">
-              Puts all Risk numbers (and Protect money Off) back to the app’s recommended starting
-              values saved on this phone.
+            <HelpItem title="Restore defaults">
+              Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.
+              Restore Home Buy / Restore Auto-trade resets only that tab (Protect money is on
+              Auto-trade). Cushions and keys stay.
             </HelpItem>
 
             <Text style={styles.modalSection}>Kalshi credentials</Text>
             <HelpItem title="API key & private key">
-              Required for Auto-trade, protect-sell, and settlement checks. Stored in the phone’s
-              Secure Store. Use Test connection after saving. Never share your PEM.
+              Required for Auto-trade, Home Buy / Sell, protect-sell, and settlement checks. Stored
+              in the phone’s Secure Store. Cloud Run also stores the key so it can place. Use Test
+              connection after saving. Never share your PEM.
             </HelpItem>
 
             <Text style={styles.modalTip}>

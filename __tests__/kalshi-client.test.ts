@@ -121,6 +121,82 @@ describe('KalshiClient', () => {
     expect(body.time_in_force).toBe('immediate_or_cancel');
   });
 
+  test('placeOrder unwraps nested order and does not poll when already filled', async () => {
+    const fetchImpl = jest.fn(async () => ({
+      status: 201,
+      json: async () => ({
+        order: {
+          order_id: 'ord-nested',
+          fill_count: '4.00',
+          remaining_count: '0',
+          status: 'executed',
+        },
+      }),
+      text: async () => '',
+    })) as unknown as typeof fetch;
+
+    const client = new KalshiClient('key', generatePem(), 'production', fetchImpl);
+    const res = await client.placeOrder({
+      ticker: 'KXGOLD15M-TEST',
+      side: 'bid',
+      count: '4.00',
+      price: '0.5000',
+      dry_run: false,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.order_id).toBe('ord-nested');
+    expect(res.fill_count).toBe('4.00');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test('placeOrder waits and GETs the order when IOC fill_count starts at 0', async () => {
+    let gets = 0;
+    const fetchImpl = jest.fn(async (_url: string, init?: RequestInit) => {
+      const method = String(init?.method || 'GET').toUpperCase();
+      if (method === 'POST') {
+        return {
+          status: 201,
+          json: async () => ({
+            order: {
+              order_id: 'ord-late',
+              fill_count: '0',
+              remaining_count: '8',
+              status: 'resting',
+            },
+          }),
+          text: async () => '',
+        };
+      }
+      gets += 1;
+      return {
+        status: 200,
+        json: async () => ({
+          order: {
+            order_id: 'ord-late',
+            fill_count: gets >= 2 ? '8.00' : '0',
+            remaining_count: gets >= 2 ? '0' : '8',
+            status: gets >= 2 ? 'executed' : 'resting',
+          },
+        }),
+        text: async () => '',
+      };
+    }) as unknown as typeof fetch;
+
+    const client = new KalshiClient('key', generatePem(), 'production', fetchImpl);
+    const res = await client.placeOrder({
+      ticker: 'KXGOLD15M-TEST',
+      side: 'bid',
+      count: '8.00',
+      price: '0.5000',
+      dry_run: false,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.order_id).toBe('ord-late');
+    expect(res.fill_count).toBe('8.00');
+    expect(gets).toBeGreaterThanOrEqual(2);
+    expect(String((fetchImpl as jest.Mock).mock.calls[1][0])).toMatch(/\/portfolio\/orders\/ord-late/);
+  });
+
   test('smokeTestDryRun fails on bad asset', async () => {
     const client = new KalshiClient('key', generatePem(), 'production', jest.fn() as any);
     const res = await client.smokeTestDryRun('XYZ');
