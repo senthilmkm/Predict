@@ -38,6 +38,7 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('home-change-24h').props.children).toBe('Collecting…');
     expect(s.getByTestId('home-today-trades')).toBeTruthy();
     expect(s.getByText('Predict trades today')).toBeTruthy();
+    expect(s.queryByTestId('home-today-path-buys')).toBeNull();
     expect(s.getByText('Cash')).toBeTruthy();
     expect(s.getByTestId('home-heartbeat')).toBeTruthy();
     expect(s.queryByTestId('btn-kill-switch')).toBeNull();
@@ -370,6 +371,122 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
     expect(s.getByText('Sell YES')).toBeTruthy();
     expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+    expect(s.queryByTestId('trade-action-BTC')).toBeNull();
+  });
+
+  test('path-buy strip shows Home / Auto fills and Sell row keeps placed @', async () => {
+    useConfigStore.setState({
+      config: { ...defaultAppConfig(), assets_enabled: { BTC: true, Gold: true, ETH: true } as any },
+      hydrated: true,
+    });
+    const today = new Date().toISOString();
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
+      cloudKillSwitch: false,
+      stats: {
+        wins: 1,
+        losses: 0,
+        pending: 2,
+        misses: 0,
+        dry_runs: 0,
+        realized_pnl_usd: 0.4,
+        win_rate: 1,
+      },
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'NO',
+          live: 90,
+          strike: 100,
+          abs_gap: 10,
+          minutes_left: 8,
+          phase: 'live',
+        },
+      } as any,
+      leanAt: { BTC: today },
+      tradeActions: {
+        BTC: {
+          status: 'placed',
+          detail: 'placed YES · 5 @ $0.55',
+          at: today,
+        },
+      },
+      trades: [
+        {
+          id: 'h-btc-1',
+          at: today,
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          side: 'YES',
+          notional_usd: 2.75,
+          fill_count: 5,
+          fill_price: 0.55,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+        {
+          id: 'h-btc-2',
+          at: today,
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-Y',
+          side: 'YES',
+          notional_usd: 2.75,
+          fill_count: 5,
+          fill_price: 0.55,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+        {
+          id: 'h-gold',
+          at: today,
+          asset: 'Gold',
+          market_ticker: 'KXGOLD15M-X',
+          side: 'YES',
+          notional_usd: 1,
+          fill_count: 2,
+          fill_price: 0.5,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+        {
+          id: 'a-eth',
+          at: today,
+          asset: 'ETH',
+          market_ticker: 'KXETH15M-X',
+          side: 'NO',
+          notional_usd: 1,
+          fill_count: 2,
+          fill_price: 0.5,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'auto',
+        },
+        {
+          id: 'miss',
+          at: today,
+          asset: 'WTI',
+          market_ticker: 'KXWTI15M-X',
+          side: 'YES',
+          notional_usd: 0,
+          fill_count: 0,
+          outcome: 'miss',
+          dry_run: false,
+          entry_path: 'home',
+        },
+      ],
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('home-today-path-buys-home').props.children).toBe('Home  BTC 2 · Gold 1');
+    expect(s.getByTestId('home-today-path-buys-auto').props.children).toBe('Auto  ETH 1');
+    expect(s.queryByText(/Manual/i)).toBeNull();
+    await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
+    expect(s.getByTestId('trade-action-BTC').props.children).toBe('placed YES · 5 @ $0.55');
   });
 
   test('manual buy error shows a popup', async () => {

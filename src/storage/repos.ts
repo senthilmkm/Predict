@@ -2,6 +2,17 @@ import { etDateKey } from '../util/time';
 
 export type TradeSide = 'YES' | 'NO';
 export type TradeOutcome = 'win' | 'loss' | 'pending' | 'miss' | 'dry_run' | 'exited';
+export type TradeEntryPath = 'home' | 'auto';
+
+/** Home tap vs Auto-trade worker. Missing on legacy fills — do not guess. */
+export function parseEntryPath(raw: unknown): TradeEntryPath | undefined {
+  const v = String(raw ?? '')
+    .toLowerCase()
+    .trim();
+  if (v === 'home' || v === 'manual_buy' || v === 'manual') return 'home';
+  if (v === 'auto' || v === 'auto_trade' || v === 'worker') return 'auto';
+  return undefined;
+}
 
 export interface TradeRecord {
   id: string;
@@ -18,6 +29,8 @@ export interface TradeRecord {
   dry_run: boolean;
   order_id?: string | null;
   config_snapshot_json?: string;
+  /** Set on new fills. Protect/Home sell keeps the original buy path. */
+  entry_path?: TradeEntryPath | null;
 }
 
 export interface AlertRecord {
@@ -98,6 +111,7 @@ export class MemoryTradeRepo {
         order_id: existing.order_id || row.order_id,
         fill_count: pickFillCount(existing, row),
         fill_price: existing.fill_price ?? row.fill_price,
+        entry_path: existing.entry_path ?? row.entry_path,
         outcome,
         pnl_usd,
       };
@@ -236,6 +250,7 @@ export function cloudTradesToRecords(cloudTrades: any[]): TradeRecord[] {
       outcome,
       dry_run: Boolean(ct.dryRun || ct.dry_run),
       order_id: ct.orderId || ct.order_id || null,
+      entry_path: parseEntryPath(ct.entryPath ?? ct.entry_path) ?? null,
     };
   });
 }

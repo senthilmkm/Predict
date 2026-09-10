@@ -6,6 +6,7 @@ import { useRuntimeStore } from '../state/runtimeStore';
 import { AssetKey } from '../config/types';
 import { LeanResult } from '../services/lean/lean';
 import { TradeRecord } from '../storage/repos';
+import { entryPathChipLabel, formatHistoryTradeSubline } from '../history/tradeDisplay';
 import { useMarkAlertsSeenOnLeave } from '../hooks/useMarkAlertsSeenOnLeave';
 import {
   ALERT_FILTERS,
@@ -65,11 +66,6 @@ export function computeTradeStatusDot(
     return { color: '#eab308', statusLabel: 'At Border (ITM < Cushion)', testIDColor: 'yellow' };
   }
   return { color: '#ef4444', statusLabel: 'Unfavorable (OTM)', testIDColor: 'red' };
-}
-
-function moneyUsd(n: unknown): string {
-  const v = Number(n);
-  return Number.isFinite(v) ? v.toFixed(2) : '—';
 }
 
 function formatWhen(at: unknown): string {
@@ -240,10 +236,7 @@ export function HistoryScreen() {
                   const lean = leans[item.asset as AssetKey];
                   const cushion = cushions[item.asset as AssetKey];
                   const statusInfo = computeTradeStatusDot(item, lean, cushion);
-                  const fillCount =
-                    item.fill_count != null && Number.isFinite(Number(item.fill_count))
-                      ? Number(item.fill_count)
-                      : null;
+                  const pathLabel = entryPathChipLabel(item.entry_path);
                   return (
                     <View style={styles.row} testID={`trade-row-${item.id}`}>
                       <View style={styles.tradeTitleGroup}>
@@ -255,12 +248,13 @@ export function HistoryScreen() {
                         <Text style={styles.title}>
                           {item.asset} {item.side} · {item.outcome}
                         </Text>
+                        {pathLabel ? (
+                          <Text style={styles.pathChip} testID={`trade-path-${item.id}`}>
+                            {pathLabel}
+                          </Text>
+                        ) : null}
                       </View>
-                      <Text style={styles.sub}>
-                        {item.market_ticker} · cost ${moneyUsd(item.notional_usd)}
-                        {fillCount != null ? ` · ${fillCount} ctr` : ''}
-                        {item.pnl_usd != null ? ` · P&L $${moneyUsd(item.pnl_usd)}` : ''}
-                      </Text>
+                      <Text style={styles.sub}>{formatHistoryTradeSubline(item)}</Text>
                       <Text style={styles.time}>{formatWhen(item.at)}</Text>
                     </View>
                   );
@@ -526,6 +520,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   title: { color: colors.textPrimary, fontWeight: '600' },
+  pathChip: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
   sub: { color: colors.textSecondary, marginTop: 4, fontSize: 13 },
   time: { color: colors.mute, marginTop: 4, fontSize: 11 },
   empty: { flex: 1, justifyContent: 'center', padding: spacing.lg },

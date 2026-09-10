@@ -44,6 +44,8 @@ function filledTrade(over: Record<string, unknown> = {}) {
     fillCount: over.fillCount ?? 10,
     pnlUsd: over.pnlUsd ?? null,
     outcome: over.outcome ?? 'pending',
+    settledAt: over.settledAt,
+    entryPath: over.entryPath,
   };
 }
 
@@ -64,6 +66,7 @@ describe('Cloud trade book ↔ /me/trades', () => {
         pnlUsd: 4,
         outcome: 'win',
         settledAt: new Date().toISOString(),
+        entryPath: 'home',
       }) as any
     );
 
@@ -78,6 +81,7 @@ describe('Cloud trade book ↔ /me/trades', () => {
     expect(row.pnlUsd).toBe(4);
     expect(row.outcome).toBe('win');
     expect(row.status).toBe('SETTLED');
+    expect(row.entryPath).toBe('home');
   });
 
   test('worker settlement writes pnl and GET reflects it', async () => {

@@ -27,6 +27,7 @@ export function buildHistoryWorkbook(
     fill_price: t.fill_price ?? '',
     pnl_usd: t.pnl_usd ?? '',
     outcome: t.outcome,
+    entry_path: t.entry_path ?? '',
     order_id: t.order_id ?? '',
   }));
   const tradeSheet = XLSX.utils.json_to_sheet(
@@ -42,6 +43,7 @@ export function buildHistoryWorkbook(
             fill_price: '',
             pnl_usd: '',
             outcome: '',
+            entry_path: '',
             order_id: '',
           },
         ]

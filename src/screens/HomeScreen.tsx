@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +22,7 @@ import { ManualSuccessFly } from '../components/ManualSuccessFly';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/moneyFormat';
 import { cloudClient } from '../services/cloud/cloudClient';
+import { formatHomePathBuyLines, summarizeTodayPathBuys } from '../storage/todayPathBuys';
 import { heldOpenFillForTicker, homeBuySkipReason, lastSignalExtraLine, lastSignalManualKind } from './lastSignalsManual';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
@@ -279,6 +280,10 @@ export function HomeScreen() {
   });
   const readyRows = decoratedRows.filter((r) => r.manualKind !== 'none');
   const otherRows = decoratedRows.filter((r) => r.manualKind === 'none');
+  const todayPathBuyLines = useMemo(
+    () => formatHomePathBuyLines(summarizeTodayPathBuys(trades)),
+    [trades]
+  );
 
   return (
     <View ref={homeRootRef} style={styles.root} collapsable={false}>
@@ -358,35 +363,39 @@ export function HomeScreen() {
         </View>
       ) : null}
 
-      <View style={styles.card} testID="home-today-trades">
-        <Text style={styles.label}>Predict trades today</Text>
+      <View style={styles.todayCard} testID="home-today-trades">
+        <Text style={styles.todayLabel}>Predict trades today</Text>
         {stats.wins + stats.losses + stats.pending + stats.misses === 0 ? (
-          <>
-            <Text style={styles.value}>No Predict fills today</Text>
-            <Text style={styles.snapHint}>
-              Closed P&L from Predict orders today (ET). Change (24h) on Predictions is your full
-              Kalshi account — a different number.
-            </Text>
-          </>
+          <Text style={styles.todayValue}>No Predict fills today</Text>
         ) : (
-          <>
-            <Text
-              style={[
-                styles.value,
-                { color: stats.realized_pnl_usd >= 0 ? colors.win : colors.loss },
-              ]}
-              testID="home-today-trade-pnl"
-            >
-              Closed P&L ${stats.realized_pnl_usd.toFixed(2)} · {stats.wins}W / {stats.losses}L ·
-              pending {stats.pending}
-              {stats.misses > 0 ? ` · miss ${stats.misses}` : ''}
-            </Text>
-            <Text style={styles.snapHint}>
-              Predict orders only, America/New_York day. Pending = filled, not settled yet.
-            </Text>
-          </>
+          <Text
+            style={[
+              styles.todayValue,
+              { color: stats.realized_pnl_usd >= 0 ? colors.win : colors.loss },
+            ]}
+            testID="home-today-trade-pnl"
+          >
+            Closed P&L ${stats.realized_pnl_usd.toFixed(2)} · {stats.wins}W / {stats.losses}L ·
+            pending {stats.pending}
+            {stats.misses > 0 ? ` · miss ${stats.misses}` : ''}
+          </Text>
         )}
       </View>
+      {todayPathBuyLines.length > 0 ? (
+        <View style={styles.pathBuyCard} testID="home-today-path-buys">
+          {todayPathBuyLines.map((line) => (
+            <Text
+              key={line}
+              style={styles.pathBuyLine}
+              testID={
+                line.startsWith('Home') ? 'home-today-path-buys-home' : 'home-today-path-buys-auto'
+              }
+            >
+              {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.card} testID="home-last-signals">
         <View style={styles.signalsHeader}>
@@ -832,8 +841,28 @@ const styles = StyleSheet.create({
   },
   liveTick: { color: colors.accent, fontSize: 11, fontWeight: '600' },
   label: { color: colors.textSecondary, fontSize: 13 },
-  value: { color: colors.textPrimary, fontSize: 18, fontWeight: '600', marginTop: 4 },
-  snapHint: { color: colors.mute, fontSize: 11, marginTop: 4, lineHeight: 15 },
+  todayCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 2,
+  },
+  todayLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
+  todayValue: { color: colors.textPrimary, fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  pathBuyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 2,
+    marginTop: -8,
+  },
+  pathBuyLine: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', lineHeight: 16 },
   valueSmall: { color: colors.textPrimary, fontSize: 14, marginTop: 4, lineHeight: 20 },
   signalRow: {
     flexDirection: 'row',

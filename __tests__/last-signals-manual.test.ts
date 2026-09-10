@@ -103,6 +103,24 @@ describe('last signal extra line', () => {
     ).toBeNull();
   });
 
+  test('Sell showing keeps Cloud placed @ line', () => {
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'sell',
+        autoTradeOn: true,
+        autoDetail: 'placed YES · 5 @ $0.55',
+        autoStatus: 'placed',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+      })
+    ).toEqual({
+      testID: 'trade-action',
+      text: 'placed YES · 5 @ $0.55',
+      placed: true,
+    });
+  });
+
   test('no button shows Auto last action, or below cushion on SKIP', () => {
     expect(
       lastSignalExtraLine({

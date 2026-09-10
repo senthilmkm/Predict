@@ -45,6 +45,8 @@ export interface TradeRecordDoc {
   protectClaimedAt?: string | null;
   /** Kalshi order id of the IOC exit — never overwrite the entry `orderId`. */
   protectExitOrderId?: string | null;
+  /** How the fill was opened. Protect / Home sell must not overwrite. */
+  entryPath?: 'home' | 'auto';
 }
 
 export interface CloudAlertDoc {

@@ -35,6 +35,7 @@ function filledTrade(over: Record<string, unknown> = {}) {
     outcome: (over.outcome as string) ?? 'pending',
     protectClaimedAt: (over.protectClaimedAt as string | null | undefined) ?? null,
     protectExitOrderId: (over.protectExitOrderId as string | null | undefined) ?? null,
+    entryPath: over.entryPath ?? 'home',
   } as any;
 }
 
@@ -188,6 +189,7 @@ describe('cloud protect-sell', () => {
     expect(stored?.pnlUsd).toBe(-2.2);
     expect(stored?.orderId).toBe('ord-entry');
     expect(stored?.protectExitOrderId).toBe('ord-exit');
+    expect(stored?.entryPath).toBe('home');
     expect(needsSettlement(stored as any)).toBe(false);
     expect(res.alerts).toHaveLength(1);
     expect(res.alerts[0].title).toBe('Protect sell');

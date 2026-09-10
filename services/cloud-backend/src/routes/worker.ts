@@ -470,6 +470,7 @@ async function runOneTick() {
                 fillCount: filled ? fillCount : 0,
                 outcome: filled || accepted ? 'pending' : 'miss',
                 pnlUsd: null,
+                entryPath: 'auto',
               };
 
               await saveTradeRecord(userId, tradeDoc);

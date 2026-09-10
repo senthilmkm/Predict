@@ -58,6 +58,45 @@ describe('iOS ↔ Cloud trade wiring', () => {
     expect(rows[1].pnl_usd).toBeNull();
   });
 
+  test('GET /me/trades maps entryPath to Home/Auto and leaves legacy blank', () => {
+    const rows = cloudTradesToRecords([
+      {
+        tradeId: 't_home',
+        ticker: 'KXBTC15M-X',
+        asset: 'BTC',
+        decision: 'YES',
+        fillCount: 5,
+        payPrice: 0.55,
+        status: 'FILLED',
+        entryPath: 'home',
+        executedAt: new Date().toISOString(),
+      },
+      {
+        tradeId: 't_auto',
+        ticker: 'KXETH15M-X',
+        asset: 'ETH',
+        decision: 'NO',
+        fillCount: 2,
+        payPrice: 0.4,
+        status: 'FILLED',
+        entry_path: 'auto',
+        executedAt: new Date().toISOString(),
+      },
+      {
+        tradeId: 't_legacy',
+        ticker: 'KXGOLD15M-X',
+        asset: 'Gold',
+        decision: 'YES',
+        fillCount: 1,
+        status: 'FILLED',
+        executedAt: new Date().toISOString(),
+      },
+    ]);
+    expect(rows[0].entry_path).toBe('home');
+    expect(rows[1].entry_path).toBe('auto');
+    expect(rows[2].entry_path).toBeNull();
+  });
+
   test('cloud protect-sell maps exited P&L and keeps in-flight exiting as open', () => {
     const rows = cloudTradesToRecords([
       {

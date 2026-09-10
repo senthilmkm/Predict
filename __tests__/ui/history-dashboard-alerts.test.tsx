@@ -176,6 +176,58 @@ describe('History / Dashboard / AlertsHub', () => {
     useRuntimeStore.setState({ refreshCloudSnapshot: async () => {} });
   });
 
+  test('History shows Home/Auto chip and fill price, and omits chip when path is missing', async () => {
+    useRuntimeStore.setState({
+      refreshCloudSnapshot: async () => {},
+      trades: [
+        {
+          id: 'home-fill',
+          at: '2026-09-10T14:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-TEST',
+          side: 'YES',
+          notional_usd: 4.6,
+          fill_count: 5,
+          fill_price: 0.55,
+          pnl_usd: 0.4,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+        {
+          id: 'auto-fill',
+          at: '2026-09-10T14:01:00.000Z',
+          asset: 'ETH',
+          market_ticker: 'KXETH15M-TEST',
+          side: 'NO',
+          notional_usd: 2.2,
+          fill_count: 4,
+          fill_price: 0.55,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'auto',
+        },
+        {
+          id: 'legacy-fill',
+          at: '2026-09-10T14:02:00.000Z',
+          asset: 'Gold',
+          market_ticker: 'KXGOLD15M-TEST',
+          side: 'YES',
+          notional_usd: 1,
+          fill_count: 2,
+          outcome: 'pending',
+          dry_run: false,
+        },
+      ] as any,
+    });
+    const s = await render(<HistoryScreen />);
+    expect(s.getByTestId('trade-path-home-fill').props.children).toBe('Home');
+    expect(s.getByTestId('trade-path-auto-fill').props.children).toBe('Auto');
+    expect(s.queryByTestId('trade-path-legacy-fill')).toBeNull();
+    expect(s.getByText('KXBTC15M-TEST · 5 ctr @ $0.55 · cost $4.60 · P&L $0.40')).toBeTruthy();
+    expect(s.queryByText(/Manual/)).toBeNull();
+  });
+
   test('Dashboard root', async () => {
     const s = await render(<DashboardScreen />);
     expect(s.getByTestId('screen-dashboard')).toBeTruthy();
@@ -244,6 +296,123 @@ describe('History / Dashboard / AlertsHub', () => {
     expect(s.getByText('1')).toBeTruthy(); // unread
     expect(s.getByText(/Latest trade: BTC pending/i)).toBeTruthy();
     expect(s.queryByTestId('dashboard-asset-pnl')).toBeNull();
+    expect(s.queryByTestId('dashboard-trades-paths')).toBeNull();
+  });
+
+  test('Dashboard Trades card adds Home / Auto fill counts', async () => {
+    const today = new Date().toISOString();
+    useRuntimeStore.setState({
+      stats: {
+        wins: 8,
+        losses: 3,
+        pending: 0,
+        misses: 0,
+        dry_runs: 0,
+        realized_pnl_usd: 1,
+        win_rate: 8 / 11,
+      },
+      trades: [
+        {
+          id: 'h1',
+          at: today,
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-A',
+          side: 'YES',
+          notional_usd: 2,
+          fill_count: 4,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+        {
+          id: 'h2',
+          at: today,
+          asset: 'Gold',
+          market_ticker: 'KXGOLD15M-A',
+          side: 'YES',
+          notional_usd: 2,
+          fill_count: 2,
+          outcome: 'win',
+          dry_run: false,
+          entry_path: 'home',
+        },
+        {
+          id: 'h3',
+          at: today,
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-B',
+          side: 'NO',
+          notional_usd: 2,
+          fill_count: 2,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+        {
+          id: 'a1',
+          at: today,
+          asset: 'ETH',
+          market_ticker: 'KXETH15M-A',
+          side: 'YES',
+          notional_usd: 1,
+          fill_count: 2,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'auto',
+        },
+        {
+          id: 'a2',
+          at: today,
+          asset: 'ETH',
+          market_ticker: 'KXETH15M-B',
+          side: 'YES',
+          notional_usd: 1,
+          fill_count: 2,
+          outcome: 'win',
+          dry_run: false,
+          entry_path: 'auto',
+        },
+        {
+          id: 'a3',
+          at: today,
+          asset: 'WTI',
+          market_ticker: 'KXWTI15M-A',
+          side: 'YES',
+          notional_usd: 1,
+          fill_count: 2,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'auto',
+        },
+        {
+          id: 'a4',
+          at: today,
+          asset: 'Silver',
+          market_ticker: 'KXSLVR15M-A',
+          side: 'YES',
+          notional_usd: 1,
+          fill_count: 2,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'auto',
+        },
+        {
+          id: 'a5',
+          at: today,
+          asset: 'COPPER',
+          market_ticker: 'KXHG15M-A',
+          side: 'YES',
+          notional_usd: 1,
+          fill_count: 2,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'auto',
+        },
+      ] as any,
+    });
+    const s = await render(<DashboardScreen />);
+    expect(s.getByText('8W / 3L')).toBeTruthy();
+    expect(s.getByTestId('dashboard-trades-paths').props.children).toBe('Home 3 · Auto 5');
   });
 
   test('Dashboard by-asset card uses pay price and matches Closed P&L', async () => {

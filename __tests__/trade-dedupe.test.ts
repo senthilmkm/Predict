@@ -14,6 +14,7 @@ function trade(over: Partial<TradeRecord> = {}): TradeRecord {
     outcome: over.outcome || 'win',
     dry_run: over.dry_run ?? false,
     order_id: over.order_id === undefined ? 'ord-kalshi-1' : over.order_id,
+    entry_path: over.entry_path,
   };
 }
 
@@ -81,6 +82,22 @@ describe('trade dedupe', () => {
     expect(repo.list()[0].outcome).toBe('win');
     expect(repo.list()[0].pnl_usd).toBe(5);
     expect(repo.list()[0].fill_count).toBe(10);
+  });
+
+  test('upsert keeps Home/Auto path when a later patch omits it', () => {
+    const repo = new MemoryTradeRepo();
+    repo.insert(trade({ id: 'local-1', entry_path: 'home', outcome: 'pending', pnl_usd: null }));
+    repo.upsert(
+      trade({
+        id: 'trade_cloud',
+        order_id: 'ord-kalshi-1',
+        outcome: 'exited',
+        pnl_usd: -1,
+        entry_path: undefined,
+      })
+    );
+    expect(repo.list()[0].entry_path).toBe('home');
+    expect(repo.list()[0].outcome).toBe('exited');
   });
 
   test('statsToday does not double-count a cloud+local pair', () => {

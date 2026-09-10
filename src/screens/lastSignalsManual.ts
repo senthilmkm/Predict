@@ -117,7 +117,8 @@ export function homeBuySkipReason(opts: {
 
 /**
  * One extra line on a Last signals row.
- * Buy/Sell showing → only a Home Buy skip (never Auto-trade's skip).
+ * Buy showing → only a Home Buy skip (never Auto-trade's skip).
+ * Sell showing → Cloud place/resting detail only (never Auto skip).
  * No button → Auto-trade last action, or "below cushion" on SKIP.
  */
 export function lastSignalExtraLine(opts: {
@@ -136,7 +137,16 @@ export function lastSignalExtraLine(opts: {
     if (opts.tapSkipReason) return { testID: 'skip-reason', text: opts.tapSkipReason };
     return null;
   }
-  if (opts.manualKind === 'sell') return null;
+  if (opts.manualKind === 'sell') {
+    const detail = String(opts.autoDetail || '').trim();
+    const status = String(opts.autoStatus || '');
+    const isPlace =
+      status === 'placed' || /^placed\b/i.test(detail) || /^resting\b/i.test(detail);
+    if (isPlace && detail) {
+      return { testID: 'trade-action', text: detail, placed: true };
+    }
+    return null;
+  }
   if (opts.autoTradeOn && opts.autoDetail) {
     return {
       testID: 'trade-action',

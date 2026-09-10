@@ -9,6 +9,7 @@ import {
   formatDayPayFooter,
   formatSignedUsd,
 } from '../storage/assetPnlToday';
+import { formatDashboardPathBuys, summarizeTodayPathBuys } from '../storage/todayPathBuys';
 
 export function DashboardScreen({ navigation }: { navigation?: any }) {
   const stats = useRuntimeStore((s) => s.stats);
@@ -24,6 +25,7 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
   const [refreshing, setRefreshing] = useState(false);
   const assetFooter = formatDayPayFooter(assetPnlToday);
+  const tradesPathLine = formatDashboardPathBuys(summarizeTodayPathBuys(trades));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -70,7 +72,12 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
           navigation?.navigate?.('History');
         }}
       >
-        <Card label="Trades" value={`${stats.wins}W / ${stats.losses}L`} />
+        <Card
+          label="Trades"
+          value={`${stats.wins}W / ${stats.losses}L`}
+          detail={tradesPathLine}
+          detailTestID="dashboard-trades-paths"
+        />
       </Pressable>
       {assetPnlToday.rows.length > 0 ? (
         <View style={styles.card} testID="dashboard-asset-pnl">
@@ -135,15 +142,24 @@ function Card({
   label,
   value,
   color,
+  detail,
+  detailTestID,
 }: {
   label: string;
   value: string;
   color?: string;
+  detail?: string | null;
+  detailTestID?: string;
 }) {
   return (
     <View style={styles.card}>
       <Text style={styles.label}>{label}</Text>
       <Text style={[styles.value, color ? { color } : null]}>{value}</Text>
+      {detail ? (
+        <Text style={styles.detail} testID={detailTestID}>
+          {detail}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -161,6 +177,7 @@ const styles = StyleSheet.create({
   },
   label: { color: colors.textSecondary },
   value: { color: colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 3 },
+  detail: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', marginTop: 4 },
   assetRow: { marginTop: spacing.sm },
   assetTop: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   assetName: { color: colors.textPrimary, fontWeight: '700', flex: 1 },

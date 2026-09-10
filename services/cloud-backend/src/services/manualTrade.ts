@@ -374,6 +374,7 @@ async function executeManualBuy(opts: {
       fillCount: filled ? fillCount : 0,
       outcome: filled || accepted ? 'pending' : 'miss',
       pnlUsd: null,
+      entryPath: 'home',
     };
     await saveTradeRecord(userId, tradeDoc);
     await writeAuditLog(userId, 'TRADE_TRIGGERED', {
