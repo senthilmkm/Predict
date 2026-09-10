@@ -78,6 +78,8 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.protect_sell_enabled).toBe(false);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(1);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(45);
+    expect(cfg.risk.smart_buy_enabled).toBe(true);
+    expect(cfg.risk.smart_buy_min_edge_usd).toBe(0.08);
   });
 
   test('old max_trades_per_asset_per_day is ignored; window cap defaults to 1 and clamps 1–5', () => {
@@ -111,6 +113,21 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.protect_sell_enabled).toBe(true);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(3);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(120);
+  });
+
+  test('normalizeRiskConfig defaults Smart buy On and clamps min extra chance', () => {
+    expect(normalizeAppConfig({} as any).risk.smart_buy_enabled).toBe(true);
+    expect(normalizeAppConfig({} as any).risk.smart_buy_min_edge_usd).toBe(0.08);
+    const off = normalizeAppConfig({
+      risk: { smart_buy_enabled: false, smart_buy_min_edge_usd: 0.01 },
+    } as any);
+    expect(off.risk.smart_buy_enabled).toBe(false);
+    expect(off.risk.smart_buy_min_edge_usd).toBe(0.04);
+    const hi = normalizeAppConfig({
+      risk: { smart_buy_min_edge_usd: 0.99 },
+    } as any);
+    expect(hi.risk.smart_buy_enabled).toBe(true);
+    expect(hi.risk.smart_buy_min_edge_usd).toBe(0.15);
   });
 
   test('missing manual_risk is seeded from risk, including legacy Home TIF', () => {

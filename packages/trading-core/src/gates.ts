@@ -1,4 +1,10 @@
 import { AppConfig, AssetKey } from './types';
+import {
+  evaluateSmartBuy,
+  isSmartBuyEnabled,
+  normalizeSmartBuyMinEdge,
+  SpotTick,
+} from './smartBuy';
 
 export interface LeanSignal {
   asset: AssetKey;
@@ -12,6 +18,10 @@ export interface LeanSignal {
   phase: 'live' | 'ended';
   yes_ask?: number;
   no_ask?: number;
+  /** Kalshi live path for Auto Smart buy. Home Buy ignores this. */
+  timeseries?: SpotTick[];
+  /** Exact minutes until close (not floored). Falls back to minutes_left. */
+  minutes_remaining?: number;
 }
 
 export interface GateResult {
@@ -60,6 +70,12 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'max trades/asset/15m window';
     case 'ask_too_rich':
       return 'ask too rich';
+    case 'smart_buy_no_path':
+      return 'need a longer price path';
+    case 'smart_buy_gap_dying':
+      return 'gap shrinking';
+    case 'smart_buy_edge_too_small':
+      return 'ticket not a good deal';
     case 'notional_too_small':
       return 'size too small';
     case 'window_locked':
@@ -189,6 +205,27 @@ export function evaluateStaticGate(
 
   if (ask > cfg.risk.max_entry_ask_usd + 1e-9) {
     return { ok: false, skip_reason: 'ask_too_rich' };
+  }
+
+  // Home Buy tap uses allowWhenAutoTradeOff — Smart buy is Auto-trade only.
+  if (isSmartBuyEnabled(cfg.risk) && !opts?.allowWhenAutoTradeOff) {
+    const tLeft = Number(
+      lean.minutes_remaining != null && Number.isFinite(Number(lean.minutes_remaining))
+        ? lean.minutes_remaining
+        : lean.minutes_left
+    );
+    const smart = evaluateSmartBuy({
+      live: lean.live,
+      strike: lean.strike,
+      absGap: lean.abs_gap,
+      minutesRemaining: tLeft,
+      ask,
+      minEdgeUsd: normalizeSmartBuyMinEdge(cfg.risk.smart_buy_min_edge_usd),
+      timeseries: lean.timeseries,
+    });
+    if (!smart.ok) {
+      return { ok: false, skip_reason: smart.skip_reason || 'smart_buy_edge_too_small' };
+    }
   }
 
   const chase = Math.max(0, Math.min(0.05, Number(cfg.risk.chase_above_ask_usd) || 0));

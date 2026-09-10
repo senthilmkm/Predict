@@ -263,6 +263,8 @@ describe('Settings credentials', () => {
     await fireEvent.press(s.getByTestId('btn-risk-help'));
     await waitFor(() => expect(s.getByTestId('modal-risk-help')).toBeTruthy());
     expect(s.getByText('Protect money (early sell)')).toBeTruthy();
+    expect(s.getAllByText(/Smart buy/).length).toBeGreaterThan(0);
+    expect(s.getAllByText(/Min extra chance/).length).toBeGreaterThan(0);
     expect(s.getByText('Shared vs each tab')).toBeTruthy();
     expect(s.getByText('Max trades / asset / 15m window')).toBeTruthy();
     expect(s.queryByText('Max trades / asset / day')).toBeNull();
@@ -281,8 +283,13 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-shared-max_trades_per_asset_per_window').props.children).toBe('1');
     expect(s.getByTestId('tif-home-immediate_or_cancel')).toBeTruthy();
     expect(s.queryByTestId('risk-toggle-protect_sell_enabled')).toBeNull();
+    expect(s.queryByTestId('risk-toggle-smart_buy_enabled')).toBeNull();
     await fireEvent.press(s.getByTestId('risk-tab-auto'));
     await waitFor(() => expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-smart_buy_enabled')).toBeTruthy();
+    expect(s.getByTestId('risk-field-auto-smart_buy_enabled')).toBeTruthy();
+    expect(s.getByTestId('risk-value-auto-smart_buy_min_edge_usd').props.children).toMatch(/\$0\.08/);
+    expect(useConfigStore.getState().config.risk.smart_buy_enabled).toBe(true);
     expect(s.getByTestId('risk-field-auto-protect_sell_enabled')).toBeTruthy();
     expect(s.queryByTestId('risk-field-max_trades_per_asset_per_day')).toBeNull();
     expect(s.getByTestId('risk-value-auto-protect_sell_gap_ratio').props.children).toMatch(/1\.00×/);

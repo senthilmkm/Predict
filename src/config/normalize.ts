@@ -109,6 +109,11 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     protect_sell_grace_seconds: Math.round(
       snap(clamp(Number(r.protect_sell_grace_seconds ?? d.protect_sell_grace_seconds), 0, 120), 15)
     ),
+    smart_buy_enabled: r.smart_buy_enabled !== false,
+    smart_buy_min_edge_usd: snap(
+      clamp(Number(r.smart_buy_min_edge_usd ?? d.smart_buy_min_edge_usd), 0.04, 0.15),
+      0.01
+    ),
   };
   if (risk.fixed_dollars_per_trade > risk.max_dollars_per_trade) {
     risk.fixed_dollars_per_trade = risk.max_dollars_per_trade;

@@ -79,6 +79,7 @@ describe('evaluateStaticGate edge cases', () => {
     cfg.execution_mode = 'live';
     cfg.live_armed = true;
     cfg.cushions.Gold = 7;
+    cfg.risk.smart_buy_enabled = false;
     return cfg;
   };
 
@@ -226,6 +227,9 @@ describe('evaluateStaticGate edge cases', () => {
     expect(formatSkipReason('minutes_left')).toBe('too little time left');
     expect(formatSkipReason('max_trades_asset_window')).toBe('max trades/asset/15m window');
     expect(formatSkipReason('no_client')).toBe('no Kalshi credentials');
+    expect(formatSkipReason('smart_buy_edge_too_small')).toBe('ticket not a good deal');
+    expect(formatSkipReason('smart_buy_gap_dying')).toBe('gap shrinking');
+    expect(formatSkipReason('smart_buy_no_path')).toBe('need a longer price path');
   });
 });
 
@@ -237,6 +241,7 @@ describe('TradingEngine live place', () => {
     cfg.execution_mode = 'live';
     cfg.live_armed = true;
     cfg.cushions.Gold = 7;
+    cfg.risk.smart_buy_enabled = false;
 
     const r1 = await engine.tryPlaceFromLean(lean({ abs_gap: 10 }), cfg);
     expect(r1.ok).toBe(false);
@@ -262,6 +267,7 @@ describe('TradingEngine live place', () => {
     cfg.execution_mode = 'live';
     cfg.live_armed = true;
     cfg.cushions.Gold = 7;
+    cfg.risk.smart_buy_enabled = false;
 
     const r1 = await engine.tryPlaceFromLean(lean({ abs_gap: 10 }), cfg);
     expect(r1.ok).toBe(true);
@@ -290,6 +296,7 @@ describe('TradingEngine live place', () => {
     cfg.live_armed = true;
     cfg.cushions.Gold = 7;
     cfg.risk.max_trades_per_asset_per_window = 2;
+    cfg.risk.smart_buy_enabled = false;
 
     const r1 = await engine.tryPlaceFromLean(lean({ abs_gap: 10 }), cfg);
     expect(r1.ok).toBe(true);

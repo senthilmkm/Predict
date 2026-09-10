@@ -299,7 +299,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'Where do I change trade size and limits?',
           a:
             'Settings → Risk → Show. Shared limits sit above the tabs. Then pick Home Buy or Auto-trade for that path’s size and timing. Tap the i next to Risk for a label-by-label guide.\n\n' +
-            'Defaults: $5 per trade, max $5, min $1, max 5 open positions, 100 new buys per day, 1 buy per asset per 15-minute window, $50 daily loss stop, wait 2 minutes after the window opens, need 2 minutes left, max ask $0.90, Auto-trade IOC, Home Buy IOC, chase $0.02, Protect money Off. Size/timing start the same on both Risk tabs until you change one.',
+            'Defaults: $5 per trade, max $5, min $1, max 5 open positions, 100 new buys per day, 1 buy per asset per 15-minute window, $50 daily loss stop, wait 2 minutes after the window opens, need 2 minutes left, max ask $0.90, Auto-trade IOC, Home Buy IOC, chase $0.02, Smart buy On (min extra chance $0.08), Protect money Off. Size/timing start the same on both Risk tabs until you change one.',
         },
         {
           id: 'window-cap',
@@ -351,7 +351,7 @@ export function getFaqCategories(): FaqCategory[] {
             '• daily loss stop\n' +
             '• cushions and asset on/off (Cushions tab)\n\n' +
             'Home Buy tab only: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, chase. Used when you tap Buy on Home. Home Sell stays IOC; its slippage is Home Buy chase.\n\n' +
-            'Auto-trade tab only: the same size/timing fields for Cloud’s scheduled buys, plus Protect money (early sell). Protect can still exit a fill that started as a Home Buy.\n\n' +
+            'Auto-trade tab only: the same size/timing fields for Cloud’s scheduled buys, plus Smart buy (default On, min extra chance $0.08) and Protect money (early sell). Protect can still exit a fill that started as a Home Buy. Smart buy does not apply to a Home tap.\n\n' +
             'Home Buy / Sell on Last signals is the Home tap path. If Auto-trade is also On and its tab passes, the worker can buy that same lean as long as shared caps still have room (15m window, trades/day, max open, daily loss).\n\n' +
             'Last signals never shows both skips at once. If Home Buy would skip (ask too rich, timing, size, shared cap), Buy is hidden and that Home skip stays on the row. Auto-trade’s last skip/place shows only when there is no Home skip and no Buy/Sell button.',
         },
@@ -361,7 +361,16 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Settings → Risk → Show opens Shared limits plus Home Buy and Auto-trade tabs.\n\n' +
             'Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.\n\n' +
-            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Protect money on Auto-trade). Cushions and keys are not wiped.',
+            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy + Protect money on Auto-trade). Cushions and keys are not wiped.',
+        },
+        {
+          id: 'smart-buy',
+          q: 'What is Smart buy on Auto-trade?',
+          a:
+            'Settings → Risk → Auto-trade. It is Off/On plus Min extra chance (default On, $0.08). Home Buy ignores it.\n\n' +
+            'When On, Auto still uses cushions, minutes, max ask, and shared caps. Then it also skips unless our guess is at least Min extra chance above the Kalshi ticket. The guess uses this window’s price path, time left, and how jumpy the price has been. Kalshi sets the ask; you do not type it.\n\n' +
+            'Skip lines you may see: “ticket not a good deal,” “gap shrinking,” or “need a longer price path.”\n\n' +
+            'Turn it Off to go back to cushion + risk only. It does not guarantee more wins or profits.',
         },
       ],
     },

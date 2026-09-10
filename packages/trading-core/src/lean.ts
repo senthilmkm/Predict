@@ -5,6 +5,7 @@ import {
   nextImmediateRetryWaitMs,
   timeoutRetryWaitMs,
 } from './kalshiRetry';
+import { sanitizeTimeseries } from './smartBuy';
 
 const PUBLIC_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
@@ -33,6 +34,9 @@ export interface LeanResult {
   no_ask?: number | null;
   price_source?: string;
   cushion?: number;
+  timeseries?: { t: number; v: number }[];
+  /** Exact minutes until close (not floored). */
+  minutes_remaining?: number;
 }
 
 const LEAN_FETCH_TIMEOUT_MS = 12_000;
@@ -297,10 +301,13 @@ export async function computeLean(
   const { decision, abs_gap } = decideLean(pick.phase, live, strike, cushion);
   const close = pick.row.close_utc;
   const open = pick.row.open_utc;
+  const minutes_remaining =
+    close == null ? undefined : Math.max(0, (close.getTime() - now.getTime()) / 60000);
   const minutes_left =
-    close == null ? undefined : Math.max(0, Math.floor((close.getTime() - now.getTime()) / 60000));
+    minutes_remaining == null ? undefined : Math.max(0, Math.floor(minutes_remaining));
   const minutes_elapsed =
     open == null ? undefined : Math.max(0, Math.floor((now.getTime() - open.getTime()) / 60000));
+  const timeseries = sanitizeTimeseries(liveSpot?.timeseries);
 
   let yes_bid: number | null = null;
   let yes_ask: number | null = null;
@@ -332,11 +339,13 @@ export async function computeLean(
     abs_gap,
     minutes_left,
     minutes_elapsed,
+    minutes_remaining,
     decision,
     yes_bid,
     yes_ask,
     no_ask,
     price_source: priceSource,
     cushion,
+    timeseries,
   };
 }

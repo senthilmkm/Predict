@@ -3,10 +3,11 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 're
 import { colors, spacing } from '../theme/tokens';
 import { ManualPathRisk, RiskConfig, TimeInForce } from '../config/types';
 import {
-  AUTO_ONLY_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
+  PROTECT_RISK_FIELD_KEYS,
   RISK_FIELD_META,
   SHARED_RISK_FIELD_KEYS,
+  SMART_BUY_RISK_FIELD_KEYS,
   TIME_IN_FORCE_OPTIONS,
 } from '../config/riskDefaults';
 import { useConfigStore } from '../state/configStore';
@@ -110,7 +111,8 @@ export function RiskScreen() {
       ) : (
         <>
           <Text style={styles.hint} testID="risk-auto-hint">
-            Used only when Auto-trade is On. Protect money can still exit a Home Buy fill.
+            Used only when Auto-trade is On. Smart buy is Auto-only. Protect money can still exit a
+            Home Buy fill.
           </Text>
           <PathFields
             values={{
@@ -126,7 +128,41 @@ export function RiskScreen() {
             testPrefix="auto"
             onChange={(key, value) => setRiskField(key as keyof RiskConfig, value as never)}
           />
-          {metaFor(AUTO_ONLY_RISK_FIELD_KEYS).map((meta) => {
+          {metaFor(SMART_BUY_RISK_FIELD_KEYS).map((meta) => {
+            if (meta.kind === 'toggle') {
+              const on = config.risk.smart_buy_enabled !== false;
+              return (
+                <View key={meta.key} style={styles.field} testID={`risk-field-auto-${meta.key}`}>
+                  <View style={styles.toggleRow}>
+                    <Text style={[styles.label, { flex: 1 }]}>{meta.label}</Text>
+                    <Switch
+                      testID="risk-toggle-smart_buy_enabled"
+                      value={on}
+                      onValueChange={(v) => setRiskField('smart_buy_enabled', v)}
+                      trackColor={{ true: colors.accent, false: colors.mute }}
+                    />
+                  </View>
+                  <Text style={styles.hint}>
+                    {on
+                      ? 'On — only buy when our guess is at least Min extra chance above the ticket'
+                      : 'Off — Auto uses cushion and risk only'}
+                  </Text>
+                </View>
+              );
+            }
+            const disabled = config.risk.smart_buy_enabled === false;
+            return (
+              <RiskStepper
+                key={meta.key}
+                meta={meta}
+                value={config.risk[meta.key]}
+                testPrefix="auto"
+                disabled={disabled}
+                onChange={(next) => setRiskField(meta.key, next as never)}
+              />
+            );
+          })}
+          {metaFor(PROTECT_RISK_FIELD_KEYS).map((meta) => {
             if (meta.kind === 'toggle') {
               const on = Boolean(config.risk.protect_sell_enabled);
               return (

@@ -377,9 +377,11 @@ async function runOneTick() {
                 abs_gap: absGap,
                 minutes_left: lean.minutes_left || 0,
                 minutes_elapsed: lean.minutes_elapsed || 0,
+                minutes_remaining: lean.minutes_remaining,
                 phase: lean.phase === 'live' ? 'live' : 'ended',
                 yes_ask: lean.yes_ask ?? undefined,
                 no_ask: lean.no_ask ?? undefined,
+                timeseries: lean.timeseries,
               },
               cfg,
               {

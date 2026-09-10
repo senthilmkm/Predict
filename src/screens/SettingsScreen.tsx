@@ -967,7 +967,8 @@ function RiskHelpModal({
             </HelpItem>
             <HelpItem title="Max entry ask ($) (Buy limit)">
               Per path. Auto-trade uses the Auto-trade tab; Home Buy uses the Home Buy tab. If the
-              ask is above that tab’s cap, that path skips “ask too rich.”
+              ask is above that tab’s cap, that path skips “ask too rich.” With Smart buy On, Auto
+              can still skip a cheaper ticket if it is not a good deal vs our guess.
             </HelpItem>
             <HelpItem title="Time in force (Auto-trade)">
               Settings → Risk → Auto-trade. How long a robot buy stays live on Kalshi:{'\n'}
@@ -986,6 +987,26 @@ function RiskHelpModal({
               its own chase and still caps pay by that path’s max entry ask (max $0.99). Auto-trade
               chase is also used as protect-sell slippage. Home Buy chase is used as Home Sell
               slippage.
+            </HelpItem>
+
+            <Text style={styles.modalSection}>Risk — Smart buy (Auto-trade only)</Text>
+            <HelpItem title="Smart buy">
+              Settings → Risk → Auto-trade only. Home Buy taps ignore this.{'\n\n'}
+              When On (default), Auto still uses your cushions, minutes, max ask, and shared caps —
+              then also asks: is our guess at least Min extra chance above the Kalshi ticket? The
+              guess uses this 15-minute price path, time left, and how jumpy the window has been.
+              {'\n\n'}
+              When Off, Auto uses cushion and risk only (same as before this setting).{'\n\n'}
+              Smart buy does not guarantee profit. It skips more tickets, including some that would
+              have won.
+            </HelpItem>
+            <HelpItem title="Min extra chance ($)">
+              How much better our guess must be than the ticket. Example: $0.08 means we buy only if
+              we think about 80% and the ask is 72¢ or less.{'\n\n'}
+              • $0.08 (default){'\n'}
+              • Lower (e.g. $0.04) = Auto buys more often{'\n'}
+              • Higher (e.g. $0.12) = pickier{'\n\n'}
+              Kalshi sets the ask. You do not type it. This is not chase (chase is extra you pay).
             </HelpItem>
 
             <Text style={styles.modalSection}>Risk — protect money (early sell)</Text>
@@ -1020,8 +1041,8 @@ function RiskHelpModal({
 
             <HelpItem title="Restore defaults">
               Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.
-              Restore Home Buy / Restore Auto-trade resets only that tab (Protect money is on
-              Auto-trade). Cushions and keys stay.
+              Restore Home Buy / Restore Auto-trade resets only that tab (Smart buy and Protect money
+              are on Auto-trade). Cushions and keys stay.
             </HelpItem>
 
             <Text style={styles.modalSection}>Kalshi credentials</Text>

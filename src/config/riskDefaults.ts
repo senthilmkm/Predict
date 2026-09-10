@@ -22,6 +22,8 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   protect_sell_enabled: false,
   protect_sell_gap_ratio: 1,
   protect_sell_grace_seconds: 45,
+  smart_buy_enabled: true,
+  smart_buy_min_edge_usd: 0.08,
 };
 
 export type RiskFieldGroup = 'size' | 'caps' | 'timing';
@@ -69,6 +71,24 @@ export const RISK_FIELD_META: {
   { key: 'max_entry_ask_usd', label: 'Max entry ask ($) (Buy limit)', group: 'timing', kind: 'chase', step: 0.01, min: 0.5, max: 0.99 },
   { key: 'time_in_force', label: 'Time in force', group: 'timing', kind: 'tif', step: 0, min: 0, max: 0 },
   { key: 'chase_above_ask_usd', label: 'Chase above ask ($)', group: 'timing', kind: 'chase', step: 0.01, min: 0, max: 0.05 },
+  {
+    key: 'smart_buy_enabled',
+    label: 'Smart buy',
+    group: 'timing',
+    kind: 'toggle',
+    step: 0,
+    min: 0,
+    max: 1,
+  },
+  {
+    key: 'smart_buy_min_edge_usd',
+    label: 'Min extra chance ($)',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.04,
+    max: 0.15,
+  },
   {
     key: 'protect_sell_enabled',
     label: 'Protect money (early sell)',
@@ -122,10 +142,20 @@ export const PATH_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'chase_above_ask_usd',
 ];
 
-export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+export const SMART_BUY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'smart_buy_enabled',
+  'smart_buy_min_edge_usd',
+];
+
+export const PROTECT_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'protect_sell_enabled',
   'protect_sell_gap_ratio',
   'protect_sell_grace_seconds',
+];
+
+export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  ...SMART_BUY_RISK_FIELD_KEYS,
+  ...PROTECT_RISK_FIELD_KEYS,
 ];
 
 export function cloneDefaultRisk(): RiskConfig {

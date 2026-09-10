@@ -136,6 +136,13 @@ export interface RiskConfig {
   protect_sell_enabled: boolean;
   protect_sell_gap_ratio: number;
   protect_sell_grace_seconds: number;
+  /**
+   * Auto-trade only. When On, buy only if model win% − ask ≥ min extra chance.
+   * Missing on old docs → On.
+   */
+  smart_buy_enabled?: boolean;
+  /** Dollars of extra chance required. Default 0.08. Range 0.04–0.15. */
+  smart_buy_min_edge_usd?: number;
 }
 
 export interface AlertPref {
@@ -236,6 +243,8 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_enabled: false,
       protect_sell_gap_ratio: 1,
       protect_sell_grace_seconds: 45,
+      smart_buy_enabled: true,
+      smart_buy_min_edge_usd: 0.08,
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,
