@@ -66,11 +66,15 @@ export function classifyClosedPnl(t: TradeRecord): 'win' | 'loss' | null {
   return null;
 }
 
-export function formatPayRange(min: number | null, max: number | null): string | null {
+export function formatPayCentsRange(min: number | null, max: number | null): string | null {
   if (min == null || max == null) return null;
-  const a = min.toFixed(2);
-  const b = max.toFixed(2);
-  return a === b ? `$${a}` : `$${a}–$${b}`;
+  const a = Math.round(min * 100);
+  const b = Math.round(max * 100);
+  return a === b ? `${a}¢` : `${a}–${b}¢`;
+}
+
+export function formatPayRange(min: number | null, max: number | null): string | null {
+  return formatPayCentsRange(min, max);
 }
 
 export function formatSignedUsd(n: number): string {
@@ -81,24 +85,24 @@ export function formatSignedUsd(n: number): string {
 }
 
 export function formatAssetPayLine(row: AssetPnlRow): string | null {
-  const win = formatPayRange(row.winPayMin, row.winPayMax);
-  const loss = formatPayRange(row.lossPayMin, row.lossPayMax);
+  const win = formatPayCentsRange(row.winPayMin, row.winPayMax);
+  const loss = formatPayCentsRange(row.lossPayMin, row.lossPayMax);
   const parts: string[] = [];
-  if (win && row.wins > 0) parts.push(`Wins paid ${win}`);
-  if (loss && row.losses > 0) parts.push(`Losses paid ${loss}`);
+  if (win && row.wins > 0) parts.push(`Won at ${win}`);
+  if (loss && row.losses > 0) parts.push(`Lost at ${loss}`);
   return parts.length ? parts.join(' · ') : null;
 }
 
 export function formatDayPayFooter(summary: AssetPnlToday): string | null {
   const parts: string[] = [];
   if (summary.winPnlAvg != null && summary.wins > 0) {
-    parts.push(`Wins avg ${formatSignedUsd(summary.winPnlAvg)}`);
+    parts.push(`Avg win ${formatSignedUsd(summary.winPnlAvg)}`);
   }
   if (summary.lossPnlAvg != null && summary.losses > 0) {
-    parts.push(`Losses avg ${formatSignedUsd(summary.lossPnlAvg)}`);
+    parts.push(`Avg loss ${formatSignedUsd(summary.lossPnlAvg)}`);
   }
-  const paid = formatPayRange(summary.lossPayMin, summary.lossPayMax);
-  if (paid && summary.losses > 0) parts.push(`Losses paid ${paid}`);
+  const lostAt = formatPayCentsRange(summary.lossPayMin, summary.lossPayMax);
+  if (lostAt && summary.losses > 0) parts.push(`Losing tickets cost ${lostAt}`);
   return parts.length ? parts.join(' · ') : null;
 }
 

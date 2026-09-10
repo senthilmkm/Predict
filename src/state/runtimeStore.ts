@@ -3,7 +3,7 @@ import { AppRuntime, getAppRuntime, resetAppRuntimeForTests, LastTradeAction } f
 import { useConfigStore } from './configStore';
 import { DashboardStats, TradeRecord, AlertRecord } from '../storage/repos';
 import { AssetPnlToday, EMPTY_ASSET_PNL_TODAY, summarizeAssetPnlToday } from '../storage/assetPnlToday';
-import { PredictCloudClient, cloudClient } from '../services/cloud/cloudClient';
+import { PredictCloudClient, cloudClient, ActiveBroadcast } from '../services/cloud/cloudClient';
 import { getUserDisplayName } from '../services/userId';
 import { LeanResult } from '../services/lean/lean';
 import { updateAppBadgeCount } from '../services/notifications';
@@ -42,6 +42,9 @@ interface RuntimeState {
   change24hUsd: number | null;
   change24hPct: number | null;
   change24hWindowMs: number | null;
+  lastSignalsManualTrade: boolean;
+  activeBroadcast: ActiveBroadcast | null;
+  cloudKillSwitch: boolean;
   ensure: () => AppRuntime;
   syncFromRuntime: () => void;
   start: () => void;
@@ -75,6 +78,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   change24hUsd: null,
   change24hPct: null,
   change24hWindowMs: null,
+  lastSignalsManualTrade: true,
+  activeBroadcast: null,
+  cloudKillSwitch: false,
   ensure: () => {
     let rt = get().runtime;
     if (!rt) {
@@ -107,6 +113,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         change24hUsd: null,
         change24hPct: null,
         change24hWindowMs: null,
+        lastSignalsManualTrade: get().lastSignalsManualTrade,
+        activeBroadcast: get().activeBroadcast,
+        cloudKillSwitch: get().cloudKillSwitch,
       });
       return;
     }
@@ -212,21 +221,25 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           }
         }
 
-        // Proactively sync local config & device name to Cloud backend on app startup/refresh
         const localConfig = useConfigStore.getState().config;
         const displayName = await getUserDisplayName();
-        void cloudClient.updateStatus(
-          localConfig.auto_trade_enabled,
-          localConfig.auto_trade_enabled ? 'ARMED' : 'DISARMED',
-          localConfig,
-          displayName
-        );
+        if (statusRes.userDoc?.state !== 'KILL_SWITCH') {
+          void cloudClient.updateStatus(
+            localConfig.auto_trade_enabled,
+            localConfig.auto_trade_enabled ? 'ARMED' : 'DISARMED',
+            localConfig,
+            displayName
+          );
+        }
 
         const cloudTrades = tradesRes.ok && Array.isArray(tradesRes.trades) ? tradesRes.trades : [];
         const cloudAlerts = alertsRes.ok && Array.isArray(alertsRes.alerts) ? alertsRes.alerts : [];
         if (gen !== cloudSnapshotGen) return;
 
         const rt = get().ensure();
+        if (statusRes.ok && statusRes.systemConfig) {
+          rt.applyKalshiRetryPolicy(statusRes.systemConfig.kalshiRetry);
+        }
         if (cloudTrades.length > 0) rt.syncCloudTrades(cloudTrades);
         if (alertsRes.ok) {
           rt.syncCloudAlerts(cloudAlerts);
@@ -235,6 +248,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         if (statusRes.ok) {
           rt.syncCloudTradeActions(statusRes.userDoc?.lastTradeAction);
           rt.syncCloudHeartbeat(statusRes.userDoc?.lastTickAt, statusRes.systemConfig?.last_worker_tick_at);
+          set({
+            lastSignalsManualTrade: statusRes.systemConfig?.featureFlags?.lastSignalsManualTrade !== false,
+            activeBroadcast: statusRes.activeBroadcast ?? null,
+            cloudKillSwitch: statusRes.userDoc?.state === 'KILL_SWITCH',
+          });
         }
         if (gen !== cloudSnapshotGen) return;
         get().syncFromRuntime();
@@ -276,5 +294,8 @@ export function resetRuntimeStoreForTests() {
     change24hUsd: null,
     change24hPct: null,
     change24hWindowMs: null,
+    lastSignalsManualTrade: true,
+    activeBroadcast: null,
+    cloudKillSwitch: false,
   });
 }

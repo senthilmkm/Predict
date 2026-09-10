@@ -1,5 +1,20 @@
 import { Firestore } from '@google-cloud/firestore';
 import { UserStatusDoc } from 'trading-core';
+import {
+  KalshiRetryPolicy,
+  mergeKalshiRetryPolicy,
+  normalizeKalshiRetryPolicy,
+} from '../../../../packages/trading-core/src/kalshiRetry';
+import {
+  BroadcastConfig,
+  mergeBroadcastConfig,
+  normalizeBroadcastConfig,
+} from './broadcast';
+import {
+  FeatureFlags,
+  mergeFeatureFlags,
+  normalizeFeatureFlags,
+} from './featureFlags';
 
 export interface TradeRecordDoc {
   tradeId: string;
@@ -83,6 +98,12 @@ export interface SystemConfig {
   last_worker_tick_at?: string;
   /** Age-out deletes for audit / dismissed alerts / closed trades. Nested-merged on save. */
   purge?: PurgeConfig;
+  /** Immediate GET retries + pause after timeouts/5xx. Nested-merged on save. */
+  kalshiRetry?: KalshiRetryPolicy;
+  /** Product feature On/Off. Nested-merged on save. */
+  featureFlags?: FeatureFlags;
+  /** In-app Home banners. Nested-merged on save. */
+  broadcast?: BroadcastConfig;
 }
 
 export const MAX_PURGE_DELETES_PER_TICK = 400;
@@ -102,6 +123,9 @@ function cloneDefaultSystemConfig(): SystemConfig {
     stale_timeout_seconds: 120,
     batch_size: 50,
     purge: cloneDefaultPurgeConfig(),
+    kalshiRetry: normalizeKalshiRetryPolicy(null),
+    featureFlags: normalizeFeatureFlags(null),
+    broadcast: normalizeBroadcastConfig(null),
   };
 }
 
@@ -189,6 +213,9 @@ export function normalizeSystemConfig(raw?: Partial<SystemConfig> | null): Syste
     batch_size: Number.isFinite(Number(raw?.batch_size)) ? Number(raw?.batch_size) : defaults.batch_size,
     ...(tickAt ? { last_worker_tick_at: tickAt } : {}),
     purge: mergePurgeConfig(defaults.purge, raw?.purge),
+    kalshiRetry: mergeKalshiRetryPolicy(defaults.kalshiRetry, raw?.kalshiRetry),
+    featureFlags: mergeFeatureFlags(defaults.featureFlags, raw?.featureFlags),
+    broadcast: mergeBroadcastConfig(defaults.broadcast, raw?.broadcast),
   });
 }
 
@@ -221,6 +248,10 @@ function userFromSnapshot(doc: { id: string; createTime?: any; data: () => any }
     ...data,
     createdAt: isoFromFirestoreTime(doc.createTime) || data.createdAt,
   };
+}
+
+export function getFirestoreDb(): Firestore | null {
+  return getDb();
 }
 
 function getDb(): Firestore | null {
@@ -998,21 +1029,29 @@ export async function getSystemConfig(opts?: { fresh?: boolean }): Promise<Syste
   return cachedSystemConfig;
 }
 
-function buildNextSystemConfig(
-  existing: SystemConfig,
-  config: Omit<Partial<SystemConfig>, 'purge'> & { purge?: Partial<PurgeConfig> }
-): SystemConfig {
+export type SystemConfigPatch = Omit<
+  Partial<SystemConfig>,
+  'purge' | 'kalshiRetry' | 'featureFlags' | 'broadcast'
+> & {
+  purge?: Partial<PurgeConfig>;
+  kalshiRetry?: Partial<KalshiRetryPolicy>;
+  featureFlags?: Partial<FeatureFlags>;
+  broadcast?: Partial<BroadcastConfig>;
+};
+
+function buildNextSystemConfig(existing: SystemConfig, config: SystemConfigPatch): SystemConfig {
   return normalizeSystemConfig({
     ...existing,
     ...config,
     last_worker_tick_at: config.last_worker_tick_at ?? existing.last_worker_tick_at,
     purge: mergePurgeConfig(existing.purge, config.purge),
+    kalshiRetry: mergeKalshiRetryPolicy(existing.kalshiRetry, config.kalshiRetry),
+    featureFlags: mergeFeatureFlags(existing.featureFlags, config.featureFlags),
+    broadcast: mergeBroadcastConfig(existing.broadcast, config.broadcast),
   });
 }
 
-export async function setSystemConfig(
-  config: Omit<Partial<SystemConfig>, 'purge'> & { purge?: Partial<PurgeConfig> }
-): Promise<SystemConfig> {
+export async function setSystemConfig(config: SystemConfigPatch): Promise<SystemConfig> {
   const f = getDb();
   if (!f) {
     const existing = await getSystemConfig({ fresh: true });

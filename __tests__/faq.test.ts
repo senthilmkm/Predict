@@ -31,8 +31,8 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/financial, investment, legal, or trading advice/i);
     expect(blob).toMatch(/Protect money/);
     expect(blob).toMatch(/Cloud Run/);
-    expect(blob).toMatch(/phone does not/i);
-    expect(blob).toMatch(/does not send buy or sell orders/i);
+    expect(blob).toMatch(/phone never talks to Kalshi/i);
+    expect(blob).toMatch(/Home Buy \/ Sell/);
     expect(blob).toMatch(/daily loss stop/i);
     expect(blob).toMatch(/Max trades \/ asset \/ 15m window/);
     expect(blob).toMatch(/\$29\.99/);

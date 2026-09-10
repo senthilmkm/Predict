@@ -11,7 +11,7 @@ const LATEST_KEY = 'predict.autotrade.risk_acceptance.latest.v1';
 const LOG_KEY = 'predict.autotrade.risk_acceptance.log.v1';
 const LOG_MAX = 50;
 
-export type RiskAcceptanceSource = 'onboarding' | 'autotrade_enable';
+export type RiskAcceptanceSource = 'onboarding' | 'autotrade_enable' | 'disclaimer_reaccept';
 
 export type AutoTradeRiskAcceptance = {
   id: string;
@@ -131,6 +131,13 @@ export async function recordOnboardingRiskAcceptance(): Promise<AutoTradeRiskAcc
 export async function recordAutoTradeRiskAcceptance(): Promise<AutoTradeRiskAcceptance> {
   const row = await appendAcceptance({ source: 'autotrade_enable', autoTradeEnabled: true });
   syncDisclaimerToCloud(DISCLAIMER_VERSION, 'autotrade_enable').catch(() => {});
+  return row;
+}
+
+/** Existing users after a material disclaimer bump (Home Buy / legal update). */
+export async function recordDisclaimerReaccept(): Promise<AutoTradeRiskAcceptance> {
+  const row = await appendAcceptance({ source: 'disclaimer_reaccept', autoTradeEnabled: false });
+  syncDisclaimerToCloud(DISCLAIMER_VERSION, 'disclaimer_reaccept').catch(() => {});
   return row;
 }
 

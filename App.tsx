@@ -9,7 +9,9 @@ import { bindNativeNotifications } from './src/services/notifications';
 import { useConfigStore } from './src/state/configStore';
 import { useRuntimeStore } from './src/state/runtimeStore';
 import { hasPredictAccess, useSubscriptionStore } from './src/state/subscriptionStore';
+import { hasAcceptedCurrentDisclaimer } from './src/storage/riskAcceptance';
 import { isOnboardingCompleted } from './src/storage/onboarding';
+import { DisclaimerReacceptScreen } from './src/screens/DisclaimerReacceptScreen';
 import { colors } from './src/theme/tokens';
 
 export default function App() {
@@ -22,6 +24,7 @@ export default function App() {
   const entitled = useSubscriptionStore((s) => hasPredictAccess(s));
   const [ready, setReady] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  const [disclaimerOk, setDisclaimerOk] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +39,11 @@ export default function App() {
       const done = await isOnboardingCompleted();
       if (!cancelled) {
         setOnboardingDone(done);
+        if (done) {
+          setDisclaimerOk(await hasAcceptedCurrentDisclaimer());
+        } else {
+          setDisclaimerOk(true);
+        }
         setReady(true);
       }
     })();
@@ -67,7 +75,7 @@ export default function App() {
     }
   }, [entitled, subReady, stop, ready, onboardingDone]);
 
-  if (!ready || !hydrated || !subReady || onboardingDone == null) {
+  if (!ready || !hydrated || !subReady || onboardingDone == null || disclaimerOk == null) {
     return (
       <SafeAreaProvider>
         <View
@@ -102,6 +110,14 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <PaywallScreen />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (!disclaimerOk) {
+    return (
+      <SafeAreaProvider>
+        <DisclaimerReacceptScreen onAccepted={() => setDisclaimerOk(true)} />
       </SafeAreaProvider>
     );
   }

@@ -1,5 +1,10 @@
 import { AssetKey, ASSETS_CATALOG } from './types';
 import { SERIES_BY_ASSET } from './client';
+import {
+  getActiveKalshiRetryPolicy,
+  nextImmediateRetryWaitMs,
+  timeoutRetryWaitMs,
+} from './kalshiRetry';
 
 const PUBLIC_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
@@ -60,16 +65,29 @@ async function jsonGet(
       : null;
   try {
     const res = await fetchImpl(url, ctrl ? { signal: ctrl.signal } : undefined);
-    if (res.status === 429) {
-      if (attempt >= 2) throw new Error('http_429');
-      const waitMs = 2500 * (attempt + 1);
-      await sleep(waitMs);
-      return jsonGet(url, fetchImpl, attempt + 1);
+    if (!res.ok) {
+      const waitMs = nextImmediateRetryWaitMs({
+        status: res.status,
+        attempt,
+        method: 'GET',
+        policy: getActiveKalshiRetryPolicy(),
+      });
+      if (waitMs != null) {
+        await sleep(waitMs);
+        return jsonGet(url, fetchImpl, attempt + 1);
+      }
+      throw new Error(`http_${res.status}`);
     }
-    if (!res.ok) throw new Error(`http_${res.status}`);
     return await res.json();
   } catch (e: any) {
-    if (e?.name === 'AbortError') throw new Error('lean_fetch_timeout');
+    if (e?.name === 'AbortError') {
+      const waitMs = timeoutRetryWaitMs(attempt, getActiveKalshiRetryPolicy());
+      if (waitMs != null) {
+        await sleep(waitMs);
+        return jsonGet(url, fetchImpl, attempt + 1);
+      }
+      throw new Error('lean_fetch_timeout');
+    }
     throw e;
   } finally {
     if (timer != null) clearTimeout(timer);

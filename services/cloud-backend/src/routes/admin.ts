@@ -17,6 +17,13 @@ import {
 import { parsePurgeJobName, runConfiguredPurgeJobs } from '../services/purgeJobs';
 import { AssetRegistry, defaultAppConfig } from '../../../../packages/trading-core/src/types';
 import { windowBuyCap } from '../../../../packages/trading-core/src/gates';
+import {
+  KalshiRetryPolicy,
+  mergeKalshiRetryPolicy,
+  parseHttpCodeList,
+} from '../../../../packages/trading-core/src/kalshiRetry';
+import { mergeFeatureFlags, type FeatureFlags } from '../services/featureFlags';
+import { mergeBroadcastConfig, type BroadcastConfig } from '../services/broadcast';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 import {
   computeOverviewTradeMetrics,
@@ -137,10 +144,47 @@ function parseAdminPurgePatch(raw: unknown): Partial<PurgeConfig> | undefined {
   return patch;
 }
 
+function parseAdminKalshiRetryPatch(raw: unknown): Partial<KalshiRetryPolicy> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const body = raw as Record<string, unknown>;
+  const patch: Partial<KalshiRetryPolicy> = {};
+  if (body.httpCodes !== undefined) patch.httpCodes = parseHttpCodeList(body.httpCodes);
+  if (body.includeTimeouts !== undefined) patch.includeTimeouts = Boolean(body.includeTimeouts);
+  if (body.maxRetries !== undefined) patch.maxRetries = Number(body.maxRetries);
+  if (body.retryIntervalSeconds !== undefined) patch.retryIntervalSeconds = Number(body.retryIntervalSeconds);
+  if (body.pauseSeconds !== undefined) patch.pauseSeconds = Number(body.pauseSeconds);
+  return Object.keys(patch).length ? patch : undefined;
+}
+
+function parseAdminFeatureFlagsPatch(raw: unknown): Partial<FeatureFlags> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const body = raw as Record<string, unknown>;
+  const patch: Partial<FeatureFlags> = {};
+  if (body.lastSignalsManualTrade !== undefined) {
+    patch.lastSignalsManualTrade = body.lastSignalsManualTrade !== false;
+  }
+  return Object.keys(patch).length ? patch : undefined;
+}
+
+function parseAdminBroadcastPatch(raw: unknown): Partial<BroadcastConfig> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const body = raw as Record<string, unknown>;
+  if (!Array.isArray(body.templates)) return undefined;
+  return { templates: body.templates as BroadcastConfig['templates'] };
+}
+
 // Update System Configuration (tick interval + purge jobs). Nested merge so a partial purge patch cannot wipe other jobs.
 adminRouter.post('/config', async (req: Request, res: Response) => {
   try {
-    const { tick_interval_seconds, stale_timeout_seconds, batch_size, purge } = req.body || {};
+    const {
+      tick_interval_seconds,
+      stale_timeout_seconds,
+      batch_size,
+      purge,
+      kalshiRetry,
+      featureFlags,
+      broadcast,
+    } = req.body || {};
     const updateData: Record<string, unknown> = {};
     const tickSec = Number(tick_interval_seconds);
     if (tick_interval_seconds !== undefined && tick_interval_seconds !== null && tick_interval_seconds !== '') {
@@ -156,11 +200,31 @@ adminRouter.post('/config', async (req: Request, res: Response) => {
     if (typeof batch_size === 'number' && batch_size >= 1) {
       updateData.batch_size = Math.round(batch_size);
     }
-    if (purge !== undefined) {
-      const patch = parseAdminPurgePatch(purge);
-      if (patch) {
-        const existing = await getSystemConfig({ fresh: true });
-        updateData.purge = mergePurgeConfig(existing.purge, patch);
+    if (purge !== undefined || kalshiRetry !== undefined || featureFlags !== undefined || broadcast !== undefined) {
+      const existing = await getSystemConfig({ fresh: true });
+      if (purge !== undefined) {
+        const patch = parseAdminPurgePatch(purge);
+        if (patch) {
+          updateData.purge = mergePurgeConfig(existing.purge, patch);
+        }
+      }
+      if (kalshiRetry !== undefined) {
+        const retryPatch = parseAdminKalshiRetryPatch(kalshiRetry);
+        if (retryPatch) {
+          updateData.kalshiRetry = mergeKalshiRetryPolicy(existing.kalshiRetry, retryPatch);
+        }
+      }
+      if (featureFlags !== undefined) {
+        const flagsPatch = parseAdminFeatureFlagsPatch(featureFlags);
+        if (flagsPatch) {
+          updateData.featureFlags = mergeFeatureFlags(existing.featureFlags, flagsPatch);
+        }
+      }
+      if (broadcast !== undefined) {
+        const bcPatch = parseAdminBroadcastPatch(broadcast);
+        if (bcPatch) {
+          updateData.broadcast = mergeBroadcastConfig(existing.broadcast, bcPatch);
+        }
       }
     }
     const updated = await setSystemConfig(updateData as any);

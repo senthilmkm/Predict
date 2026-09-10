@@ -38,13 +38,19 @@ export function AlertsHubScreen() {
   useMarkAlertsSeenOnLeave(true);
 
   useEffect(() => {
-    void refreshCloudSnapshot();
+    void Promise.resolve()
+      .then(() => refreshCloudSnapshot())
+      .catch(() => {
+        /* Keep last alerts if Cloud/Firestore is down */
+      });
   }, [refreshCloudSnapshot]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await refreshCloudSnapshot();
+    } catch {
+      /* Keep last known alerts if the snapshot fails */
     } finally {
       setRefreshing(false);
     }

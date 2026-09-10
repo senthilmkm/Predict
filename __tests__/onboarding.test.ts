@@ -39,6 +39,8 @@ describe('onboarding + disclaimer acceptance', () => {
     expect(log[0].autoTradeEnabled).toBe(false);
     expect(log[0].disclaimerVersion).toBe(DISCLAIMER_VERSION);
     expect(DISCLAIMER_LONG).toContain(PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF);
+    expect(DISCLAIMER_LONG).toMatch(/Home Buy \/ Sell/);
+    expect(DISCLAIMER_VERSION).toBe('2026-09-10.1');
 
     await markOnboardingCompleted(withRisk);
     expect(await isOnboardingCompleted()).toBe(true);

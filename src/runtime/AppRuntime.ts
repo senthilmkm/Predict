@@ -17,6 +17,7 @@ import { settlePendingTrades, inferFillCount, computeTradePnlUsd } from '../serv
 import {
   PortfolioSample,
   computeChange24h,
+  latestPortfolioSample,
   recordPortfolioSample,
 } from '../services/portfolioChange';
 import { withSupportContact } from '../config/appMeta';
@@ -27,10 +28,37 @@ import {
   isQuietIntegrationError,
   isRateLimitError,
 } from '../util/httpErrors';
+import {
+  getActiveKalshiRetryPolicy,
+  isTransientKalshiError,
+  KalshiRetryPolicy,
+  pauseMs,
+  setActiveKalshiRetryPolicy,
+} from '../../packages/trading-core/src/kalshiRetry';
 import { etDateKey } from '../util/time';
 
 function rid(): string {
   return `id-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+const BALANCE_FETCH_TIMEOUT_MS =
+  typeof process !== 'undefined' && process.env.NODE_ENV === 'test' ? 40 : 12_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  if (!Number.isFinite(ms) || ms <= 0) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(label)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
 }
 
 /** @deprecated use etDateKey from util/time */
@@ -123,7 +151,10 @@ export class AppRuntime {
   private rateLimitUntilMs = 0;
   /** Skip signed Kalshi calls after HTTP 401/403 until user fixes keys (or cooldown ends). */
   private authBlockedUntilMs = 0;
+  /** Skip Kalshi after timeouts/5xx exhaust Admin retries. */
+  private transientBackoffUntilMs = 0;
   private balanceInFlight: Promise<void> | null = null;
+  private balanceFetchGen = 0;
   private lastBalanceFetchMs = 0;
   private alertsInboxCaughtUp = false;
 
@@ -164,32 +195,48 @@ export class AppRuntime {
     this.authBlockedUntilMs = 0;
   }
 
+  /** After the user wipes API keys — do not call this on a transient SecureStore miss. */
+  dropKalshiClient(): void {
+    this.engine.setClient(null);
+  }
+
+  /** Admin Kalshi retry/pause policy from Cloud systemConfig. */
+  applyKalshiRetryPolicy(raw?: Partial<KalshiRetryPolicy> | null): void {
+    setActiveKalshiRetryPolicy(raw);
+  }
+
+  private noteTransientKalshiFailure(message: string): void {
+    const policy = getActiveKalshiRetryPolicy();
+    if (!isTransientKalshiError(message, null, policy)) return;
+    this.transientBackoffUntilMs = Math.max(this.transientBackoffUntilMs, Date.now() + pauseMs(policy));
+  }
+
   /** Single Kalshi /portfolio/balance fetch → updates Cash + Predictions cards. */
   private async refreshKalshiBalances(opts?: { force?: boolean }): Promise<void> {
     const now = Date.now();
     if (!opts?.force && now < this.rateLimitUntilMs) return;
     if (!opts?.force && now < this.authBlockedUntilMs) return;
-    if (this.balanceInFlight) return this.balanceInFlight;
-    // Coalesce frequent pull/settle/fill refreshes (still allow force within ~3s via in-flight share)
+    if (!opts?.force && now < this.transientBackoffUntilMs) return;
+    // A hung iOS fetch must not block pull-to-refresh. Force starts a new generation.
+    if (this.balanceInFlight && !opts?.force) return this.balanceInFlight;
     if (!opts?.force && now - this.lastBalanceFetchMs < 8_000 && this.status.cashBalanceUsd != null) {
       return;
     }
 
+    const gen = ++this.balanceFetchGen;
     this.balanceInFlight = (async () => {
       const hasClient = await this.refreshClient();
+      if (gen !== this.balanceFetchGen) return;
       if (!hasClient) {
-        this.status.predictionsBalanceUsd = null;
-        this.status.cashBalanceUsd = null;
-        this.status.change24hUsd = null;
-        this.status.change24hPct = null;
-        this.status.change24hWindowMs = null;
+        // Keep last known (and hydrated sample) totals. Missing keys ≠ $0.
         this.onChange?.();
         return;
       }
       const client = this.engine.getClient();
       if (!client) return;
       try {
-        const bal = await client.balance();
+        const bal = await withTimeout(client.balance(), BALANCE_FETCH_TIMEOUT_MS, 'balance_timeout');
+        if (gen !== this.balanceFetchGen) return;
         if (bal.ok) {
           const cash =
             bal.balance_usd != null && Number.isFinite(Number(bal.balance_usd))
@@ -219,13 +266,16 @@ export class AppRuntime {
         } else if (bal.http_status === 401 || bal.http_status === 403) {
           this.authBlockedUntilMs = Date.now() + 5 * 60_000;
           this.status.lastError = humanizeQuietError(`http_${bal.http_status}`);
+        } else if (bal.http_status) {
+          this.noteTransientKalshiFailure(`http_${bal.http_status}`);
         }
-      } catch {
+      } catch (e: any) {
+        this.noteTransientKalshiFailure(String(e?.message || e || 'balance_timeout'));
         /* keep last known balances */
       }
-      this.onChange?.();
+      if (gen === this.balanceFetchGen) this.onChange?.();
     })().finally(() => {
-      this.balanceInFlight = null;
+      if (gen === this.balanceFetchGen) this.balanceInFlight = null;
     });
 
     return this.balanceInFlight;
@@ -234,8 +284,8 @@ export class AppRuntime {
   async refreshClient(): Promise<boolean> {
     const creds = await loadCredentials();
     if (!creds) {
-      this.engine.setClient(null);
-      return false;
+      // Transient SecureStore misses must not destroy a working client (Home cards go blank).
+      return this.engine.getClient() != null;
     }
     this.engine.setClient(
       new KalshiClient(creds.keyId, creds.privateKeyPem, creds.env, this.fetchImpl)
@@ -336,8 +386,21 @@ export class AppRuntime {
       this.engine.windows.claimExisting(t.market_ticker, t.order_id || t.id || 'hydrated');
     }
     this.portfolioSamples = await loadPortfolioSamples();
+    this.restoreBalancesFromLastSample();
     this.applyChange24h();
     this.onChange?.();
+  }
+
+  private restoreBalancesFromLastSample(): void {
+    if (this.status.predictionsBalanceUsd != null && this.status.cashBalanceUsd != null) return;
+    const last = latestPortfolioSample(this.portfolioSamples);
+    if (!last) return;
+    if (this.status.predictionsBalanceUsd == null) {
+      this.status.predictionsBalanceUsd = last.predictionsUsd;
+    }
+    if (this.status.cashBalanceUsd == null && last.cashUsd != null) {
+      this.status.cashBalanceUsd = last.cashUsd;
+    }
   }
 
   private applyChange24h(): void {
@@ -490,6 +553,11 @@ export class AppRuntime {
         this.status.lastError = humanizeQuietError('http_429');
         return;
       }
+      if (Date.now() < this.transientBackoffUntilMs) {
+        const left = Math.max(1, Math.round((this.transientBackoffUntilMs - Date.now()) / 1000));
+        this.status.lastError = `Kalshi paused ${left}s after timeout/5xx`;
+        return;
+      }
 
       const cfg = snapshotConfig(this.getConfig());
       const authBlocked = Date.now() < this.authBlockedUntilMs;
@@ -524,7 +592,7 @@ export class AppRuntime {
 
       for (let i = 0; i < assets.length; i++) {
         const asset = assets[i];
-        if (Date.now() < this.rateLimitUntilMs) break;
+        if (Date.now() < this.rateLimitUntilMs || Date.now() < this.transientBackoffUntilMs) break;
         // Stagger assets slightly so 5 series don't burst the public API at once
         if (i > 0) {
           const staggerMs =
@@ -545,6 +613,11 @@ export class AppRuntime {
             // Screen locked / app backgrounded — iOS canceled in-flight HTTP request. Ignore quietly.
             this.pulseHeartbeat();
             continue;
+          }
+          this.noteTransientKalshiFailure(raw);
+          if (Date.now() < this.transientBackoffUntilMs) {
+            this.noteAssetError(asset, 'timeout/5xx · pausing Kalshi', tickErrors);
+            break;
           }
           if (isQuietIntegrationError(raw)) {
             // Public lean/spot 401 must NOT block signed Kalshi trading for 5m.
@@ -631,6 +704,7 @@ export class AppRuntime {
       await this.pullCloudAlerts();
     } catch (e: any) {
       this.status.lastError = String(e?.message || e);
+      this.noteTransientKalshiFailure(this.status.lastError);
       const cfg = this.getConfig();
       await this.maybeAlertHardError(cfg, 'Runtime error', this.status.lastError);
       await this.persistHistory();

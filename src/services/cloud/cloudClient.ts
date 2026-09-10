@@ -12,12 +12,38 @@ export interface SystemConfig {
   stale_timeout_seconds: number;
   batch_size: number;
   last_worker_tick_at?: string;
+  kalshiRetry?: {
+    httpCodes: number[];
+    includeTimeouts: boolean;
+    maxRetries: number;
+    retryIntervalSeconds: number;
+    pauseSeconds: number;
+  };
+  featureFlags?: {
+    lastSignalsManualTrade?: boolean;
+  };
+  broadcast?: {
+    templates?: Array<{
+      id: string;
+      title: string;
+      message: string;
+      show: boolean;
+      showUntil: string | null;
+    }>;
+  };
+}
+
+export interface ActiveBroadcast {
+  id: string;
+  title: string;
+  message: string;
 }
 
 export interface CloudStatusResult {
   ok: boolean;
   userDoc?: UserStatusDoc & { config?: any };
   systemConfig?: SystemConfig;
+  activeBroadcast?: ActiveBroadcast | null;
   error?: string;
 }
 
@@ -85,7 +111,12 @@ export class PredictCloudClient {
       const res = await this.fetchWithAuth('/me/status', { method: 'GET' });
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error || 'status_failed' };
-      return { ok: true, userDoc: data.userDoc, systemConfig: data.systemConfig };
+      return {
+        ok: true,
+        userDoc: data.userDoc,
+        systemConfig: data.systemConfig,
+        activeBroadcast: data.activeBroadcast ?? null,
+      };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
     }
@@ -107,7 +138,12 @@ export class PredictCloudClient {
       });
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error || 'update_failed' };
-      return { ok: true, userDoc: data.userDoc, systemConfig: data.systemConfig };
+      return {
+        ok: true,
+        userDoc: data.userDoc,
+        systemConfig: data.systemConfig,
+        activeBroadcast: data.activeBroadcast ?? null,
+      };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
     }
@@ -209,6 +245,43 @@ export class PredictCloudClient {
       return { ok: true, dismissed: Number(data.dismissed || 0) };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
+    }
+  }
+
+  async placeManualOrder(input: {
+    asset: string;
+    action: 'buy' | 'sell';
+    requestId: string;
+  }): Promise<{
+    ok: boolean;
+    message?: string;
+    error?: string;
+    skip_reason?: string;
+    tradeId?: string;
+    filled?: boolean;
+  }> {
+    try {
+      const res = await this.fetchWithAuth('/me/orders/manual', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        return {
+          ok: false,
+          error: data.error || 'place_failed',
+          skip_reason: data.skip_reason,
+          message: data.message || data.error || 'Could not place order',
+        };
+      }
+      return {
+        ok: true,
+        message: data.message,
+        tradeId: data.tradeId,
+        filled: data.filled,
+      };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'network_error', message: e?.message || 'Network error' };
     }
   }
 }

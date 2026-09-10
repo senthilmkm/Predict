@@ -101,6 +101,12 @@ describe('Settings toggles', () => {
 
     expect(s.queryByTestId('risk-field-max_dollars_per_trade')).toBeNull();
     await fireEvent.press(s.getByTestId('btn-toggle-risk'));
+    expect(s.getByTestId('risk-group-size')).toBeTruthy();
+    expect(s.getByTestId('risk-group-caps')).toBeTruthy();
+    expect(s.getByTestId('risk-group-timing')).toBeTruthy();
+    expect(s.getByText('Size')).toBeTruthy();
+    expect(s.getByText('Caps')).toBeTruthy();
+    expect(s.getByText('Timing & protect')).toBeTruthy();
     await fireEvent.press(s.getByTestId('risk-up-max_dollars_per_trade'));
     await fireEvent.press(s.getByTestId('risk-up-fixed_dollars_per_trade'));
     expect(useConfigStore.getState().config.risk.fixed_dollars_per_trade).toBeGreaterThan(5);
@@ -113,6 +119,9 @@ describe('Settings toggles', () => {
     );
     expect(useConfigStore.getState().config.risk.chase_above_ask_usd).toBe(0.02);
     expect(useConfigStore.getState().config.risk.time_in_force).toBe('immediate_or_cancel');
+    expect(useConfigStore.getState().config.risk.manual_buy_time_in_force).toBe(
+      'immediate_or_cancel'
+    );
   });
 
   test('daily Settings parks subscription legal identity FAQ one tap away', async () => {

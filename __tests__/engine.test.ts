@@ -132,6 +132,9 @@ describe('evaluateStaticGate edge cases', () => {
     const cfg = base();
     cfg.auto_trade_enabled = false;
     expect(evaluateStaticGate(lean(), cfg).skip_reason).toBe('auto_trade_off');
+    expect(
+      evaluateStaticGate(lean(), cfg, { allowWhenAutoTradeOff: true }).ok
+    ).toBe(true);
   });
 
   test('asset_disabled', () => {
@@ -171,6 +174,41 @@ describe('evaluateStaticGate edge cases', () => {
     expect(
       evaluateStaticGate(lean({ abs_gap: 10, yes_ask: 0.8 }), cfg).skip_reason
     ).toBe('ask_too_rich');
+  });
+
+  test('Home Buy tap skips timing and max-ask, uses chase and manual TIF', () => {
+    const cfg = base();
+    cfg.auto_trade_enabled = false;
+    cfg.risk.min_minutes_left = 5;
+    cfg.risk.min_minutes_elapsed = 5;
+    cfg.risk.max_entry_ask_usd = 0.5;
+    cfg.risk.chase_above_ask_usd = 0.02;
+    cfg.risk.time_in_force = 'fill_or_kill';
+    cfg.risk.manual_buy_time_in_force = 'good_till_canceled';
+    const g = evaluateStaticGate(lean({ minutes_left: 1, minutes_elapsed: 0, yes_ask: 0.8, abs_gap: 10 }), cfg, {
+      allowWhenAutoTradeOff: true,
+      skipTimingAndMaxAsk: true,
+    });
+    expect(g.ok).toBe(true);
+    expect(g.pay_price).toBeCloseTo(0.82, 4);
+    expect(g.time_in_force).toBe('good_till_canceled');
+  });
+
+  test('Home Buy tap still respects cushion and caps', () => {
+    const cfg = base();
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 1 }), cfg, {
+        allowWhenAutoTradeOff: true,
+        skipTimingAndMaxAsk: true,
+      }).skip_reason
+    ).toBe('below_cushion');
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 10 }), cfg, {
+        allowWhenAutoTradeOff: true,
+        skipTimingAndMaxAsk: true,
+        assetTradesInWindow: 1,
+      }).skip_reason
+    ).toBe('max_trades_asset_window');
   });
 
   test('formatSkipReason matches Last signals labels', () => {

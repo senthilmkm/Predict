@@ -66,6 +66,18 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'already traded this window';
     case 'no_client':
       return 'no Kalshi credentials';
+    case 'kill_switch':
+      return 'kill switch on';
+    case 'feature_disabled':
+      return 'manual trade off';
+    case 'kalshi_paused':
+      return 'Kalshi paused after timeout/5xx';
+    case 'already_holding':
+      return 'already holding this window';
+    case 'no_open_fill':
+      return 'no open fill to sell';
+    case 'market_closed':
+      return 'market closed';
     default:
       return reason || 'gate';
   }
@@ -123,6 +135,10 @@ export function evaluateStaticGate(
     dailyPnlUsd?: number;
     tradesToday?: number;
     assetTradesInWindow?: number;
+    /** Home Buy tap: same risk gates except auto-trade Off. */
+    allowWhenAutoTradeOff?: boolean;
+    /** Home Buy tap: skip min minutes left/elapsed and max entry ask. Chase still applies; pay is not capped by max ask. */
+    skipTimingAndMaxAsk?: boolean;
   }
 ): GateResult {
   const openPositions = opts?.openPositions ?? 0;
@@ -130,7 +146,7 @@ export function evaluateStaticGate(
   const tradesToday = opts?.tradesToday ?? 0;
   const assetTradesInWindow = opts?.assetTradesInWindow ?? 0;
 
-  if (!cfg.auto_trade_enabled) {
+  if (!cfg.auto_trade_enabled && !opts?.allowWhenAutoTradeOff) {
     return { ok: false, skip_reason: 'auto_trade_off' };
   }
   if (!cfg.assets_enabled[lean.asset]) {
@@ -142,11 +158,12 @@ export function evaluateStaticGate(
   if (lean.decision !== 'YES' && lean.decision !== 'NO') {
     return { ok: false, skip_reason: 'skip_decision' };
   }
-  if (lean.minutes_left < cfg.risk.min_minutes_left) {
+  const skipTiming = opts?.skipTimingAndMaxAsk === true;
+  if (!skipTiming && lean.minutes_left < cfg.risk.min_minutes_left) {
     return { ok: false, skip_reason: 'minutes_left' };
   }
   const elapsed = Number(lean.minutes_elapsed ?? 0);
-  if (elapsed < cfg.risk.min_minutes_elapsed) {
+  if (!skipTiming && elapsed < cfg.risk.min_minutes_elapsed) {
     return { ok: false, skip_reason: 'minutes_elapsed' };
   }
 
@@ -173,12 +190,15 @@ export function evaluateStaticGate(
   if (lean.decision === 'NO' && lean.no_ask != null) ask = Number(lean.no_ask);
   ask = Math.min(0.99, Math.max(0.01, ask));
 
-  if (ask > cfg.risk.max_entry_ask_usd + 1e-9) {
+  if (!skipTiming && ask > cfg.risk.max_entry_ask_usd + 1e-9) {
     return { ok: false, skip_reason: 'ask_too_rich' };
   }
 
   const chase = Math.max(0, Math.min(0.05, Number(cfg.risk.chase_above_ask_usd) || 0));
-  let pay = Math.min(cfg.risk.max_entry_ask_usd, ask + chase);
+  let pay = ask + chase;
+  if (!skipTiming) {
+    pay = Math.min(cfg.risk.max_entry_ask_usd, pay);
+  }
   pay = Math.min(0.99, Math.max(0.01, pay));
 
   const dollars = Math.min(
@@ -215,7 +235,9 @@ export function evaluateStaticGate(
     count: String(countNum),
     pay_price: pay,
     notional_usd: notional,
-    time_in_force: cfg.risk.time_in_force,
+    time_in_force: skipTiming
+      ? cfg.risk.manual_buy_time_in_force || 'immediate_or_cancel'
+      : cfg.risk.time_in_force,
     config_snapshot: cfg,
   };
 }

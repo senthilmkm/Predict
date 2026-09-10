@@ -51,7 +51,8 @@ export function AutoTradeRiskAcceptModal({ visible, onCancel, onAccept }: Props)
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             <Text style={styles.lead}>
               Auto-trade can place real Kalshi orders with your saved credentials when cushions and
-              risk gates pass. Runs 24/7 securely on GCP Cloud Run without needing to keep the app open.
+              risk gates pass. Runs 24/7 on Cloud Run. Home Buy / Sell taps are separate: they can
+              place even when Auto-trade is Off, and they skip Auto-trade timing / max-ask rules.
             </Text>
             <Text style={styles.disclaimer}>{DISCLAIMER_SHORT}</Text>
             <Text style={styles.lead}>
@@ -69,7 +70,8 @@ export function AutoTradeRiskAcceptModal({ visible, onCancel, onAccept }: Props)
               thumbColor={colors.textPrimary}
             />
             <Text style={styles.checkLabel}>
-              I understand — no profit guarantee, and I am responsible for all trades
+              I understand — no profit guarantee, and I am responsible for Auto-trade and Home Buy /
+              Sell
             </Text>
           </View>
 

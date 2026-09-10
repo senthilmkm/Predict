@@ -1,6 +1,7 @@
 import { MemoryTradeRepo, TradeRecord, cloudTradesToRecords, statsFromCloudTrades } from '../src/storage/repos';
 import {
   classifyClosedPnl,
+  formatAssetPayLine,
   formatDayPayFooter,
   formatPayRange,
   resolvePayUsd,
@@ -79,10 +80,13 @@ describe('summarizeAssetPnlToday', () => {
     expect(summary.rows.map((r) => r.asset)).toEqual(['Silver', 'Gold', 'ETH', 'WTI', 'COPPER', 'BTC']);
     expect(summary.rows[0]).toMatchObject({ asset: 'Silver', wins: 3, losses: 4, realized_pnl_usd: -13.37 });
     expect(summary.rows[1]).toMatchObject({ asset: 'Gold', wins: 4, losses: 2, realized_pnl_usd: -6.6 });
-    expect(formatPayRange(summary.rows[0].lossPayMin, summary.rows[0].lossPayMax)).toBe('$0.85–$0.92');
-    expect(formatPayRange(summary.rows[1].lossPayMin, summary.rows[1].lossPayMax)).toBe('$0.86–$0.87');
-    expect(formatPayRange(summary.lossPayMin, summary.lossPayMax)).toBe('$0.85–$0.92');
-    expect(formatDayPayFooter(summary)).toContain('Losses paid $0.85–$0.92');
+    expect(formatPayRange(summary.rows[0].lossPayMin, summary.rows[0].lossPayMax)).toBe('85–92¢');
+    expect(formatPayRange(summary.rows[1].lossPayMin, summary.rows[1].lossPayMax)).toBe('86–87¢');
+    expect(formatPayRange(summary.lossPayMin, summary.lossPayMax)).toBe('85–92¢');
+    expect(formatAssetPayLine(summary.rows[0])).toBe('Won at 92¢ · Lost at 85–92¢');
+    expect(formatDayPayFooter(summary)).toContain('Losing tickets cost 85–92¢');
+    expect(formatDayPayFooter(summary)).toContain('Avg win');
+    expect(formatDayPayFooter(summary)).toContain('Avg loss');
   });
 
   test('protect-sell exited uses P&L sign; payPrice wins over opposite-side quote', () => {

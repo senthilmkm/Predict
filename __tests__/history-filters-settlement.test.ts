@@ -1,4 +1,4 @@
-import { filterAlerts, filterTrades } from '../src/history/filters';
+import { filterAlerts, filterTrades, tradeAssetFilterOptions } from '../src/history/filters';
 import { AlertRecord, MemoryTradeRepo, TradeRecord } from '../src/storage/repos';
 import {
   computeTradePnlUsd,
@@ -72,19 +72,61 @@ describe('History filters', () => {
   });
 
   test('trade filters by outcome, side, asset', () => {
-    expect(filterTrades(trades, 'all')).toHaveLength(6);
-    expect(filterTrades(trades, 'pending').map((t) => t.id).sort()).toEqual(['p1', 'p2']);
-    expect(filterTrades(trades, 'win').map((t) => t.id)).toEqual(['w1']);
-    expect(filterTrades(trades, 'loss').map((t) => t.id)).toEqual(['l1']);
-    expect(filterTrades(trades, 'miss').map((t) => t.id)).toEqual(['m1']);
-    expect(filterTrades(trades, 'exited').map((t) => t.id)).toEqual(['e1']);
-    expect(filterTrades(trades, 'YES').map((t) => t.id).sort()).toEqual(['e1', 'm1', 'p1', 'w1']);
-    expect(filterTrades(trades, 'NO').map((t) => t.id).sort()).toEqual(['l1', 'p2']);
-    expect(filterTrades(trades, 'BTC').map((t) => t.id).sort()).toEqual(['e1', 'p1', 'w1']);
-    expect(filterTrades(trades, 'Gold').map((t) => t.id)).toEqual(['p2']);
-    expect(filterTrades(trades, 'ETH').map((t) => t.id)).toEqual(['l1']);
-    expect(filterTrades(trades, 'WTI').map((t) => t.id)).toEqual(['m1']);
-    expect(filterTrades(trades, 'Silver')).toHaveLength(0);
+    expect(filterTrades(trades, { status: 'all', side: 'all', asset: 'all' })).toHaveLength(6);
+    expect(filterTrades(trades, { status: 'pending' }).map((t) => t.id).sort()).toEqual(['p1', 'p2']);
+    expect(filterTrades(trades, { status: 'win' }).map((t) => t.id)).toEqual(['w1']);
+    expect(filterTrades(trades, { status: 'loss' }).map((t) => t.id)).toEqual(['l1']);
+    expect(filterTrades(trades, { status: 'miss' }).map((t) => t.id)).toEqual(['m1']);
+    expect(filterTrades(trades, { status: 'exited' }).map((t) => t.id)).toEqual(['e1']);
+    expect(filterTrades(trades, { status: 'all', side: 'YES' }).map((t) => t.id).sort()).toEqual([
+      'e1',
+      'm1',
+      'p1',
+      'w1',
+    ]);
+    expect(filterTrades(trades, { status: 'all', side: 'NO' }).map((t) => t.id).sort()).toEqual(['l1', 'p2']);
+    expect(filterTrades(trades, { status: 'all', asset: 'BTC' }).map((t) => t.id).sort()).toEqual([
+      'e1',
+      'p1',
+      'w1',
+    ]);
+    expect(filterTrades(trades, { status: 'all', asset: 'Gold' }).map((t) => t.id)).toEqual(['p2']);
+    expect(filterTrades(trades, { status: 'all', asset: 'ETH' }).map((t) => t.id)).toEqual(['l1']);
+    expect(filterTrades(trades, { status: 'all', asset: 'WTI' }).map((t) => t.id)).toEqual(['m1']);
+    expect(filterTrades(trades, { status: 'all', asset: 'Silver' })).toHaveLength(0);
+  });
+
+  test('trade filters AND across status, side, and asset', () => {
+    expect(
+      filterTrades(trades, { status: 'pending', side: 'YES', asset: 'BTC' }).map((t) => t.id)
+    ).toEqual(['p1']);
+    expect(filterTrades(trades, { status: 'pending', side: 'YES', asset: 'Gold' })).toHaveLength(0);
+    expect(filterTrades(trades, { status: 'win', side: 'NO', asset: 'all' })).toHaveLength(0);
+    expect(filterTrades(trades, { status: 'pending', side: 'NO', asset: 'Gold' }).map((t) => t.id)).toEqual([
+      'p2',
+    ]);
+  });
+
+  test('trade filters default to pending and ignore bad input', () => {
+    expect(filterTrades(trades, null).map((t) => t.id).sort()).toEqual(['p1', 'p2']);
+    expect(filterTrades(trades, { status: 'bogus' as any }).map((t) => t.id).sort()).toEqual(['p1', 'p2']);
+    expect(filterTrades(null as any, { status: 'all' })).toEqual([]);
+    expect(filterTrades(undefined, { status: 'all' })).toEqual([]);
+    expect(
+      filterTrades([null as any, trades[0], { id: 'x' } as any], { status: 'pending', side: 'all', asset: 'all' }).map(
+        (t) => t.id
+      )
+    ).toEqual(['p1']);
+  });
+
+  test('asset dropdown lists All, catalog keys, and extra trade assets', () => {
+    const opts = tradeAssetFilterOptions([
+      trade({ id: 'p1', asset: 'BTC' }),
+      trade({ id: 'z1', asset: 'ZZZTEST' }),
+    ]);
+    expect(opts[0]).toEqual({ id: 'all', label: 'All' });
+    expect(opts.map((o) => o.id)).toEqual(expect.arrayContaining(['BTC', 'Gold', 'NG', 'ZZZTEST']));
+    expect(opts.filter((o) => o.id === 'ZZZTEST')).toHaveLength(1);
   });
 });
 

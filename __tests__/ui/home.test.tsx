@@ -1,4 +1,5 @@
 import React from 'react';
+import { AppState } from 'react-native';
 import { fireEvent, render, waitFor, cleanup } from './test-utils';
 import { cancelScheduledPersist } from '../../src/storage/configPersistence';
 import {
@@ -10,6 +11,7 @@ import { useConfigStore } from '../../src/state/configStore';
 import { resetRuntimeStoreForTests, useRuntimeStore } from '../../src/state/runtimeStore';
 import { defaultAppConfig } from '../../src/config/types';
 import { HomeScreen } from '../../src/screens/HomeScreen';
+import { heldOpenFillForTicker } from '../../src/screens/lastSignalsManual';
 
 beforeEach(() => {
   setKeyValueStore(new MemoryKeyValueStore());
@@ -38,7 +40,7 @@ describe('HomeScreen', () => {
     expect(s.getByText('Predict trades today')).toBeTruthy();
     expect(s.getByText('Cash')).toBeTruthy();
     expect(s.getByTestId('home-heartbeat')).toBeTruthy();
-    expect(s.getByTestId('btn-kill-switch')).toBeTruthy();
+    expect(s.queryByTestId('btn-kill-switch')).toBeNull();
     expect(s.queryByTestId('btn-toggle-dev-tools')).toBeNull();
     expect(s.queryByTestId('btn-toggle-poller')).toBeNull();
     expect(s.queryByTestId('btn-tick-once')).toBeNull();
@@ -69,56 +71,19 @@ describe('HomeScreen', () => {
     expect(s.getAllByText(/senthil930@gmail\.com/).length).toBeGreaterThanOrEqual(1);
   });
 
-  test('kill switch confirms then shows processing and Disarmed label', async () => {
-    const Alert = require('react-native').Alert;
-    const spy = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
-      const disarm = buttons?.find((b: { text?: string }) => b.text === 'Disarm');
-      disarm?.onPress?.();
+  test('auto-trade on explains Cloud Run places orders', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        auto_trade_enabled: true,
+        execution_mode: 'live',
+        live_armed: true,
+      },
+      hydrated: true,
     });
-    try {
-      useConfigStore.setState({
-        config: {
-          ...defaultAppConfig(),
-          auto_trade_enabled: true,
-          execution_mode: 'live',
-          live_armed: true,
-        },
-        hydrated: true,
-      });
-      useRuntimeStore.getState().ensure();
-      const s = await render(<HomeScreen />);
-      expect(s.getByText(/Cloud Run places real orders/i)).toBeTruthy();
-      expect(s.getByText(/This phone never/i)).toBeTruthy();
-      expect(s.getByText('Kill switch — disarm now')).toBeTruthy();
-      await fireEvent.press(s.getByTestId('btn-kill-switch'));
-      expect(spy).toHaveBeenCalled();
-      expect(String(spy.mock.calls[0][0])).toMatch(/Turn off Auto-trade/i);
-      expect(String(spy.mock.calls[0][1])).toMatch(/Protect money works whenever that switch is On/i);
-      expect(String(spy.mock.calls[0][1])).toMatch(/even if Auto-trade \(new buys\) is Off/i);
-      await waitFor(() => expect(s.getByTestId('kill-switch-spinner')).toBeTruthy());
-      await waitFor(() => expect(useConfigStore.getState().config.auto_trade_enabled).toBe(false));
-      await waitFor(() => expect(s.getByText('Disarmed — Auto-trade off')).toBeTruthy());
-      await waitFor(() => expect(s.queryByTestId('kill-switch-spinner')).toBeNull());
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  test('kill switch when already off explains already disarmed', async () => {
-    const Alert = require('react-native').Alert;
-    const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    try {
-      const s = await render(<HomeScreen />);
-      expect(s.getByText('Disarmed — Auto-trade off')).toBeTruthy();
-      await fireEvent.press(s.getByTestId('btn-kill-switch'));
-      expect(spy).toHaveBeenCalledWith(
-        'Already disarmed',
-        expect.stringMatching(/Settings tab.*enable Auto-trade/i)
-      );
-      expect(String(spy.mock.calls[0][1])).toMatch(/Protect money works whenever that switch is On/i);
-    } finally {
-      spy.mockRestore();
-    }
+    const s = await render(<HomeScreen />);
+    expect(s.getByText(/places now on Cloud Run/i)).toBeTruthy();
+    expect(s.getByText(/this phone never talks to Kalshi/i)).toBeTruthy();
   });
 
   test('SKIP lean on an open market shows below cushion', async () => {
@@ -210,5 +175,230 @@ describe('HomeScreen', () => {
     expect(lastTickLabel).toMatch(/Last tick /);
     expect(lastTickLabel).not.toMatch(/40m ago/);
     expect(lastTickLabel).toMatch(/\d+s ago/);
+  });
+
+  test('returning to the foreground refreshes Predictions and Cash', async () => {
+    const refreshPredictionsBalance = jest.fn(async () => {});
+    const refreshCloudSnapshot = jest.fn(async () => {});
+    const listeners: Array<(state: string) => void> = [];
+    const addSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, cb) => {
+      listeners.push(cb as (state: string) => void);
+      return { remove: jest.fn() } as any;
+    });
+    try {
+      useRuntimeStore.setState({ refreshPredictionsBalance, refreshCloudSnapshot });
+      await render(<HomeScreen />);
+      refreshPredictionsBalance.mockClear();
+      refreshCloudSnapshot.mockClear();
+      listeners.forEach((cb) => cb('active'));
+      expect(refreshPredictionsBalance).toHaveBeenCalled();
+      expect(refreshCloudSnapshot).toHaveBeenCalled();
+    } finally {
+      addSpy.mockRestore();
+    }
+  });
+
+  test('broadcast banner renders Cloud message', async () => {
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      activeBroadcast: { id: 'system_maintenance', title: 'System maintenance', message: 'Down for a bit.' },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('home-broadcast-banner')).toBeTruthy();
+    expect(s.getByText('Down for a bit.')).toBeTruthy();
+  });
+
+  test('YES row shows Buy YES', async () => {
+    useConfigStore.setState({
+      config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
+      cloudKillSwitch: false,
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'YES',
+          live: 200,
+          strike: 100,
+          abs_gap: 100,
+          minutes_left: 8,
+          phase: 'live',
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+    });
+    const on = await render(<HomeScreen />);
+    expect(on.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
+    expect(on.getByText('Buy YES')).toBeTruthy();
+    expect(on.getByTestId('home-ready-to-buy-label')).toBeTruthy();
+  });
+
+  test('feature flag off hides Buy YES', async () => {
+    useConfigStore.setState({
+      config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: false,
+      cloudKillSwitch: false,
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'YES',
+          live: 200,
+          strike: 100,
+          abs_gap: 100,
+          minutes_left: 8,
+          phase: 'live',
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+    });
+    const off = await render(<HomeScreen />);
+    expect(off.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+  });
+
+  test('held fill shows Sell YES not Buy', async () => {
+    useConfigStore.setState({
+      config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
+      cloudKillSwitch: false,
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'NO',
+          live: 90,
+          strike: 100,
+          abs_gap: 10,
+          minutes_left: 8,
+          phase: 'live',
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+      trades: [
+        {
+          id: 't1',
+          at: new Date().toISOString(),
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          side: 'YES',
+          notional_usd: 5,
+          fill_count: 4,
+          outcome: 'pending',
+          dry_run: false,
+        },
+      ],
+    });
+    expect(useRuntimeStore.getState().lastSignalsManualTrade).toBe(true);
+    expect(heldOpenFillForTicker(useRuntimeStore.getState().trades, 'KXBTC15M-X')?.side).toBe('YES');
+    const s = await render(<HomeScreen />);
+    await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
+    expect(s.getByText('Sell YES')).toBeTruthy();
+    expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+  });
+
+  test('manual buy error shows a popup', async () => {
+    const Alert = require('react-native').Alert;
+    const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const { cloudClient } = require('../../src/services/cloud/cloudClient');
+    const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockResolvedValue({
+      ok: false,
+      error: 'below_cushion',
+      message: 'below cushion',
+    });
+    try {
+      useConfigStore.setState({
+        config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+        hydrated: true,
+      });
+      useRuntimeStore.setState({
+        refreshPredictionsBalance: async () => {},
+        refreshCloudSnapshot: async () => {},
+        lastSignalsManualTrade: true,
+        leans: {
+          BTC: {
+            asset: 'BTC',
+            market_ticker: 'KXBTC15M-X',
+            decision: 'YES',
+            live: 200,
+            strike: 100,
+            abs_gap: 100,
+            minutes_left: 8,
+            phase: 'live',
+          },
+        } as any,
+        leanAt: { BTC: new Date().toISOString() },
+      });
+      const s = await render(<HomeScreen />);
+      await waitFor(() => expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy());
+      await fireEvent.press(s.getByTestId('btn-manual-buy-BTC'));
+      await waitFor(() => expect(spy).toHaveBeenCalled());
+      expect(String(spy.mock.calls[0][0])).toMatch(/Could not place order/i);
+      expect(String(spy.mock.calls[0][1])).toMatch(/below cushion/i);
+    } finally {
+      spy.mockRestore();
+      placeSpy.mockRestore();
+    }
+  });
+
+  test('manual buy success flies a gold message instead of a popup', async () => {
+    const Alert = require('react-native').Alert;
+    const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const { cloudClient } = require('../../src/services/cloud/cloudClient');
+    const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockResolvedValue({
+      ok: true,
+      filled: true,
+      message: 'Bought YES · 8 contracts',
+      tradeId: 't1',
+    });
+    try {
+      useConfigStore.setState({
+        config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+        hydrated: true,
+      });
+      useRuntimeStore.setState({
+        refreshPredictionsBalance: async () => {},
+        refreshCloudSnapshot: async () => {},
+        lastSignalsManualTrade: true,
+        cloudKillSwitch: false,
+        leans: {
+          BTC: {
+            asset: 'BTC',
+            market_ticker: 'KXBTC15M-X',
+            decision: 'YES',
+            live: 200,
+            strike: 100,
+            abs_gap: 100,
+            minutes_left: 8,
+            phase: 'live',
+          },
+        } as any,
+        leanAt: { BTC: new Date().toISOString() },
+      });
+      const s = await render(<HomeScreen />);
+      await waitFor(() => expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy());
+      await fireEvent.press(s.getByTestId('btn-manual-buy-BTC'));
+      await waitFor(() => expect(s.getByTestId('manual-success-fly')).toBeTruthy());
+      expect(s.getByTestId('manual-success-fly-text').props.children).toBe('BTC buy success');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      placeSpy.mockRestore();
+    }
   });
 });

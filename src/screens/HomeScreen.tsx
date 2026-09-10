@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,9 +18,11 @@ import { LastTradeAction } from '../runtime/AppRuntime';
 import { getMarketScheduleNotice, isMarketOpen } from '../services/marketHours';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
+import { ManualSuccessFly } from '../components/ManualSuccessFly';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
-import { PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF } from '../config/disclaimers';
 import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/moneyFormat';
+import { cloudClient } from '../services/cloud/cloudClient';
+import { heldOpenFillForTicker, lastSignalManualKind } from './lastSignalsManual';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -33,6 +35,45 @@ export function formatGapDisplay(gap: number | undefined | null, assetKey?: stri
   return `gap $${abs.toFixed(prec)}`;
 }
 
+function windowToHomeLocal(
+  root: { measureInWindow?: (cb: (x: number, y: number) => void) => void } | null,
+  origin?: { x: number; y: number }
+): Promise<{ x: number; y: number }> {
+  const fallback = {
+    x: Number.isFinite(origin?.x) ? Number(origin!.x) : 24,
+    y: Number.isFinite(origin?.y) ? Number(origin!.y) : 220,
+  };
+  return new Promise((resolve) => {
+    if (!origin || !root || typeof root.measureInWindow !== 'function') {
+      resolve(fallback);
+      return;
+    }
+    let done = false;
+    const finish = (pt: { x: number; y: number }) => {
+      if (done) return;
+      done = true;
+      resolve(pt);
+    };
+    const t = setTimeout(() => finish(fallback), 16);
+    try {
+      root.measureInWindow((rx, ry) => {
+        clearTimeout(t);
+        if (!Number.isFinite(rx) || !Number.isFinite(ry)) {
+          finish(fallback);
+          return;
+        }
+        finish({
+          x: Math.max(8, origin.x - rx),
+          y: Math.max(8, origin.y - ry),
+        });
+      });
+    } catch {
+      clearTimeout(t);
+      finish(fallback);
+    }
+  });
+}
+
 export function HomeScreen() {
   const config = useConfigStore((s) => s.config);
   const status = useRuntimeStore((s) => s.status);
@@ -42,7 +83,6 @@ export function HomeScreen() {
   const tradeActions = useRuntimeStore((s) => s.tradeActions);
   const assetErrors = useRuntimeStore((s) => s.assetErrors);
   const bump = useRuntimeStore((s) => s.bump);
-  const kill = useRuntimeStore((s) => s.kill);
   const predictionsBalanceUsd = useRuntimeStore((s) => s.predictionsBalanceUsd);
   const cashBalanceUsd = useRuntimeStore((s) => s.cashBalanceUsd);
   const change24hUsd = useRuntimeStore((s) => s.change24hUsd);
@@ -51,10 +91,27 @@ export function HomeScreen() {
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const alerts = useRuntimeStore((s) => s.alerts);
+  const trades = useRuntimeStore((s) => s.trades);
+  const lastSignalsManualTrade = useRuntimeStore((s) => s.lastSignalsManualTrade);
+  const activeBroadcast = useRuntimeStore((s) => s.activeBroadcast);
+  const cloudKillSwitch = useRuntimeStore((s) => s.cloudKillSwitch);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
-  const [killBusy, setKillBusy] = useState(false);
+  const [placing, setPlacing] = useState<Record<string, boolean>>({});
+  const [fly, setFly] = useState<{ id: string; text: string; startX: number; startY: number } | null>(
+    null
+  );
+  const placingRef = useRef<Record<string, boolean>>({});
+  const mountedRef = useRef(true);
+  const homeRootRef = useRef<View>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -70,15 +127,18 @@ export function HomeScreen() {
     void refreshCloudSnapshot();
   }, [refreshPredictionsBalance, refreshCloudSnapshot]);
 
-  // 2. On App Foregrounding / Return
+  // 2. On App Foregrounding / Return — iOS often cancels the in-flight Kalshi balance call.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         void refreshCloudSnapshot();
+        void refreshPredictionsBalance();
       }
     });
-    return () => sub.remove();
-  }, [refreshCloudSnapshot]);
+    return () => {
+      sub?.remove?.();
+    };
+  }, [refreshCloudSnapshot, refreshPredictionsBalance]);
 
   // 3. On `trade_result` Alert Received
   const latestAlertId = alerts[0]?.id;
@@ -99,40 +159,59 @@ export function HomeScreen() {
     }
   }, [refreshPredictionsBalance, refreshCloudSnapshot]);
 
-  const runKillSwitch = useCallback(async () => {
-    if (killBusy) return;
-    setKillBusy(true);
-    const started = Date.now();
-    try {
-      kill();
-    } finally {
-      const wait = Math.max(0, 320 - (Date.now() - started));
-      setTimeout(() => setKillBusy(false), wait);
-    }
-  }, [kill, killBusy]);
-
-  const requestKillSwitch = useCallback(() => {
-    if (killBusy) return;
-    if (!config.auto_trade_enabled) {
-      Alert.alert(
-        'Already disarmed',
-        'Auto-trade is off on this phone. To turn it back on, open the Settings tab and enable Auto-trade (you may need Face ID).\n\n' +
-          PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF
-      );
-      return;
-    }
-    Alert.alert(
-      'Turn off Auto-trade now?',
-      'This stops new auto-trades right away.\n\n' + PROTECT_MONEY_RUNS_WHEN_AUTO_TRADE_OFF,
-      [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Disarm',
-        style: 'destructive',
-        onPress: () => void runKillSwitch(),
-      },
-    ]);
-  }, [killBusy, config.auto_trade_enabled, runKillSwitch]);
+  const placeManual = useCallback(
+    async (
+      asset: AssetKey,
+      action: 'buy' | 'sell',
+      origin?: { x: number; y: number }
+    ) => {
+      if (useRuntimeStore.getState().lastSignalsManualTrade === false) {
+        Alert.alert('Buy / Sell is off', 'Last signals Buy / Sell is turned off.');
+        return;
+      }
+      if (useRuntimeStore.getState().cloudKillSwitch) {
+        Alert.alert('Kill switch is on', 'Home Buy / Sell is hidden while Kill Switch is on.');
+        return;
+      }
+      if (placingRef.current[asset]) return;
+      placingRef.current[asset] = true;
+      setPlacing((prev) => ({ ...prev, [asset]: true }));
+      const requestId = `ios_${action}_${asset}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        const res = await cloudClient.placeManualOrder({ asset, action, requestId });
+        if (!mountedRef.current) return;
+        if (!res.ok) {
+          Alert.alert(
+            'Could not place order',
+            res.message || res.error || 'Order failed. Check your connection and try again.'
+          );
+          return;
+        }
+        const start = await windowToHomeLocal(homeRootRef.current, origin);
+        if (!mountedRef.current) return;
+        setFly({
+          id: `${asset}-${action}-${Date.now()}`,
+          text: `${asset} ${action} success`,
+          startX: start.x,
+          startY: start.y,
+        });
+        void refreshCloudSnapshot();
+      } catch (err: any) {
+        if (!mountedRef.current) return;
+        Alert.alert('Could not place order', String(err?.message || err || 'Order failed.'));
+      } finally {
+        placingRef.current[asset] = false;
+        if (mountedRef.current) {
+          setPlacing((prev) => {
+            const next = { ...prev };
+            delete next[asset];
+            return next;
+          });
+        }
+      }
+    },
+    [refreshCloudSnapshot]
+  );
 
   void bump;
 
@@ -153,6 +232,7 @@ export function HomeScreen() {
       priceSource: lean?.price_source,
       isOpen: open,
       noMarket,
+      marketTicker: lean?.market_ticker || null,
     };
   });
 
@@ -170,14 +250,23 @@ export function HomeScreen() {
   }
   const hasAssetErrors = signalRows.some((r) => r.isOpen && r.err);
   const autoTradeOn = config.auto_trade_enabled;
-  const killDisarmed = !autoTradeOn || Boolean(status?.killSwitch);
-  const killLabel = killBusy
-    ? 'Disarming…'
-    : killDisarmed
-      ? 'Disarmed — Auto-trade off'
-      : 'Kill switch — disarm now';
+
+  const featureOn = lastSignalsManualTrade !== false;
+  const decoratedRows = signalRows.map((row) => {
+    const held = heldOpenFillForTicker(trades, row.marketTicker);
+    const manualKind = lastSignalManualKind({
+      featureOn,
+      killSwitch: Boolean(cloudKillSwitch),
+      row,
+      held: held ? { side: held.side } : null,
+    });
+    return { ...row, held, manualKind, placing: Boolean(placing[row.asset]) };
+  });
+  const readyRows = decoratedRows.filter((r) => r.manualKind !== 'none');
+  const otherRows = decoratedRows.filter((r) => r.manualKind === 'none');
 
   return (
+    <View ref={homeRootRef} style={styles.root} collapsable={false}>
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
@@ -229,6 +318,13 @@ export function HomeScreen() {
         </View>
       ) : null}
 
+      {activeBroadcast?.message ? (
+        <View style={styles.scheduleBanner} testID="home-broadcast-banner">
+          <Text style={styles.scheduleTitle}>{activeBroadcast.title || 'Notice'}</Text>
+          <Text style={styles.scheduleBody}>{activeBroadcast.message}</Text>
+        </View>
+      ) : null}
+
       {integrationError || hasAssetErrors ? (
         <View style={styles.errorBanner} testID="home-integration-error">
           <Text style={styles.errorTitle}>Integration issue</Text>
@@ -246,19 +342,6 @@ export function HomeScreen() {
           </Text>
         </View>
       ) : null}
-
-      <Pressable
-        style={[styles.kill, (killDisarmed || killBusy) && styles.killMuted]}
-        onPress={requestKillSwitch}
-        disabled={killBusy}
-        testID="btn-kill-switch"
-        accessibilityState={{ busy: killBusy, disabled: killBusy }}
-      >
-        {killBusy ? (
-          <ActivityIndicator color="#fff" size="small" testID="kill-switch-spinner" />
-        ) : null}
-        <Text style={styles.killText}>{killLabel}</Text>
-      </Pressable>
 
       <View style={styles.card} testID="home-today-trades">
         <Text style={styles.label}>Predict trades today</Text>
@@ -299,73 +382,46 @@ export function HomeScreen() {
               : 'Last tick —'}
           </Text>
         </View>
-        {signalRows.length === 0 ? (
+        {decoratedRows.length === 0 ? (
           <Text style={styles.valueSmall}>—</Text>
         ) : (
-          signalRows.map((row) => (
-            <View key={row.asset} style={styles.signalRow}>
-              <View style={{ flex: 1 }}>
-                <View style={styles.signalLeft}>
-                  <Text style={styles.signalAsset}>{row.asset}</Text>
-                  {AssetRegistry.get(row.asset)?.category ? (
-                    <Text style={styles.signalCategoryIcon} testID={`signal-category-icon-${row.asset}`}>
-                      {AssetRegistry.getCategoryIcon(AssetRegistry.get(row.asset)?.category)}
-                    </Text>
-                  ) : null}
-                  <Text
-                    style={[
-                      styles.signalDecision,
-                      decisionColor(row.err ? 'ERR' : row.decision),
-                    ]}
-                    testID={`signal-decision-${row.asset}`}
-                  >
-                    {row.err ? 'ERR' : row.decision}
-                  </Text>
-                  {!row.err && row.gap != null ? (
-                    <Text style={styles.signalMeta}>
-                      {formatGapDisplay(row.gap, row.asset)}
-                    </Text>
-                  ) : null}
-                </View>
-                {row.err ? (
-                  <Text style={styles.signalErr} testID={`signal-err-${row.asset}`}>
-                    {row.err}
-                  </Text>
-                ) : null}
-                {autoTradeOn && row.trade && row.trade.status !== 'idle' ? (
-                  <Text
-                    style={[
-                      styles.tradeAction,
-                      row.trade.status === 'placed' && { color: colors.win },
-                      row.trade.status === 'failed' && { color: colors.loss },
-                      row.trade.status === 'skipped' && { color: colors.warn },
-                    ]}
-                    testID={`trade-action-${row.asset}`}
-                  >
-                    {row.trade.detail}
-                  </Text>
-                ) : row.decision === 'SKIP' && row.isOpen && !row.noMarket && !row.err ? (
-                  <Text
-                    style={[styles.tradeAction, { color: colors.warn }]}
-                    testID={`skip-reason-${row.asset}`}
-                  >
-                    below cushion
-                  </Text>
-                ) : null}
-              </View>
-              {!row.isOpen ? (
-                <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
-                  (Market closed)
-                </Text>
-              ) : row.noMarket || !row.at ? (
-                <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
-                  (No Kalshi 15m contract)
-                </Text>
-              ) : null}
-            </View>
-          ))
+          <>
+            {readyRows.length > 0 ? (
+              <Text style={styles.signalSection} testID="home-ready-to-buy-label">
+                Ready to buy
+              </Text>
+            ) : null}
+            {readyRows.map((row) => (
+              <LastSignalRow
+                key={row.asset}
+                row={row}
+                autoTradeOn={autoTradeOn}
+                onPlace={(action, origin) => void placeManual(row.asset, action, origin)}
+              />
+            ))}
+            {otherRows.length > 0 && readyRows.length > 0 ? (
+              <Text style={styles.signalSection} testID="home-other-signals-label">
+                Other signals
+              </Text>
+            ) : null}
+            {otherRows.map((row) => (
+              <LastSignalRow
+                key={row.asset}
+                row={row}
+                autoTradeOn={autoTradeOn}
+                onPlace={(action, origin) => void placeManual(row.asset, action, origin)}
+              />
+            ))}
+          </>
         )}
-        {autoTradeOn ? (
+        {featureOn ? (
+          <Text style={styles.tradeHint}>
+            Lean YES/NO here is a signal. Buy YES / Buy NO places now on Cloud Run (this phone never
+            talks to Kalshi). Timing and max-ask do not block a tap; size, caps, cushion, chase, and
+            Manual-buy time-in-force still apply. Kill-Switch and the Last signals Buy / Sell flag
+            hide these buttons.
+          </Text>
+        ) : autoTradeOn ? (
           <Text style={styles.tradeHint}>
             Lean YES/NO here is a signal only. Cloud Run places real orders. This phone never
             sends buy or sell orders.
@@ -385,6 +441,16 @@ export function HomeScreen() {
       />
       <SupportContactFooter />
     </ScrollView>
+    {fly ? (
+      <ManualSuccessFly
+        key={fly.id}
+        text={fly.text}
+        startX={fly.startX}
+        startY={fly.startY}
+        onDone={() => setFly(null)}
+      />
+    ) : null}
+    </View>
   );
 }
 
@@ -510,6 +576,147 @@ function Chip({ label, accent }: { label: string; accent?: boolean }) {
   );
 }
 
+function LastSignalRow({
+  row,
+  autoTradeOn,
+  onPlace,
+}: {
+  row: {
+    asset: AssetKey;
+    decision: string;
+    gap?: number;
+    at?: string;
+    err?: string;
+    trade?: LastTradeAction;
+    isOpen: boolean;
+    noMarket: boolean;
+    manualKind: 'buy' | 'sell' | 'none';
+    placing: boolean;
+    held?: { side: 'YES' | 'NO' } | null;
+  };
+  autoTradeOn: boolean;
+  onPlace: (action: 'buy' | 'sell', origin?: { x: number; y: number }) => void;
+}) {
+  const btnRef = React.useRef<View>(null);
+  const actionable = row.manualKind !== 'none';
+  const btnLabel =
+    row.placing
+      ? 'Placing…'
+      : row.manualKind === 'sell'
+        ? `Sell ${row.held?.side || 'YES'}`
+        : `Buy ${row.decision}`;
+  const firePlace = () => {
+    const action: 'buy' | 'sell' = row.manualKind === 'sell' ? 'sell' : 'buy';
+    const node = btnRef.current as { measureInWindow?: (cb: (...args: number[]) => void) => void } | null;
+    let sent = false;
+    const send = (origin?: { x: number; y: number }) => {
+      if (sent) return;
+      sent = true;
+      onPlace(action, origin);
+    };
+    try {
+      if (node && typeof node.measureInWindow === 'function') {
+        const t = setTimeout(() => send(), 16);
+        node.measureInWindow((x, y, _w, h) => {
+          clearTimeout(t);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            send();
+            return;
+          }
+          send({ x, y: y + Math.max(0, (h || 0) / 2) });
+        });
+        return;
+      }
+    } catch {
+      /* test renderer / missing native measure */
+    }
+    send();
+  };
+  return (
+    <View
+      style={[styles.signalRow, actionable && styles.signalRowReady]}
+      testID={`signal-row-${row.asset}`}
+    >
+      <View style={{ flex: 1 }}>
+        <View style={styles.signalLeft}>
+          <Text style={styles.signalAsset}>{row.asset}</Text>
+          {AssetRegistry.get(row.asset)?.category ? (
+            <Text style={styles.signalCategoryIcon} testID={`signal-category-icon-${row.asset}`}>
+              {AssetRegistry.getCategoryIcon(AssetRegistry.get(row.asset)?.category)}
+            </Text>
+          ) : null}
+          <Text
+            style={[
+              styles.signalDecision,
+              decisionColor(row.err ? 'ERR' : row.decision),
+            ]}
+            testID={`signal-decision-${row.asset}`}
+          >
+            {row.err ? 'ERR' : row.decision}
+          </Text>
+          {!row.err && row.gap != null ? (
+            <Text style={styles.signalMeta}>{formatGapDisplay(row.gap, row.asset)}</Text>
+          ) : null}
+        </View>
+        {row.err ? (
+          <Text style={styles.signalErr} testID={`signal-err-${row.asset}`}>
+            {row.err}
+          </Text>
+        ) : null}
+        {autoTradeOn && row.trade && row.trade.status !== 'idle' ? (
+          <Text
+            style={[
+              styles.tradeAction,
+              row.trade.status === 'placed' && { color: colors.win },
+              row.trade.status === 'failed' && { color: colors.loss },
+              row.trade.status === 'skipped' && { color: colors.warn },
+            ]}
+            testID={`trade-action-${row.asset}`}
+          >
+            {row.trade.detail}
+          </Text>
+        ) : row.decision === 'SKIP' && row.isOpen && !row.noMarket && !row.err ? (
+          <Text
+            style={[styles.tradeAction, { color: colors.warn }]}
+            testID={`skip-reason-${row.asset}`}
+          >
+            below cushion
+          </Text>
+        ) : null}
+      </View>
+      {actionable ? (
+        <Pressable
+          ref={btnRef}
+          collapsable={false}
+          style={[
+            styles.manualBtn,
+            row.manualKind === 'sell' ? styles.manualBtnSell : styles.manualBtnBuy,
+            row.placing && styles.manualBtnBusy,
+          ]}
+          onPress={firePlace}
+          disabled={row.placing}
+          hitSlop={6}
+          testID={`btn-manual-${row.manualKind}-${row.asset}`}
+          accessibilityState={{ busy: row.placing, disabled: row.placing }}
+        >
+          {row.placing ? (
+            <ActivityIndicator color="#fff" size="small" testID={`manual-placing-${row.asset}`} />
+          ) : null}
+          <Text style={styles.manualBtnText}>{btnLabel}</Text>
+        </Pressable>
+      ) : !row.isOpen ? (
+        <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
+          (Market closed)
+        </Text>
+      ) : row.noMarket || !row.at ? (
+        <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
+          (No Kalshi 15m contract)
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.lg, gap: spacing.md },
@@ -595,18 +802,6 @@ const styles = StyleSheet.create({
   errorTitle: { color: colors.danger, fontWeight: '800', fontSize: 13 },
   errorBody: { color: '#ffb4b4', fontSize: 12, lineHeight: 17 },
   errorSupport: { color: colors.accent, fontSize: 12, fontWeight: '700', marginTop: 4 },
-  kill: {
-    backgroundColor: colors.danger,
-    borderRadius: 12,
-    padding: spacing.md,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    minHeight: 48,
-  },
-  killMuted: { opacity: 0.72 },
-  killText: { color: '#fff', fontWeight: '800' },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 12,
@@ -636,6 +831,32 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     gap: 8,
   },
+  signalRowReady: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  signalSection: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    marginTop: 6,
+  },
+  manualBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 32,
+    minWidth: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  manualBtnBuy: { backgroundColor: colors.win },
+  manualBtnSell: { backgroundColor: colors.warn },
+  manualBtnBusy: { opacity: 0.72 },
+  manualBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   signalLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   signalAsset: { color: colors.textPrimary, fontWeight: '700', minWidth: 44 },
   signalCategoryIcon: {

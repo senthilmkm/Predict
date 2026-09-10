@@ -1,4 +1,5 @@
 import { signKalshiRequest } from './sign';
+import { getActiveKalshiRetryPolicy, nextImmediateRetryWaitMs } from './kalshiRetry';
 import { ASSETS_CATALOG } from './types';
 
 export type KalshiEnv = 'production' | 'demo';
@@ -93,8 +94,13 @@ export class KalshiClient {
     } catch {
       data = { raw: await res.text().catch(() => '') };
     }
-    if (res.status === 429 && attempt < 2 && method.toUpperCase() === 'GET') {
-      const waitMs = 2500 * (attempt + 1);
+    const waitMs = nextImmediateRetryWaitMs({
+      status: res.status,
+      attempt,
+      method,
+      policy: getActiveKalshiRetryPolicy(),
+    });
+    if (waitMs != null) {
       await new Promise((r) => setTimeout(r, waitMs));
       return this.request(method, path, body, attempt + 1);
     }

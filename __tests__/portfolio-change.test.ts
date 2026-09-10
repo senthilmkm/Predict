@@ -1,6 +1,7 @@
 import {
   computeChange24h,
   findBaselineSample,
+  latestPortfolioSample,
   prunePortfolioSamples,
   recordPortfolioSample,
   PORTFOLIO_LOOKBACK_MS,
@@ -102,6 +103,13 @@ describe('portfolio 24h change', () => {
     });
   });
 
+  test('latestPortfolioSample picks the newest by time', () => {
+    const older = { at: new Date(t0 - 60_000).toISOString(), predictionsUsd: 100, cashUsd: 40 };
+    const newer = { at: new Date(t0).toISOString(), predictionsUsd: 110, cashUsd: 50 };
+    expect(latestPortfolioSample([newer, older])).toEqual(newer);
+    expect(latestPortfolioSample([])).toBeNull();
+  });
+
   test('caps sample ring so storage stays bounded', () => {
     const flood = Array.from({ length: PORTFOLIO_MAX_SAMPLES + 50 }, (_, i) => ({
       at: new Date(t0 - i * 60_000).toISOString(),
@@ -116,7 +124,7 @@ describe('portfolio 24h change', () => {
 
   test('persists and reloads samples', async () => {
     setKeyValueStore(new MemoryKeyValueStore());
-    const rows = [{ at: new Date(t0).toISOString(), predictionsUsd: 99.5, cashUsd: 40 }];
+    const rows = [{ at: new Date().toISOString(), predictionsUsd: 99.5, cashUsd: 40 }];
     await persistPortfolioSamples(rows);
     expect(await loadPortfolioSamples()).toEqual(rows);
   });

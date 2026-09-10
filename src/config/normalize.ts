@@ -87,6 +87,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     ),
     max_entry_ask_usd: clamp(Number(r.max_entry_ask_usd ?? d.max_entry_ask_usd), 0.5, 0.99),
     time_in_force: normalizeTimeInForce(r.time_in_force ?? d.time_in_force),
+    manual_buy_time_in_force: normalizeTimeInForce(
+      r.manual_buy_time_in_force ?? d.manual_buy_time_in_force
+    ),
     chase_above_ask_usd: snap(
       clamp(Number(r.chase_above_ask_usd ?? d.chase_above_ask_usd), 0, 0.05),
       0.01

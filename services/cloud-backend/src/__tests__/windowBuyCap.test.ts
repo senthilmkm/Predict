@@ -33,31 +33,33 @@ describe('max trades / asset / 15m window', () => {
     expect(isCountableWindowBuy(trades[3] as any)).toBe(false);
   });
 
-  test('two sequential claims on the same ticker are serialized by the in-tick counter', () => {
-    const ticker = 'KXGOLD15M-A';
-    const trades: any[] = [];
-    const windowClaims = new Map<string, number>();
-    const cap = 2;
-    const tryClaim = () => {
-      const n = countWindowBuysForTicker(trades, ticker) + (windowClaims.get(ticker) || 0);
-      if (n >= cap) return false;
-      windowClaims.set(ticker, (windowClaims.get(ticker) || 0) + 1);
-      return true;
-    };
-    expect(tryClaim()).toBe(true);
-    expect(tryClaim()).toBe(true);
-    expect(tryClaim()).toBe(false);
-
-    windowClaims.set(ticker, Math.max(0, (windowClaims.get(ticker) || 1) - 1));
-    expect(tryClaim()).toBe(true);
-    expect(tryClaim()).toBe(false);
-
-    trades.push(
-      { ticker, dryRun: false, status: 'FILLED', outcome: 'pending', fillCount: 1 },
-      { ticker, dryRun: false, status: 'SETTLED', outcome: 'exited', fillCount: 1 }
-    );
-    windowClaims.clear();
-    expect(tryClaim()).toBe(false);
+  test('two concurrent place locks on the same ticker refuse the second', async () => {
+    const { tryAcquirePlaceLock, releasePlaceLock, resetPlaceLocksForTests } = require('../services/placeLock');
+    resetPlaceLocksForTests();
+    const ticker = 'KXGOLD15M-LOCK';
+    const [a, b] = await Promise.all([
+      tryAcquirePlaceLock({
+        userId: 'u_lock',
+        ticker,
+        cap: 1,
+        requestId: 'req_a',
+        existingBuys: 0,
+      }),
+      tryAcquirePlaceLock({
+        userId: 'u_lock',
+        ticker,
+        cap: 1,
+        requestId: 'req_b',
+        existingBuys: 0,
+      }),
+    ]);
+    const oks = [a, b].filter((r: any) => r.ok);
+    const locked = [a, b].filter((r: any) => !r.ok);
+    expect(oks).toHaveLength(1);
+    expect(locked).toHaveLength(1);
+    expect(locked[0].reason).toBe('window_locked');
+    await releasePlaceLock({ userId: 'u_lock', ticker, requestId: 'req_a' });
+    await releasePlaceLock({ userId: 'u_lock', ticker, requestId: 'req_b' });
   });
 
   test('POST /me/status stores window cap and drops the old per-day field', async () => {
@@ -133,6 +135,11 @@ describe('max trades / asset / 15m window', () => {
     };
     expect(evaluateStaticGate(lean, cfg, { assetTradesInWindow: 1 }).skip_reason).toBe(
       'max_trades_asset_window'
+    );
+    cfg.auto_trade_enabled = false;
+    expect(evaluateStaticGate(lean, cfg).skip_reason).toBe('auto_trade_off');
+    expect(evaluateStaticGate(lean, cfg, { allowWhenAutoTradeOff: true, assetTradesInWindow: 0 }).ok).toBe(
+      true
     );
   });
 });

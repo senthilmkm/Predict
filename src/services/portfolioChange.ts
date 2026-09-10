@@ -78,6 +78,17 @@ export type PortfolioChange = {
   complete: boolean;
 };
 
+/** Most recent sample by time — used to paint Cash / Predictions before Kalshi answers. */
+export function latestPortfolioSample(samples: PortfolioSample[]): PortfolioSample | null {
+  let latest: PortfolioSample | null = null;
+  for (const s of samples) {
+    const t = sampleTimeMs(s);
+    if (!Number.isFinite(t) || !Number.isFinite(s.predictionsUsd)) continue;
+    if (!latest || t > sampleTimeMs(latest)) latest = s;
+  }
+  return latest;
+}
+
 function oldestUsableSample(samples: PortfolioSample[]): PortfolioSample | null {
   let oldest: PortfolioSample | null = null;
   for (const s of samples) {

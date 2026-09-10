@@ -1,6 +1,11 @@
 import { AssetKey, AssetRegistry } from '../../config/types';
 import { SERIES_BY_ASSET } from '../kalshi/client';
 import { isMarketOpen } from '../marketHours';
+import {
+  getActiveKalshiRetryPolicy,
+  nextImmediateRetryWaitMs,
+  timeoutRetryWaitMs,
+} from '../../../packages/trading-core/src/kalshiRetry';
 
 const PUBLIC_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
@@ -33,8 +38,6 @@ export interface LeanResult {
 const LEAN_FETCH_TIMEOUT_MS = 12_000;
 const EVENTS_CACHE_TTL_MS = 20_000;
 const QUOTE_CACHE_TTL_MS = 5_000;
-const RATE_LIMIT_BASE_MS =
-  typeof process !== 'undefined' && process.env.NODE_ENV === 'test' ? 1 : 2500;
 
 type CacheEntry<T> = { at: number; value: T };
 const eventsCache = new Map<string, CacheEntry<any>>();
@@ -62,25 +65,40 @@ async function jsonGet(
       : null;
   try {
     const res = await fetchImpl(url, ctrl ? { signal: ctrl.signal } : undefined);
-    if (res.status === 429) {
-      if (attempt >= 2) throw new Error('http_429');
-      let waitMs = RATE_LIMIT_BASE_MS * (attempt + 1);
+    if (!res.ok) {
+      let retryAfterMs: number | null = null;
       try {
         const ra = res.headers?.get?.('retry-after');
         if (ra) {
           const sec = Number(ra);
-          if (Number.isFinite(sec) && sec > 0) waitMs = Math.min(30_000, sec * 1000);
+          if (Number.isFinite(sec) && sec > 0) retryAfterMs = sec * 1000;
         }
       } catch {
         /* */
       }
-      await sleep(waitMs);
-      return jsonGet(url, fetchImpl, attempt + 1);
+      const waitMs = nextImmediateRetryWaitMs({
+        status: res.status,
+        attempt,
+        method: 'GET',
+        policy: getActiveKalshiRetryPolicy(),
+        retryAfterMs,
+      });
+      if (waitMs != null) {
+        await sleep(waitMs);
+        return jsonGet(url, fetchImpl, attempt + 1);
+      }
+      throw new Error(`http_${res.status}`);
     }
-    if (!res.ok) throw new Error(`http_${res.status}`);
     return await res.json();
   } catch (e: any) {
-    if (e?.name === 'AbortError') throw new Error('lean_fetch_timeout');
+    if (e?.name === 'AbortError') {
+      const waitMs = timeoutRetryWaitMs(attempt, getActiveKalshiRetryPolicy());
+      if (waitMs != null) {
+        await sleep(waitMs);
+        return jsonGet(url, fetchImpl, attempt + 1);
+      }
+      throw new Error('lean_fetch_timeout');
+    }
     throw e;
   } finally {
     if (timer != null) clearTimeout(timer);

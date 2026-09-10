@@ -30,21 +30,12 @@ npm start
 
 Keep the app open while auto-trading. iOS will not poll every few seconds in background.
 
-**Modes:** Alerts only (default) or Auto-trade (Face ID to enable — places real orders).
-
-`verify:kalshi` reads `KALSHI_*` from `../RobinhoodTradingMCP/.env`. Does **not** place live orders unless you pass `--live-smoke` (tiny $0.01 IOC).
-
-## Layout
-
-- `src/config` — cushions, risk, mute matrix, poll interval
-- `src/services/kalshi` — RSA-PSS sign + API client
-- `src/engine` — static gates, mutex, window locks
-- `src/storage` — in-memory trade/alert repos
-- `src/screens` — Home / Cushions / History / Dashboard / Settings / Alerts
+**Modes:** Alerts (default), Auto-trade (Face ID — Cloud places on a schedule), and Home Buy / Sell taps (Cloud places now). Kill Switch is the red panic icon in the header.
 
 ## Safety
 
-- Auto-trade default: off (alerts only)
+- Auto-trade default: off
 - Enabling auto-trade requires credentials + Face ID
-- Kill switch on Home disarms immediately
+- Header panic Kill Switch disarms Auto-trade and hides Home Buy / Sell
+- Admin flag Last signals Buy / Sell Off disables all Home taps
 - Keep the app open while polling (iOS won’t poll every few seconds in background)

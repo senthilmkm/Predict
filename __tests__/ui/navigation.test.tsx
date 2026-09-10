@@ -15,6 +15,7 @@ import { HistoryScreen } from '../../src/screens/HistoryScreen';
 import { DashboardScreen } from '../../src/screens/DashboardScreen';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { AlertsHubScreen } from '../../src/screens/AlertsHubScreen';
+import { KillSwitchHeaderButton } from '../../src/components/KillSwitchHeaderButton';
 
 function NavHarness() {
   const [tab, setTab] = useState<'Home' | 'Cushions' | 'History' | 'Dashboard' | 'Settings'>(
@@ -42,9 +43,7 @@ function NavHarness() {
             <Text>{name}</Text>
           </Pressable>
         ))}
-        <Pressable testID="btn-alerts-bell" onPress={() => setHub(true)}>
-          <Text>bell:{unread}</Text>
-        </Pressable>
+        <KillSwitchHeaderButton />
         <Pressable
           testID="btn-export-history"
           onPress={async () => {
@@ -53,6 +52,9 @@ function NavHarness() {
           }}
         >
           <Text>export</Text>
+        </Pressable>
+        <Pressable testID="btn-alerts-bell" onPress={() => setHub(true)}>
+          <Text>bell:{unread}</Text>
         </Pressable>
       </View>
       {tab === 'Home' && <HomeScreen />}
@@ -77,8 +79,10 @@ describe('navigation', () => {
   test('tab switches across all screens', async () => {
     const s = await render(<NavHarness />);
     expect(s.getByTestId('screen-home')).toBeTruthy();
+    expect(s.getByTestId('btn-kill-switch')).toBeTruthy();
     await fireEvent.press(s.getByTestId('nav-tab-Cushions'));
     expect(s.getByTestId('screen-cushions')).toBeTruthy();
+    expect(s.getByTestId('btn-kill-switch')).toBeTruthy();
     await fireEvent.press(s.getByTestId('nav-tab-History'));
     expect(s.getByTestId('screen-history')).toBeTruthy();
     await fireEvent.press(s.getByTestId('nav-tab-Dashboard'));

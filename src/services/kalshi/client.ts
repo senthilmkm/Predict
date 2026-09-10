@@ -1,4 +1,5 @@
 import { signKalshiRequest } from './sign';
+import { getActiveKalshiRetryPolicy, nextImmediateRetryWaitMs } from '../../../packages/trading-core/src/kalshiRetry';
 
 export type KalshiEnv = 'production' | 'demo';
 
@@ -94,19 +95,24 @@ export class KalshiClient {
     } catch {
       data = { raw: await res.text().catch(() => '') };
     }
-    if (res.status === 429 && attempt < 2 && method.toUpperCase() === 'GET') {
-      let waitMs =
-        (typeof process !== 'undefined' && process.env.NODE_ENV === 'test' ? 1 : 2500) *
-        (attempt + 1);
-      try {
-        const ra = res.headers?.get?.('retry-after');
-        if (ra) {
-          const sec = Number(ra);
-          if (Number.isFinite(sec) && sec > 0) waitMs = Math.min(30_000, sec * 1000);
-        }
-      } catch {
-        /* */
+    let retryAfterMs: number | null = null;
+    try {
+      const ra = res.headers?.get?.('retry-after');
+      if (ra) {
+        const sec = Number(ra);
+        if (Number.isFinite(sec) && sec > 0) retryAfterMs = sec * 1000;
       }
+    } catch {
+      /* */
+    }
+    const waitMs = nextImmediateRetryWaitMs({
+      status: res.status,
+      attempt,
+      method,
+      policy: getActiveKalshiRetryPolicy(),
+      retryAfterMs,
+    });
+    if (waitMs != null) {
       await new Promise((r) => setTimeout(r, waitMs));
       return this.request(method, path, body, attempt + 1);
     }

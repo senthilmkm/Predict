@@ -1,7 +1,4 @@
-/**
- * Classify Kalshi / lean HTTP errors so the poller can show a Home banner
- * without spamming Expo push notifications for expected auth / rate-limit noise.
- */
+import { isTimeoutLikeError } from '../../packages/trading-core/src/kalshiRetry';
 
 export function isRateLimitError(message: string): boolean {
   return /http[_\s-]?429|\brate[\s_-]*limit/i.test(String(message || ''));
@@ -23,19 +20,29 @@ export function isCanceledNetworkError(message: string): boolean {
   );
 }
 
+export function isServerError(message: string): boolean {
+  const m = String(message || '').match(/http[_\s-]?(\d{3})/i);
+  const n = m ? Number(m[1]) : NaN;
+  return (Number.isFinite(n) && n >= 500 && n <= 599) || isTimeoutLikeError(message);
+}
+
 /** Errors that belong on Home / Alerts Hub, but must not fire Expo OS pushes. */
 export function isQuietIntegrationError(message: string): boolean {
   return (
     isRateLimitError(message) ||
     isAuthError(message) ||
     isForbiddenError(message) ||
-    isCanceledNetworkError(message)
+    isCanceledNetworkError(message) ||
+    isServerError(message)
   );
 }
 
 export function humanizeQuietError(message: string): string {
   if (isCanceledNetworkError(message)) {
     return 'Network request paused (app backgrounded)';
+  }
+  if (isServerError(message)) {
+    return 'Kalshi timeout or server error — pausing briefly';
   }
   if (isRateLimitError(message)) {
     return 'Kalshi rate limit — pausing requests briefly';

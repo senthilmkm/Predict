@@ -29,7 +29,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Predict is an iPhone app for Kalshi 15-minute prediction markets.\n\n' +
             'It watches live price vs the contract strike, applies your cushion (a dollar buffer), and shows a lean: YES, NO, or skip.\n\n' +
-            'You can get alerts only, or turn on Auto-trade so Cloud Run may place real Kalshi orders using your own API key.\n\n' +
+            'You can get alerts, turn on Auto-trade so Cloud Run may place orders on a schedule, and — when Last signals Buy / Sell is On — tap Buy or Sell on Home so Cloud Run places now.\n\n' +
             'Example: Gold strike $2,650, your cushion is $7, live gold is $2,660. Gap is $10, which is more than $7, so the lean can be YES.',
         },
         {
@@ -37,7 +37,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'Does Predict hold my Kalshi money?',
           a:
             'No. Predict never holds your cash. Trades go to your own Kalshi account with your API key.\n\n' +
-            'Your Kalshi cash and open contracts stay at Kalshi. Predict only sends orders when you turn Auto-trade (or Protect money) on and the rules pass.',
+            'Your Kalshi cash and open contracts stay at Kalshi. Predict only sends orders when Auto-trade or Protect money is On and the rules pass, or when you tap Buy / Sell on Home (if that feature is On).',
         },
         {
           id: 'what-markets',
@@ -77,7 +77,7 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'does-it-guarantee',
           q: 'Does Predict guarantee profits?',
           a:
-            'No. Trading involves risk of loss. Predict does not guarantee profits or successful trades — whether you use alerts only, Auto-trade, or both.\n\n' +
+            'No. Trading involves risk of loss. Predict does not guarantee profits or successful trades — whether you use alerts, Auto-trade, Home Buy / Sell taps, or any mix.\n\n' +
             'Past results on Home, Dashboard, or History do not predict the next contract. You can lose some or all of the money you risk on Kalshi.',
         },
         {
@@ -85,7 +85,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'Is this financial or trading advice?',
           a:
             'No. Nothing in Predict is financial, investment, legal, or trading advice.\n\n' +
-            'Predict is not a broker, investment adviser, or money manager. It does not owe you a fiduciary duty. You decide whether to use alerts, Auto-trade, and Protect money.',
+            'Predict is not a broker, investment adviser, or money manager. It does not owe you a fiduciary duty. You decide whether to use alerts, Auto-trade, Home Buy / Sell, and Protect money.',
         },
         {
           id: 'who-is-liable',
@@ -125,7 +125,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'If I only use alerts and trade myself on Kalshi, am I still responsible?',
           a:
             'Yes. An alert is not an order. If you tap into Kalshi and place a trade because Predict pinged you, that trade and its P&L are yours.\n\n' +
-            'Review every alert yourself before you place anything outside Predict.',
+            'If Home shows Buy / Sell and you tap it, that is also your order (Cloud Run places it). Review the lean yourself before you tap.',
         },
         {
           id: 'age-and-legal',
@@ -186,23 +186,34 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Signal alerts On = you can be notified when a lean appears. No order is placed just because an alert fired.\n\n' +
             'Auto-trade On = Cloud Run may place real Kalshi buy orders when cushions and Risk rules pass. Face ID is required to turn this On.\n\n' +
-            'They are independent. Example: alerts On + Auto-trade Off = research pings only. Alerts Off + Auto-trade On = orders can still place; lean notification sounds stay quiet.',
+            'Home Buy / Sell (when the Last signals Buy / Sell flag is On) = you tap to place now, even if Auto-trade is Off. Timing and max-ask do not block a tap.\n\n' +
+            'They are independent. Example: alerts On + Auto-trade Off = research pings, plus optional Home taps if the buttons are shown.',
+        },
+        {
+          id: 'home-buy-sell',
+          q: 'What does tapping Buy or Sell on Home do?',
+          a:
+            'When Last signals Buy / Sell is On, a green Buy YES / Buy NO (or Sell) appears on a live lean. One tap tells Cloud Run to place now. The phone never talks to Kalshi. There is no confirm sheet.\n\n' +
+            'Purpose: trade without Auto-trade, or take a contract you see while the app is open even if Auto-trade is On.\n\n' +
+            'A tap still uses Size and Caps (dollars, max open, daily loss, trades/day, 1-per-window), cushion, chase above ask, and Time in force (Manual buy). It does not use min minutes left, min minutes elapsed, or max entry ask — so a tap can buy a rich ticket or a late window that Auto-trade would skip.\n\n' +
+            'Success shows a gold “Gold buy success” chip flying up from the button — not a popup. Failures show an error popup (ask too small after size math, daily loss stop, no fill, network, Kill Switch, or the feature flag Off).\n\n' +
+            'You can lose the full amount of that order. GTC can rest on the book. IOC can miss. Chase can pay a few cents above the ask. If the Admin flag Last signals Buy / Sell is Off, buttons disappear and Cloud rejects taps.',
         },
         {
           id: 'need-keys-for-alerts',
           q: 'Do I need a Kalshi API key for alerts only?',
           a:
             'No. Alerts can run without keys. Allow notifications during setup (or later in iOS Settings) if you want pings when Predict is closed.\n\n' +
-            'You need a saved Key ID + private key PEM for Auto-trade, Protect money sells, settlement checks, and Kalshi balances on Home. Tap Test connection after you save keys.',
+            'You need a saved Key ID + private key PEM for Auto-trade, Home Buy / Sell taps, Protect money sells, settlement checks, and Kalshi balances on Home. Tap Test connection after you save keys.',
         },
         {
           id: 'kill-switch',
-          q: 'What does the Home kill switch do?',
+          q: 'What does the header kill switch do?',
           a:
-            'It turns Auto-trade Off right away on this phone and syncs that Off state to Cloud Run, so new automatic buys should stop.\n\n' +
+            'It is the red “!” panic icon in the top-right header (left of Export). Tap confirms, then turns Auto-trade Off right away on this phone and syncs that Off state to Cloud Run, so new automatic buys should stop. It also hides Home Buy / Sell.\n\n' +
             'It does not turn Protect money Off. If Protect money is still On, Cloud Run may still try to sell open trades.\n\n' +
             'Cloud Run still settles fills you already have and can still write Trade won / Trade lost.\n\n' +
-            'To stop new buys and early sells: Auto-trade Off, and turn Protect money Off under Settings → Risk.',
+            'To stop new buys and early sells: Auto-trade Off, Last signals Buy / Sell off (or Kill Switch), and turn Protect money Off under Settings → Risk.',
         },
         {
           id: 'phone-in-background',
@@ -225,6 +236,7 @@ export function getFaqCategories(): FaqCategory[] {
             'Google Cloud Run is Predict’s always-on server. On a short tick it can:\n' +
             '• send lean / fill / protect-sell / trade-result / IOC-miss / daily-loss push sounds (so the phone does not ding twice)\n' +
             '• place Auto-trade buys when Auto-trade is On\n' +
+            '• place a Home Buy / Sell when you tap (if Last signals Buy / Sell is On)\n' +
             '• place Protect money sells when that switch is On\n' +
             '• record fills and settlements on your user in Firestore (settlements continue after Auto-trade Off if keys are saved)\n\n' +
             'Your Risk numbers and asset on/off flags are stored with your user so the server uses the same rules as Settings.',
@@ -233,8 +245,8 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'who-sells',
           q: 'Does the phone ever buy or sell?',
           a:
-            'No. Auto-trade buys and Protect money sells are placed by Cloud Run only. The phone does not send buy or sell orders.\n\n' +
-            'Protect money still runs 24/7 on Cloud Run even if Auto-trade (new buys) is Off — as long as the Protect money switch is On and keys are saved.',
+            'No. The phone never talks to Kalshi. Auto-trade buys, Home Buy / Sell taps, and Protect money sells are placed by Cloud Run only.\n\n' +
+            'A Home tap still spends real money — Cloud Run places the order. Protect money still runs 24/7 on Cloud Run even if Auto-trade (new buys) is Off — as long as the Protect money switch is On and keys are saved.',
         },
         {
           id: 'user-id',
@@ -282,8 +294,8 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'where-risk',
           q: 'Where do I change trade size and limits?',
           a:
-            'Settings → Risk → Show. Tap the i next to Risk for a label-by-label guide.\n\n' +
-            'Defaults: $5 per trade, max $5, min $1, max 5 open positions, 100 new buys per day, 1 buy per asset per 15-minute window, $50 daily loss stop, wait 2 minutes after the window opens, need 2 minutes left, max ask $0.90, IOC, chase $0.02, Protect money Off.',
+            'Settings → Risk → Show. Fields are grouped as Size, Caps, and Timing & protect. Tap the i next to Risk for a label-by-label guide.\n\n' +
+            'Defaults: $5 per trade, max $5, min $1, max 5 open positions, 100 new buys per day, 1 buy per asset per 15-minute window, $50 daily loss stop, wait 2 minutes after the window opens, need 2 minutes left, max ask $0.90, Auto-trade IOC, Manual buy IOC, chase $0.02, Protect money Off.',
         },
         {
           id: 'window-cap',
@@ -305,21 +317,23 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'timing-and-ask',
           q: 'Why did it skip with “too early,” “too little time,” or “size too small”?',
           a:
-            'Min minutes elapsed (default 2) = don’t buy in the noisy open. “Too early in window” means this clock has not been reached.\n\n' +
-            'Min minutes left (default 2) = don’t buy in the last minutes. “Too little time left” means the window is too close to expiry. These two buy-timing rules do not block Protect money sells.\n\n' +
-            'Max entry ask (default $0.90) = don’t buy a very expensive ticket.\n\n' +
-            'Min $ / trade (default $1) = if the order would be smaller than this (often when the contract price is high), it skips “size too small.” Keep min below $ per trade.',
+            'These Auto-trade-only rules do not block a Home Buy tap. A tap can still buy when Auto-trade would skip as too early, too little time, or ask too rich.\n\n' +
+            'Min minutes elapsed (default 2) = Auto-trade don’t buy in the noisy open. “Too early in window” means this clock has not been reached.\n\n' +
+            'Min minutes left (default 2) = Auto-trade don’t buy in the last minutes. “Too little time left” means the window is too close to expiry. These two buy-timing rules do not block Protect money sells.\n\n' +
+            'Max entry ask (default $0.90) = Auto-trade don’t buy a very expensive ticket.\n\n' +
+            'Min $ / trade (default $1) = if the order would be smaller than this (often when the contract price is high), it skips “size too small.” Keep min below $ per trade. This size rule still applies to Home taps.',
         },
         {
           id: 'tif-and-chase',
           q: 'What are IOC / FOK / GTC and chase above ask?',
           a:
-            'Time in force is how long a buy stays on Kalshi (Auto-trade buys):\n' +
+            'Time in force is how long a buy stays on Kalshi.\n\n' +
+            'Auto-trade buys use Time in force (Auto-trade buys). Home Buy taps use Time in force (Manual buy). Same three choices:\n' +
             '• IOC (default) = fill what you can now, cancel the rest\n' +
             '• FOK = fill all now or cancel all\n' +
             '• GTC = leave it working until filled or canceled\n\n' +
-            'Most people keep IOC on these short windows. Protect money sells always use IOC.\n\n' +
-            'Chase above ask (default $0.02) is a tiny extra you allow above the ask to help a buy fill, still capped by Max entry ask. The same idea is used as sell slippage on protect-sell.',
+            'Most people keep IOC on these short windows. GTC on a Home tap can rest until the 15-minute window ends. Protect money sells always use IOC.\n\n' +
+            'Chase above ask (default $0.02) is a tiny extra you allow above the ask to help a fill. Auto-trade still caps pay by Max entry ask. A Home Buy tap uses chase without that cap (pay is ask + chase, max $0.99). The same idea is used as sell slippage on protect-sell.',
         },
         {
           id: 'restore-risk',
@@ -391,14 +405,14 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'History = every Predict fill and alert on this phone, with filters (pending, win, loss, miss). Status dots: green settled win / still favorable, yellow checking, red unfavorable or settled loss, gray IOC miss.\n\n' +
             'Home pulls Cloud alerts after each poll so a lean can show in History without opening this tab.\n\n' +
-            'Dashboard = today’s Predict stats (ET): win rate, closed P&L from Predict fills today, W/L, pending, IOC misses, alerts logged, unread. A by-asset card lists W/L, P&L, and what you paid on wins vs losses (the fill pay price). Closed P&L is not the same as Change (24h).\n\n' +
+            'Dashboard = today’s Predict stats (ET): win rate, closed P&L from Predict fills today, W/L, pending, IOC misses, alerts logged, unread. A by-asset card lists W/L, P&L, and won-at / lost-at contract prices (what you bought the ticket for). Closed P&L is not the same as Change (24h).\n\n' +
             'Bell (top right) = new alerts since you last opened Alerts (bell page or History → Alerts). Leaving that list clears the badge. Bell mute is only the lock-screen ping (see “Mute vs Notify on lean signals”). Delete still removes rows.',
         },
         {
           id: 'export',
           q: 'How do I export my history?',
           a:
-            'Tap the share/export icon in the top-right (next to the bell). You get a spreadsheet of trades, alerts, and risk-acceptance notes to save or send.\n\n' +
+            'Tap the share/export icon in the top-right (next to the bell; panic Kill Switch is left of Export). You get a spreadsheet of trades, alerts, and risk-acceptance notes to save or send.\n\n' +
             'Still never put your PEM in that file or in email.',
         },
         {
@@ -448,7 +462,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Two different lines on Home → Last signals:\n\n' +
             '• SKIP (amber) — live price is not far enough past the strike. The line under it says “below cushion.” That is not a skipped order.\n\n' +
-            '• YES or NO with a second amber line — Cloud tried a buy and a Risk gate stopped it (ask too rich, too early, too little time left, size too small, and so on).\n\n' +
+            '• YES or NO with a second amber line — Cloud Auto-trade tried a buy and a Risk gate stopped it (ask too rich, too early, too little time left, size too small, and so on). You can still tap Home Buy if the button is shown; a tap skips those timing / max-ask gates.\n\n' +
             'Open Settings → Risk → i for what each limit means.',
         },
         {

@@ -9,12 +9,20 @@ import { TradeRecord } from '../storage/repos';
 import { useMarkAlertsSeenOnLeave } from '../hooks/useMarkAlertsSeenOnLeave';
 import {
   ALERT_FILTERS,
-  TRADE_FILTERS,
   AlertFilter,
-  TradeFilter,
+  DEFAULT_TRADE_FILTERS,
+  TRADE_SIDE_FILTERS,
+  TRADE_STATUS_FILTERS,
+  TradeAssetFilter,
+  TradeFilterSelection,
+  TradeSideFilter,
+  TradeStatusFilter,
   alertFilterLabel,
   filterAlerts,
   filterTrades,
+  tradeAssetFilterOptions,
+  tradeSideFilterLabel,
+  tradeStatusFilterLabel,
 } from '../history/filters';
 
 export function computeTradeStatusDot(
@@ -59,39 +67,65 @@ export function computeTradeStatusDot(
   return { color: '#ef4444', statusLabel: 'Unfavorable (OTM)', testIDColor: 'red' };
 }
 
+function moneyUsd(n: unknown): string {
+  const v = Number(n);
+  return Number.isFinite(v) ? v.toFixed(2) : '—';
+}
+
+function formatWhen(at: unknown): string {
+  const d = new Date(String(at || ''));
+  return Number.isFinite(d.getTime()) ? d.toLocaleString() : '—';
+}
+
+type OpenTradeMenu = 'status' | 'side' | 'asset' | null;
+
 export function HistoryScreen() {
   const [tab, setTab] = useState<'trades' | 'alerts'>('trades');
   const [alertFilter, setAlertFilter] = useState<AlertFilter>('all');
-  const [tradeFilter, setTradeFilter] = useState<TradeFilter>('all');
+  const [tradeFilters, setTradeFilters] = useState<TradeFilterSelection>(DEFAULT_TRADE_FILTERS);
+  const [openTradeMenu, setOpenTradeMenu] = useState<OpenTradeMenu>(null);
   const cushions = useConfigStore((s) => s.config.cushions);
-  const trades = useRuntimeStore((s) => s.trades);
+  const tradesRaw = useRuntimeStore((s) => s.trades);
   const leans = useRuntimeStore((s) => s.leans);
-  const alerts = useRuntimeStore((s) => s.alerts);
+  const alertsRaw = useRuntimeStore((s) => s.alerts);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const [refreshing, setRefreshing] = useState(false);
   useMarkAlertsSeenOnLeave(tab === 'alerts');
 
+  const trades = Array.isArray(tradesRaw) ? tradesRaw : [];
+  const alerts = Array.isArray(alertsRaw) ? alertsRaw : [];
+
   useEffect(() => {
-    void refreshCloudSnapshot();
+    void Promise.resolve()
+      .then(() => refreshCloudSnapshot())
+      .catch(() => {
+        /* Keep last trades/alerts if Cloud/Firestore is down */
+      });
   }, [refreshCloudSnapshot]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await refreshCloudSnapshot();
+    } catch {
+      /* Keep last known History if the snapshot fails */
     } finally {
       setRefreshing(false);
     }
   }, [refreshCloudSnapshot]);
 
-  const filteredTrades = useMemo(
-    () => filterTrades(trades, tradeFilter),
-    [trades, tradeFilter]
-  );
-  const filteredAlerts = useMemo(
-    () => filterAlerts(alerts, alertFilter),
-    [alerts, alertFilter]
-  );
+  const filteredTrades = useMemo(() => filterTrades(trades, tradeFilters), [trades, tradeFilters]);
+  const filteredAlerts = useMemo(() => filterAlerts(alerts, alertFilter), [alerts, alertFilter]);
+  const assetOptions = useMemo(() => tradeAssetFilterOptions(trades), [trades]);
+
+  const statusLabel = tradeStatusFilterLabel(tradeFilters.status);
+  const sideLabel = tradeSideFilterLabel(tradeFilters.side);
+  const assetLabel =
+    tradeFilters.asset === 'all'
+      ? 'All'
+      : assetOptions.find((o) => o.id === tradeFilters.asset)?.label || tradeFilters.asset;
+
+  const closeTradeMenu = useCallback(() => setOpenTradeMenu(null), []);
 
   return (
     <View style={styles.root} testID="screen-history">
@@ -100,35 +134,99 @@ export function HistoryScreen() {
           testID="seg-trades"
           label="Trades"
           active={tab === 'trades'}
-          onPress={() => setTab('trades')}
+          onPress={() => {
+            closeTradeMenu();
+            setTab('trades');
+          }}
         />
         <Seg
           testID="seg-alerts"
           label="Alerts"
           active={tab === 'alerts'}
-          onPress={() => setTab('alerts')}
+          onPress={() => {
+            closeTradeMenu();
+            setTab('alerts');
+          }}
         />
       </View>
 
       {tab === 'trades' ? (
         <>
-          <FilterRow
-            testID="history-trade-filters"
-            options={TRADE_FILTERS}
-            active={tradeFilter}
-            onChange={setTradeFilter}
-          />
+          <View testID="history-trade-filters">
+            <View style={styles.filterBar}>
+              <FilterDropdown
+                testID="trade-filter-status"
+                caption="Status"
+                value={statusLabel}
+                open={openTradeMenu === 'status'}
+                onPress={() => setOpenTradeMenu((m) => (m === 'status' ? null : 'status'))}
+              />
+              <FilterDropdown
+                testID="trade-filter-side"
+                caption="Side"
+                value={sideLabel}
+                open={openTradeMenu === 'side'}
+                onPress={() => setOpenTradeMenu((m) => (m === 'side' ? null : 'side'))}
+              />
+              <FilterDropdown
+                testID="trade-filter-asset"
+                caption="Asset"
+                value={assetLabel}
+                open={openTradeMenu === 'asset'}
+                onPress={() => setOpenTradeMenu((m) => (m === 'asset' ? null : 'asset'))}
+              />
+            </View>
+            {openTradeMenu === 'status' ? (
+              <OptionMenu
+                testID="trade-filter-status-menu"
+                options={TRADE_STATUS_FILTERS}
+                selected={tradeFilters.status}
+                optionTestID={(id) => `trade-filter-status-option-${id}`}
+                onSelect={(id) => {
+                  setTradeFilters((prev) => ({ ...prev, status: id as TradeStatusFilter }));
+                  closeTradeMenu();
+                }}
+              />
+            ) : null}
+            {openTradeMenu === 'side' ? (
+              <OptionMenu
+                testID="trade-filter-side-menu"
+                options={TRADE_SIDE_FILTERS}
+                selected={tradeFilters.side}
+                optionTestID={(id) => `trade-filter-side-option-${id}`}
+                onSelect={(id) => {
+                  setTradeFilters((prev) => ({ ...prev, side: id as TradeSideFilter }));
+                  closeTradeMenu();
+                }}
+              />
+            ) : null}
+            {openTradeMenu === 'asset' ? (
+              <OptionMenu
+                testID="trade-filter-asset-menu"
+                options={assetOptions}
+                selected={tradeFilters.asset}
+                optionTestID={(id) => `trade-filter-asset-option-${id}`}
+                onSelect={(id) => {
+                  setTradeFilters((prev) => ({ ...prev, asset: id as TradeAssetFilter }));
+                  closeTradeMenu();
+                }}
+              />
+            ) : null}
+          </View>
           <Text style={styles.count} testID="history-trade-count">
             {filteredTrades.length} of {trades.length}
+            {tradeFilters.status !== 'all' ? ` · ${statusLabel}` : ''}
+            {tradeFilters.side !== 'all' ? ` · ${sideLabel}` : ''}
+            {tradeFilters.asset !== 'all' ? ` · ${assetLabel}` : ''}
           </Text>
           {trades.length === 0 ? (
             <Empty text="No trades yet" sub="Filled and pending orders appear here." />
           ) : filteredTrades.length === 0 ? (
-            <Empty text="No matching trades" sub="Try another filter." />
+            <Empty text="No matching trades" sub="Change Status, Side, or Asset." />
           ) : (
             <FlatList
               data={filteredTrades}
-              keyExtractor={(i) => i.id}
+              keyExtractor={(i, index) => (i && i.id ? String(i.id) : `trade-${index}`)}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -138,30 +236,42 @@ export function HistoryScreen() {
                 />
               }
               renderItem={({ item }) => {
-                const lean = leans[item.asset as AssetKey];
-                const cushion = cushions[item.asset as AssetKey];
-                const statusInfo = computeTradeStatusDot(item, lean, cushion);
-
-                return (
-                  <View style={styles.row} testID={`trade-row-${item.id}`}>
-                    <View style={styles.tradeTitleGroup}>
-                      <View
-                        style={[styles.statusDot, { backgroundColor: statusInfo.color }]}
-                        testID={`trade-status-dot-${item.id}-${statusInfo.testIDColor}`}
-                        accessibilityLabel={statusInfo.statusLabel}
-                      />
-                      <Text style={styles.title}>
-                        {item.asset} {item.side} · {item.outcome}
+                try {
+                  const lean = leans[item.asset as AssetKey];
+                  const cushion = cushions[item.asset as AssetKey];
+                  const statusInfo = computeTradeStatusDot(item, lean, cushion);
+                  const fillCount =
+                    item.fill_count != null && Number.isFinite(Number(item.fill_count))
+                      ? Number(item.fill_count)
+                      : null;
+                  return (
+                    <View style={styles.row} testID={`trade-row-${item.id}`}>
+                      <View style={styles.tradeTitleGroup}>
+                        <View
+                          style={[styles.statusDot, { backgroundColor: statusInfo.color }]}
+                          testID={`trade-status-dot-${item.id}-${statusInfo.testIDColor}`}
+                          accessibilityLabel={statusInfo.statusLabel}
+                        />
+                        <Text style={styles.title}>
+                          {item.asset} {item.side} · {item.outcome}
+                        </Text>
+                      </View>
+                      <Text style={styles.sub}>
+                        {item.market_ticker} · cost ${moneyUsd(item.notional_usd)}
+                        {fillCount != null ? ` · ${fillCount} ctr` : ''}
+                        {item.pnl_usd != null ? ` · P&L $${moneyUsd(item.pnl_usd)}` : ''}
                       </Text>
+                      <Text style={styles.time}>{formatWhen(item.at)}</Text>
                     </View>
-                    <Text style={styles.sub}>
-                      {item.market_ticker} · cost ${item.notional_usd.toFixed(2)}
-                      {item.fill_count != null ? ` · ${item.fill_count} ctr` : ''}
-                      {item.pnl_usd != null ? ` · P&L $${item.pnl_usd.toFixed(2)}` : ''}
-                    </Text>
-                    <Text style={styles.time}>{new Date(item.at).toLocaleString()}</Text>
-                  </View>
-                );
+                  );
+                } catch {
+                  return (
+                    <View style={styles.row} testID={`trade-row-error-${item?.id || 'unknown'}`}>
+                      <Text style={styles.title}>Couldn't display this trade</Text>
+                      <Text style={styles.sub}>Skipped a bad row so History can still load.</Text>
+                    </View>
+                  );
+                }
               }}
             />
           )}
@@ -184,7 +294,7 @@ export function HistoryScreen() {
           ) : (
             <FlatList
               data={filteredAlerts}
-              keyExtractor={(i) => i.id}
+              keyExtractor={(i, index) => (i && i.id ? String(i.id) : `alert-${index}`)}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -198,7 +308,7 @@ export function HistoryScreen() {
                   <Text style={styles.title}>{item.title}</Text>
                   <Text style={styles.sub}>{item.body}</Text>
                   <Text style={styles.time}>
-                    {alertFilterLabel(item.kind)} · {new Date(item.at).toLocaleString()}
+                    {alertFilterLabel(item.kind)} · {formatWhen(item.at)}
                   </Text>
                 </View>
               )}
@@ -207,6 +317,74 @@ export function HistoryScreen() {
         </>
       )}
     </View>
+  );
+}
+
+function FilterDropdown({
+  caption,
+  value,
+  open,
+  onPress,
+  testID,
+}: {
+  caption: string;
+  value: string;
+  open: boolean;
+  onPress: () => void;
+  testID: string;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={`${caption} ${value}`}
+      accessibilityState={{ expanded: open }}
+      onPress={onPress}
+      style={[styles.dropdown, open && styles.dropdownOpen]}
+    >
+      <Text style={styles.dropdownCaption}>{caption}</Text>
+      <Text style={styles.dropdownValue} numberOfLines={1}>
+        {value} ▾
+      </Text>
+    </Pressable>
+  );
+}
+
+function OptionMenu({
+  options,
+  selected,
+  onSelect,
+  testID,
+  optionTestID,
+}: {
+  options: { id: string; label: string }[];
+  selected: string;
+  onSelect: (id: string) => void;
+  testID: string;
+  optionTestID: (id: string) => string;
+}) {
+  return (
+    <ScrollView
+      testID={testID}
+      style={styles.menu}
+      contentContainerStyle={styles.menuInner}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+    >
+      {options.map((opt) => {
+        const on = opt.id === selected;
+        return (
+          <Pressable
+            key={opt.id}
+            testID={optionTestID(opt.id)}
+            style={[styles.menuItem, on && styles.menuItemOn]}
+            onPress={() => onSelect(opt.id)}
+          >
+            <Text style={[styles.menuItemText, on && styles.menuItemTextOn]}>{opt.label}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -287,6 +465,33 @@ const styles = StyleSheet.create({
   },
   segActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   segText: { color: colors.textPrimary, fontWeight: '700' },
+  filterBar: { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  dropdown: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  dropdownOpen: { borderColor: colors.accent },
+  dropdownCaption: { color: colors.mute, fontSize: 10, fontWeight: '700', marginBottom: 2 },
+  dropdownValue: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
+  menu: {
+    maxHeight: 220,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+  },
+  menuInner: { paddingVertical: 4 },
+  menuItem: { paddingHorizontal: 12, paddingVertical: 10 },
+  menuItemOn: { backgroundColor: colors.accent },
+  menuItemText: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
+  menuItemTextOn: { color: colors.bg },
   filtersScroll: { maxHeight: 40, marginBottom: 6 },
   filters: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 8 },
   chip: {
@@ -327,3 +532,4 @@ const styles = StyleSheet.create({
   emptyTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '600', textAlign: 'center' },
   emptySub: { color: colors.textSecondary, textAlign: 'center', marginTop: 8 },
 });
+

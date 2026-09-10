@@ -48,12 +48,15 @@ import {
 } from '../services/cloudAlerts';
 import { isMarketOpen } from '../services/marketHours';
 import { etDateKey } from '../util/time';
+import { setActiveKalshiRetryPolicy } from '../../../../packages/trading-core/src/kalshiRetry';
 import {
   cloudDailyRealizedPnl,
   createQuoteCache,
   liveCloudTradesToday,
   settlePendingCloudTrades,
 } from '../services/settlement';
+import { isCloudKalshiPaused, noteTransientKalshiFailure, resetKalshiPauseForTests } from '../services/kalshiPause';
+import { tryAcquirePlaceLock, releasePlaceLock } from '../services/placeLock';
 
 export const workerRouter = Router();
 
@@ -98,8 +101,21 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+export { resetKalshiPauseForTests };
+
 async function runOneTick() {
   const now = new Date();
+  const sysConfig = await getSystemConfig();
+  setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
+  if (isCloudKalshiPaused()) {
+    return {
+      timestamp: now.toISOString(),
+      activeUserCount: 0,
+      results: [],
+      paused: true,
+    };
+  }
+
   const activeUsers = await getEnrolledActiveUsers();
 
   const results: Array<{
@@ -143,10 +159,20 @@ async function runOneTick() {
         const lean = await computeLean(asset, 0.0, fetch, now);
         sharedLeans[asset] = lean;
       } catch (err: any) {
+        noteTransientKalshiFailure(err);
         console.warn(`[TICK_SPOT_FETCH_WARN] Asset ${asset} fetch failed:`, err?.message || err);
       }
     })
   );
+
+  if (isCloudKalshiPaused()) {
+    return {
+      timestamp: now.toISOString(),
+      activeUserCount: activeUsers.length,
+      results,
+      paused: true,
+    };
+  }
 
   // 2. PARALLEL BATCH PROCESSING: Process active users in concurrent batches of 50
   const BATCH_SIZE = 50;
@@ -154,10 +180,10 @@ async function runOneTick() {
   const quoteCache = createQuoteCache();
 
   for (const batch of userBatches) {
+    if (isCloudKalshiPaused()) break;
     await Promise.all(
       batch.map(async (user) => {
         const userId = user.userId;
-        const windowClaims = new Map<string, number>();
 
         try {
           const cfg = user.config || defaultAppConfig();
@@ -334,9 +360,8 @@ async function runOneTick() {
               continue;
             }
             const windowCap = windowBuyCap(cfg.risk);
-            const buysOnTicker =
-              countWindowBuysForTicker(userTrades, marketTicker) + (windowClaims.get(marketTicker) || 0);
-            if (buysOnTicker >= windowCap) {
+            const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
+            if (existingBuys >= windowCap) {
               lastTradeAction[asset] = skippedTradeAction('max_trades_asset_window', tickIso);
               continue;
             }
@@ -359,7 +384,7 @@ async function runOneTick() {
               {
                 openPositions,
                 tradesToday,
-                assetTradesInWindow: buysOnTicker,
+                assetTradesInWindow: existingBuys,
                 dailyPnlUsd,
               }
             );
@@ -383,17 +408,31 @@ async function runOneTick() {
               continue;
             }
 
-            windowClaims.set(marketTicker, (windowClaims.get(marketTicker) || 0) + 1);
+            const placeRequestId = `tick_${userId}_${marketTicker}_${Date.now()}_${Math.random()
+              .toString(36)
+              .slice(2, 8)}`.slice(0, 64);
+            const claimed = await tryAcquirePlaceLock({
+              userId,
+              ticker: marketTicker,
+              cap: windowCap,
+              requestId: placeRequestId,
+              existingBuys,
+            });
+            if (!claimed.ok) {
+              lastTradeAction[asset] = skippedTradeAction(claimed.reason, tickIso);
+              continue;
+            }
 
             const client = new KalshiClient(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo');
-            const placeRes = await client.placeOrder({
-              ticker: marketTicker,
-              side: gate.side || 'bid',
-              count: gate.count,
-              price: gate.price,
-              time_in_force: gate.time_in_force,
-              dry_run: !isLive,
-            });
+            try {
+              const placeRes = await client.placeOrder({
+                ticker: marketTicker,
+                side: gate.side || 'bid',
+                count: gate.count,
+                price: gate.price,
+                time_in_force: gate.time_in_force,
+                dry_run: !isLive,
+              });
 
             if (placeRes.ok) {
               tradesCount++;
@@ -428,9 +467,6 @@ async function runOneTick() {
 
               await saveTradeRecord(userId, tradeDoc);
               userTrades.unshift(tradeDoc);
-              if (!filled) {
-                windowClaims.set(marketTicker, Math.max(0, (windowClaims.get(marketTicker) || 1) - 1));
-              }
               if (filled && !tradeDoc.dryRun) {
                 openPositions += 1;
                 tradesToday += 1;
@@ -489,12 +525,14 @@ async function runOneTick() {
                 });
               }
             } else {
-              windowClaims.set(marketTicker, Math.max(0, (windowClaims.get(marketTicker) || 1) - 1));
               lastTradeAction[asset] = {
                 status: 'failed',
                 detail: String(placeRes.error || 'order failed'),
                 at: tickIso,
               };
+            }
+            } finally {
+              await releasePlaceLock({ userId, ticker: marketTicker, requestId: placeRequestId });
             }
           }
 
@@ -516,6 +554,7 @@ async function runOneTick() {
           });
           await writeAuditLog(userId, 'ERROR', { error: err?.message || 'tick_exception' });
           results.push({ userId, tradesPlaced: 0, leansEvaluated: 0, error: err?.message || 'tick_exception' });
+          noteTransientKalshiFailure(err);
         }
       })
     );
@@ -527,6 +566,9 @@ async function runOneTick() {
 // Endpoint triggered every minute by Cloud Scheduler (executes N sub-ticks per minute based on systemConfig)
 workerRouter.post('/tick', async (req: Request, res: Response) => {
   const isTest = process.env.NODE_ENV === 'test' || req.query.single === 'true';
+  if (process.env.NODE_ENV === 'test') {
+    resetKalshiPauseForTests();
+  }
   const sysConfig = await getSystemConfig();
   const intervalSec = sysConfig?.tick_interval_seconds || 20;
   const tickCount = isTest ? 1 : Math.max(1, Math.floor(60 / intervalSec));
@@ -535,6 +577,7 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
 
   for (let i = 0; i < tickCount; i++) {
     lastResult = await runOneTick();
+    if (lastResult?.paused) break;
     if (i < tickCount - 1) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }

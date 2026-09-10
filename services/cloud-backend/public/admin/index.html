@@ -32,7 +32,17 @@
   <style>
     html { color-scheme: dark; }
     body { background-color: #0F172A; color: #F8FAFC; font-family: 'Inter', sans-serif; }
-    input[type="date"], input[type="time"] { color-scheme: dark; }
+    input[type="date"], input[type="time"], input[type="datetime-local"] { color-scheme: dark; }
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="time"]::-webkit-calendar-picker-indicator,
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+      opacity: 1;
+      display: block;
+      cursor: pointer;
+      filter: invert(0.85);
+      width: 18px;
+      height: 18px;
+    }
     .glass-card { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid #334155; }
     .tab-btn.active { background-color: #0284C7; color: #FFFFFF; font-weight: 700; }
     /* Contextual Info Tooltip */
@@ -72,6 +82,11 @@
           <span class="w-2.5 h-2.5 rounded-full bg-slate-500" id="headerWorkerDot"></span>
           <span id="headerWorkerStatus" class="text-slate-300 font-medium">Worker —</span>
         </div>
+
+        <!-- Broadcast (in-app Home banner) — next to Kill-Switch, not iPhone -->
+        <button onclick="openBroadcastModal()" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-lg transition duration-150 flex items-center gap-1.5 border border-amber-400/30">
+          <span>📣 Broadcast</span>
+        </button>
 
         <!-- Emergency Kill-Switch Button -->
         <button onclick="openKillSwitchModal()" class="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-lg transition duration-150 flex items-center gap-1.5 border border-rose-400/30">
@@ -182,6 +197,12 @@
         </button>
         <button onclick="switchTab('purge')" id="tab-purge" class="tab-btn px-4 py-2 text-xs font-bold rounded-xl transition duration-150 text-slate-300 hover:text-white">
           🧹 Purge jobs
+        </button>
+        <button onclick="switchTab('retry')" id="tab-retry" class="tab-btn px-4 py-2 text-xs font-bold rounded-xl transition duration-150 text-slate-300 hover:text-white">
+          🔁 Kalshi retries
+        </button>
+        <button onclick="switchTab('features')" id="tab-features" class="tab-btn px-4 py-2 text-xs font-bold rounded-xl transition duration-150 text-slate-300 hover:text-white">
+          ⚙️ Feature configs
         </button>
         <button onclick="switchTab('devdocs')" id="tab-devdocs" class="tab-btn px-4 py-2 text-xs font-bold rounded-xl transition duration-150 text-slate-300 hover:text-white">
           🛠️ Dev & GCP Infra Docs
@@ -537,6 +558,91 @@
       </div>
     </div>
 
+    <!-- TAB: KALSHI RETRIES -->
+    <div id="view-retry" class="hidden space-y-6">
+      <div class="glass-card rounded-2xl p-6 space-y-5">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>🔁 Kalshi retries</span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">
+            Platform-wide. Applies to the iPhone foreground poller and the GCP worker.
+            On a matching error, Predict retries the <strong class="text-white">same GET</strong> this many times, waiting the interval between tries.
+            If it still fails, both sides <strong class="text-white">pause all Kalshi calls</strong> for the pause seconds, then try again.
+            Stored in <span class="font-mono text-sky-400">system/config.kalshiRetry</span>.
+          </p>
+        </div>
+        <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs text-slate-300 space-y-2">
+          <p><strong class="text-white">401 / 403</strong> are never retried here (still a 5-minute auth block on the phone).</p>
+          <p><strong class="text-white">429</strong> keeps the existing ~30s pause unless you add 429 to the HTTP list, then this policy wins.</p>
+          <p>POST / place-order is never immediately retried (could double-fill). A 5xx on place still starts the pause.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="block text-[11px] text-slate-400 md:col-span-2">HTTP codes (comma-separated)
+            <input type="text" id="retryHttpCodes" value="408,500,502,503,504" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" placeholder="408,500,502,503,504" onchange="markRetryFormDirty()" oninput="markRetryFormDirty()" />
+          </label>
+          <label class="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer md:col-span-2">
+            <input type="checkbox" id="retryIncludeTimeouts" class="accent-sky-500" checked onchange="markRetryFormDirty()" />
+            Treat timeouts (fetch abort, ETIMEDOUT) like these codes
+          </label>
+          <label class="block text-[11px] text-slate-400">Retries before pause
+            <input type="number" id="retryMaxRetries" min="0" max="5" value="2" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markRetryFormDirty()" oninput="markRetryFormDirty()" />
+            <span class="text-slate-500">Extra GET attempts after the first failure (0–5)</span>
+          </label>
+          <label class="block text-[11px] text-slate-400">Retry interval (seconds)
+            <input type="number" id="retryIntervalSeconds" min="0" max="30" value="2" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markRetryFormDirty()" oninput="markRetryFormDirty()" />
+            <span class="text-slate-500">Wait between those extra GET attempts (0–30)</span>
+          </label>
+          <label class="block text-[11px] text-slate-400">Pause (seconds)
+            <input type="number" id="retryPauseSeconds" min="10" max="300" value="60" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markRetryFormDirty()" oninput="markRetryFormDirty()" />
+            <span class="text-slate-500">After retries fail, skip Kalshi this long (10–300). Default 60.</span>
+          </label>
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p id="retryUnsavedHint" class="hidden text-[11px] text-amber-400 font-semibold">Unsaved changes — click Save retry settings.</p>
+          <button type="button" onclick="saveRetrySettings()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl border border-sky-400">
+            Save retry settings
+          </button>
+        </div>
+        <p id="retryStatusMsg" class="text-[11px] text-slate-500"></p>
+      </div>
+    </div>
+
+    <!-- TAB: FEATURE CONFIGS -->
+    <div id="view-features" class="hidden space-y-6">
+      <div class="glass-card rounded-2xl p-6 space-y-5">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>⚙️ Feature configs</span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">
+            Platform On/Off for product features. The iPhone and GCP worker read
+            <span class="font-mono text-sky-400">system/config.featureFlags</span> on the next status sync / tick.
+            No App Store / EAS publish is required to hide a feature.
+          </p>
+        </div>
+        <label class="flex items-start gap-3 p-4 rounded-xl bg-slate-900/80 border border-slate-800 cursor-pointer">
+          <input type="checkbox" id="flagLastSignalsManualTrade" class="mt-1 accent-sky-500" checked onchange="markFeatureFormDirty()" />
+          <span>
+            <span class="text-sm font-bold text-white">Last signals Buy / Sell</span>
+            <span class="block text-xs text-slate-400 mt-1">
+              Home Last signals shows Buy YES / Buy NO (and Sell when already holding that 15m window).
+              One tap places now on Cloud Run. Auto-trade Off still places. Timing and max-ask do not
+              block a tap; size, caps, cushion, chase, and Manual-buy TIF still apply. Off hides buttons
+              and Cloud rejects taps. Kill-Switch also hides the buttons. POST /place is never immediately retried.
+            </span>
+          </span>
+        </label>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p id="featureUnsavedHint" class="hidden text-[11px] text-amber-400 font-semibold">Unsaved changes — click Save feature configs.</p>
+          <button type="button" onclick="saveFeatureSettings()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl border border-sky-400">
+            Save feature configs
+          </button>
+        </div>
+        <p id="featureStatusMsg" class="text-[11px] text-slate-500"></p>
+      </div>
+    </div>
+
     <!-- TAB 7: DEV & GCP INFRASTRUCTURE DOCS -->
     <div id="view-devdocs" class="hidden space-y-6">
       <div class="glass-card rounded-2xl p-6 space-y-6">
@@ -603,6 +709,25 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
         <button onclick="closeAuthModal()" class="px-4 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700">Cancel</button>
         <button onclick="saveAdminKey()" class="px-4 py-2 bg-sky-600 text-white font-bold text-xs rounded-xl hover:bg-sky-500">Save Secret</button>
       </div>
+    </div>
+  </div>
+
+  <!-- BROADCAST MODAL -->
+  <div id="broadcastModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-2xl w-full rounded-2xl p-6 border border-amber-500/40 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 text-amber-400">
+          <span class="text-2xl">📣</span>
+          <h3 class="text-base font-extrabold text-white">Broadcast</h3>
+        </div>
+        <button type="button" onclick="closeBroadcastModal()" class="px-3 py-1.5 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700">Close</button>
+      </div>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        In-app banner on iPhone Home (same band as schedule notices). Uncheck <strong>Show to users</strong> to pull immediately.
+        <strong>Show until</strong> uses the calendar for date and the clock for time (your local timezone). Leave both blank for no end. Auto-hides even if the checkbox is still on. Kill-Switch stays trading-only.
+      </p>
+      <div id="broadcastTemplateGrid" class="grid grid-cols-1 gap-3"></div>
+      <p id="broadcastStatusMsg" class="text-[11px] text-slate-500"></p>
     </div>
   </div>
 
@@ -884,6 +1009,261 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       }
     }
 
+    let retryFormDirty = false;
+    function setRetryUnsavedHint(on) {
+      const el = document.getElementById('retryUnsavedHint');
+      if (el) el.classList.toggle('hidden', !on);
+    }
+    function markRetryFormDirty() {
+      retryFormDirty = true;
+      setRetryUnsavedHint(true);
+    }
+    function applyRetryForm(systemConfig, opts) {
+      const force = Boolean(opts && opts.force);
+      if (retryFormDirty && !force) return;
+      const r = (systemConfig && systemConfig.kalshiRetry) || {};
+      const codes = Array.isArray(r.httpCodes) ? r.httpCodes.join(',') : '408,500,502,503,504';
+      const codesEl = document.getElementById('retryHttpCodes');
+      const toEl = document.getElementById('retryIncludeTimeouts');
+      const maxEl = document.getElementById('retryMaxRetries');
+      const intEl = document.getElementById('retryIntervalSeconds');
+      const pauseEl = document.getElementById('retryPauseSeconds');
+      if (codesEl) codesEl.value = codes;
+      if (toEl) toEl.checked = r.includeTimeouts !== false;
+      if (maxEl) maxEl.value = r.maxRetries != null ? r.maxRetries : 2;
+      if (intEl) intEl.value = r.retryIntervalSeconds != null ? r.retryIntervalSeconds : 2;
+      if (pauseEl) pauseEl.value = r.pauseSeconds != null ? r.pauseSeconds : 60;
+    }
+    function readRetryForm() {
+      return {
+        httpCodes: document.getElementById('retryHttpCodes').value,
+        includeTimeouts: document.getElementById('retryIncludeTimeouts').checked,
+        maxRetries: Number(document.getElementById('retryMaxRetries').value),
+        retryIntervalSeconds: Number(document.getElementById('retryIntervalSeconds').value),
+        pauseSeconds: Number(document.getElementById('retryPauseSeconds').value),
+      };
+    }
+    async function saveRetrySettings() {
+      const status = document.getElementById('retryStatusMsg');
+      try {
+        const res = await fetch(`${API_BASE}/config`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ kalshiRetry: readRetryForm() }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          const msg = data.error || `Save failed (${res.status})`;
+          if (status) status.innerText = msg;
+          alert(msg);
+          return;
+        }
+        applyRetryForm(data.systemConfig, { force: true });
+        retryFormDirty = false;
+        setRetryUnsavedHint(false);
+        if (status) status.innerText = 'Retry settings saved. iPhone picks them up on the next Cloud status pull; GCP worker on the next /tick.';
+      } catch (e) {
+        alert('Error saving retry settings: ' + (e?.message || e));
+      }
+    }
+
+    const DEFAULT_MAINTENANCE_MESSAGE = 'Predict is undergoing brief maintenance. Auto-trade and new orders may pause. Open positions stay on Kalshi until they settle or you exit.';
+    let featureFormDirty = false;
+    let cachedBroadcastTemplates = [{
+      id: 'system_maintenance',
+      title: 'System maintenance',
+      message: DEFAULT_MAINTENANCE_MESSAGE,
+      show: false,
+      showUntil: null,
+    }];
+
+    function setFeatureUnsavedHint(on) {
+      const el = document.getElementById('featureUnsavedHint');
+      if (el) el.classList.toggle('hidden', !on);
+    }
+    function markFeatureFormDirty() {
+      featureFormDirty = true;
+      setFeatureUnsavedHint(true);
+    }
+    function applyFeatureForm(systemConfig, opts) {
+      const force = Boolean(opts && opts.force);
+      if (featureFormDirty && !force) return;
+      const flags = (systemConfig && systemConfig.featureFlags) || {};
+      const el = document.getElementById('flagLastSignalsManualTrade');
+      if (el) el.checked = flags.lastSignalsManualTrade !== false;
+    }
+    async function saveFeatureSettings() {
+      const status = document.getElementById('featureStatusMsg');
+      try {
+        const res = await fetch(`${API_BASE}/config`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            featureFlags: {
+              lastSignalsManualTrade: document.getElementById('flagLastSignalsManualTrade').checked,
+            },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          const msg = data.error || `Save failed (${res.status})`;
+          if (status) status.innerText = msg;
+          alert(msg);
+          return;
+        }
+        applyFeatureForm(data.systemConfig, { force: true });
+        featureFormDirty = false;
+        setFeatureUnsavedHint(false);
+        if (status) status.innerText = 'Feature configs saved. iPhone picks them up on the next Cloud status pull.';
+      } catch (e) {
+        alert('Error saving feature configs: ' + (e?.message || e));
+      }
+    }
+
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    function parseIsoDate(iso) {
+      if (!iso) return null;
+      const d = new Date(iso);
+      return Number.isFinite(d.getTime()) ? d : null;
+    }
+    function isoToDatePart(iso) {
+      const d = parseIsoDate(iso);
+      if (!d) return '';
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    }
+    function isoToTimePart(iso) {
+      const d = parseIsoDate(iso);
+      if (!d) return '';
+      return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+    function readBroadcastUntilIso(index) {
+      const dateEl = document.getElementById(`broadcastUntilDate_${index}`);
+      const timeEl = document.getElementById(`broadcastUntilTime_${index}`);
+      const date = (dateEl && dateEl.value || '').trim();
+      let time = (timeEl && timeEl.value || '').trim();
+      if (!date) return null;
+      if (!time) time = '23:59';
+      const t = Date.parse(`${date}T${time}`);
+      return Number.isFinite(t) ? new Date(t).toISOString() : null;
+    }
+    function formatBroadcastUntilPreview(iso) {
+      const d = parseIsoDate(iso);
+      if (!d) return 'No end time — stays until you uncheck Show to users.';
+      return `Hides after ${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} (your local time).`;
+    }
+    function refreshBroadcastUntilPreview(index) {
+      const el = document.getElementById(`broadcastUntilPreview_${index}`);
+      if (el) el.textContent = formatBroadcastUntilPreview(readBroadcastUntilIso(index));
+    }
+    function onBroadcastUntilChange(index) {
+      const dateEl = document.getElementById(`broadcastUntilDate_${index}`);
+      const timeEl = document.getElementById(`broadcastUntilTime_${index}`);
+      if (dateEl && dateEl.value && timeEl && !timeEl.value) timeEl.value = '23:59';
+      refreshBroadcastUntilPreview(index);
+    }
+    function openNativePicker(el) {
+      if (!el) return;
+      try {
+        if (typeof el.showPicker === 'function') {
+          el.showPicker();
+          return;
+        }
+      } catch (_) { /* already consumed / unsupported */ }
+      el.focus();
+      el.click();
+    }
+    function openBroadcastDatePicker(index) {
+      openNativePicker(document.getElementById(`broadcastUntilDate_${index}`));
+    }
+    function openBroadcastTimePicker(index) {
+      openNativePicker(document.getElementById(`broadcastUntilTime_${index}`));
+    }
+    function clearBroadcastUntil(index) {
+      const dateEl = document.getElementById(`broadcastUntilDate_${index}`);
+      const timeEl = document.getElementById(`broadcastUntilTime_${index}`);
+      if (dateEl) dateEl.value = '';
+      if (timeEl) timeEl.value = '';
+      refreshBroadcastUntilPreview(index);
+    }
+    function applyBroadcastForm(systemConfig) {
+      const templates = (systemConfig && systemConfig.broadcast && Array.isArray(systemConfig.broadcast.templates))
+        ? systemConfig.broadcast.templates
+        : cachedBroadcastTemplates;
+      cachedBroadcastTemplates = templates.map((t) => ({
+        id: t.id || 'system_maintenance',
+        title: t.title || 'System maintenance',
+        message: t.message || DEFAULT_MAINTENANCE_MESSAGE,
+        show: t.show === true,
+        showUntil: t.showUntil || null,
+      }));
+      renderBroadcastGrid();
+    }
+    function renderBroadcastGrid() {
+      const grid = document.getElementById('broadcastTemplateGrid');
+      if (!grid) return;
+      grid.innerHTML = cachedBroadcastTemplates.map((t, i) => `
+        <div class="rounded-xl border border-slate-700 bg-slate-900/80 p-4 space-y-3" data-broadcast-id="${t.id}">
+          <div class="text-sm font-bold text-white">${t.title || 'Template'}</div>
+          <label class="block text-[11px] text-slate-400">Message
+            <textarea id="broadcastMsg_${i}" rows="3" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs">${String(t.message || '').replace(/</g, '&lt;')}</textarea>
+          </label>
+          <label class="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer">
+            <input type="checkbox" id="broadcastShow_${i}" class="accent-amber-500" ${t.show ? 'checked' : ''} />
+            Show to users
+          </label>
+          <div class="space-y-1.5">
+            <div class="text-[11px] text-slate-400">Show until</div>
+            <div class="flex flex-wrap items-center gap-2">
+              <input type="date" id="broadcastUntilDate_${i}" value="${isoToDatePart(t.showUntil)}" onchange="onBroadcastUntilChange(${i})" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs" />
+              <button type="button" onclick="openBroadcastDatePicker(${i})" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold rounded-lg border border-slate-600">Calendar</button>
+              <input type="time" id="broadcastUntilTime_${i}" value="${isoToTimePart(t.showUntil)}" step="60" onchange="onBroadcastUntilChange(${i})" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs" />
+              <button type="button" onclick="openBroadcastTimePicker(${i})" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold rounded-lg border border-slate-600">Time</button>
+              <button type="button" onclick="clearBroadcastUntil(${i})" class="px-2 py-1.5 text-slate-400 hover:text-white text-[11px]">Clear</button>
+            </div>
+            <div id="broadcastUntilPreview_${i}" class="text-[10px] text-slate-500">${formatBroadcastUntilPreview(t.showUntil)}</div>
+          </div>
+          <button type="button" onclick="saveBroadcastTemplate(${i})" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl">Save template</button>
+        </div>
+      `).join('');
+    }
+    function openBroadcastModal() {
+      renderBroadcastGrid();
+      document.getElementById('broadcastModal').classList.remove('hidden');
+    }
+    function closeBroadcastModal() {
+      document.getElementById('broadcastModal').classList.add('hidden');
+    }
+    async function saveBroadcastTemplate(index) {
+      const status = document.getElementById('broadcastStatusMsg');
+      const prev = cachedBroadcastTemplates[index];
+      if (!prev) return;
+      const next = {
+        id: prev.id,
+        title: prev.title,
+        message: document.getElementById(`broadcastMsg_${index}`).value,
+        show: document.getElementById(`broadcastShow_${index}`).checked,
+        showUntil: readBroadcastUntilIso(index),
+      };
+      try {
+        const res = await fetch(`${API_BASE}/config`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ broadcast: { templates: [next] } }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          const msg = data.error || `Save failed (${res.status})`;
+          if (status) status.innerText = msg;
+          alert(msg);
+          return;
+        }
+        applyBroadcastForm(data.systemConfig);
+        if (status) status.innerText = next.show ? 'Broadcast is showing on iPhone Home until the end time (or until you uncheck Show).' : 'Broadcast hidden. iPhone pulls this on the next status sync.';
+      } catch (e) {
+        alert('Error saving broadcast: ' + (e?.message || e));
+      }
+    }
+
     async function runPurgeJob(job) {
       const status = document.getElementById('purgeStatusMsg');
       if (job === 'trades') {
@@ -925,7 +1305,7 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       const activeBtn = document.getElementById(`tab-${tabId}`);
       if (activeBtn) activeBtn.classList.add('active');
 
-      ['overview', 'users', 'cushions', 'trades', 'audit', 'purge', 'devdocs'].forEach(id => {
+      ['overview', 'users', 'cushions', 'trades', 'audit', 'purge', 'retry', 'features', 'devdocs'].forEach(id => {
         const el = document.getElementById(`view-${id}`);
         if (el) el.classList.toggle('hidden', id !== tabId);
       });
@@ -972,6 +1352,9 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
         const data = await res.json();
         if (data.ok && data.systemConfig) {
           applyPurgeForm(data.systemConfig);
+          applyRetryForm(data.systemConfig);
+          applyFeatureForm(data.systemConfig);
+          applyBroadcastForm(data.systemConfig);
         }
         if (data.ok && data.metrics) {
           document.getElementById('metricTotalUsers').innerText = data.metrics.totalUsers || 0;

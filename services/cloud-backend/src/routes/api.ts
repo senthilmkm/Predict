@@ -14,6 +14,8 @@ import {
   getSystemConfig,
   syncAssetCatalogToFirestore,
 } from '../services/firestore';
+import { resolveActiveBroadcast } from '../services/broadcast';
+import { executeManualOrder } from '../services/manualTrade';
 
 export const apiRouter = Router();
 
@@ -174,6 +176,7 @@ apiRouter.get('/me/status', async (req: Request, res: Response) => {
     userDoc: finalUserDoc,
     systemConfig,
     assetsCatalog,
+    activeBroadcast: resolveActiveBroadcast(systemConfig.broadcast),
   });
 });
 
@@ -186,7 +189,17 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
     const systemConfig = await getSystemConfig();
     const updateData: any = {};
     if (typeof cloudTradingEnabled === 'boolean') updateData.cloudTradingEnabled = cloudTradingEnabled;
-    if (state === 'ARMED' || state === 'DISARMED') updateData.state = state;
+    const existing = await getUserDoc(userId);
+    if (state === 'ARMED' || state === 'DISARMED') {
+      if (existing?.state === 'KILL_SWITCH') {
+        /* Phone snapshot must not clear emergency kill. Admin arm can. */
+      } else {
+        updateData.state = state;
+      }
+    }
+    if (existing?.state === 'KILL_SWITCH' && updateData.cloudTradingEnabled === true) {
+      updateData.cloudTradingEnabled = false;
+    }
     if (config) {
       const risk = config.risk || {};
       const { max_trades_per_asset_per_day: _removedPerDay, ...restRisk } = risk;
@@ -203,7 +216,7 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
     if (displayName) updateData.displayName = displayName;
     if (deviceName) updateData.deviceName = deviceName;
 
-    const before = await getUserDoc(userId);
+    const before = existing;
     const userDoc = await upsertUserDoc(userId, updateData);
     const armedChanged =
       !before ||
@@ -217,7 +230,12 @@ apiRouter.post('/me/status', async (req: Request, res: Response) => {
       );
     }
 
-    res.json({ ok: true, userDoc, systemConfig });
+    res.json({
+      ok: true,
+      userDoc,
+      systemConfig,
+      activeBroadcast: resolveActiveBroadcast(systemConfig.broadcast),
+    });
   } catch (err: any) {
     res.status(500).json({ error: 'update_failed', message: err?.message || 'Failed to update user status' });
   }
@@ -317,4 +335,37 @@ apiRouter.get('/me/audit', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
   const auditLogs = await getAuditLogs(userId);
   res.json({ ok: true, auditLogs });
+});
+
+// Home Last-signals Buy YES/NO / Sell — Cloud place-now (never from the phone)
+apiRouter.post('/me/orders/manual', async (req: Request, res: Response) => {
+  const userId = extractUserId(req);
+  const asset = String(req.body?.asset || '').trim();
+  const action = req.body?.action === 'sell' ? 'sell' : req.body?.action === 'buy' ? 'buy' : '';
+  const requestId = String(req.body?.requestId || '').trim() || undefined;
+  if (!asset || (action !== 'buy' && action !== 'sell')) {
+    res.status(400).json({
+      ok: false,
+      error: 'invalid_request',
+      message: 'asset and action (buy|sell) are required',
+    });
+    return;
+  }
+  try {
+    const result = await executeManualOrder({ userId, asset, action, requestId });
+    res.status(result.httpStatus).json(result);
+  } catch (err: any) {
+    await writeAuditLog(userId, 'ERROR', {
+      source: 'manual_order',
+      error: 'exception',
+      asset,
+      action,
+      message: err?.message || 'manual_order_failed',
+    });
+    res.status(500).json({
+      ok: false,
+      error: 'manual_order_failed',
+      message: err?.message || 'Could not place order',
+    });
+  }
 });

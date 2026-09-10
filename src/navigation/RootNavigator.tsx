@@ -17,6 +17,7 @@ import { exportAndShareHistory } from '../services/exportHistory';
 import { withSupportContact } from '../config/appMeta';
 import { useAutoTradeBackgroundGuard } from '../hooks/useAutoTradeBackgroundGuard';
 import { PostTrialNextStepsModal } from '../components/PostTrialNextStepsModal';
+import { KillSwitchHeaderButton } from '../components/KillSwitchHeaderButton';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -101,6 +102,7 @@ function HeaderActions({ navigation }: { navigation: any }) {
   const unread = useRuntimeStore((s) => s.unread);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+      <KillSwitchHeaderButton />
       <ExportButton />
       <BellButton count={unread} onPress={() => navigation.navigate('AlertsHub')} />
     </View>

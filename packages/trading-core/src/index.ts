@@ -4,3 +4,4 @@ export * from './client';
 export * from './lean';
 export * from './gates';
 export * from './protectSell';
+export * from './kalshiRetry';

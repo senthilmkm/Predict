@@ -72,6 +72,7 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.chase_above_ask_usd).toBe(0.05);
     expect(cfg.risk.min_dollars_per_trade).toBe(1);
     expect(cfg.risk.time_in_force).toBe('immediate_or_cancel');
+    expect(cfg.risk.manual_buy_time_in_force).toBe('immediate_or_cancel');
     expect(cfg.risk.protect_sell_enabled).toBe(false);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(1);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(45);

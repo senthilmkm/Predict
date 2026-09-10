@@ -29,6 +29,8 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
     setRefreshing(true);
     try {
       await Promise.all([refreshCloudSnapshot(), refreshPredictionsBalance()]);
+    } catch {
+      /* Keep last dashboard numbers if Cloud/Kalshi is down */
     } finally {
       setRefreshing(false);
     }
@@ -121,8 +123,8 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
       <Text style={styles.note}>
         Change is your Kalshi Predictions total vs a saved snapshot (24h when we have one,
         otherwise since the first snapshot on this phone). Closed P&L is only Predict orders
-        that filled today (ET). The by-asset card uses the same fills and the price you paid
-        (not the other side’s quote). History has every fill.
+        that filled today (ET). The by-asset card uses the same fills. Won at / lost at is the
+        contract price you bought (for example 92¢), not the other side’s quote. History has every fill.
       </Text>
       <SupportContactFooter compact />
     </ScrollView>

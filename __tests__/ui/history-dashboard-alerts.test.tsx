@@ -63,6 +63,10 @@ describe('History / Dashboard / AlertsHub', () => {
     });
 
     const s = await render(<HistoryScreen />);
+    expect(s.getByTestId('trade-status-dot-t-pending-green-green')).toBeTruthy();
+    expect(s.queryByTestId('trade-status-dot-t-win-green')).toBeNull();
+    await fireEvent.press(s.getByTestId('trade-filter-status'));
+    await fireEvent.press(s.getByTestId('trade-filter-status-option-all'));
     expect(s.getByTestId('trade-status-dot-t-win-green')).toBeTruthy();
     expect(s.getByTestId('trade-status-dot-t-pending-green-green')).toBeTruthy();
   });
@@ -71,12 +75,105 @@ describe('History / Dashboard / AlertsHub', () => {
     const s = await render(<HistoryScreen />);
     expect(s.getByTestId('screen-history')).toBeTruthy();
     expect(s.getByTestId('history-trade-filters')).toBeTruthy();
-    await fireEvent.press(s.getByTestId('filter-pending'));
+    expect(s.getByTestId('trade-filter-status')).toBeTruthy();
+    expect(s.getByText('Pending ▾')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('trade-filter-status'));
+    expect(s.getByTestId('trade-filter-status-option-pending')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('trade-filter-status-option-pending'));
     await fireEvent.press(s.getByTestId('seg-alerts'));
     expect(s.getByTestId('history-alert-filters')).toBeTruthy();
     await fireEvent.press(s.getByTestId('filter-lean_signal'));
     await fireEvent.press(s.getByTestId('filter-order_placed'));
     await fireEvent.press(s.getByTestId('seg-trades'));
+  });
+
+  test('History trade dropdowns AND status, side, and asset', async () => {
+    useRuntimeStore.setState({
+      refreshCloudSnapshot: async () => {},
+      trades: [
+        {
+          id: 'p-btc',
+          at: '2026-09-03T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-TEST',
+          side: 'YES',
+          notional_usd: 10,
+          outcome: 'pending',
+          dry_run: false,
+        } as any,
+        {
+          id: 'p-gold',
+          at: '2026-09-03T10:00:00.000Z',
+          asset: 'Gold',
+          market_ticker: 'KXGOLD15M-TEST',
+          side: 'NO',
+          notional_usd: 8,
+          outcome: 'pending',
+          dry_run: false,
+        } as any,
+        {
+          id: 'w-btc',
+          at: '2026-09-03T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-WIN',
+          side: 'YES',
+          notional_usd: 10,
+          outcome: 'win',
+          dry_run: false,
+        } as any,
+      ],
+    });
+
+    const s = await render(<HistoryScreen />);
+    expect(s.getByTestId('trade-row-p-btc')).toBeTruthy();
+    expect(s.getByTestId('trade-row-p-gold')).toBeTruthy();
+    expect(s.queryByTestId('trade-row-w-btc')).toBeNull();
+    expect(s.getByText(/2 of 3/)).toBeTruthy();
+
+    await fireEvent.press(s.getByTestId('trade-filter-side'));
+    await fireEvent.press(s.getByTestId('trade-filter-side-option-YES'));
+    expect(s.getByTestId('trade-row-p-btc')).toBeTruthy();
+    expect(s.queryByTestId('trade-row-p-gold')).toBeNull();
+
+    await fireEvent.press(s.getByTestId('trade-filter-asset'));
+    await fireEvent.press(s.getByTestId('trade-filter-asset-option-Gold'));
+    expect(s.queryByTestId('trade-row-p-btc')).toBeNull();
+    expect(s.queryByTestId('trade-row-p-gold')).toBeNull();
+    expect(s.getByText('No matching trades')).toBeTruthy();
+
+    await fireEvent.press(s.getByTestId('trade-filter-status'));
+    await fireEvent.press(s.getByTestId('trade-filter-status-option-all'));
+    await fireEvent.press(s.getByTestId('trade-filter-side'));
+    await fireEvent.press(s.getByTestId('trade-filter-side-option-all'));
+    await fireEvent.press(s.getByTestId('trade-filter-asset'));
+    await fireEvent.press(s.getByTestId('trade-filter-asset-option-all'));
+    expect(s.getByTestId('trade-row-p-btc')).toBeTruthy();
+    expect(s.getByTestId('trade-row-p-gold')).toBeTruthy();
+    expect(s.getByTestId('trade-row-w-btc')).toBeTruthy();
+  });
+
+  test('History keeps last trades if Cloud snapshot fails', async () => {
+    useRuntimeStore.setState({
+      refreshCloudSnapshot: async () => {
+        throw new Error('firestore_unavailable');
+      },
+      trades: [
+        {
+          id: 'keep-me',
+          at: '2026-09-03T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-TEST',
+          side: 'YES',
+          notional_usd: 10,
+          outcome: 'pending',
+          dry_run: false,
+        } as any,
+      ],
+    });
+    const s = await render(<HistoryScreen />);
+    expect(s.getByTestId('trade-row-keep-me')).toBeTruthy();
+    s.unmount();
+    useRuntimeStore.setState({ refreshCloudSnapshot: async () => {} });
   });
 
   test('Dashboard root', async () => {
@@ -199,9 +296,11 @@ describe('History / Dashboard / AlertsHub', () => {
     expect(s.getByTestId('dashboard-asset-pnl-Silver')).toBeTruthy();
     expect(s.getAllByText('3W / 4L').length).toBeGreaterThan(0);
     expect(s.getByText('-$13.37')).toBeTruthy();
-    expect(s.getByText('Wins paid $0.92 · Losses paid $0.85–$0.92')).toBeTruthy();
+    expect(s.getByText('Won at 92¢ · Lost at 85–92¢')).toBeTruthy();
     expect(s.getByText('+$7.34')).toBeTruthy();
-    expect(s.getByTestId('dashboard-asset-pnl-footer').props.children).toContain('Losses paid $0.85–$0.92');
+    expect(s.getByTestId('dashboard-asset-pnl-footer').props.children).toContain(
+      'Losing tickets cost 85–92¢'
+    );
   });
 
   test('Dashboard Kalshi card uses a shorter window label until 24h exists', async () => {

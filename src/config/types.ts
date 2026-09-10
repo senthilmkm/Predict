@@ -135,10 +135,12 @@ export interface RiskConfig {
    * 0 = allow from the open. Example: 2 = skip the first ~2 noisy minutes.
    */
   min_minutes_elapsed: number;
-  /** Do not buy if side ask is above this. */
+  /** Do not buy if side ask is above this. Auto-trade only. */
   max_entry_ask_usd: number;
   time_in_force: TimeInForce;
-  /** Add to ask for IOC fill aid; still capped by max_entry_ask. */
+  /** Home Last-signals Buy tap only. Auto-trade still uses time_in_force. */
+  manual_buy_time_in_force: TimeInForce;
+  /** Add to ask for fill aid. Auto-trade still caps pay by max_entry_ask; Home Buy does not. */
   chase_above_ask_usd: number;
   /**
    * When ON: if a held trade faces a strong opposite lean, sell early to protect money
@@ -239,6 +241,7 @@ export function defaultAppConfig(): AppConfig {
       min_minutes_elapsed: 2,
       max_entry_ask_usd: 0.9,
       time_in_force: 'immediate_or_cancel',
+      manual_buy_time_in_force: 'immediate_or_cancel',
       chase_above_ask_usd: 0.02,
       protect_sell_enabled: false,
       protect_sell_gap_ratio: 1,

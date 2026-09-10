@@ -107,9 +107,9 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.metrics.filled24hCount).toBeGreaterThanOrEqual(2);
     expect(res.body.metrics.volumeUsd24h).toBeGreaterThanOrEqual(6.6);
     expect(res.body.metrics.volumeUsd24h).toBeLessThan(6.6 + 2.5);
-    expect(res.body.metrics.assetCount).toBe(19);
+    expect(res.body.metrics.assetCount).toBe(13);
     expect(Array.isArray(res.body.assets)).toBe(true);
-    expect(res.body.assets.length).toBe(19);
+    expect(res.body.assets.length).toBe(13);
     expect(res.body.worker).toBeDefined();
     expect(res.body.worker.status).toBe('ACTIVE');
     expect(res.body.worker.tickIntervalSeconds).toBe(20);
@@ -221,6 +221,23 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('Save purge settings');
     expect(res.text).toContain('/purge/run');
     expect(res.text).toContain("switchTab('purge')");
+    expect(res.text).toContain("switchTab('retry')");
+    expect(res.text).toMatch(/\['overview', 'users', 'cushions', 'trades', 'audit', 'purge', 'retry', 'features', 'devdocs'\]/);
+    expect(res.text).toContain("switchTab('features')");
+    expect(res.text).toContain('Feature configs');
+    expect(res.text).toContain('Last signals Buy / Sell');
+    expect(res.text).toContain('Manual-buy TIF');
+    expect(res.text).toContain('flagLastSignalsManualTrade');
+    expect(res.text).toContain('saveFeatureSettings');
+    expect(res.text).toContain('Broadcast');
+    expect(res.text).toContain('openBroadcastModal');
+    expect(res.text).toContain('Show to users');
+    expect(res.text).toContain('Show until');
+    expect(res.text).toContain('broadcastTemplateGrid');
+    expect(res.text).toContain('broadcastUntilDate_');
+    expect(res.text).toContain('openBroadcastDatePicker');
+    expect(res.text).toContain('readBroadcastUntilIso');
+    expect(res.text).toContain('showPicker');
     expect(res.text).toContain('Live Trade Stream, History, and Cloud P&amp;L');
     expect(res.text).toContain('Never auto-deleted');
     expect(res.text).toContain('purgeAuditCount');
@@ -229,6 +246,9 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('markPurgeFormDirty');
     expect(res.text).toContain('purgeUnsavedHint');
     expect(res.text).toContain('purgeFormDirty');
+    expect(res.text).toContain('Kalshi retries');
+    expect(res.text).toContain('saveRetrySettings');
+    expect(res.text).toContain('retryHttpCodes');
   });
 
   test('11. POST /admin/api/config updates tick_interval_seconds dynamically', async () => {
@@ -246,6 +266,35 @@ describe('Predict Admin Web Portal API Suite', () => {
       .set('x-admin-key', ADMIN_SECRET);
     expect(overviewRes.body.worker.tickIntervalSeconds).toBe(15);
     expect(overviewRes.body.worker.subTicksPerMinute).toBe(4);
+  });
+
+  test('11b. POST /admin/api/config nested-merges kalshiRetry without wiping tick interval', async () => {
+    const first = await request(app)
+      .post('/admin/api/config')
+      .set('x-admin-key', ADMIN_SECRET)
+      .send({
+        kalshiRetry: {
+          httpCodes: '503,504',
+          includeTimeouts: true,
+          maxRetries: 1,
+          retryIntervalSeconds: 3,
+          pauseSeconds: 60,
+        },
+      });
+    expect(first.status).toBe(200);
+    expect(first.body.systemConfig.kalshiRetry.httpCodes).toEqual([503, 504]);
+    expect(first.body.systemConfig.kalshiRetry.maxRetries).toBe(1);
+    expect(first.body.systemConfig.kalshiRetry.pauseSeconds).toBe(60);
+    expect(typeof first.body.systemConfig.tick_interval_seconds).toBe('number');
+
+    const pauseOnly = await request(app)
+      .post('/admin/api/config')
+      .set('x-admin-key', ADMIN_SECRET)
+      .send({ kalshiRetry: { pauseSeconds: 90 } });
+    expect(pauseOnly.body.systemConfig.kalshiRetry.pauseSeconds).toBe(90);
+    expect(pauseOnly.body.systemConfig.kalshiRetry.httpCodes).toEqual([503, 504]);
+    expect(pauseOnly.body.systemConfig.kalshiRetry.maxRetries).toBe(1);
+    expect(pauseOnly.body.systemConfig.tick_interval_seconds).toBe(first.body.systemConfig.tick_interval_seconds);
   });
 
   test('12. GET /admin/api/trades filters by asset, status, user, and reports realized P&L', async () => {

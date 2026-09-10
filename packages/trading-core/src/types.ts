@@ -130,6 +130,8 @@ export interface RiskConfig {
   min_minutes_elapsed: number;
   max_entry_ask_usd: number;
   time_in_force: TimeInForce;
+  /** Home Last-signals Buy tap only. Auto-trade still uses time_in_force. */
+  manual_buy_time_in_force: TimeInForce;
   chase_above_ask_usd: number;
   protect_sell_enabled: boolean;
   protect_sell_gap_ratio: number;
@@ -217,6 +219,7 @@ export function defaultAppConfig(): AppConfig {
       min_minutes_elapsed: 2,
       max_entry_ask_usd: 0.9,
       time_in_force: 'immediate_or_cancel',
+      manual_buy_time_in_force: 'immediate_or_cancel',
       chase_above_ask_usd: 0.02,
       protect_sell_enabled: false,
       protect_sell_gap_ratio: 1,

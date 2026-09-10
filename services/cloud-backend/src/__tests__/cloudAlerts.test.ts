@@ -503,7 +503,7 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(src).not.toContain('SETTLEMENT_ALERT_LOOKBACK');
     const leanAt = src.indexOf('maybeEmitLeanAlert');
     const cushionAt = src.indexOf('absGap < userCushion');
-    const capAt = src.indexOf('buysOnTicker >= windowCap');
+    const capAt = src.indexOf('existingBuys >= windowCap');
     expect(leanAt).toBeGreaterThan(0);
     expect(leanAt).toBeLessThan(cushionAt);
     expect(src).toContain('leanAlertSide');

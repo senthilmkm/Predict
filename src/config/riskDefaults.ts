@@ -17,49 +17,63 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   min_minutes_elapsed: 2,
   max_entry_ask_usd: 0.9,
   time_in_force: 'immediate_or_cancel',
+  manual_buy_time_in_force: 'immediate_or_cancel',
   chase_above_ask_usd: 0.02,
   protect_sell_enabled: false,
   protect_sell_gap_ratio: 1,
   protect_sell_grace_seconds: 45,
 };
 
+export type RiskFieldGroup = 'size' | 'caps' | 'timing';
+
+export const RISK_GROUPS: { id: RiskFieldGroup; label: string }[] = [
+  { id: 'size', label: 'Size' },
+  { id: 'caps', label: 'Caps' },
+  { id: 'timing', label: 'Timing & protect' },
+];
+
 export const RISK_FIELD_META: {
   key: keyof RiskConfig;
   label: string;
+  group: RiskFieldGroup;
   kind: 'money' | 'int' | 'tif' | 'chase' | 'toggle' | 'ratio' | 'seconds';
   step: number;
   min: number;
   max: number;
 }[] = [
-  { key: 'fixed_dollars_per_trade', label: '$ per trade', kind: 'money', step: 1, min: 1, max: 500 },
-  { key: 'max_dollars_per_trade', label: 'Max $ / trade', kind: 'money', step: 1, min: 1, max: 500 },
-  { key: 'min_dollars_per_trade', label: 'Min $ / trade', kind: 'money', step: 1, min: 1, max: 500 },
-  { key: 'max_open_positions', label: 'Max open positions', kind: 'int', step: 1, min: 1, max: 50 },
-  { key: 'max_trades_per_day', label: 'Max trades / day', kind: 'int', step: 1, min: 1, max: 50000 },
+  { key: 'fixed_dollars_per_trade', label: '$ per trade', group: 'size', kind: 'money', step: 1, min: 1, max: 500 },
+  { key: 'max_dollars_per_trade', label: 'Max $ / trade', group: 'size', kind: 'money', step: 1, min: 1, max: 500 },
+  { key: 'min_dollars_per_trade', label: 'Min $ / trade', group: 'size', kind: 'money', step: 1, min: 1, max: 500 },
+  { key: 'max_open_positions', label: 'Max open positions', group: 'caps', kind: 'int', step: 1, min: 1, max: 50 },
+  { key: 'max_trades_per_day', label: 'Max trades / day', group: 'caps', kind: 'int', step: 1, min: 1, max: 50000 },
   {
     key: 'max_trades_per_asset_per_window',
     label: 'Max trades / asset / 15m window',
+    group: 'caps',
     kind: 'int',
     step: 1,
     min: 1,
     max: 5,
   },
-  { key: 'daily_loss_stop_usd', label: 'Daily loss stop ($)', kind: 'money', step: 5, min: 1, max: 10000 },
-  { key: 'min_minutes_left', label: 'Min minutes left (Buy only)', kind: 'int', step: 1, min: 0, max: 14 },
+  { key: 'daily_loss_stop_usd', label: 'Daily loss stop ($)', group: 'caps', kind: 'money', step: 5, min: 1, max: 10000 },
+  { key: 'min_minutes_left', label: 'Min minutes left (Buy only)', group: 'timing', kind: 'int', step: 1, min: 0, max: 14 },
   {
     key: 'min_minutes_elapsed',
     label: 'Min minutes elapsed (Buy only)',
+    group: 'timing',
     kind: 'int',
     step: 1,
     min: 0,
     max: 10,
   },
-  { key: 'max_entry_ask_usd', label: 'Max entry ask ($) (Buy limit)', kind: 'chase', step: 0.01, min: 0.5, max: 0.99 },
-  { key: 'time_in_force', label: 'Time in force (Auto-trade buys)', kind: 'tif', step: 0, min: 0, max: 0 },
-  { key: 'chase_above_ask_usd', label: 'Chase above ask ($) (Buy & Sell)', kind: 'chase', step: 0.01, min: 0, max: 0.05 },
+  { key: 'max_entry_ask_usd', label: 'Max entry ask ($) (Buy limit)', group: 'timing', kind: 'chase', step: 0.01, min: 0.5, max: 0.99 },
+  { key: 'time_in_force', label: 'Time in force (Auto-trade buys)', group: 'timing', kind: 'tif', step: 0, min: 0, max: 0 },
+  { key: 'manual_buy_time_in_force', label: 'Time in force (Manual buy)', group: 'timing', kind: 'tif', step: 0, min: 0, max: 0 },
+  { key: 'chase_above_ask_usd', label: 'Chase above ask ($) (Buy & Sell)', group: 'timing', kind: 'chase', step: 0.01, min: 0, max: 0.05 },
   {
     key: 'protect_sell_enabled',
     label: 'Protect money (early sell)',
+    group: 'timing',
     kind: 'toggle',
     step: 0,
     min: 0,
@@ -68,6 +82,7 @@ export const RISK_FIELD_META: {
   {
     key: 'protect_sell_gap_ratio',
     label: 'Sell when gap ≥ cushion ×',
+    group: 'timing',
     kind: 'ratio',
     step: 0.25,
     min: 0.5,
@@ -76,6 +91,7 @@ export const RISK_FIELD_META: {
   {
     key: 'protect_sell_grace_seconds',
     label: 'Wait after fill before sell',
+    group: 'timing',
     kind: 'seconds',
     step: 15,
     min: 0,

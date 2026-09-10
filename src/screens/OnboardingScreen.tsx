@@ -565,8 +565,8 @@ function RiskStep({
           thumbColor={colors.textPrimary}
         />
         <Text style={styles.checkLabel}>
-          I understand — no profit guarantee, and I am responsible for all trades (alerts or
-          Auto-trade)
+          I understand — no profit guarantee, and I am responsible for all trades (alerts,
+          Auto-trade, and Home Buy / Sell)
         </Text>
       </View>
       <Text style={styles.fine}>
@@ -619,8 +619,8 @@ function ModeStep({
 
         <Text style={styles.modeTitle}>Lean signals only</Text>
         <Text style={styles.modeBullet}>• Receive real-time probability lean alerts</Text>
-        <Text style={styles.modeBullet}>• You place trades yourself manually in Kalshi</Text>
-        <Text style={styles.modeBullet}>• Zero risk of automated order placement</Text>
+        <Text style={styles.modeBullet}>• Home Buy / Sell taps can still place real orders if that feature is On and keys are saved</Text>
+        <Text style={styles.modeBullet}>• Auto-trade stays Off until you enable it later in Settings</Text>
 
         {intent === 'alerts_only' ? (
           <View style={styles.selectedBadge}>
@@ -662,11 +662,12 @@ function ModeStep({
       <View style={styles.compare}>
         <Text style={styles.compareTitle}>Clear difference</Text>
         <Text style={styles.compareLine}>
-          · Lean signals = information + alerts. No money moved by the app.
+          · Lean signals = information + alerts. If Home shows Buy / Sell, a tap still spends Kalshi
+          cash via Cloud Run even when Auto-trade is Off.
         </Text>
         <Text style={styles.compareLine}>
-          · Lean signals + Auto-trade = same signals, and the app may spend your Kalshi cash when
-          you explicitly enable Auto-trade later.
+          · Lean signals + Auto-trade = same signals, and Cloud Run may also buy on a schedule when
+          you enable Auto-trade later.
         </Text>
       </View>
 

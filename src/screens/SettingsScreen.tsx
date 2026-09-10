@@ -22,7 +22,7 @@ import {
   RiskConfig,
   TimeInForce,
 } from '../config/types';
-import { RISK_FIELD_META, TIME_IN_FORCE_OPTIONS } from '../config/riskDefaults';
+import { RISK_FIELD_META, RISK_GROUPS, TIME_IN_FORCE_OPTIONS } from '../config/riskDefaults';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { AutoTradeRiskAcceptModal } from '../components/AutoTradeRiskAcceptModal';
@@ -468,6 +468,7 @@ export function SettingsScreen({
           return;
         }
         await clearCredentials();
+        useRuntimeStore.getState().ensure().dropKalshiClient();
         setHasCreds(false);
         setShowSecrets(false);
         setPem('');
@@ -553,9 +554,13 @@ export function SettingsScreen({
         </View>
         {riskOpen ? (
           <>
-            {RISK_FIELD_META.map((meta) => {
+            {RISK_GROUPS.map((group) => (
+              <View key={group.id} testID={`risk-group-${group.id}`}>
+                <Text style={styles.riskGroupTitle}>{group.label}</Text>
+                {RISK_FIELD_META.filter((m) => m.group === group.id).map((meta) => {
               if (meta.kind === 'tif') {
-                const cur = config.risk.time_in_force;
+                const key = meta.key as 'time_in_force' | 'manual_buy_time_in_force';
+                const cur = config.risk[key];
                 return (
                   <View key={meta.key} style={styles.riskField} testID={`risk-field-${meta.key}`}>
                     <Text style={styles.riskLabel}>{meta.label}</Text>
@@ -563,9 +568,9 @@ export function SettingsScreen({
                       {TIME_IN_FORCE_OPTIONS.map((opt) => (
                         <Pressable
                           key={opt.value}
-                          testID={`tif-${opt.value}`}
+                          testID={`tif-${key}-${opt.value}`}
                           style={[styles.tifChip, cur === opt.value && styles.tifChipOn]}
-                          onPress={() => setRiskField('time_in_force', opt.value as TimeInForce)}
+                          onPress={() => setRiskField(key, opt.value as TimeInForce)}
                         >
                           <Text style={[styles.tifText, cur === opt.value && styles.tifTextOn]}>
                             {opt.label}
@@ -654,6 +659,8 @@ export function SettingsScreen({
                 </View>
               );
             })}
+              </View>
+            ))}
             <ActionButton
               testID="btn-restore-risk-defaults"
               variant="slim"
@@ -968,9 +975,10 @@ function RiskHelpModal({
             </Text>
             <Text style={styles.modalLead}>
               Important: Trading involves risk of loss. Predict does not guarantee profits or
-              successful trades — whether you use alerts only, auto-trade, or both. You alone are
-              responsible for trades you place outside this app based on alerts, and for trades
-              placed when Auto-trade is on. The app owner is not liable for your losses.
+              successful trades — whether you use alerts, Auto-trade, Home Buy / Sell taps, or any
+              mix. You alone are responsible for trades you place outside this app based on alerts,
+              trades Cloud Run places when Auto-trade is On, and trades Cloud Run places when you
+              tap Buy or Sell on Home. The app owner is not liable for your losses.
             </Text>
 
             <Text style={styles.modalSection}>Signal alerts vs Auto-trade</Text>
@@ -981,7 +989,18 @@ function RiskHelpModal({
             <HelpItem title="Auto-trade">
               When On, the app may place real Kalshi buy orders when cushions and Risk gates pass.
               Turning this On requires Face ID / biometrics. Auto-trading runs 24/7 securely on GCP Cloud Run.
-              Independent from alerts — you can trade with alerts muted.
+              Independent from alerts — you can trade with alerts muted. Home Buy / Sell taps are a
+              separate path and can still place when Auto-trade is Off.
+            </HelpItem>
+            <HelpItem title="Home Buy / Sell (Last signals)">
+              When the Last signals Buy / Sell flag is On, Home shows Buy YES / Buy NO (or Sell if
+              you already hold that 15-minute window). One tap tells Cloud Run to place now. The
+              phone never talks to Kalshi. No confirm sheet. Kill Switch hides the buttons. If the
+              Admin flag is Off, buttons disappear and Cloud rejects taps.{'\n\n'}
+              A tap skips Auto-trade timing: min minutes left, min minutes elapsed, and max entry
+              ask. Size, caps, cushion, chase, and Time in force (Manual buy) still apply. Chase is
+              not capped by max entry ask (pay = ask + chase, max $0.99). You can lose the full
+              notional. GTC can rest. IOC can miss.
             </HelpItem>
             <HelpItem title="Notify on lean vs mute on the bell" testID="help-notify-vs-mute">
               Settings → Notify on lean signals Off stops new lean rows and all lock-screen pings
@@ -1056,35 +1075,39 @@ function RiskHelpModal({
 
             <Text style={styles.modalSection}>Risk — entry timing & price</Text>
             <HelpItem title="Min minutes left (Buy only)">
-              Only enter if the 15‑minute window still has at least this many minutes left. Example:
-              2 means “don’t enter in the last 2 minutes.” If you see “too little time left,” the
-              clock is under this number. (Applies to new Buy entries only; does not block Protect Sell exits).
+              Auto-trade only: enter if the 15‑minute window still has at least this many minutes left.
+              Example: 2 means “don’t enter in the last 2 minutes.” If you see “too little time left,”
+              the clock is under this number. Does not block a Home Buy tap. Does not block Protect Sell.
             </HelpItem>
             <HelpItem title="Min minutes elapsed (Buy only)">
-              Only enter after this many whole minutes have already passed in the 15‑minute window.
-              Skips the noisy open when price/lean can flip quickly.{'\n\n'}
-              • 0 = allow buys from the window open{'\n'}
-              • 2 (default) = wait ~2 minutes before buying{'\n'}
-              • 3–5 = stricter — fewer early entries{'\n\n'}
-              Works together with Min minutes left. Example: elapsed ≥ 2 and left ≥ 2 → roughly the
-              middle of the window only.{'\n\n'}
-              If you see “too early in window,” the clock has not reached this number yet. (Applies to new Buy entries only).
+              Auto-trade only: enter after this many whole minutes have already passed in the
+              15‑minute window. Skips the noisy open.{'\n\n'}
+              • 0 = allow Auto-trade buys from the window open{'\n'}
+              • 2 (default) = wait ~2 minutes before Auto-trade buying{'\n'}
+              • 3–5 = stricter — fewer early Auto-trade entries{'\n\n'}
+              Does not block a Home Buy tap. If you see “too early in window,” Auto-trade has not
+              reached this clock yet.
             </HelpItem>
             <HelpItem title="Max entry ask ($) (Buy limit)">
-              Do not buy if the contract ask is above this (example: $0.90). Protects you from paying
-              too much for a low-edge ticket. (Applies to new Buy entries only).
+              Auto-trade only: do not buy if the contract ask is above this (example: $0.90).
+              Home Buy taps skip this cap so a tap can still fill a richer ticket.
             </HelpItem>
             <HelpItem title="Time in force (Auto-trade buys)">
-              How long the order stays live on Kalshi:{'\n'}
+              How long an Auto-trade buy stays live on Kalshi:{'\n'}
               • IOC — try to fill now; cancel anything not filled{'\n'}
               • FOK — fill all of it now, or cancel everything{'\n'}
               • GTC — leave the order open until filled or you cancel{'\n\n'}
-              Most people use IOC for these short windows. (Applies to new Auto-trade buys. Protect Sell exits always use IOC).
+              Most people use IOC for these short windows. Home Buy taps use the separate Manual buy
+              TIF. Protect Sell exits always use IOC.
+            </HelpItem>
+            <HelpItem title="Time in force (Manual buy)">
+              How long a Home Buy tap stays live on Kalshi (IOC / FOK / GTC). Default IOC. GTC can
+              rest until the 15-minute window ends. Does not apply to Auto-trade or Protect Sell.
             </HelpItem>
             <HelpItem title="Chase above ask ($) (Buy & Sell)">
-              Tiny extra you’re willing to pay above the current ask to help a buy fill (example:
-              $0.02). Still limited by Max entry ask. The same idea is used as slippage when
-              protect-selling. (Applies to both Buy entries and Protect Sell exit slippage).
+              Tiny extra you’re willing to pay above the current ask to help a fill (example:
+              $0.02). Auto-trade still limited by Max entry ask. Home Buy uses chase without that
+              cap (ask + chase, max $0.99). Same idea is used as slippage when protect-selling.
             </HelpItem>
 
             <Text style={styles.modalSection}>Risk — protect money (early sell)</Text>
@@ -1545,6 +1568,14 @@ const styles = StyleSheet.create({
   helpItemText: { color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
   meta: { color: colors.textSecondary, fontSize: 12 },
   hint: { color: colors.mute, fontSize: 11, lineHeight: 15 },
+  riskGroupTitle: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    marginTop: 10,
+    marginBottom: 4,
+  },
   riskField: {
     backgroundColor: colors.surface,
     borderRadius: 8,

@@ -26,6 +26,12 @@ describe('httpErrors quiet classification', () => {
     expect(isQuietIntegrationError('order failed · HTTP 401')).toBe(true);
   });
 
+  test('detects 5xx / timeout without treating background cancel as a timeout', () => {
+    expect(isQuietIntegrationError('http_503')).toBe(true);
+    expect(isQuietIntegrationError('lean_fetch_timeout')).toBe(true);
+    expect(humanizeQuietError('http_503')).toMatch(/pausing/i);
+  });
+
   test('detects iOS screen lock FetchRequestCanceledException', () => {
     const err = 'ETH: price/lean failed · fetch failed: FetchRequestCanceledException: Fetch request has been canceled (at Expo/NativeResponse.swift:63)';
     expect(isCanceledNetworkError(err)).toBe(true);
@@ -130,7 +136,7 @@ describe('AppRuntime does not Expo-push 401/429', () => {
     expect(pushes).toHaveLength(0);
   });
 
-  test('unexpected integration error still pushes', async () => {
+  test('lean http_500 is quiet and pauses without push', async () => {
     const pushes: string[] = [];
     setNotifyImpl(async (p) => {
       pushes.push(`${p.kind}:${p.title}`);
@@ -163,7 +169,44 @@ describe('AppRuntime does not Expo-push 401/429', () => {
 
     await rt.tick();
 
-    expect(rt.status.lastError).toMatch(/http_500|price\/lean/i);
+    expect(rt.status.lastError).toMatch(/timeout|5xx|paus/i);
+    expect(pushes).toHaveLength(0);
+  });
+
+  test('unexpected integration error still pushes', async () => {
+    const pushes: string[] = [];
+    setNotifyImpl(async (p) => {
+      pushes.push(`${p.kind}:${p.title}`);
+    });
+
+    const cfg = {
+      ...defaultAppConfig(),
+      auto_trade_enabled: false,
+      assets_enabled: {
+        WTI: false,
+        Gold: false,
+        Silver: false,
+        BTC: true,
+        ETH: false,
+      },
+    };
+
+    const fetchImpl = jest.fn(async () => ({
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+      json: async () => ({}),
+      text: async () => '',
+    }));
+
+    const rt = new AppRuntime({
+      getConfig: () => cfg,
+      fetchImpl: fetchImpl as any,
+    });
+
+    await rt.tick();
+
+    expect(rt.status.lastError).toMatch(/http_404|price\/lean/i);
     expect(pushes.some((p) => p.startsWith('error:'))).toBe(true);
   });
 });
