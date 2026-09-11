@@ -6,6 +6,7 @@ import {
   cashOutEdgeUsd,
   cashOutEnterMinGapUsd,
   cashOutFillExitTargetUsd,
+  cashOutStopFloorUsd,
   cashOutEdgeWarn,
   cashOutGateConfig,
   cashOutMinMinutesLeft,
@@ -24,6 +25,7 @@ import {
   normalizeCashOutBidCheckSeconds,
   normalizeCashOutEnterPct,
   normalizeCashOutMaxAsk,
+  normalizeCashOutStopUsd,
   openCashOutAssets,
   parseTradeEntryPath,
   reconcileCashOutTargets,
@@ -106,6 +108,11 @@ describe('Cash out ticket math', () => {
     expect(normalizeCashOutMaxAsk(0.1)).toBe(0.5);
     expect(normalizeCashOutBid(0.88)).toBe(0.88);
     expect(normalizeCashOutBid(1.2)).toBe(0.99);
+    expect(normalizeCashOutStopUsd(0.05)).toBe(0.05);
+    expect(normalizeCashOutStopUsd(0.01)).toBe(0.03);
+    expect(normalizeCashOutStopUsd(0.99)).toBe(0.1);
+    expect(cashOutStopFloorUsd(0.78, 0.05)).toBe(0.73);
+    expect(cashOutStopFloorUsd(null, 0.05)).toBeNull();
     expect(normalizeCashOutBidCheckSeconds(3)).toBe(3);
     expect(normalizeCashOutBidCheckSeconds(1)).toBe(2);
     expect(normalizeCashOutBidCheckSeconds(99)).toBe(10);
@@ -338,6 +345,101 @@ describe('Cash out exit', () => {
     expect(hit.kind).toBe('cash_out_bid');
     expect(hit.target).toBe(0.84);
     expect(hit.bid).toBe(0.84);
+  });
+
+  test('5¢ stop sells when bid is 5¢ below fill; 4¢ dip does not', () => {
+    const miss = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.74, yes_ask: 0.76 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.78,
+      stopUsd: 0.05,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    });
+    expect(miss.sell).toBe(false);
+
+    const hit = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.73, yes_ask: 0.75 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.78,
+      stopUsd: 0.05,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    });
+    expect(hit.kind).toBe('cash_out_stop');
+    expect(hit.sell).toBe(true);
+
+    const grace = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.73, yes_ask: 0.75 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.78,
+      stopUsd: 0.05,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:00:20.000Z'),
+    });
+    expect(grace.reason).toBe('grace_after_fill');
+
+    const ended = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.73, yes_ask: 0.75 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.78,
+      stopUsd: 0.05,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'ended' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:14:00.000Z'),
+    });
+    expect(ended.kind).toBe('settle');
+    expect(ended.sell).toBe(false);
+
+    const noMiss = evaluateCashOutExit({
+      heldSide: 'NO',
+      quotes: { yes_bid: 0.22, yes_ask: 0.26 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.78,
+      stopUsd: 0.05,
+      lean: { decision: 'NO', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    });
+    expect(noMiss.sell).toBe(false);
+
+    const noHit = evaluateCashOutExit({
+      heldSide: 'NO',
+      quotes: { yes_bid: 0.22, yes_ask: 0.27 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.78,
+      stopUsd: 0.05,
+      lean: { decision: 'NO', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    });
+    expect(noHit.kind).toBe('cash_out_stop');
+    expect(noHit.sell).toBe(true);
   });
 
   test('87.99¢ does not cash out; 88.00¢ does', () => {

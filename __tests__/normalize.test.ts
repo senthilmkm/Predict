@@ -136,6 +136,7 @@ describe('normalize / cushions', () => {
     expect(d.cash_out_enter_pct).toBe(60);
     expect(d.cash_out_max_ask_usd).toBe(0.82);
     expect(d.cash_out_bid_usd).toBe(0.88);
+    expect(d.cash_out_stop_usd).toBe(0.05);
     expect(d.cash_out_assets).toEqual(['Gold']);
     const fixed = normalizeAppConfig({
       risk: { cash_out_max_ask_usd: 0.9, cash_out_bid_usd: 0.88, cash_out_enter_pct: 10 },

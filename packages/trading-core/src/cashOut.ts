@@ -20,11 +20,14 @@ export const CASH_OUT_BID_CHECK_DEFAULT_SEC = 3;
 export const CASH_OUT_BID_CHECK_MIN_SEC = 2;
 export const CASH_OUT_BID_CHECK_MAX_SEC = 10;
 export const CASH_OUT_MIN_EDGE_WARN_USD = 0.04;
+export const CASH_OUT_STOP_DEFAULT_USD = 0.05;
+export const CASH_OUT_STOP_MIN_USD = 0.03;
+export const CASH_OUT_STOP_MAX_USD = 0.1;
 export const CASH_OUT_DEFAULT_ASSETS: AssetKey[] = ['Gold'];
 
 export type TradeEntryPath = 'home' | 'auto' | 'cash_out';
 export type CashOutHeldSide = 'YES' | 'NO';
-export type CashOutExitKind = 'none' | 'cash_out_bid' | 'flip' | 'settle';
+export type CashOutExitKind = 'none' | 'cash_out_bid' | 'cash_out_stop' | 'flip' | 'settle';
 
 function clamp(n: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return min;
@@ -109,6 +112,13 @@ export function normalizeCashOutBid(raw: unknown): number {
   return snap(clamp(Number(raw ?? CASH_OUT_BID_DEFAULT), CASH_OUT_TICKET_MIN, CASH_OUT_TICKET_MAX), 0.01);
 }
 
+export function normalizeCashOutStopUsd(raw: unknown): number {
+  return snap(
+    clamp(Number(raw ?? CASH_OUT_STOP_DEFAULT_USD), CASH_OUT_STOP_MIN_USD, CASH_OUT_STOP_MAX_USD),
+    0.01
+  );
+}
+
 export function normalizeCashOutBidCheckSeconds(raw: unknown): number {
   return Math.round(
     clamp(Number(raw ?? CASH_OUT_BID_CHECK_DEFAULT_SEC), CASH_OUT_BID_CHECK_MIN_SEC, CASH_OUT_BID_CHECK_MAX_SEC)
@@ -163,6 +173,16 @@ export function cashOutFillExitTargetUsd(opts: {
   const fill = ticketUsd(opts.fillPayUsd);
   if (fill == null || !(edge > 0)) return bid;
   return normalizeCashOutBid(fill + edge);
+}
+
+/** Bid at or below this → Cash out stop. Paid $0.78 / 5¢ → $0.73. */
+export function cashOutStopFloorUsd(fillPayUsd: unknown, stopUsd: unknown): number | null {
+  const fill = ticketUsd(fillPayUsd);
+  if (fill == null) return null;
+  const stop = normalizeCashOutStopUsd(stopUsd);
+  const floor = Math.round((fill - stop) * 10000) / 10000;
+  if (floor < 0.01 - 1e-12) return 0.01;
+  return floor;
 }
 
 export function cashOutTargetsValid(maxAsk: number, bid: number): boolean {
@@ -361,6 +381,7 @@ export function evaluateCashOutExit(opts: {
   cashOutBidUsd: number;
   cashOutMaxAskUsd?: number | null;
   fillPayUsd?: number | null;
+  stopUsd?: number | null;
   lean: { decision: string; abs_gap?: number; phase?: string };
   cushion: number;
   filledAt?: string | Date | number | null;
@@ -380,6 +401,10 @@ export function evaluateCashOutExit(opts: {
     maxAskUsd: opts.cashOutMaxAskUsd,
     bidUsd: opts.cashOutBidUsd,
   });
+  const stopFloor = cashOutStopFloorUsd(
+    opts.fillPayUsd,
+    opts.stopUsd == null ? CASH_OUT_STOP_DEFAULT_USD : opts.stopUsd
+  );
   const bid = sideBidOf(opts.heldSide, opts.quotes);
   const flip = shouldProtectSell({
     enabled: true,
@@ -425,6 +450,17 @@ export function evaluateCashOutExit(opts: {
       sell: true,
       kind: 'cash_out_bid',
       reason: 'bid_target',
+      bid,
+      target,
+      minGap: flip.minGap,
+      leanGap: flip.leanGap,
+    };
+  }
+  if (bid != null && stopFloor != null && bid <= stopFloor + 1e-9) {
+    return {
+      sell: true,
+      kind: 'cash_out_stop',
+      reason: 'bid_stop',
       bid,
       target,
       minGap: flip.minGap,

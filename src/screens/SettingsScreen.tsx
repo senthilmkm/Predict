@@ -1044,8 +1044,9 @@ function RiskHelpModal({
               Admin must enable this first. Then Settings → Risk → Auto-trade.{'\n\n'}
               Separate path for the assets you check (default Gold). Buys a cheaper ticket (enter % of
               cushion + max ask), then sells when the bid is up by Cash out bid minus max ask from
-              what you paid (paid $0.82 → $0.88; paid $0.78 → $0.84), or if the lean fully flips
-              against you. Window end settles — no dump.{'\n\n'}
+              what you paid (paid $0.82 → $0.88; paid $0.78 → $0.84), or if the bid falls by Cash out
+              stop below the fill (default 5¢), or if the lean fully flips against you. Window end
+              settles — no dump.{'\n\n'}
               Home Buy / Sell stay off while Cash out holds that ticker. Protect money skips these lots.
               Smart buy does not apply.
             </HelpItem>
@@ -1057,6 +1058,10 @@ function RiskHelpModal({
               Max ask is the most you will pay. Cash out bid is the sell target if you paid max ask.
               If you paid less, Cloud sells when the bid rises by the same edge (bid − max ask). Bid
               must be above max ask.
+            </HelpItem>
+            <HelpItem title="Cash out stop">
+              If the bid falls this far below what you paid, Cloud sells (default 5¢). Range 3¢–10¢.
+              Cuts a full $0 settle loss. You may get fewer $1 window wins.
             </HelpItem>
 
             <HelpItem title="Restore defaults">

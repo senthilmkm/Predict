@@ -168,6 +168,8 @@ export interface RiskConfig {
   cash_out_enter_pct?: number;
   cash_out_max_ask_usd?: number;
   cash_out_bid_usd?: number;
+  /** Sell if held-side bid falls this far below fill. Default $0.05. Range $0.03–$0.10. */
+  cash_out_stop_usd?: number;
   cash_out_assets?: string[];
 }
 
@@ -277,6 +279,7 @@ export function defaultAppConfig(): AppConfig {
       cash_out_enter_pct: 60,
       cash_out_max_ask_usd: 0.82,
       cash_out_bid_usd: 0.88,
+      cash_out_stop_usd: 0.05,
       cash_out_assets: ['Gold'],
     },
     manual_risk: {

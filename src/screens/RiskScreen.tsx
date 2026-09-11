@@ -248,6 +248,7 @@ function CashOutFields() {
           );
         }
         const isPct = meta.key === 'cash_out_enter_pct';
+        const isStop = meta.key === 'cash_out_stop_usd';
         return (
           <RiskStepper
             key={meta.key}
@@ -255,7 +256,13 @@ function CashOutFields() {
             value={config.risk[meta.key]}
             testPrefix="auto"
             disabled={!on}
-            displayOverride={isPct ? `${Number(config.risk.cash_out_enter_pct)}%` : undefined}
+            displayOverride={
+              isPct
+                ? `${Number(config.risk.cash_out_enter_pct)}%`
+                : isStop
+                  ? `${Math.round(Number(config.risk.cash_out_stop_usd) * 100)}¢`
+                  : undefined
+            }
             onChange={(next) => setRiskField(meta.key, next as never)}
           />
         );
@@ -263,7 +270,8 @@ function CashOutFields() {
       {on ? (
         <Text style={styles.hint} testID="cash-out-fill-edge-hint">
           Sell when the bid is up by Cash out bid minus max ask from what you paid. Paid $0.78 with
-          $0.82 / $0.88 → sell at $0.84.
+          $0.82 / $0.88 → sell at $0.84. Stop sells if the bid falls that many cents below what you
+          paid (default 5¢).
         </Text>
       ) : null}
       {warn && on ? (

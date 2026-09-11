@@ -58,6 +58,7 @@ export async function runCloudCashOutExits(opts: {
   cushion: number;
   cashOutBidUsd: number;
   cashOutMaxAskUsd?: number | null;
+  stopUsd?: number | null;
   graceSeconds: number;
   slippageUsd: number;
   dryRun: boolean;
@@ -94,6 +95,7 @@ export async function runCloudCashOutExits(opts: {
       cashOutBidUsd: opts.cashOutBidUsd,
       cashOutMaxAskUsd: opts.cashOutMaxAskUsd,
       fillPayUsd: economicPayPrice(trade),
+      stopUsd: opts.stopUsd,
       lean: {
         decision: opts.lean.decision,
         abs_gap: opts.lean.abs_gap,
@@ -178,7 +180,12 @@ export async function runCloudCashOutExits(opts: {
       exitPayPrice,
     });
     exited += 1;
-    const title = evalRes.kind === 'cash_out_bid' ? 'Cash out' : 'Cash out flip';
+    const title =
+      evalRes.kind === 'cash_out_bid'
+        ? 'Cash out'
+        : evalRes.kind === 'cash_out_stop'
+          ? 'Cash out stop'
+          : 'Cash out flip';
     alerts.push({
       tradeId: trade.tradeId,
       title,

@@ -28,6 +28,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   cash_out_enter_pct: 60,
   cash_out_max_ask_usd: 0.82,
   cash_out_bid_usd: 0.88,
+  cash_out_stop_usd: 0.05,
   cash_out_assets: ['Gold'],
 };
 
@@ -157,6 +158,15 @@ export const RISK_FIELD_META: {
     min: 0.5,
     max: 0.99,
   },
+  {
+    key: 'cash_out_stop_usd',
+    label: 'Cash out stop',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.03,
+    max: 0.1,
+  },
 ];
 
 export const TIME_IN_FORCE_OPTIONS: { value: TimeInForce; label: string }[] = [
@@ -199,6 +209,7 @@ export const CASH_OUT_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'cash_out_enter_pct',
   'cash_out_max_ask_usd',
   'cash_out_bid_usd',
+  'cash_out_stop_usd',
 ];
 
 export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [

@@ -148,6 +148,75 @@ describe('Cloud Cash out', () => {
     expect(closed[0].exitPayPrice).toBeCloseTo(0.82, 4);
   });
 
+  test('5¢ stop sells a cheaper fill when bid drops; does not dump at window end', async () => {
+    const userId = 'user_cout_stop';
+    const trade = filledTrade({
+      userId,
+      executedAt: '2026-09-10T15:00:00.000Z',
+      payPrice: 0.78,
+      price: '0.78',
+    });
+    await saveTradeRecord(userId, trade);
+    const hold = await runCloudCashOutExits({
+      userId,
+      asset: 'Gold',
+      ticker: trade.ticker,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live', yes_bid: 0.74, yes_ask: 0.76 },
+      trades: [trade],
+      cushion: 175,
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      stopUsd: 0.05,
+      graceSeconds: 45,
+      slippageUsd: 0.02,
+      dryRun: false,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+      place: async () => ({ ok: true, fill_count: 7, order_id: 'should-not' }),
+    });
+    expect(hold.exited).toBe(0);
+    expect(hold.placed).toBe(0);
+
+    const ended = await runCloudCashOutExits({
+      userId,
+      asset: 'Gold',
+      ticker: trade.ticker,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'ended', yes_bid: 0.73, yes_ask: 0.75 },
+      trades: await getTradeRecords(userId),
+      cushion: 175,
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      stopUsd: 0.05,
+      graceSeconds: 45,
+      slippageUsd: 0.02,
+      dryRun: false,
+      now: new Date('2026-09-10T15:14:00.000Z'),
+      place: async () => ({ ok: true, fill_count: 7, order_id: 'should-not-end' }),
+    });
+    expect(ended.exited).toBe(0);
+    expect(ended.placed).toBe(0);
+
+    const hit = await runCloudCashOutExits({
+      userId,
+      asset: 'Gold',
+      ticker: trade.ticker,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live', yes_bid: 0.73, yes_ask: 0.75 },
+      trades: await getTradeRecords(userId),
+      cushion: 175,
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      stopUsd: 0.05,
+      graceSeconds: 45,
+      slippageUsd: 0.02,
+      dryRun: false,
+      now: new Date('2026-09-10T15:01:05.000Z'),
+      place: async () => ({ ok: true, fill_count: 7, order_id: 'ord-stop' }),
+    });
+    expect(hit.exited).toBe(1);
+    expect(hit.alerts[0].title).toBe('Cash out stop');
+    const closed = await getTradeRecords(userId);
+    expect(closed[0].outcome).toBe('exited');
+  });
+
   test('claim lock: two overlapping sells, only one places', async () => {
     const userId = 'user_cout_race';
     const trade = filledTrade({ userId, tradeId: 'race1' });

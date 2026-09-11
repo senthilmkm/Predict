@@ -32,6 +32,7 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/Protect money/);
     expect(blob).toMatch(/Smart buy/);
     expect(blob).toMatch(/Cash out/);
+    expect(blob).toMatch(/Cash out stop/);
     expect(blob).toMatch(/Cloud Run/);
     expect(blob).toMatch(/phone never talks to Kalshi/i);
     expect(blob).toMatch(/Home Buy \/ Sell/);

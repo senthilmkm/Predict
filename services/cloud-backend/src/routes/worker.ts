@@ -63,6 +63,7 @@ import { normalizeFeatureFlags } from '../services/featureFlags';
 import {
   evaluateCashOutEnter,
   isCashOutEnterPath,
+  normalizeCashOutStopUsd,
   openCashOutAssets,
   tickerHasOpenCashOut,
   tickerHasOpenNonCashOut,
@@ -382,6 +383,7 @@ async function runOneTick() {
                   cushion: userCushion,
                   cashOutBidUsd: Number(cfg.risk?.cash_out_bid_usd ?? 0.88),
                   cashOutMaxAskUsd: Number(cfg.risk?.cash_out_max_ask_usd ?? 0.82),
+                  stopUsd: normalizeCashOutStopUsd(cfg.risk?.cash_out_stop_usd),
                   graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
                   slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
                   dryRun: false,
@@ -773,6 +775,7 @@ export async function runCashOutBidWatchTick(): Promise<{
           cushion: cfg.cushions?.[asset] ?? 25,
           cashOutBidUsd: Number(cfg.risk?.cash_out_bid_usd ?? 0.88),
           cashOutMaxAskUsd: Number(cfg.risk?.cash_out_max_ask_usd ?? 0.82),
+          stopUsd: normalizeCashOutStopUsd(cfg.risk?.cash_out_stop_usd),
           graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
           slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
           dryRun: false,

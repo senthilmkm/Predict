@@ -263,6 +263,7 @@ describe('Settings credentials', () => {
     await fireEvent.press(s.getByTestId('btn-risk-help'));
     await waitFor(() => expect(s.getByTestId('modal-risk-help')).toBeTruthy());
     expect(s.getByText('Protect money (early sell)')).toBeTruthy();
+    expect(s.getByText('Cash out stop')).toBeTruthy();
     expect(s.getAllByText(/Smart buy/).length).toBeGreaterThan(0);
     expect(s.getAllByText(/Min extra chance/).length).toBeGreaterThan(0);
     expect(s.getByText('Shared vs each tab')).toBeTruthy();
@@ -293,6 +294,7 @@ describe('Settings credentials', () => {
     });
     await waitFor(() => expect(s.getByTestId('risk-toggle-cash_out_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-value-auto-cash_out_enter_pct').props.children).toBe('60%');
+    expect(s.getByTestId('risk-value-auto-cash_out_stop_usd').props.children).toBe('5¢');
     expect(s.getByTestId('cash-out-asset-Gold')).toBeTruthy();
     expect(s.getByTestId('risk-field-auto-smart_buy_enabled')).toBeTruthy();
     expect(s.getByTestId('risk-value-auto-smart_buy_min_edge_usd').props.children).toMatch(/\$0\.08/);
