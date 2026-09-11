@@ -5,6 +5,7 @@ import {
   parseTradeStreamQuery,
   buildTradeStreamResult,
   tradeMatchesFilters,
+  tradeStreamEntryLabel,
 } from '../services/adminMetrics';
 import { TradeRecordDoc } from '../services/firestore';
 
@@ -126,17 +127,39 @@ describe('admin overview metrics', () => {
     expect(now.toISOString()).toContain('2026-09-08');
   });
 
+  test('trade stream entry path labels and filter', () => {
+    expect(tradeStreamEntryLabel('home')).toBe('Home');
+    expect(tradeStreamEntryLabel('manual_buy')).toBe('Home');
+    expect(tradeStreamEntryLabel('auto')).toBe('Auto');
+    expect(tradeStreamEntryLabel('cash_out')).toBe('Cash out');
+    expect(tradeStreamEntryLabel(undefined)).toBe('—');
+    expect(tradeStreamEntryLabel('other')).toBe('—');
+
+    const rows = [
+      trade({ tradeId: 'h', status: 'FILLED', entryPath: 'home' }),
+      trade({ tradeId: 'a', status: 'FILLED', entryPath: 'auto' }),
+      trade({ tradeId: 'c', status: 'FILLED', entryPath: 'cash_out' }),
+      trade({ tradeId: 'legacy', status: 'FILLED' }),
+    ];
+    const cash = buildTradeStreamResult(rows, { entryPath: 'cash_out' }, 200);
+    expect(cash.matchedCount).toBe(1);
+    expect(cash.trades[0].tradeId).toBe('c');
+    expect(tradeMatchesFilters(rows[3], { entryPath: 'home' })).toBe(false);
+  });
+
   test('parseTradeStreamQuery clamps limit and date-only bounds', () => {
     const q = parseTradeStreamQuery({
       asset: 'BTC',
       status: 'all',
       userId: ' usr_x ',
+      entryPath: 'cash_out',
       from: '2026-09-01',
       to: '2026-09-08',
       limit: '9999',
     });
     expect(q.asset).toBe('BTC');
     expect(q.status).toBeUndefined();
+    expect(q.entryPath).toBe('cash_out');
     expect(q.userId).toBe('usr_x');
     expect(q.fromMs).toBe(Date.parse('2026-09-01T00:00:00.000Z'));
     expect(q.toMs).toBe(Date.parse('2026-09-08T23:59:59.999Z'));

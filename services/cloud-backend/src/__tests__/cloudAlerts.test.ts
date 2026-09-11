@@ -11,6 +11,7 @@ import {
   leanAlertSide,
   missAlertId,
   maybeEmitLeanAlert,
+  orderPlacedAlertTitle,
   persistSettlementAlertIfNeeded,
   protectAlertId,
   settleAlertId,
@@ -46,6 +47,19 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(leanAlertSide({ phase: 'live', decision: 'SKIP' })).toBeNull();
     expect(leanAlertSide({ phase: 'live', decision: 'NO' })).toBe('NO');
     expect(leanAlertSide({ phase: 'upcoming', decision: 'YES' })).toBeNull();
+    expect(
+      orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'YES', entryPath: 'home' })
+    ).toBe('Order Placed · Home · Gold YES');
+    expect(
+      orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'YES', entryPath: 'auto' })
+    ).toBe('Order Placed · Auto · Gold YES');
+    expect(
+      orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'NO', entryPath: 'cash_out' })
+    ).toBe('Order Placed · Cash out · Gold NO');
+    expect(orderPlacedAlertTitle({ live: false, asset: 'BTC', decision: 'YES', entryPath: 'auto' })).toBe(
+      'Dry-Run Order · Auto · BTC YES'
+    );
+    expect(orderPlacedAlertTitle({ live: true, asset: 'ETH', decision: 'YES' })).toBe('Order Placed · ETH YES');
   });
 
   test('SKIP leans never persist and below-cushion does not write both sides', async () => {

@@ -3,6 +3,7 @@ import { defaultAppConfig } from 'trading-core';
 import { app } from '../index';
 import { executeManualOrder } from '../services/manualTrade';
 import {
+  getAlertRecords,
   getAuditLogs,
   getTradeRecords,
   resetSystemConfigCacheForTests,
@@ -137,6 +138,10 @@ describe('manual buy/sell place-now', () => {
     const trades = await getTradeRecords(uid);
     expect(trades[0].orderId).toBe('ord_manual_1');
     expect(trades[0].entryPath).toBe('home');
+    const alerts = await getAlertRecords(uid);
+    expect(alerts.some((a) => a.kind === 'order_filled' && a.title === 'Order Placed · Home · BTC YES')).toBe(
+      true
+    );
     const logs = await getAuditLogs(uid);
     expect(logs.some((l) => l.eventType === 'TRADE_TRIGGERED' && l.details?.source === 'manual_buy')).toBe(
       true

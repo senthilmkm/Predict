@@ -38,6 +38,8 @@ import { isCloudKalshiPaused, noteTransientKalshiFailure } from './kalshiPause';
 import { economicPayPrice, fillCountOf, liveCloudTradesToday, cloudDailyRealizedPnl } from './settlement';
 import { normalizeFeatureFlags } from './featureFlags';
 import { isCashOutEntryPath } from '../../../../packages/trading-core/src/cashOut';
+import { emitCloudAlert, fillAlertId, orderPlacedAlertTitle } from './cloudAlerts';
+import { fillCollapseId } from './leanAlerts';
 
 export type ManualTradeAction = 'buy' | 'sell';
 
@@ -410,6 +412,33 @@ async function executeManualBuy(opts: {
             : { status: 'failed', detail: 'IOC no fill', at: now.toISOString() },
       },
     } as any);
+
+    if (filled) {
+      const userTokens = [
+        ...((user as { pushTokens?: string[] })?.pushTokens || []),
+        ...((user as { fcmTokens?: string[] })?.fcmTokens || []),
+      ].filter((t, i, arr) => t && arr.indexOf(t) === i);
+      await emitCloudAlert({
+        userId,
+        alertId: fillAlertId(tradeId),
+        kind: 'order_filled',
+        title: orderPlacedAlertTitle({
+          live: isLive,
+          asset,
+          decision: String(lean.decision || ''),
+          entryPath: 'home',
+        }),
+        body: `${fillCount} ctr @ $${priceVal.toFixed(2)} · Cost $${(tradeDoc.notionalUsd || 0).toFixed(2)}`,
+        cfg,
+        tokens: userTokens,
+        collapseId: fillCollapseId(userId, tradeId),
+        asset,
+        ticker,
+        tradeId,
+        decision: lean.decision,
+        at: now.toISOString(),
+      });
+    }
 
     if (!filled && !accepted) {
       await auditError(userId, {

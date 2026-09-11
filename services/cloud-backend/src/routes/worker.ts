@@ -41,6 +41,7 @@ import {
   emitCloudAlert,
   fillAlertId,
   missAlertId,
+  orderPlacedAlertTitle,
   leanAlertSide,
   maybeEmitLeanAlert,
   protectAlertId,
@@ -613,9 +614,12 @@ async function runOneTick() {
                     }
                 : { status: 'failed', detail: 'IOC no fill', at: tickIso };
               if (filled) {
-                const fillTitle = isLive
-                  ? `Order Placed · ${asset} ${lean.decision}`
-                  : `Dry-Run Order · ${asset} ${lean.decision}`;
+                const fillTitle = orderPlacedAlertTitle({
+                  live: isLive,
+                  asset,
+                  decision: String(lean.decision || ''),
+                  entryPath,
+                });
                 const fillBody = `${gate.count} ctr @ $${priceVal.toFixed(2)} · Cost $${(gate.notional_usd || 0).toFixed(2)}`;
                 await emitCloudAlert({
                   userId,

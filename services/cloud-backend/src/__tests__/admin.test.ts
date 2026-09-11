@@ -37,6 +37,7 @@ describe('Predict Admin Web Portal API Suite', () => {
       dryRun: false,
       status: 'FILLED',
       fillCount: 5,
+      entryPath: 'cash_out',
       executedAt: new Date().toISOString(),
     });
     await saveTradeRecord(testUserId, {
@@ -53,6 +54,7 @@ describe('Predict Admin Web Portal API Suite', () => {
       fillCount: 10,
       outcome: 'win',
       pnlUsd: 4.35,
+      entryPath: 'auto',
       executedAt: new Date().toISOString(),
     });
     await saveTradeRecord(testUserId, {
@@ -68,6 +70,7 @@ describe('Predict Admin Web Portal API Suite', () => {
       status: 'CANCELLED',
       fillCount: 0,
       outcome: 'miss',
+      entryPath: 'home',
       executedAt: new Date().toISOString(),
     });
   });
@@ -318,7 +321,16 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(gold.status).toBe(200);
     expect(gold.body.matchedCount).toBe(1);
     expect(gold.body.trades.every((t: any) => t.asset === 'Gold')).toBe(true);
+    expect(gold.body.trades[0].entryPath).toBe('cash_out');
     expect(gold.body.totalPnlUsd).toBe(0);
+
+    const cashOut = await request(app)
+      .get('/admin/api/trades')
+      .query({ entryPath: 'cash_out', userId: testUserId })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(cashOut.body.matchedCount).toBe(1);
+    expect(cashOut.body.trades[0].tradeId).toBe('trade_admin_test_001');
+    expect(cashOut.body.trades[0].entryPath).toBe('cash_out');
 
     const settled = await request(app)
       .get('/admin/api/trades')

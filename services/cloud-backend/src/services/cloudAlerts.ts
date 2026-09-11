@@ -1,4 +1,25 @@
+import { parseTradeEntryPath } from '../../../../packages/trading-core/src/cashOut';
 import { CloudAlertDoc, TradeRecordDoc, saveAlertRecord, updateTradeRecord } from './firestore';
+
+export function orderPlacedPathTag(raw: unknown): 'Home' | 'Auto' | 'Cash out' | null {
+  const parsed = parseTradeEntryPath(raw);
+  if (parsed === 'home') return 'Home';
+  if (parsed === 'auto') return 'Auto';
+  if (parsed === 'cash_out') return 'Cash out';
+  return null;
+}
+
+export function orderPlacedAlertTitle(opts: {
+  live: boolean;
+  asset: string;
+  decision: string;
+  entryPath?: unknown;
+}): string {
+  const prefix = opts.live ? 'Order Placed' : 'Dry-Run Order';
+  const tag = orderPlacedPathTag(opts.entryPath);
+  const rest = `${opts.asset} ${opts.decision}`.trim();
+  return tag ? `${prefix} · ${tag} · ${rest}` : `${prefix} · ${rest}`;
+}
 import {
   claimLeanAlert,
   fillPushEnabled,
