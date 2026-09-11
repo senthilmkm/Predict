@@ -144,6 +144,27 @@ export function cashOutEdgeUsd(maxAsk: number, bid: number): number {
   return Math.round((normalizeCashOutBid(bid) - normalizeCashOutMaxAsk(maxAsk)) * 10000) / 10000;
 }
 
+/**
+ * Sell when held-side bid ≥ fill + (Cash out bid − max ask).
+ * Paid $0.82 with $0.82 / $0.88 → $0.88. Paid $0.78 → $0.84.
+ * Missing fill or invalid edge falls back to the Cash out bid setting.
+ */
+export function cashOutFillExitTargetUsd(opts: {
+  fillPayUsd?: number | null;
+  maxAskUsd?: number | null;
+  bidUsd: number;
+}): number {
+  const bid = normalizeCashOutBid(opts.bidUsd);
+  const maxAsk =
+    opts.maxAskUsd == null || !Number.isFinite(Number(opts.maxAskUsd))
+      ? CASH_OUT_MAX_ASK_DEFAULT
+      : normalizeCashOutMaxAsk(opts.maxAskUsd);
+  const edge = cashOutEdgeUsd(maxAsk, bid);
+  const fill = ticketUsd(opts.fillPayUsd);
+  if (fill == null || !(edge > 0)) return bid;
+  return normalizeCashOutBid(fill + edge);
+}
+
 export function cashOutTargetsValid(maxAsk: number, bid: number): boolean {
   return cashOutEdgeUsd(maxAsk, bid) > 0;
 }
@@ -338,13 +359,27 @@ export function evaluateCashOutExit(opts: {
   heldSide: CashOutHeldSide;
   quotes: CashOutQuotes;
   cashOutBidUsd: number;
+  cashOutMaxAskUsd?: number | null;
+  fillPayUsd?: number | null;
   lean: { decision: string; abs_gap?: number; phase?: string };
   cushion: number;
   filledAt?: string | Date | number | null;
   graceSeconds?: number;
   now?: Date;
-}): { sell: boolean; kind: CashOutExitKind; reason: string; bid: number | null; minGap: number; leanGap: number } {
-  const target = normalizeCashOutBid(opts.cashOutBidUsd);
+}): {
+  sell: boolean;
+  kind: CashOutExitKind;
+  reason: string;
+  bid: number | null;
+  target: number;
+  minGap: number;
+  leanGap: number;
+} {
+  const target = cashOutFillExitTargetUsd({
+    fillPayUsd: opts.fillPayUsd,
+    maxAskUsd: opts.cashOutMaxAskUsd,
+    bidUsd: opts.cashOutBidUsd,
+  });
   const bid = sideBidOf(opts.heldSide, opts.quotes);
   const flip = shouldProtectSell({
     enabled: true,
@@ -358,7 +393,15 @@ export function evaluateCashOutExit(opts: {
   });
 
   if (opts.lean.phase === 'ended') {
-    return { sell: false, kind: 'settle', reason: 'window_ended', bid, minGap: flip.minGap, leanGap: flip.leanGap };
+    return {
+      sell: false,
+      kind: 'settle',
+      reason: 'window_ended',
+      bid,
+      target,
+      minGap: flip.minGap,
+      leanGap: flip.leanGap,
+    };
   }
   if (
     inProtectSellGrace({
@@ -367,15 +410,47 @@ export function evaluateCashOutExit(opts: {
       now: opts.now,
     })
   ) {
-    return { sell: false, kind: 'none', reason: 'grace_after_fill', bid, minGap: flip.minGap, leanGap: flip.leanGap };
+    return {
+      sell: false,
+      kind: 'none',
+      reason: 'grace_after_fill',
+      bid,
+      target,
+      minGap: flip.minGap,
+      leanGap: flip.leanGap,
+    };
   }
   if (bid != null && bid + 1e-9 >= target) {
-    return { sell: true, kind: 'cash_out_bid', reason: 'bid_target', bid, minGap: flip.minGap, leanGap: flip.leanGap };
+    return {
+      sell: true,
+      kind: 'cash_out_bid',
+      reason: 'bid_target',
+      bid,
+      target,
+      minGap: flip.minGap,
+      leanGap: flip.leanGap,
+    };
   }
   if (flip.sell) {
-    return { sell: true, kind: 'flip', reason: flip.reason, bid, minGap: flip.minGap, leanGap: flip.leanGap };
+    return {
+      sell: true,
+      kind: 'flip',
+      reason: flip.reason,
+      bid,
+      target,
+      minGap: flip.minGap,
+      leanGap: flip.leanGap,
+    };
   }
-  return { sell: false, kind: 'none', reason: flip.reason, bid, minGap: flip.minGap, leanGap: flip.leanGap };
+  return {
+    sell: false,
+    kind: 'none',
+    reason: flip.reason,
+    bid,
+    target,
+    minGap: flip.minGap,
+    leanGap: flip.leanGap,
+  };
 }
 
 export function buildCashOutSellOrder(opts: {

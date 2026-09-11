@@ -57,6 +57,7 @@ export async function runCloudCashOutExits(opts: {
   trades: TradeRecordDoc[];
   cushion: number;
   cashOutBidUsd: number;
+  cashOutMaxAskUsd?: number | null;
   graceSeconds: number;
   slippageUsd: number;
   dryRun: boolean;
@@ -91,6 +92,8 @@ export async function runCloudCashOutExits(opts: {
       heldSide: trade.decision,
       quotes,
       cashOutBidUsd: opts.cashOutBidUsd,
+      cashOutMaxAskUsd: opts.cashOutMaxAskUsd,
+      fillPayUsd: economicPayPrice(trade),
       lean: {
         decision: opts.lean.decision,
         abs_gap: opts.lean.abs_gap,
@@ -157,12 +160,14 @@ export async function runCloudCashOutExits(opts: {
       fillCount,
     });
     const exitOrderId = placedRes.order_id ?? null;
+    const exitPayPrice = Math.round(Number(order.economicExit || 0) * 10000) / 10000;
     trade.outcome = 'exited';
     trade.pnlUsd = pnlUsd;
     trade.settledAt = now.toISOString();
     trade.status = 'SETTLED';
     trade.protectClaimedAt = null;
     trade.protectExitOrderId = exitOrderId;
+    trade.exitPayPrice = exitPayPrice;
     await updateTradeRecord(opts.userId, trade.tradeId, {
       outcome: 'exited',
       status: 'SETTLED',
@@ -170,6 +175,7 @@ export async function runCloudCashOutExits(opts: {
       settledAt: now.toISOString(),
       protectClaimedAt: null,
       protectExitOrderId: exitOrderId,
+      exitPayPrice,
     });
     exited += 1;
     const title = evalRes.kind === 'cash_out_bid' ? 'Cash out' : 'Cash out flip';

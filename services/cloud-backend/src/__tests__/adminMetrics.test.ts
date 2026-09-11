@@ -6,6 +6,7 @@ import {
   buildTradeStreamResult,
   tradeMatchesFilters,
   tradeStreamEntryLabel,
+  tradeStreamSellPriceUsd,
 } from '../services/adminMetrics';
 import { TradeRecordDoc } from '../services/firestore';
 
@@ -145,6 +146,60 @@ describe('admin overview metrics', () => {
     expect(cash.matchedCount).toBe(1);
     expect(cash.trades[0].tradeId).toBe('c');
     expect(tradeMatchesFilters(rows[3], { entryPath: 'home' })).toBe(false);
+  });
+
+  test('cash out sell price uses stored exit, else derives from P&L', () => {
+    expect(
+      tradeStreamSellPriceUsd(
+        trade({
+          tradeId: 'stored',
+          status: 'SETTLED',
+          entryPath: 'cash_out',
+          outcome: 'exited',
+          exitPayPrice: 0.86,
+          payPrice: 0.82,
+          fillCount: 6,
+          pnlUsd: 0.24,
+        })
+      )
+    ).toBe(0.86);
+    expect(
+      tradeStreamSellPriceUsd(
+        trade({
+          tradeId: 'derived',
+          status: 'SETTLED',
+          entryPath: 'cash_out',
+          outcome: 'exited',
+          payPrice: 0.82,
+          fillCount: 6,
+          pnlUsd: 0.24,
+        })
+      )
+    ).toBe(0.86);
+    expect(
+      tradeStreamSellPriceUsd(
+        trade({
+          tradeId: 'open',
+          status: 'FILLED',
+          entryPath: 'cash_out',
+          payPrice: 0.82,
+          fillCount: 6,
+        })
+      )
+    ).toBeNull();
+    expect(
+      tradeStreamSellPriceUsd(
+        trade({
+          tradeId: 'home',
+          status: 'SETTLED',
+          entryPath: 'home',
+          outcome: 'win',
+          payPrice: 0.82,
+          fillCount: 6,
+          pnlUsd: 1.08,
+        })
+      )
+    ).toBeNull();
   });
 
   test('parseTradeStreamQuery clamps limit and date-only bounds', () => {

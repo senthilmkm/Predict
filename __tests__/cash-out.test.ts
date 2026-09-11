@@ -5,6 +5,7 @@ import {
   buildCashOutSellOrder,
   cashOutEdgeUsd,
   cashOutEnterMinGapUsd,
+  cashOutFillExitTargetUsd,
   cashOutEdgeWarn,
   cashOutGateConfig,
   cashOutMinMinutesLeft,
@@ -298,6 +299,45 @@ describe('Cash out exit', () => {
     expect(hit.sell).toBe(true);
     expect(hit.kind).toBe('cash_out_bid');
     expect(hit.bid).toBe(0.88);
+    expect(hit.target).toBe(0.88);
+  });
+
+  test('fill + (bid − max ask): paid 78¢ sells at 84¢, not 88¢', () => {
+    expect(cashOutFillExitTargetUsd({ fillPayUsd: 0.82, maxAskUsd: 0.82, bidUsd: 0.88 })).toBe(0.88);
+    expect(cashOutFillExitTargetUsd({ fillPayUsd: 0.78, maxAskUsd: 0.82, bidUsd: 0.88 })).toBe(0.84);
+    expect(cashOutFillExitTargetUsd({ fillPayUsd: null, maxAskUsd: 0.82, bidUsd: 0.88 })).toBe(0.88);
+    expect(cashOutFillExitTargetUsd({ fillPayUsd: 0.78, maxAskUsd: 0.82, bidUsd: 0.9 })).toBe(0.86);
+
+    const miss = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.8399, yes_ask: 0.86 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.78,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    });
+    expect(miss.sell).toBe(false);
+    expect(miss.target).toBe(0.84);
+
+    const hit = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.84, yes_ask: 0.86 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.78,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    });
+    expect(hit.kind).toBe('cash_out_bid');
+    expect(hit.target).toBe(0.84);
+    expect(hit.bid).toBe(0.84);
   });
 
   test('87.99¢ does not cash out; 88.00¢ does', () => {

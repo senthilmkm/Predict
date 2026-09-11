@@ -260,6 +260,12 @@ function CashOutFields() {
           />
         );
       })}
+      {on ? (
+        <Text style={styles.hint} testID="cash-out-fill-edge-hint">
+          Sell when the bid is up by Cash out bid minus max ask from what you paid. Paid $0.78 with
+          $0.82 / $0.88 → sell at $0.84.
+        </Text>
+      ) : null}
       {warn && on ? (
         <Text style={styles.hint} testID="cash-out-edge-warn">
           Cash out bid is less than 4¢ above max ask — little room to sell higher than you buy.

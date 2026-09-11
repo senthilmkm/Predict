@@ -407,7 +407,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Cash out?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Cash out.\n\n' +
-            'Checked assets use Cash out instead of normal Auto. It buys when the gap is your Enter cushion % of the Cushions dollar (default 60%), the ask is at or under Max ask (default $0.82), and the book is tight. It then tries to sell when the bid on your side is at least Cash out bid (default $0.88). If the lean fully flips by a full cushion, it sells to get out. If neither happens, the ticket settles $1 or $0 — no last-second dump.\n\n' +
+            'Checked assets use Cash out instead of normal Auto. It buys when the gap is your Enter cushion % of the Cushions dollar (default 60%), the ask is at or under Max ask (default $0.82), and the book is tight. It then sells when the bid is up by Cash out bid minus max ask from what you paid (paid $0.82 → $0.88; paid $0.78 → $0.84). If the lean fully flips by a full cushion, it sells to get out. If neither happens, the ticket settles $1 or $0 — no last-second dump.\n\n' +
             'Home Buy and Cash out never share a ticker. Protect money does not sell Cash out lots.',
         },
         {

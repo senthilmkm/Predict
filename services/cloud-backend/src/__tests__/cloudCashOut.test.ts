@@ -96,6 +96,56 @@ describe('Cloud Cash out', () => {
     const closed = await getTradeRecords(userId);
     expect(closed[0].outcome).toBe('exited');
     expect(closed[0].protectExitOrderId).toBe('ord-exit');
+    expect(closed[0].exitPayPrice).toBeCloseTo(0.88, 4);
+  });
+
+  test('cheaper fill sells at fill + edge, not the $0.88 setting', async () => {
+    const userId = 'user_cout_fill_edge';
+    const trade = filledTrade({
+      userId,
+      executedAt: '2026-09-10T15:00:00.000Z',
+      payPrice: 0.78,
+      price: '0.78',
+    });
+    await saveTradeRecord(userId, trade);
+    const tooSoon = await runCloudCashOutExits({
+      userId,
+      asset: 'Gold',
+      ticker: trade.ticker,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live', yes_bid: 0.83, yes_ask: 0.85 },
+      trades: [trade],
+      cushion: 175,
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      graceSeconds: 45,
+      slippageUsd: 0.02,
+      dryRun: false,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+      place: async () => ({ ok: true, fill_count: 7, order_id: 'should-not' }),
+    });
+    expect(tooSoon.exited).toBe(0);
+    expect(tooSoon.placed).toBe(0);
+
+    const hit = await runCloudCashOutExits({
+      userId,
+      asset: 'Gold',
+      ticker: trade.ticker,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live', yes_bid: 0.84, yes_ask: 0.86 },
+      trades: await getTradeRecords(userId),
+      cushion: 175,
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      graceSeconds: 45,
+      slippageUsd: 0.02,
+      dryRun: false,
+      now: new Date('2026-09-10T15:01:05.000Z'),
+      place: async () => ({ ok: true, fill_count: 7, order_id: 'ord-edge' }),
+    });
+    expect(hit.exited).toBe(1);
+    expect(hit.alerts[0].title).toBe('Cash out');
+    const closed = await getTradeRecords(userId);
+    expect(closed[0].outcome).toBe('exited');
+    expect(closed[0].exitPayPrice).toBeCloseTo(0.82, 4);
   });
 
   test('claim lock: two overlapping sells, only one places', async () => {

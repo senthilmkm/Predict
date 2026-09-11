@@ -45,6 +45,10 @@ export interface TradeRecordDoc {
   protectClaimedAt?: string | null;
   /** Kalshi order id of the IOC exit — never overwrite the entry `orderId`. */
   protectExitOrderId?: string | null;
+  /** Economic sell / cover price in dollars after a Cash out (or Protect) IOC exit. */
+  exitPayPrice?: number | null;
+  /** Admin stream only. Cash out sell price (stored or derived). */
+  sellPriceUsd?: number | null;
   /** How the fill was opened. Protect / Home sell / Cash out must not overwrite. */
   entryPath?: 'home' | 'auto' | 'cash_out';
 }

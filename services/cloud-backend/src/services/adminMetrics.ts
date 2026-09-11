@@ -123,6 +123,21 @@ export function tradeMatchesFilters(t: TradeRecordDoc, f: TradeStreamFilters): b
   return true;
 }
 
+/** Cash out IOC sell price. Stored on new exits; older rows derive from P&L. */
+export function tradeStreamSellPriceUsd(t: TradeRecordDoc): number | null {
+  const stored = Number(t.exitPayPrice);
+  if (Number.isFinite(stored) && stored > 0) {
+    return Math.round(stored * 100) / 100;
+  }
+  if (parseTradeEntryPath(t.entryPath) !== 'cash_out') return null;
+  if (t.outcome !== 'exited' && !t.protectExitOrderId) return null;
+  const pay = Number(t.payPrice != null ? t.payPrice : t.price);
+  const fills = Number(t.fillCount != null ? t.fillCount : t.count);
+  const pnl = Number(t.pnlUsd);
+  if (!(pay > 0) || !(fills > 0) || !Number.isFinite(pnl)) return null;
+  return Math.round((pay + pnl / fills) * 100) / 100;
+}
+
 export function realizedPnlForDisplay(t: TradeRecordDoc): number | null {
   if (t.status !== 'SETTLED' && t.outcome !== 'win' && t.outcome !== 'loss' && t.outcome !== 'exited') {
     return null;
@@ -146,7 +161,10 @@ export function buildTradeStreamResult(
   matched.sort((a, b) => Date.parse(b.executedAt || '') - Date.parse(a.executedAt || ''));
   const liveMatched = matched.filter((t) => !t.dryRun);
   const cap = Math.min(TRADE_STREAM_DISPLAY_MAX, Math.max(1, Math.round(limit)));
-  const shown = matched.slice(0, cap);
+  const shown = matched.slice(0, cap).map((t) => {
+    const sellPriceUsd = tradeStreamSellPriceUsd(t);
+    return sellPriceUsd == null ? t : { ...t, sellPriceUsd };
+  });
   return {
     matchedCount: matched.length,
     displayedCount: shown.length,
