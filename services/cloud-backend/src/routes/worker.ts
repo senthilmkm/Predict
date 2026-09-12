@@ -228,6 +228,76 @@ function oneSecondDumpWatching(): boolean {
   return cashOutWatchUsers.size > 0 || goldFadeWatchUsers.size > 0 || protectWatchUsers.size > 0;
 }
 
+function applyDumpWatchMaps(
+  userId: string,
+  opts: {
+    trades: TradeRecordDoc[];
+    protectEnabled: boolean;
+    killSwitch: boolean;
+    now: Date;
+  }
+): void {
+  const stillOpenCashOut = openCashOutAssets(opts.trades);
+  if (stillOpenCashOut.length) cashOutWatchUsers.set(userId, stillOpenCashOut);
+  else cashOutWatchUsers.delete(userId);
+  const stillOpenFade = openGoldFadeAssets(opts.trades);
+  if (stillOpenFade.length) goldFadeWatchUsers.set(userId, stillOpenFade);
+  else goldFadeWatchUsers.delete(userId);
+  const stillOpenProtect =
+    opts.protectEnabled && !opts.killSwitch ? openProtectWatchAssets(opts.trades, opts.now) : [];
+  if (stillOpenProtect.length) protectWatchUsers.set(userId, stillOpenProtect);
+  else protectWatchUsers.delete(userId);
+}
+
+/** Re-read open Cash out / Gold fade / Protect lots so a mid-tick fill joins the same 1s snapshot. */
+export async function refreshDumpWatchFromTradeBooks(now = new Date()): Promise<void> {
+  const activeUsers = await getEnrolledActiveUsers();
+  const seen = new Set<string>();
+  await Promise.all(
+    activeUsers.map(async (user) => {
+      const userId = user.userId;
+      seen.add(userId);
+      if (!shouldLoadCloudTradeBook(user)) {
+        cashOutWatchUsers.delete(userId);
+        goldFadeWatchUsers.delete(userId);
+        protectWatchUsers.delete(userId);
+        return;
+      }
+      const cfg = user.config || defaultAppConfig();
+      const trades = await getTradeRecords(userId);
+      applyDumpWatchMaps(userId, {
+        trades,
+        protectEnabled: Boolean(cfg.risk?.protect_sell_enabled),
+        killSwitch: user.state === 'KILL_SWITCH',
+        now,
+      });
+    })
+  );
+  const staleIds = new Set([
+    ...cashOutWatchUsers.keys(),
+    ...goldFadeWatchUsers.keys(),
+    ...protectWatchUsers.keys(),
+  ]);
+  for (const userId of staleIds) {
+    if (seen.has(userId)) continue;
+    cashOutWatchUsers.delete(userId);
+    goldFadeWatchUsers.delete(userId);
+    protectWatchUsers.delete(userId);
+  }
+}
+
+export function dumpWatchSnapshotForTests(): {
+  cashOut: Record<string, string[]>;
+  goldFade: Record<string, string[]>;
+  protect: Record<string, string[]>;
+} {
+  return {
+    cashOut: Object.fromEntries(cashOutWatchUsers),
+    goldFade: Object.fromEntries(goldFadeWatchUsers),
+    protect: Object.fromEntries(protectWatchUsers),
+  };
+}
+
 function oneSecondPathWatching(): boolean {
   return (
     twapLockWatchUsers.size > 0 ||
@@ -2145,18 +2215,12 @@ async function runOneTick() {
           if (leanAlertsDirty) {
             leanAlertMemory.set(userId, leanAlertsSent);
           }
-          const stillOpenCashOut = openCashOutAssets(userTrades);
-          if (stillOpenCashOut.length) cashOutWatchUsers.set(userId, stillOpenCashOut);
-          else cashOutWatchUsers.delete(userId);
-          const stillOpenFade = openGoldFadeAssets(userTrades);
-          if (stillOpenFade.length) goldFadeWatchUsers.set(userId, stillOpenFade);
-          else goldFadeWatchUsers.delete(userId);
-          const stillOpenProtect =
-            protectEnabled && user.state !== 'KILL_SWITCH'
-              ? openProtectWatchAssets(userTrades, now)
-              : [];
-          if (stillOpenProtect.length) protectWatchUsers.set(userId, stillOpenProtect);
-          else protectWatchUsers.delete(userId);
+          applyDumpWatchMaps(userId, {
+            trades: userTrades,
+            protectEnabled,
+            killSwitch: user.state === 'KILL_SWITCH',
+            now,
+          });
           if (
             featureFlags.twapLock &&
             cfg.auto_trade_enabled &&
@@ -4468,12 +4532,15 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
     if (Date.now() > endAt - 80) continue;
     let nextPulse = Date.now() + 1000;
     while (Date.now() <= endAt - 80) {
-      const watching = oneSecondPathWatching() || oneSecondDumpWatching();
-      const nextAt = watching ? Math.min(nextPulse, endAt) : endAt;
-      await sleepMs(Math.max(0, nextAt - Date.now()));
+      await sleepMs(Math.max(0, Math.min(nextPulse, endAt) - Date.now()));
       if (Date.now() > endAt - 80) break;
-      if (!watching) break;
       if (isCloudKalshiPaused()) break;
+      await refreshDumpWatchFromTradeBooks(new Date());
+      const watching = oneSecondPathWatching() || oneSecondDumpWatching();
+      if (!watching) {
+        nextPulse += 1000;
+        continue;
+      }
       const watchAssets = oneSecondWatchAssets();
       const snap = watchAssets.length
         ? await buildOneSecondMarketSnapshot(watchAssets, new Date())
