@@ -132,6 +132,26 @@ import {
   tickerHasOpenOtherThanStepBuy,
   tickerHasOpenStepBuy,
 } from '../../../../packages/trading-core/src/stepBuy';
+import {
+  evaluateSpikeFadeEnter,
+  isSpikeFadeEnterPath,
+  isSpikeFadeEnterWindow,
+  pickSpikeFadeSide,
+  spikeFadeTwapOwns,
+  tickerHasOpenOtherThanSpikeFade,
+  tickerHasOpenSpikeFade,
+} from '../../../../packages/trading-core/src/spikeFade';
+import {
+  evaluatePairLockEnter,
+  evaluatePairLockWatch,
+  isPairLockEnterPath,
+  isPairLockEnterWindow,
+  pairLockLockedUsd,
+  pairLockLotsForTicker,
+  pairLockTwapOwns,
+  tickerHasOpenOtherThanPairLock,
+  tickerHasOpenPairLock,
+} from '../../../../packages/trading-core/src/pairLock';
 import { resolveSkipThinBid } from '../../../../packages/trading-core/src/skipThinBid';
 import { cfbRtiBuffer, fetchCfbRtiPrints, ingestRecentCfbPrints } from '../services/cfbRti';
 import {
@@ -149,7 +169,21 @@ import {
   persistStepBuyWatcherSnapshot,
   resetStepBuyWatcherMemoryForTests,
 } from '../services/stepBuyWatcher';
+import {
+  buildSpikeFadeWatcherSnapshot,
+  persistSpikeFadeWatcherSnapshot,
+  resetSpikeFadeWatcherMemoryForTests,
+  spikeFadeMinutesLeftFromLean,
+} from '../services/spikeFadeWatcher';
+import {
+  buildPairLockWatcherSnapshot,
+  persistPairLockWatcherSnapshot,
+  resetPairLockWatcherMemoryForTests,
+  pairLockMinutesLeftFromLean,
+} from '../services/pairLockWatcher';
 import { runCloudStepBuyStops } from '../services/cloudStepBuy';
+import { pendingSpikeFadeTradesForMarket, runCloudSpikeFadeExits } from '../services/cloudSpikeFade';
+import { runCloudPairLockFlatten } from '../services/cloudPairLock';
 
 export const workerRouter = Router();
 
@@ -163,6 +197,8 @@ const twapLockWatchUsers = new Map<string, string[]>();
 /** Armed Last-minute users with an enabled asset in the watch window — 1s quotes + clip ladder. */
 const lastMinuteWatchUsers = new Map<string, string[]>();
 const stepBuyWatchUsers = new Map<string, string[]>();
+const spikeFadeWatchUsers = new Map<string, string[]>();
+const pairLockWatchUsers = new Map<string, string[]>();
 
 async function cashOutBestBidSize(
   ticker: string,
@@ -251,6 +287,52 @@ async function flushStepBuyWatcher(
   );
 }
 
+function spikeFadeWatcherMinutesLeft(
+  leans: Partial<Record<string, { minutes_left?: number; minutes_remaining?: number }>>
+): Record<string, number | null | undefined> {
+  const out: Record<string, number | null | undefined> = {};
+  for (const asset of new Set([...spikeFadeWatchUsers.values()].flat())) {
+    out[asset] = spikeFadeMinutesLeftFromLean(leans[asset]);
+  }
+  return out;
+}
+
+async function flushSpikeFadeWatcher(
+  now: Date,
+  leans: Partial<Record<string, { minutes_left?: number; minutes_remaining?: number }>>
+): Promise<void> {
+  await persistSpikeFadeWatcherSnapshot(
+    buildSpikeFadeWatcherSnapshot({
+      now,
+      watchUsers: spikeFadeWatchUsers,
+      minutesLeftByAsset: spikeFadeWatcherMinutesLeft(leans),
+    })
+  );
+}
+
+function pairLockWatcherMinutesLeft(
+  leans: Partial<Record<string, { minutes_left?: number; minutes_remaining?: number }>>
+): Record<string, number | null | undefined> {
+  const out: Record<string, number | null | undefined> = {};
+  for (const asset of new Set([...pairLockWatchUsers.values()].flat())) {
+    out[asset] = pairLockMinutesLeftFromLean(leans[asset]);
+  }
+  return out;
+}
+
+async function flushPairLockWatcher(
+  now: Date,
+  leans: Partial<Record<string, { minutes_left?: number; minutes_remaining?: number }>>
+): Promise<void> {
+  await persistPairLockWatcherSnapshot(
+    buildPairLockWatcherSnapshot({
+      now,
+      watchUsers: pairLockWatchUsers,
+      minutesLeftByAsset: pairLockWatcherMinutesLeft(leans),
+    })
+  );
+}
+
 export function resetLeanAlertMemoryForTests(): void {
   leanAlertMemory.clear();
   cashOutWatchUsers.clear();
@@ -258,9 +340,13 @@ export function resetLeanAlertMemoryForTests(): void {
   twapLockWatchUsers.clear();
   lastMinuteWatchUsers.clear();
   stepBuyWatchUsers.clear();
+  spikeFadeWatchUsers.clear();
+  pairLockWatchUsers.clear();
   resetTwapLockWatcherMemoryForTests();
   resetLastMinuteWatcherMemoryForTests();
   resetStepBuyWatcherMemoryForTests();
+  resetSpikeFadeWatcherMemoryForTests();
+  resetPairLockWatcherMemoryForTests();
 }
 
 function loadLeanAlertsSent(userId: string, fromDoc: any): LeanAlertsSent {
@@ -307,6 +393,28 @@ function lastMinutePickedSide(
     maxAsk,
     bothMinAsk: normalizeLastMinuteBothMinAsk(cfg.risk?.last_minute_both_min_ask, maxAsk),
     bothGap: normalizeLastMinuteBothGap(cfg.risk?.last_minute_both_gap),
+  });
+  return picked.ok ? picked.decision : 'YES';
+}
+
+function spikeFadePickedSide(
+  lean: { yes_ask?: number; no_ask?: number },
+  cfg: {
+    risk?: {
+      spike_fade_expensive_min_usd?: unknown;
+      spike_fade_expensive_max_usd?: unknown;
+      spike_fade_cheap_min_usd?: unknown;
+      spike_fade_cheap_max_usd?: unknown;
+    };
+  }
+): 'YES' | 'NO' {
+  const picked = pickSpikeFadeSide({
+    yesAsk: lean.yes_ask,
+    noAsk: lean.no_ask,
+    expensiveMin: cfg.risk?.spike_fade_expensive_min_usd,
+    expensiveMax: cfg.risk?.spike_fade_expensive_max_usd,
+    cheapMin: cfg.risk?.spike_fade_cheap_min_usd,
+    cheapMax: cfg.risk?.spike_fade_cheap_max_usd,
   });
   return picked.ok ? picked.decision : 'YES';
 }
@@ -414,9 +522,13 @@ async function runOneTick() {
     twapLockWatchUsers.clear();
     lastMinuteWatchUsers.clear();
     stepBuyWatchUsers.clear();
+    spikeFadeWatchUsers.clear();
+    pairLockWatchUsers.clear();
     await flushTwapLockWatcher(now, {});
     await flushLastMinuteWatcher(now, {});
     await flushStepBuyWatcher(now, {});
+    await flushSpikeFadeWatcher(now, {});
+    await flushPairLockWatcher(now, {});
     return { timestamp: now.toISOString(), activeUserCount: 0, results: [] };
   }
 
@@ -691,10 +803,28 @@ async function runOneTick() {
                 }
               }
             }
+            const pairLockWanted =
+              isPairLockEnterPath({
+                adminEnabled: featureFlags.pairLock,
+                userEnabled: Boolean(cfg.risk?.pair_lock_enabled),
+                assetEnabled: cfg.assets_enabled?.[asset] !== false,
+                asset,
+                assets: cfg.risk?.pair_lock_assets,
+              }) &&
+              !pairLockTwapOwns({
+                twapAdminEnabled: featureFlags.twapLock,
+                twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+                twapAssets: cfg.risk?.twap_lock_assets,
+                asset,
+              });
+            let pairLockLots = pairLockLotsForTicker(userTrades, marketTicker);
+            const pairLockHolding = tickerHasOpenPairLock(userTrades, marketTicker);
             const lastMinuteOwnsNewBuys =
               lastMinuteWanted &&
               Boolean(twapClose) &&
               stepBuyLots.count <= 0 &&
+              !tickerHasOpenSpikeFade(userTrades, marketTicker) &&
+              !pairLockHolding &&
               isLastMinuteWindow(now, twapClose!, lastMinuteTimes.enterSec, lastMinuteTimes.stopSec);
             const stepBuyTick = Boolean(
               stepBuyWanted &&
@@ -708,8 +838,68 @@ async function runOneTick() {
                   }) &&
                     !lastMinuteOwnsNewBuys))
             );
+            const spikeFadeWanted =
+              isSpikeFadeEnterPath({
+                adminEnabled: featureFlags.spikeFade,
+                userEnabled: Boolean(cfg.risk?.spike_fade_enabled),
+                assetEnabled: cfg.assets_enabled?.[asset] !== false,
+                asset,
+                assets: cfg.risk?.spike_fade_assets,
+              }) &&
+              !spikeFadeTwapOwns({
+                twapAdminEnabled: featureFlags.twapLock,
+                twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+                twapAssets: cfg.risk?.twap_lock_assets,
+                asset,
+              });
+            const spikeFadeHolding = tickerHasOpenSpikeFade(userTrades, marketTicker);
+            const inSpikeEnterWindow = isSpikeFadeEnterWindow({
+              minutesElapsed: lean.minutes_elapsed,
+              startMinutes: cfg.risk?.spike_fade_start_minutes,
+              untilMinutes: cfg.risk?.spike_fade_until_minutes,
+            });
+            const spikeFadeOwnsSlice = spikeFadeWanted && inSpikeEnterWindow && !spikeFadeHolding;
+            const spikeFadeTick = Boolean(
+              spikeFadeWanted &&
+                twapClose &&
+                (spikeFadeHolding ||
+                  (inSpikeEnterWindow &&
+                    !lastMinuteOwnsNewBuys &&
+                    stepBuyLots.count <= 0 &&
+                    !pairLockHolding))
+            );
+            const inPairEnterWindow = isPairLockEnterWindow({
+              minutesElapsed: lean.minutes_elapsed,
+              startMinutes: cfg.risk?.pair_lock_start_minutes,
+              untilMinutes: cfg.risk?.pair_lock_until_minutes,
+            });
+            const pairLockOwnsSlice = pairLockWanted && inPairEnterWindow && !pairLockHolding;
+            const pairLockTick = Boolean(
+              pairLockWanted &&
+                twapClose &&
+                (pairLockHolding ||
+                  (inPairEnterWindow &&
+                    !lastMinuteOwnsNewBuys &&
+                    stepBuyLots.count <= 0 &&
+                    !spikeFadeHolding &&
+                    !spikeFadeTick))
+            );
+            const goldFadePath =
+              goldFadeEnter &&
+              !spikeFadeOwnsSlice &&
+              !spikeFadeHolding &&
+              !pairLockOwnsSlice &&
+              !pairLockHolding;
             const cashOutEnter =
-              cashOutWanted && !goldFadeEnter && !twapLockWanted && !lastMinuteTick && !stepBuyTick;
+              cashOutWanted &&
+              !goldFadePath &&
+              !twapLockWanted &&
+              !lastMinuteTick &&
+              !stepBuyTick &&
+              !spikeFadeTick &&
+              !spikeFadeOwnsSlice &&
+              !pairLockTick &&
+              !pairLockOwnsSlice;
 
             if (
               protectEnabled &&
@@ -943,6 +1133,299 @@ async function runOneTick() {
               }
             }
 
+            if (
+              loadTradeBook &&
+              user.kalshiConfigured &&
+              pendingSpikeFadeTradesForMarket(userTrades, marketTicker).length > 0
+            ) {
+              if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
+              const secret = cachedSecret;
+              if (secret?.privateKeyPem && secret.keyId) {
+                const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+                const heldSpike = pendingSpikeFadeTradesForMarket(userTrades, marketTicker)[0];
+                const spikeSkipThin = resolveSkipThinBid(cfg.risk, 'spike_fade');
+                const spikeRes = await runCloudSpikeFadeExits({
+                  userId,
+                  asset,
+                  ticker: marketTicker,
+                  lean: {
+                    phase: lean.phase === 'live' ? 'live' : 'ended',
+                    minutes_left: lean.minutes_left,
+                    minutes_remaining: lean.minutes_remaining,
+                    yes_bid: lean.yes_bid,
+                    yes_ask: lean.yes_ask,
+                    no_bid: lean.no_bid,
+                    no_ask: lean.no_ask,
+                  },
+                  trades: userTrades,
+                  takeAskUsd: cfg.risk?.spike_fade_take_ask_usd,
+                  stopAskUsd: cfg.risk?.spike_fade_stop_ask_usd,
+                  flattenMinutes: cfg.risk?.spike_fade_flatten_minutes,
+                  skipThinBid: spikeSkipThin,
+                  bidSize: await cashOutBestBidSize(
+                    marketTicker,
+                    heldSpike?.decision || lean.decision,
+                    spikeSkipThin
+                  ),
+                  slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+                  dryRun: false,
+                  now,
+                  place: (input) =>
+                    client.placeOrder({
+                      ticker: input.ticker,
+                      side: input.side,
+                      count: input.count,
+                      price: input.price,
+                      time_in_force: input.time_in_force,
+                      dry_run: input.dry_run,
+                      client_order_id: input.client_order_id,
+                    }),
+                });
+                if (spikeRes.exited > 0) {
+                  tradesCount += spikeRes.exited;
+                  openPositions = Math.max(0, openPositions - spikeRes.exited);
+                  await writeAuditLog(userId, 'TRADE_TRIGGERED', {
+                    spikeFade: true,
+                    asset,
+                    ticker: marketTicker,
+                    exited: spikeRes.exited,
+                  });
+                }
+                for (const alert of spikeRes.alerts) {
+                  await emitCloudAlert({
+                    userId,
+                    alertId: protectAlertId(alert.tradeId),
+                    kind: 'protect_sell',
+                    title: alert.title,
+                    body: alert.body,
+                    cfg,
+                    tokens: userTokens,
+                    collapseId: `spk:${userId}:${alert.tradeId}`.slice(0, 64),
+                    asset,
+                    ticker: marketTicker,
+                    tradeId: alert.tradeId,
+                    at: now.toISOString(),
+                  });
+                }
+              }
+            }
+
+            if (
+              loadTradeBook &&
+              user.kalshiConfigured &&
+              pairLockLots.unmatched
+            ) {
+              if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
+              const secret = cachedSecret;
+              if (secret?.privateKeyPem && secret.keyId) {
+                const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+                const pairSkipThin = resolveSkipThinBid(cfg.risk, 'pair_lock');
+                const quotes = {
+                  yes_bid: lean.yes_bid,
+                  yes_ask: lean.yes_ask,
+                  no_bid: lean.no_bid,
+                  no_ask: lean.no_ask,
+                };
+                const watch = evaluatePairLockWatch({
+                  lots: pairLockLots,
+                  quotes,
+                  minLockUsd: cfg.risk?.pair_lock_min_lock_usd,
+                  flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
+                  lean: {
+                    phase: lean.phase === 'live' ? 'live' : 'ended',
+                    minutes_left: lean.minutes_left,
+                    minutes_remaining: lean.minutes_remaining,
+                  },
+                  filledAt: pairLockLots.runnerFilledAt,
+                  now,
+                  skipThinBid: pairSkipThin,
+                  hedgeBidSize: await cashOutBestBidSize(
+                    marketTicker,
+                    pairLockLots.runnerSide === 'YES' ? 'NO' : 'YES',
+                    pairSkipThin
+                  ),
+                  flattenBidSize: await cashOutBestBidSize(
+                    marketTicker,
+                    pairLockLots.runnerSide || lean.decision,
+                    pairSkipThin
+                  ),
+                });
+                if (watch.kind === 'hedge' && watch.hedge?.ok && watch.hedge.price && watch.hedge.count) {
+                  const hedgeReq = `plh_${userId}_${marketTicker}_${Date.now()}`.slice(0, 64);
+                  const hedgeLock = await tryAcquirePlaceLock({
+                    userId,
+                    ticker: marketTicker,
+                    cap: Math.max(2, windowBuyCap(cfg.risk) + 1),
+                    requestId: hedgeReq,
+                    existingBuys: 1,
+                  });
+                  if (hedgeLock.ok) {
+                    try {
+                      const placeRes = await client.placeOrder({
+                        ticker: marketTicker,
+                        side: watch.hedge.side || 'bid',
+                        count: watch.hedge.count,
+                        price: watch.hedge.price,
+                        time_in_force: 'immediate_or_cancel',
+                        dry_run: false,
+                      });
+                      const { fillCount, filled } = resolvedPlaceFillCount({
+                        dryRun: Boolean(placeRes.dry_run),
+                        fillCount: placeRes.fill_count,
+                        intendedCount: watch.hedge.count,
+                      });
+                      const payPrice = Number(watch.hedge.pay_price ?? 0) || null;
+                      const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                      const hedgeDecision = watch.hedge.decision === 'NO' ? 'NO' : 'YES';
+                      const tradeDoc: TradeRecordDoc = {
+                        tradeId,
+                        userId,
+                        ticker: marketTicker,
+                        asset,
+                        decision: hedgeDecision,
+                        count: filled ? String(fillCount) : String(watch.hedge.count || 0),
+                        price: String(watch.hedge.price),
+                        notionalUsd:
+                          filled && payPrice
+                            ? Math.round(fillCount * payPrice * 100) / 100
+                            : watch.hedge.notional_usd || 0,
+                        dryRun: false,
+                        status: filled ? 'FILLED' : 'CANCELLED',
+                        leanDiff: absGap,
+                        liveSpot: lean.live,
+                        strike: lean.strike,
+                        executedAt: now.toISOString(),
+                        orderId: placeRes.order_id ?? null,
+                        payPrice,
+                        fillCount: filled ? fillCount : 0,
+                        outcome: filled ? 'pending' : 'miss',
+                        pnlUsd: null,
+                        entryPath: 'pair_lock',
+                      };
+                      await saveTradeRecord(userId, tradeDoc);
+                      userTrades.unshift(tradeDoc);
+                      pairLockLots = pairLockLotsForTicker(userTrades, marketTicker);
+                      const priceVal = parseFloat(String(watch.hedge.price || 0));
+                      lastTradeAction[asset] = filled
+                        ? {
+                            status: 'placed',
+                            detail: `placed Pair lock hedge ${hedgeDecision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
+                            at: tickIso,
+                          }
+                        : { status: 'failed', detail: 'IOC no fill', at: tickIso };
+                      if (filled) {
+                        tradesCount += 1;
+                        const locked = pairLockLockedUsd(
+                          pairLockLots.runnerSide === 'YES' ? pairLockLots.runnerFillUsd : pairLockLots.hedgeFillUsd,
+                          pairLockLots.runnerSide === 'NO' ? pairLockLots.runnerFillUsd : pairLockLots.hedgeFillUsd
+                        );
+                        const cents = locked != null ? Math.round(locked * 100) : 0;
+                        await emitCloudAlert({
+                          userId,
+                          alertId: fillAlertId(tradeId),
+                          kind: 'order_filled',
+                          title: orderPlacedAlertTitle({
+                            live: true,
+                            asset,
+                            decision: hedgeDecision,
+                            entryPath: 'pair_lock_hedge',
+                          }),
+                          body:
+                            cents > 0
+                              ? `${watch.hedge.count} ctr @ $${priceVal.toFixed(2)} · Pair lock locked · +${cents}¢`
+                              : `${watch.hedge.count} ctr @ $${priceVal.toFixed(2)}`,
+                          cfg,
+                          tokens: userTokens,
+                          collapseId: fillCollapseId(userId, tradeId),
+                          asset,
+                          ticker: marketTicker,
+                          tradeId,
+                          decision: hedgeDecision,
+                          at: now.toISOString(),
+                        });
+                      } else {
+                        await emitCloudAlert({
+                          userId,
+                          alertId: missAlertId(tradeId),
+                          kind: 'ioc_miss',
+                          title: iocMissAlertTitle('pair_lock'),
+                          body: iocMissAlertBody({
+                            asset,
+                            decision: hedgeDecision,
+                            entryPath: 'pair_lock',
+                            price: priceVal,
+                            count: watch.hedge.count,
+                          }),
+                          cfg,
+                          tokens: userTokens,
+                          asset,
+                          ticker: marketTicker,
+                          tradeId,
+                          decision: hedgeDecision,
+                          at: now.toISOString(),
+                        });
+                      }
+                    } finally {
+                      await releasePlaceLock({ userId, ticker: marketTicker, requestId: hedgeReq });
+                    }
+                  }
+                } else if (watch.kind === 'flatten' || watch.kind === 'thin_bid') {
+                  const pairRes = await runCloudPairLockFlatten({
+                    userId,
+                    asset,
+                    ticker: marketTicker,
+                    lean: {
+                      phase: lean.phase === 'live' ? 'live' : 'ended',
+                      minutes_left: lean.minutes_left,
+                      minutes_remaining: lean.minutes_remaining,
+                      yes_bid: lean.yes_bid,
+                      yes_ask: lean.yes_ask,
+                      no_bid: lean.no_bid,
+                      no_ask: lean.no_ask,
+                    },
+                    trades: userTrades,
+                    flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
+                    skipThinBid: pairSkipThin,
+                    bidSize: await cashOutBestBidSize(
+                      marketTicker,
+                      pairLockLots.runnerSide || lean.decision,
+                      pairSkipThin
+                    ),
+                    slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+                    dryRun: false,
+                    now,
+                    place: (input) => client.placeOrder(input),
+                  });
+                  if (pairRes.exited > 0) {
+                    tradesCount += pairRes.exited;
+                    openPositions = Math.max(0, openPositions - pairRes.exited);
+                    pairLockLots = pairLockLotsForTicker(userTrades, marketTicker);
+                    lastTradeAction[asset] = {
+                      status: 'placed',
+                      detail: `Pair lock flatten · sold ${pairRes.exited}`,
+                      at: tickIso,
+                    };
+                  }
+                  for (const alert of pairRes.alerts) {
+                    await emitCloudAlert({
+                      userId,
+                      alertId: protectAlertId(alert.tradeId),
+                      kind: 'protect_sell',
+                      title: alert.title,
+                      body: alert.body,
+                      cfg,
+                      tokens: userTokens,
+                      collapseId: `plk:${userId}:${alert.tradeId}`.slice(0, 64),
+                      asset,
+                      ticker: marketTicker,
+                      tradeId: alert.tradeId,
+                      at: now.toISOString(),
+                    });
+                  }
+                }
+              }
+            }
+
             const leanSide = leanAlertSide(lean);
             if (leanSide) {
               const leanEmit = await maybeEmitLeanAlert({
@@ -970,10 +1453,13 @@ async function runOneTick() {
             }
             if (
               !cashOutEnter &&
-              !goldFadeEnter &&
+              !goldFadePath &&
               !twapLockWanted &&
               !lastMinuteTick &&
               !stepBuyTick &&
+              !spikeFadeTick &&
+              !pairLockTick &&
+              !pairLockOwnsSlice &&
               absGap < userCushion
             ) {
               delete lastTradeAction[asset];
@@ -1005,6 +1491,13 @@ async function runOneTick() {
               lastTradeAction[asset] = skippedTradeAction('step_buy_holding', tickIso);
               continue;
             }
+            if (!spikeFadeTick && tickerHasOpenSpikeFade(userTrades, marketTicker)) {
+              lastTradeAction[asset] = skippedTradeAction('spike_fade_holding', tickIso);
+              continue;
+            }
+            if (pairLockHolding) {
+              continue;
+            }
 
             const leanForGate = {
               asset: lean.asset,
@@ -1029,6 +1522,8 @@ async function runOneTick() {
             const twapThin = resolveSkipThinBid(cfg.risk, 'twap_lock');
             const lastThin = resolveSkipThinBid(cfg.risk, 'last_minute');
             const stepThin = resolveSkipThinBid(cfg.risk, 'step_buy');
+            const spikeThin = resolveSkipThinBid(cfg.risk, 'spike_fade');
+            const pairThin = resolveSkipThinBid(cfg.risk, 'pair_lock');
             const fadeSide = goldFadeCheapSide(leanForGate);
             if (twapLockWanted && twapClose && isTwapLockWatchWindow(now, twapClose)) {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
@@ -1054,7 +1549,9 @@ async function runOneTick() {
                   skipThinBid: twapThin,
                   bidSize: await cashOutBestBidSize(marketTicker, 'YES', twapThin),
                 })
-              : lastMinuteTick && !(stepBuyTick && stepBuyLots.count > 0)
+              : lastMinuteTick &&
+                !(stepBuyTick && stepBuyLots.count > 0) &&
+                !(spikeFadeTick && spikeFadeHolding)
               ? evaluateLastMinuteEnter({
                   lean: leanForGate,
                   cfg,
@@ -1073,6 +1570,25 @@ async function runOneTick() {
                     marketTicker,
                     lastMinutePickedSide(leanForGate, cfg),
                     lastThin
+                  ),
+                })
+              : spikeFadeTick && !stepBuyLots.count
+              ? evaluateSpikeFadeEnter({
+                  lean: leanForGate,
+                  cfg,
+                  adminEnabled: featureFlags.spikeFade,
+                  twapAdminEnabled: featureFlags.twapLock,
+                  openPositions,
+                  tradesToday,
+                  assetTradesInWindow: existingBuys,
+                  dailyPnlUsd,
+                  hasOpenOnTicker: tickerHasOpenOtherThanSpikeFade(userTrades, marketTicker),
+                  lastMinuteOwnsNewBuys,
+                  skipThinBid: spikeThin,
+                  bidSize: await cashOutBestBidSize(
+                    marketTicker,
+                    spikeFadePickedSide(leanForGate, cfg),
+                    spikeThin
                   ),
                 })
               : stepBuyTick
@@ -1099,7 +1615,22 @@ async function runOneTick() {
                     stepThin
                   ),
                 })
-              : goldFadeEnter
+              : pairLockTick
+              ? evaluatePairLockEnter({
+                  lean: leanForGate,
+                  cfg,
+                  adminEnabled: featureFlags.pairLock,
+                  twapAdminEnabled: featureFlags.twapLock,
+                  openPositions,
+                  tradesToday,
+                  assetTradesInWindow: existingBuys,
+                  dailyPnlUsd,
+                  hasOpenOnTicker: tickerHasOpenOtherThanPairLock(userTrades, marketTicker),
+                  lastMinuteOwnsNewBuys,
+                  skipThinBid: pairThin,
+                  bidSize: await cashOutBestBidSize(marketTicker, lean.decision, pairThin),
+                })
+              : goldFadePath
               ? evaluateGoldFadeEnter({
                   lean: leanForGate,
                   cfg,
@@ -1133,11 +1664,17 @@ async function runOneTick() {
                   });
             const entryPath = twapLockWanted
               ? 'twap_lock'
-              : lastMinuteTick && !(stepBuyTick && stepBuyLots.count > 0)
+              : lastMinuteTick &&
+                !(stepBuyTick && stepBuyLots.count > 0) &&
+                !(spikeFadeTick && spikeFadeHolding)
                 ? 'last_minute'
+                : spikeFadeTick && !stepBuyLots.count
+                  ? 'spike_fade'
                 : stepBuyTick
                   ? 'step_buy'
-                : goldFadeEnter
+                : pairLockTick
+                  ? 'pair_lock'
+                : goldFadePath
                   ? 'gold_fade'
                   : cashOutEnter
                     ? 'cash_out'
@@ -1145,7 +1682,10 @@ async function runOneTick() {
             const placeDecision =
               entryPath === 'twap_lock'
                 ? 'YES'
-                : entryPath === 'last_minute' || entryPath === 'step_buy'
+                : entryPath === 'last_minute' ||
+                    entryPath === 'step_buy' ||
+                    entryPath === 'spike_fade' ||
+                    entryPath === 'pair_lock'
                   ? gate.decision || lean.decision
                   : lean.decision;
 
@@ -1166,7 +1706,14 @@ async function runOneTick() {
                 gate.skip_reason === 'step_buy_stop_add' ||
                 gate.skip_reason === 'step_buy_add_band' ||
                 gate.skip_reason === 'step_buy_no_thesis' ||
-                gate.skip_reason === 'step_buy_lean_flipped'
+                gate.skip_reason === 'step_buy_lean_flipped' ||
+                gate.skip_reason === 'spike_fade_outside_window' ||
+                gate.skip_reason === 'spike_fade_no_spike' ||
+                gate.skip_reason === 'spike_fade_cheap_off_band' ||
+                gate.skip_reason === 'pair_lock_outside_window' ||
+                gate.skip_reason === 'pair_lock_min_lock' ||
+                gate.skip_reason === 'pair_lock_no_lean' ||
+                gate.skip_reason === 'pair_lock_ask_rich'
               ) {
                 continue;
               }
@@ -1211,6 +1758,66 @@ async function runOneTick() {
 
             const client = new KalshiClient(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo');
             try {
+              if (entryPath === 'pair_lock') {
+                const freshTrades = await getTradeRecords(userId);
+                userTrades.splice(0, userTrades.length, ...freshTrades);
+                const freshExisting = countWindowBuysForTicker(userTrades, marketTicker);
+                const recheck = evaluatePairLockEnter({
+                  lean: leanForGate,
+                  cfg,
+                  adminEnabled: featureFlags.pairLock,
+                  twapAdminEnabled: featureFlags.twapLock,
+                  openPositions: userTrades.filter(
+                    (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+                  ).length,
+                  tradesToday,
+                  assetTradesInWindow: freshExisting,
+                  dailyPnlUsd,
+                  hasOpenOnTicker: tickerHasOpenOtherThanPairLock(userTrades, marketTicker),
+                  lastMinuteOwnsNewBuys,
+                  skipThinBid: pairThin,
+                  bidSize: await cashOutBestBidSize(marketTicker, lean.decision, pairThin),
+                });
+                if (!recheck.ok || !recheck.price || !recheck.count) {
+                  lastTradeAction[asset] = skippedTradeAction(
+                    recheck.skip_reason || 'window_locked',
+                    tickIso
+                  );
+                  continue;
+                }
+              }
+              if (entryPath === 'spike_fade') {
+                const freshTrades = await getTradeRecords(userId);
+                userTrades.splice(0, userTrades.length, ...freshTrades);
+                const freshExisting = countWindowBuysForTicker(userTrades, marketTicker);
+                const recheck = evaluateSpikeFadeEnter({
+                  lean: leanForGate,
+                  cfg,
+                  adminEnabled: featureFlags.spikeFade,
+                  twapAdminEnabled: featureFlags.twapLock,
+                  openPositions: userTrades.filter(
+                    (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+                  ).length,
+                  tradesToday,
+                  assetTradesInWindow: freshExisting,
+                  dailyPnlUsd,
+                  hasOpenOnTicker: tickerHasOpenOtherThanSpikeFade(userTrades, marketTicker),
+                  lastMinuteOwnsNewBuys,
+                  skipThinBid: spikeThin,
+                  bidSize: await cashOutBestBidSize(
+                    marketTicker,
+                    spikeFadePickedSide(leanForGate, cfg),
+                    spikeThin
+                  ),
+                });
+                if (!recheck.ok || !recheck.price || !recheck.count) {
+                  lastTradeAction[asset] = skippedTradeAction(
+                    recheck.skip_reason || 'window_locked',
+                    tickIso
+                  );
+                  continue;
+                }
+              }
               if (entryPath === 'step_buy') {
                 const freshTrades = await getTradeRecords(userId);
                 userTrades.splice(0, userTrades.length, ...freshTrades);
@@ -1496,6 +2103,100 @@ async function runOneTick() {
           } else {
             stepBuyWatchUsers.delete(userId);
           }
+          if (
+            featureFlags.spikeFade &&
+            cfg.auto_trade_enabled &&
+            user.state === 'ARMED' &&
+            Boolean(cfg.risk?.spike_fade_enabled)
+          ) {
+            const watchAssets = assets.filter((a) => {
+              if (cfg.assets_enabled?.[a] === false) return false;
+              if (
+                !isSpikeFadeEnterPath({
+                  adminEnabled: true,
+                  userEnabled: true,
+                  assetEnabled: true,
+                  asset: a,
+                  assets: cfg.risk?.spike_fade_assets,
+                })
+              ) {
+                return false;
+              }
+              if (
+                spikeFadeTwapOwns({
+                  twapAdminEnabled: featureFlags.twapLock,
+                  twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+                  twapAssets: cfg.risk?.twap_lock_assets,
+                  asset: a,
+                })
+              ) {
+                return false;
+              }
+              const row = sharedLeans[a];
+              const close = row ? resolveTwapCloseUtc(row, now) : null;
+              if (!close) return false;
+              const ticker = String(row?.market_ticker || '').trim();
+              if (ticker && tickerHasOpenSpikeFade(userTrades, ticker)) return true;
+              return isSpikeFadeEnterWindow({
+                minutesElapsed: row?.minutes_elapsed,
+                startMinutes: cfg.risk?.spike_fade_start_minutes,
+                untilMinutes: cfg.risk?.spike_fade_until_minutes,
+              });
+            });
+            if (watchAssets.length) spikeFadeWatchUsers.set(userId, watchAssets);
+            else spikeFadeWatchUsers.delete(userId);
+          } else {
+            spikeFadeWatchUsers.delete(userId);
+          }
+          if (
+            featureFlags.pairLock &&
+            cfg.auto_trade_enabled &&
+            user.state === 'ARMED' &&
+            Boolean(cfg.risk?.pair_lock_enabled)
+          ) {
+            const watchAssets = assets.filter((a) => {
+              if (cfg.assets_enabled?.[a] === false) return false;
+              if (
+                !isPairLockEnterPath({
+                  adminEnabled: true,
+                  userEnabled: true,
+                  assetEnabled: true,
+                  asset: a,
+                  assets: cfg.risk?.pair_lock_assets,
+                })
+              ) {
+                return false;
+              }
+              if (
+                pairLockTwapOwns({
+                  twapAdminEnabled: featureFlags.twapLock,
+                  twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+                  twapAssets: cfg.risk?.twap_lock_assets,
+                  asset: a,
+                })
+              ) {
+                return false;
+              }
+              const row = sharedLeans[a];
+              const close = row ? resolveTwapCloseUtc(row, now) : null;
+              if (!close) return false;
+              const ticker = String(row?.market_ticker || '').trim();
+              if (ticker) {
+                const lots = pairLockLotsForTicker(userTrades, ticker);
+                if (lots.locked) return false;
+                if (lots.unmatched) return true;
+              }
+              return isPairLockEnterWindow({
+                minutesElapsed: row?.minutes_elapsed,
+                startMinutes: cfg.risk?.pair_lock_start_minutes,
+                untilMinutes: cfg.risk?.pair_lock_until_minutes,
+              });
+            });
+            if (watchAssets.length) pairLockWatchUsers.set(userId, watchAssets);
+            else pairLockWatchUsers.delete(userId);
+          } else {
+            pairLockWatchUsers.delete(userId);
+          }
           await upsertUserDoc(userId, {
             lastTickAt: now.toISOString(),
             lastError: null,
@@ -1520,6 +2221,8 @@ async function runOneTick() {
   await flushTwapLockWatcher(now, sharedLeans);
   await flushLastMinuteWatcher(now, sharedLeans);
   await flushStepBuyWatcher(now, sharedLeans);
+  await flushSpikeFadeWatcher(now, sharedLeans);
+  await flushPairLockWatcher(now, sharedLeans);
   return { timestamp: now.toISOString(), activeUserCount: activeUsers.length, results };
 }
 
@@ -2501,6 +3204,814 @@ export async function runStepBuyWatchTick(): Promise<{
   return { timestamp: now.toISOString(), watched };
 }
 
+export async function runSpikeFadeWatchTick(): Promise<{
+  timestamp: string;
+  watched: number;
+  paused?: boolean;
+}> {
+  if (spikeFadeWatchUsers.size === 0) {
+    const now = new Date();
+    await flushSpikeFadeWatcher(now, {});
+    return { timestamp: now.toISOString(), watched: 0 };
+  }
+  const now = new Date();
+  const sysConfig = await getSystemConfig();
+  const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
+  setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
+  if (isCloudKalshiPaused()) {
+    return { timestamp: now.toISOString(), watched: 0, paused: true };
+  }
+  if (!featureFlags.spikeFade) {
+    spikeFadeWatchUsers.clear();
+    await flushSpikeFadeWatcher(now, {});
+    return { timestamp: now.toISOString(), watched: 0 };
+  }
+  const watchAssets = [...new Set([...spikeFadeWatchUsers.values()].flat())] as AssetKey[];
+  const sharedLeans: Partial<Record<AssetKey, any>> = {};
+  await Promise.all(
+    watchAssets.map(async (asset) => {
+      try {
+        if (!isMarketOpen(asset, now).open) return;
+        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
+      } catch (err: any) {
+        noteTransientKalshiFailure(err);
+      }
+    })
+  );
+  const activeUsers = await getEnrolledActiveUsers();
+  const byId = new Map(activeUsers.map((u) => [u.userId, u]));
+  let watched = 0;
+  for (const [userId, userAssets] of [...spikeFadeWatchUsers.entries()]) {
+    const user = byId.get(userId);
+    if (!user) {
+      spikeFadeWatchUsers.delete(userId);
+      continue;
+    }
+    try {
+      const cfg = user.config || defaultAppConfig();
+      if (!cfg.auto_trade_enabled || user.state !== 'ARMED' || !cfg.risk?.spike_fade_enabled) {
+        spikeFadeWatchUsers.delete(userId);
+        continue;
+      }
+      const userTrades = await getTradeRecords(userId);
+      const tradesTodayList = liveCloudTradesToday(userTrades, now);
+      let tradesToday = tradesTodayList.length;
+      const dailyPnlUsd = cloudDailyRealizedPnl(tradesTodayList);
+      let openPositions = userTrades.filter(
+        (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+      ).length;
+      const lastTradeAction = copyLastTradeActions(user);
+      const userTokens = [...(user.pushTokens || []), ...(user.fcmTokens || [])].filter(
+        (t, i, arr) => t && arr.indexOf(t) === i
+      );
+      const tickIso = now.toISOString();
+      const still: string[] = [];
+      for (const asset of userAssets) {
+        const lean = sharedLeans[asset];
+        if (!lean?.market_ticker) continue;
+        const closeUtc = resolveTwapCloseUtc(lean, now);
+        if (!closeUtc) continue;
+        if (
+          spikeFadeTwapOwns({
+            twapAdminEnabled: featureFlags.twapLock,
+            twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+            twapAssets: cfg.risk?.twap_lock_assets,
+            asset,
+          })
+        ) {
+          continue;
+        }
+        still.push(asset);
+        watched += 1;
+        const marketTicker = lean.market_ticker;
+        try {
+          const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
+          if (quote?.yes_ask_dollars != null) lean.yes_ask = Number(quote.yes_ask_dollars);
+          if (quote?.no_ask_dollars != null) lean.no_ask = Number(quote.no_ask_dollars);
+          if (quote?.yes_bid_dollars != null) lean.yes_bid = Number(quote.yes_bid_dollars);
+          if (quote?.no_bid_dollars != null) lean.no_bid = Number(quote.no_bid_dollars);
+        } catch {
+          /* keep lean */
+        }
+        if (pendingSpikeFadeTradesForMarket(userTrades, marketTicker).length > 0) {
+          const secret = await getUserSecret(userId);
+          if (secret?.privateKeyPem && secret.keyId) {
+            const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+            const heldSpike = pendingSpikeFadeTradesForMarket(userTrades, marketTicker)[0];
+            const spikeSkipThin = resolveSkipThinBid(cfg.risk, 'spike_fade');
+            const spikeRes = await runCloudSpikeFadeExits({
+              userId,
+              asset,
+              ticker: marketTicker,
+              lean: {
+                phase: lean.phase === 'live' ? 'live' : 'ended',
+                minutes_left: lean.minutes_left,
+                minutes_remaining: lean.minutes_remaining,
+                yes_bid: lean.yes_bid,
+                yes_ask: lean.yes_ask,
+                no_bid: lean.no_bid,
+                no_ask: lean.no_ask,
+              },
+              trades: userTrades,
+              takeAskUsd: cfg.risk?.spike_fade_take_ask_usd,
+              stopAskUsd: cfg.risk?.spike_fade_stop_ask_usd,
+              flattenMinutes: cfg.risk?.spike_fade_flatten_minutes,
+              skipThinBid: spikeSkipThin,
+              bidSize: await cashOutBestBidSize(
+                marketTicker,
+                heldSpike?.decision || lean.decision,
+                spikeSkipThin
+              ),
+              slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+              dryRun: false,
+              now,
+              place: (input) => client.placeOrder(input),
+            });
+            for (const alert of spikeRes.alerts) {
+              await emitCloudAlert({
+                userId,
+                alertId: protectAlertId(alert.tradeId),
+                kind: 'protect_sell',
+                title: alert.title,
+                body: alert.body,
+                cfg: cfg as never,
+                tokens: userTokens,
+                collapseId: `spk:${userId}:${alert.tradeId}`.slice(0, 64),
+                asset,
+                ticker: marketTicker,
+                tradeId: alert.tradeId,
+                at: now.toISOString(),
+              });
+            }
+            if (spikeRes.exited > 0) {
+              lastTradeAction[asset] = {
+                status: 'placed',
+                detail: `Spike fade · sold ${spikeRes.exited}`,
+                at: tickIso,
+              };
+              openPositions = Math.max(0, openPositions - spikeRes.exited);
+            }
+          }
+        }
+        if (tickerHasOpenSpikeFade(userTrades, marketTicker)) continue;
+        const lastMinuteTimes = lastMinuteTimingFromRisk(cfg.risk);
+        const lastMinuteOwnsNewBuys =
+          isLastMinuteEnterPath({
+            adminEnabled: featureFlags.lastMinute,
+            userEnabled: Boolean(cfg.risk?.last_minute_enabled),
+            assetEnabled: cfg.assets_enabled?.[asset] !== false,
+            asset,
+            assets: cfg.risk?.last_minute_assets,
+          }) &&
+          isLastMinuteWindow(now, closeUtc, lastMinuteTimes.enterSec, lastMinuteTimes.stopSec);
+        const windowCap = windowBuyCap(cfg.risk);
+        const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
+        const skipThinBid = resolveSkipThinBid(cfg.risk, 'spike_fade');
+        const absGap = Number.isFinite(Number(lean.abs_gap))
+          ? Number(lean.abs_gap)
+          : Math.abs((lean.live || 0) - (lean.strike || 0));
+        const leanForGate = {
+          asset: lean.asset,
+          market_ticker: marketTicker,
+          decision: lean.decision,
+          live: lean.live || 0,
+          strike: lean.strike || 0,
+          abs_gap: absGap,
+          minutes_left: lean.minutes_left || 0,
+          minutes_elapsed: lean.minutes_elapsed || 0,
+          minutes_remaining: lean.minutes_remaining,
+          phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
+          yes_ask: lean.yes_ask ?? undefined,
+          no_ask: lean.no_ask ?? undefined,
+          yes_bid: lean.yes_bid ?? undefined,
+          no_bid: lean.no_bid ?? undefined,
+          timeseries: lean.timeseries,
+          close_utc: lean.close_utc,
+        };
+        const gate = evaluateSpikeFadeEnter({
+          lean: leanForGate,
+          cfg,
+          adminEnabled: featureFlags.spikeFade,
+          twapAdminEnabled: featureFlags.twapLock,
+          openPositions,
+          tradesToday,
+          assetTradesInWindow: existingBuys,
+          dailyPnlUsd,
+          hasOpenOnTicker: tickerHasOpenOtherThanSpikeFade(userTrades, marketTicker),
+          lastMinuteOwnsNewBuys,
+          skipThinBid,
+          bidSize: await cashOutBestBidSize(
+            marketTicker,
+            spikeFadePickedSide(leanForGate, cfg),
+            skipThinBid
+          ),
+        });
+        if (!gate.ok || !gate.price || !gate.count) continue;
+        const secret = await getUserSecret(userId);
+        if (!secret?.privateKeyPem || !secret.keyId) continue;
+        const placeRequestId = `sf_${userId}_${marketTicker}_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}`.slice(0, 64);
+        const claimed = await tryAcquirePlaceLock({
+          userId,
+          ticker: marketTicker,
+          cap: windowCap,
+          requestId: placeRequestId,
+          existingBuys,
+        });
+        if (!claimed.ok) continue;
+        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const placeDecision = gate.decision || lean.decision;
+        try {
+          const freshTrades = await getTradeRecords(userId);
+          userTrades.splice(0, userTrades.length, ...freshTrades);
+          const freshExisting = countWindowBuysForTicker(userTrades, marketTicker);
+          const recheck = evaluateSpikeFadeEnter({
+            lean: leanForGate,
+            cfg,
+            adminEnabled: featureFlags.spikeFade,
+            twapAdminEnabled: featureFlags.twapLock,
+            openPositions: userTrades.filter(
+              (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+            ).length,
+            tradesToday,
+            assetTradesInWindow: freshExisting,
+            dailyPnlUsd,
+            hasOpenOnTicker: tickerHasOpenOtherThanSpikeFade(userTrades, marketTicker),
+            lastMinuteOwnsNewBuys,
+            skipThinBid,
+            bidSize: await cashOutBestBidSize(
+              marketTicker,
+              spikeFadePickedSide(leanForGate, cfg),
+              skipThinBid
+            ),
+          });
+          if (!recheck.ok || !recheck.price || !recheck.count) continue;
+          const placeRes = await client.placeOrder({
+            ticker: marketTicker,
+            side: gate.side || 'bid',
+            count: gate.count,
+            price: gate.price,
+            time_in_force: 'immediate_or_cancel',
+            dry_run: false,
+          });
+          if (!placeRes.ok) continue;
+          const { fillCount, filled } = resolvedPlaceFillCount({
+            dryRun: Boolean(placeRes.dry_run),
+            fillCount: placeRes.fill_count,
+            intendedCount: gate.count,
+          });
+          const payPrice = Number(gate.pay_price ?? 0) || null;
+          const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const tradeDoc: TradeRecordDoc = {
+            tradeId,
+            userId,
+            ticker: marketTicker,
+            asset: lean.asset,
+            decision: placeDecision === 'NO' ? 'NO' : 'YES',
+            count: filled ? String(fillCount) : String(gate.count || 0),
+            price: String(gate.price),
+            notionalUsd:
+              filled && payPrice ? Math.round(fillCount * payPrice * 100) / 100 : gate.notional_usd || 0,
+            dryRun: false,
+            status: filled ? 'FILLED' : 'CANCELLED',
+            leanDiff: absGap,
+            liveSpot: lean.live,
+            strike: lean.strike,
+            executedAt: now.toISOString(),
+            orderId: placeRes.order_id ?? null,
+            payPrice,
+            fillCount: filled ? fillCount : 0,
+            outcome: filled ? 'pending' : 'miss',
+            pnlUsd: null,
+            entryPath: 'spike_fade',
+          };
+          await saveTradeRecord(userId, tradeDoc);
+          userTrades.unshift(tradeDoc);
+          if (filled) {
+            openPositions += 1;
+            tradesToday += 1;
+            tradesTodayList.push(tradeDoc);
+          }
+          const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
+          lastTradeAction[asset] = filled
+            ? {
+                status: 'placed',
+                detail: `placed ${placeDecision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
+                at: tickIso,
+              }
+            : { status: 'failed', detail: 'IOC no fill', at: tickIso };
+          if (filled) {
+            await emitCloudAlert({
+              userId,
+              alertId: fillAlertId(tradeId),
+              kind: 'order_filled',
+              title: orderPlacedAlertTitle({
+                live: true,
+                asset,
+                decision: String(placeDecision || ''),
+                entryPath: 'spike_fade',
+              }),
+              body: `${gate.count} ctr @ $${priceVal.toFixed(2)} · Cost $${(gate.notional_usd || 0).toFixed(2)}`,
+              cfg,
+              tokens: userTokens,
+              collapseId: fillCollapseId(userId, tradeId),
+              asset: lean.asset,
+              ticker: marketTicker,
+              tradeId,
+              decision: placeDecision,
+              at: now.toISOString(),
+            });
+          } else {
+            await emitCloudAlert({
+              userId,
+              alertId: missAlertId(tradeId),
+              kind: 'ioc_miss',
+              title: iocMissAlertTitle('spike_fade'),
+              body: iocMissAlertBody({
+                asset,
+                decision: String(placeDecision || ''),
+                entryPath: 'spike_fade',
+                price: priceVal,
+                count: gate.count,
+              }),
+              cfg,
+              tokens: userTokens,
+              asset: lean.asset,
+              ticker: marketTicker,
+              tradeId,
+              decision: placeDecision,
+              at: now.toISOString(),
+            });
+          }
+        } finally {
+          await releasePlaceLock({ userId, ticker: marketTicker, requestId: placeRequestId });
+        }
+      }
+      if (still.length) spikeFadeWatchUsers.set(userId, still);
+      else spikeFadeWatchUsers.delete(userId);
+      await upsertUserDoc(userId, { lastTradeAction, lastTickAt: now.toISOString() } as any);
+    } catch (err: any) {
+      noteTransientKalshiFailure(err);
+    }
+  }
+  await flushSpikeFadeWatcher(now, sharedLeans);
+  return { timestamp: now.toISOString(), watched };
+}
+
+export async function runPairLockWatchTick(): Promise<{
+  timestamp: string;
+  watched: number;
+  paused?: boolean;
+}> {
+  if (pairLockWatchUsers.size === 0) {
+    const now = new Date();
+    await flushPairLockWatcher(now, {});
+    return { timestamp: now.toISOString(), watched: 0 };
+  }
+  const now = new Date();
+  const sysConfig = await getSystemConfig();
+  const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
+  setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
+  if (isCloudKalshiPaused()) {
+    return { timestamp: now.toISOString(), watched: 0, paused: true };
+  }
+  if (!featureFlags.pairLock) {
+    pairLockWatchUsers.clear();
+    await flushPairLockWatcher(now, {});
+    return { timestamp: now.toISOString(), watched: 0 };
+  }
+  const watchAssets = [...new Set([...pairLockWatchUsers.values()].flat())] as AssetKey[];
+  const sharedLeans: Partial<Record<AssetKey, any>> = {};
+  await Promise.all(
+    watchAssets.map(async (asset) => {
+      try {
+        if (!isMarketOpen(asset, now).open) return;
+        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
+      } catch (err: any) {
+        noteTransientKalshiFailure(err);
+      }
+    })
+  );
+  const activeUsers = await getEnrolledActiveUsers();
+  const byId = new Map(activeUsers.map((u) => [u.userId, u]));
+  let watched = 0;
+  for (const [userId, userAssets] of [...pairLockWatchUsers.entries()]) {
+    const user = byId.get(userId);
+    if (!user) {
+      pairLockWatchUsers.delete(userId);
+      continue;
+    }
+    try {
+      const cfg = user.config || defaultAppConfig();
+      if (!cfg.auto_trade_enabled || user.state !== 'ARMED' || !cfg.risk?.pair_lock_enabled) {
+        pairLockWatchUsers.delete(userId);
+        continue;
+      }
+      const userTrades = await getTradeRecords(userId);
+      const tradesTodayList = liveCloudTradesToday(userTrades, now);
+      let tradesToday = tradesTodayList.length;
+      const dailyPnlUsd = cloudDailyRealizedPnl(tradesTodayList);
+      let openPositions = userTrades.filter(
+        (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+      ).length;
+      const lastTradeAction = copyLastTradeActions(user);
+      const userTokens = [...(user.pushTokens || []), ...(user.fcmTokens || [])].filter(
+        (t, i, arr) => t && arr.indexOf(t) === i
+      );
+      const tickIso = now.toISOString();
+      const still: string[] = [];
+      for (const asset of userAssets) {
+        const lean = sharedLeans[asset];
+        if (!lean?.market_ticker) continue;
+        const closeUtc = resolveTwapCloseUtc(lean, now);
+        if (!closeUtc) continue;
+        if (
+          pairLockTwapOwns({
+            twapAdminEnabled: featureFlags.twapLock,
+            twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+            twapAssets: cfg.risk?.twap_lock_assets,
+            asset,
+          })
+        ) {
+          continue;
+        }
+        still.push(asset);
+        watched += 1;
+        const marketTicker = lean.market_ticker;
+        try {
+          const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
+          if (quote?.yes_ask_dollars != null) lean.yes_ask = Number(quote.yes_ask_dollars);
+          if (quote?.no_ask_dollars != null) lean.no_ask = Number(quote.no_ask_dollars);
+          if (quote?.yes_bid_dollars != null) lean.yes_bid = Number(quote.yes_bid_dollars);
+          if (quote?.no_bid_dollars != null) lean.no_bid = Number(quote.no_bid_dollars);
+        } catch {
+          /* keep lean */
+        }
+        let lots = pairLockLotsForTicker(userTrades, marketTicker);
+        const pairSkipThin = resolveSkipThinBid(cfg.risk, 'pair_lock');
+        if (lots.unmatched) {
+          const secret = await getUserSecret(userId);
+          if (secret?.privateKeyPem && secret.keyId) {
+            const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+            const watch = evaluatePairLockWatch({
+              lots,
+              quotes: {
+                yes_bid: lean.yes_bid,
+                yes_ask: lean.yes_ask,
+                no_bid: lean.no_bid,
+                no_ask: lean.no_ask,
+              },
+              minLockUsd: cfg.risk?.pair_lock_min_lock_usd,
+              flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
+              lean: {
+                phase: lean.phase === 'live' ? 'live' : 'ended',
+                minutes_left: lean.minutes_left,
+                minutes_remaining: lean.minutes_remaining,
+              },
+              filledAt: lots.runnerFilledAt,
+              now,
+              skipThinBid: pairSkipThin,
+              hedgeBidSize: await cashOutBestBidSize(
+                marketTicker,
+                lots.runnerSide === 'YES' ? 'NO' : 'YES',
+                pairSkipThin
+              ),
+              flattenBidSize: await cashOutBestBidSize(
+                marketTicker,
+                lots.runnerSide || lean.decision,
+                pairSkipThin
+              ),
+            });
+            if (watch.kind === 'hedge' && watch.hedge?.ok && watch.hedge.price && watch.hedge.count) {
+              const hedgeReq = `plw_${userId}_${marketTicker}_${Date.now()}`.slice(0, 64);
+              const hedgeLock = await tryAcquirePlaceLock({
+                userId,
+                ticker: marketTicker,
+                cap: Math.max(2, windowBuyCap(cfg.risk) + 1),
+                requestId: hedgeReq,
+                existingBuys: 1,
+              });
+              if (hedgeLock.ok) {
+                try {
+                  const placeRes = await client.placeOrder({
+                    ticker: marketTicker,
+                    side: watch.hedge.side || 'bid',
+                    count: watch.hedge.count,
+                    price: watch.hedge.price,
+                    time_in_force: 'immediate_or_cancel',
+                    dry_run: false,
+                  });
+                  const { fillCount, filled } = resolvedPlaceFillCount({
+                    dryRun: Boolean(placeRes.dry_run),
+                    fillCount: placeRes.fill_count,
+                    intendedCount: watch.hedge.count,
+                  });
+                  const payPrice = Number(watch.hedge.pay_price ?? 0) || null;
+                  const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                  const hedgeDecision = watch.hedge.decision === 'NO' ? 'NO' : 'YES';
+                  const tradeDoc: TradeRecordDoc = {
+                    tradeId,
+                    userId,
+                    ticker: marketTicker,
+                    asset,
+                    decision: hedgeDecision,
+                    count: filled ? String(fillCount) : String(watch.hedge.count || 0),
+                    price: String(watch.hedge.price),
+                    notionalUsd:
+                      filled && payPrice
+                        ? Math.round(fillCount * payPrice * 100) / 100
+                        : watch.hedge.notional_usd || 0,
+                    dryRun: false,
+                    status: filled ? 'FILLED' : 'CANCELLED',
+                    leanDiff: Number(lean.abs_gap) || 0,
+                    liveSpot: lean.live,
+                    strike: lean.strike,
+                    executedAt: now.toISOString(),
+                    orderId: placeRes.order_id ?? null,
+                    payPrice,
+                    fillCount: filled ? fillCount : 0,
+                    outcome: filled ? 'pending' : 'miss',
+                    pnlUsd: null,
+                    entryPath: 'pair_lock',
+                  };
+                  await saveTradeRecord(userId, tradeDoc);
+                  userTrades.unshift(tradeDoc);
+                  lots = pairLockLotsForTicker(userTrades, marketTicker);
+                  const priceVal = parseFloat(String(watch.hedge.price || 0));
+                  lastTradeAction[asset] = filled
+                    ? {
+                        status: 'placed',
+                        detail: `placed Pair lock hedge ${hedgeDecision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
+                        at: tickIso,
+                      }
+                    : { status: 'failed', detail: 'IOC no fill', at: tickIso };
+                  if (filled) {
+                    const locked = pairLockLockedUsd(
+                      lots.runnerSide === 'YES' ? lots.runnerFillUsd : lots.hedgeFillUsd,
+                      lots.runnerSide === 'NO' ? lots.runnerFillUsd : lots.hedgeFillUsd
+                    );
+                    const cents = locked != null ? Math.round(locked * 100) : 0;
+                    await emitCloudAlert({
+                      userId,
+                      alertId: fillAlertId(tradeId),
+                      kind: 'order_filled',
+                      title: orderPlacedAlertTitle({
+                        live: true,
+                        asset,
+                        decision: hedgeDecision,
+                        entryPath: 'pair_lock_hedge',
+                      }),
+                      body:
+                        cents > 0
+                          ? `${watch.hedge.count} ctr @ $${priceVal.toFixed(2)} · Pair lock locked · +${cents}¢`
+                          : `${watch.hedge.count} ctr @ $${priceVal.toFixed(2)}`,
+                      cfg: cfg as never,
+                      tokens: userTokens,
+                      collapseId: fillCollapseId(userId, tradeId),
+                      asset,
+                      ticker: marketTicker,
+                      tradeId,
+                      decision: hedgeDecision,
+                      at: now.toISOString(),
+                    });
+                  }
+                } finally {
+                  await releasePlaceLock({ userId, ticker: marketTicker, requestId: hedgeReq });
+                }
+              }
+            } else if (watch.kind === 'flatten' || watch.kind === 'thin_bid') {
+              const pairRes = await runCloudPairLockFlatten({
+                userId,
+                asset,
+                ticker: marketTicker,
+                lean: {
+                  phase: lean.phase === 'live' ? 'live' : 'ended',
+                  minutes_left: lean.minutes_left,
+                  minutes_remaining: lean.minutes_remaining,
+                  yes_bid: lean.yes_bid,
+                  yes_ask: lean.yes_ask,
+                  no_bid: lean.no_bid,
+                  no_ask: lean.no_ask,
+                },
+                trades: userTrades,
+                flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
+                skipThinBid: pairSkipThin,
+                bidSize: await cashOutBestBidSize(
+                  marketTicker,
+                  lots.runnerSide || lean.decision,
+                  pairSkipThin
+                ),
+                slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+                dryRun: false,
+                now,
+                place: (input) => client.placeOrder(input),
+              });
+              for (const alert of pairRes.alerts) {
+                await emitCloudAlert({
+                  userId,
+                  alertId: protectAlertId(alert.tradeId),
+                  kind: 'protect_sell',
+                  title: alert.title,
+                  body: alert.body,
+                  cfg: cfg as never,
+                  tokens: userTokens,
+                  collapseId: `plk:${userId}:${alert.tradeId}`.slice(0, 64),
+                  asset,
+                  ticker: marketTicker,
+                  tradeId: alert.tradeId,
+                  at: now.toISOString(),
+                });
+              }
+              if (pairRes.exited > 0) {
+                lastTradeAction[asset] = {
+                  status: 'placed',
+                  detail: `Pair lock flatten · sold ${pairRes.exited}`,
+                  at: tickIso,
+                };
+                openPositions = Math.max(0, openPositions - pairRes.exited);
+                lots = pairLockLotsForTicker(userTrades, marketTicker);
+              }
+            }
+          }
+        }
+        if (tickerHasOpenPairLock(userTrades, marketTicker)) continue;
+        const lastMinuteTimes = lastMinuteTimingFromRisk(cfg.risk);
+        const lastMinuteOwnsNewBuys =
+          isLastMinuteEnterPath({
+            adminEnabled: featureFlags.lastMinute,
+            userEnabled: Boolean(cfg.risk?.last_minute_enabled),
+            assetEnabled: cfg.assets_enabled?.[asset] !== false,
+            asset,
+            assets: cfg.risk?.last_minute_assets,
+          }) &&
+          isLastMinuteWindow(now, closeUtc, lastMinuteTimes.enterSec, lastMinuteTimes.stopSec);
+        const windowCap = windowBuyCap(cfg.risk);
+        const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
+        const absGap = Number.isFinite(Number(lean.abs_gap))
+          ? Number(lean.abs_gap)
+          : Math.abs((lean.live || 0) - (lean.strike || 0));
+        const leanForGate = {
+          asset: lean.asset,
+          market_ticker: marketTicker,
+          decision: lean.decision,
+          live: lean.live || 0,
+          strike: lean.strike || 0,
+          abs_gap: absGap,
+          minutes_left: lean.minutes_left || 0,
+          minutes_elapsed: lean.minutes_elapsed || 0,
+          minutes_remaining: lean.minutes_remaining,
+          phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
+          yes_ask: lean.yes_ask ?? undefined,
+          no_ask: lean.no_ask ?? undefined,
+          yes_bid: lean.yes_bid ?? undefined,
+          no_bid: lean.no_bid ?? undefined,
+          timeseries: lean.timeseries,
+          close_utc: lean.close_utc,
+        };
+        const gate = evaluatePairLockEnter({
+          lean: leanForGate,
+          cfg,
+          adminEnabled: featureFlags.pairLock,
+          twapAdminEnabled: featureFlags.twapLock,
+          openPositions,
+          tradesToday,
+          assetTradesInWindow: existingBuys,
+          dailyPnlUsd,
+          hasOpenOnTicker: tickerHasOpenOtherThanPairLock(userTrades, marketTicker),
+          lastMinuteOwnsNewBuys,
+          skipThinBid: pairSkipThin,
+          bidSize: await cashOutBestBidSize(marketTicker, lean.decision, pairSkipThin),
+        });
+        if (!gate.ok || !gate.price || !gate.count) continue;
+        const secret = await getUserSecret(userId);
+        if (!secret?.privateKeyPem || !secret.keyId) continue;
+        const placeRequestId = `pl_${userId}_${marketTicker}_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}`.slice(0, 64);
+        const claimed = await tryAcquirePlaceLock({
+          userId,
+          ticker: marketTicker,
+          cap: windowCap,
+          requestId: placeRequestId,
+          existingBuys,
+        });
+        if (!claimed.ok) continue;
+        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const placeDecision = gate.decision || lean.decision;
+        try {
+          const placeRes = await client.placeOrder({
+            ticker: marketTicker,
+            side: gate.side || 'bid',
+            count: gate.count,
+            price: gate.price,
+            time_in_force: 'immediate_or_cancel',
+            dry_run: false,
+          });
+          if (!placeRes.ok) continue;
+          const { fillCount, filled } = resolvedPlaceFillCount({
+            dryRun: Boolean(placeRes.dry_run),
+            fillCount: placeRes.fill_count,
+            intendedCount: gate.count,
+          });
+          const payPrice = Number(gate.pay_price ?? 0) || null;
+          const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const tradeDoc: TradeRecordDoc = {
+            tradeId,
+            userId,
+            ticker: marketTicker,
+            asset: lean.asset,
+            decision: placeDecision === 'NO' ? 'NO' : 'YES',
+            count: filled ? String(fillCount) : String(gate.count || 0),
+            price: String(gate.price),
+            notionalUsd:
+              filled && payPrice ? Math.round(fillCount * payPrice * 100) / 100 : gate.notional_usd || 0,
+            dryRun: false,
+            status: filled ? 'FILLED' : 'CANCELLED',
+            leanDiff: absGap,
+            liveSpot: lean.live,
+            strike: lean.strike,
+            executedAt: now.toISOString(),
+            orderId: placeRes.order_id ?? null,
+            payPrice,
+            fillCount: filled ? fillCount : 0,
+            outcome: filled ? 'pending' : 'miss',
+            pnlUsd: null,
+            entryPath: 'pair_lock',
+          };
+          await saveTradeRecord(userId, tradeDoc);
+          userTrades.unshift(tradeDoc);
+          if (filled) {
+            openPositions += 1;
+            tradesToday += 1;
+            tradesTodayList.push(tradeDoc);
+          }
+          const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
+          lastTradeAction[asset] = filled
+            ? {
+                status: 'placed',
+                detail: `placed ${placeDecision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
+                at: tickIso,
+              }
+            : { status: 'failed', detail: 'IOC no fill', at: tickIso };
+          if (filled) {
+            await emitCloudAlert({
+              userId,
+              alertId: fillAlertId(tradeId),
+              kind: 'order_filled',
+              title: orderPlacedAlertTitle({
+                live: true,
+                asset,
+                decision: String(placeDecision || ''),
+                entryPath: 'pair_lock',
+              }),
+              body: `${gate.count} ctr @ $${priceVal.toFixed(2)} · Cost $${(gate.notional_usd || 0).toFixed(2)}`,
+              cfg,
+              tokens: userTokens,
+              collapseId: fillCollapseId(userId, tradeId),
+              asset: lean.asset,
+              ticker: marketTicker,
+              tradeId,
+              decision: placeDecision,
+              at: now.toISOString(),
+            });
+          } else {
+            await emitCloudAlert({
+              userId,
+              alertId: missAlertId(tradeId),
+              kind: 'ioc_miss',
+              title: iocMissAlertTitle('pair_lock'),
+              body: iocMissAlertBody({
+                asset,
+                decision: String(placeDecision || ''),
+                entryPath: 'pair_lock',
+                price: priceVal,
+                count: gate.count,
+              }),
+              cfg,
+              tokens: userTokens,
+              asset: lean.asset,
+              ticker: marketTicker,
+              tradeId,
+              decision: placeDecision,
+              at: now.toISOString(),
+            });
+          }
+        } finally {
+          await releasePlaceLock({ userId, ticker: marketTicker, requestId: placeRequestId });
+        }
+      }
+      if (still.length) pairLockWatchUsers.set(userId, still);
+      else pairLockWatchUsers.delete(userId);
+      await upsertUserDoc(userId, { lastTradeAction, lastTickAt: now.toISOString() } as any);
+    } catch (err: any) {
+      noteTransientKalshiFailure(err);
+    }
+  }
+  await flushPairLockWatcher(now, sharedLeans);
+  return { timestamp: now.toISOString(), watched };
+}
+
 /** Quote + exit only for users that already hold a Cash out lot. No new buys. */
 export async function runCashOutBidWatchTick(): Promise<{
   timestamp: string;
@@ -2766,7 +4277,11 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
       await sleepMs(Math.max(0, nextAt - Date.now()));
       if (Date.now() > endAt - 80) break;
       const lastMinuteWatching =
-        twapLockWatchUsers.size > 0 || lastMinuteWatchUsers.size > 0 || stepBuyWatchUsers.size > 0;
+        twapLockWatchUsers.size > 0 ||
+        lastMinuteWatchUsers.size > 0 ||
+        stepBuyWatchUsers.size > 0 ||
+        spikeFadeWatchUsers.size > 0 ||
+        pairLockWatchUsers.size > 0;
       if (lastMinuteWatching && Date.now() + 20 >= nextTwap) {
         if (twapLockWatchUsers.size > 0) {
           const twap = await runTwapLockWatchTick();
@@ -2779,6 +4294,14 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
         if (stepBuyWatchUsers.size > 0) {
           const sb = await runStepBuyWatchTick();
           if (sb.paused) break;
+        }
+        if (spikeFadeWatchUsers.size > 0) {
+          const sf = await runSpikeFadeWatchTick();
+          if (sf.paused) break;
+        }
+        if (pairLockWatchUsers.size > 0) {
+          const pl = await runPairLockWatchTick();
+          if (pl.paused) break;
         }
         nextTwap += 1000;
       } else if (!lastMinuteWatching) {

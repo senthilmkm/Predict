@@ -137,6 +137,8 @@ describe('admin overview metrics', () => {
     expect(tradeStreamEntryLabel('twap_lock')).toBe('TWAP lock');
     expect(tradeStreamEntryLabel('last_minute')).toBe('Last-minute');
     expect(tradeStreamEntryLabel('step_buy')).toBe('Step buy');
+    expect(tradeStreamEntryLabel('spike_fade')).toBe('Spike fade');
+    expect(tradeStreamEntryLabel('pair_lock')).toBe('Pair lock');
     expect(tradeStreamEntryLabel(undefined)).toBe('—');
     expect(tradeStreamEntryLabel('other')).toBe('—');
 

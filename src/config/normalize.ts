@@ -61,6 +61,30 @@ import {
   normalizeStepBuyStopUsd,
 } from '../../packages/trading-core/src/stepBuy';
 import {
+  normalizeSpikeFadeAssets,
+  normalizeSpikeFadeCheapMaxUsd,
+  normalizeSpikeFadeCheapMinUsd,
+  normalizeSpikeFadeExpensiveMaxUsd,
+  normalizeSpikeFadeExpensiveMinUsd,
+  normalizeSpikeFadeFlattenMinutes,
+  normalizeSpikeFadeLotCount,
+  normalizeSpikeFadeStartMinutes,
+  normalizeSpikeFadeStopAskUsd,
+  normalizeSpikeFadeTakeAskUsd,
+  normalizeSpikeFadeUntilMinutes,
+  reconcileSpikeFadeBands,
+} from '../../packages/trading-core/src/spikeFade';
+import {
+  normalizePairLockAssets,
+  normalizePairLockFlattenMinutes,
+  normalizePairLockLotCount,
+  normalizePairLockMinLockUsd,
+  normalizePairLockRunnerMaxAskUsd,
+  normalizePairLockStartMinutes,
+  normalizePairLockUntilMinutes,
+  reconcilePairLockWindow,
+} from '../../packages/trading-core/src/pairLock';
+import {
   configForHomeBuy as mergeHomeBuyRisk,
   normalizeManualPathRisk,
 } from '../../packages/trading-core/src/pathRisk';
@@ -234,6 +258,60 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     step_buy_max_ask_usd: normalizeStepBuyMaxAskUsd(r.step_buy_max_ask_usd ?? d.step_buy_max_ask_usd),
     step_buy_skip_thin_bid: inheritSkipThinBid(r.step_buy_skip_thin_bid, r.cash_out_skip_thin_bid === true),
     step_buy_assets: normalizeStepBuyAssets(r.step_buy_assets !== undefined ? r.step_buy_assets : d.step_buy_assets),
+    spike_fade_enabled: r.spike_fade_enabled === true,
+    spike_fade_start_minutes: normalizeSpikeFadeStartMinutes(
+      r.spike_fade_start_minutes ?? d.spike_fade_start_minutes
+    ),
+    spike_fade_until_minutes: normalizeSpikeFadeUntilMinutes(
+      r.spike_fade_until_minutes ?? d.spike_fade_until_minutes
+    ),
+    spike_fade_expensive_min_usd: normalizeSpikeFadeExpensiveMinUsd(
+      r.spike_fade_expensive_min_usd ?? d.spike_fade_expensive_min_usd
+    ),
+    spike_fade_expensive_max_usd: normalizeSpikeFadeExpensiveMaxUsd(
+      r.spike_fade_expensive_max_usd ?? d.spike_fade_expensive_max_usd
+    ),
+    spike_fade_cheap_min_usd: normalizeSpikeFadeCheapMinUsd(
+      r.spike_fade_cheap_min_usd ?? d.spike_fade_cheap_min_usd
+    ),
+    spike_fade_cheap_max_usd: normalizeSpikeFadeCheapMaxUsd(
+      r.spike_fade_cheap_max_usd ?? d.spike_fade_cheap_max_usd
+    ),
+    spike_fade_take_ask_usd: normalizeSpikeFadeTakeAskUsd(
+      r.spike_fade_take_ask_usd ?? d.spike_fade_take_ask_usd
+    ),
+    spike_fade_stop_ask_usd: normalizeSpikeFadeStopAskUsd(
+      r.spike_fade_stop_ask_usd ?? d.spike_fade_stop_ask_usd
+    ),
+    spike_fade_flatten_minutes: normalizeSpikeFadeFlattenMinutes(
+      r.spike_fade_flatten_minutes ?? d.spike_fade_flatten_minutes
+    ),
+    spike_fade_lot_count: normalizeSpikeFadeLotCount(r.spike_fade_lot_count ?? d.spike_fade_lot_count),
+    spike_fade_skip_thin_bid: inheritSkipThinBid(r.spike_fade_skip_thin_bid, r.cash_out_skip_thin_bid === true),
+    spike_fade_assets: normalizeSpikeFadeAssets(
+      r.spike_fade_assets !== undefined ? r.spike_fade_assets : d.spike_fade_assets
+    ),
+    pair_lock_enabled: r.pair_lock_enabled === true,
+    pair_lock_start_minutes: normalizePairLockStartMinutes(
+      r.pair_lock_start_minutes ?? d.pair_lock_start_minutes
+    ),
+    pair_lock_until_minutes: normalizePairLockUntilMinutes(
+      r.pair_lock_until_minutes ?? d.pair_lock_until_minutes
+    ),
+    pair_lock_runner_max_ask_usd: normalizePairLockRunnerMaxAskUsd(
+      r.pair_lock_runner_max_ask_usd ?? d.pair_lock_runner_max_ask_usd
+    ),
+    pair_lock_min_lock_usd: normalizePairLockMinLockUsd(
+      r.pair_lock_min_lock_usd ?? d.pair_lock_min_lock_usd
+    ),
+    pair_lock_flatten_minutes: normalizePairLockFlattenMinutes(
+      r.pair_lock_flatten_minutes ?? d.pair_lock_flatten_minutes
+    ),
+    pair_lock_lot_count: normalizePairLockLotCount(r.pair_lock_lot_count ?? d.pair_lock_lot_count),
+    pair_lock_skip_thin_bid: inheritSkipThinBid(r.pair_lock_skip_thin_bid, r.cash_out_skip_thin_bid === true),
+    pair_lock_assets: normalizePairLockAssets(
+      r.pair_lock_assets !== undefined ? r.pair_lock_assets : d.pair_lock_assets
+    ),
   };
   const targets = reconcileCashOutTargets(
     Number(risk.cash_out_max_ask_usd),
@@ -241,6 +319,25 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
   );
   risk.cash_out_max_ask_usd = targets.maxAsk;
   risk.cash_out_bid_usd = targets.bid;
+  const spikeBands = reconcileSpikeFadeBands({
+    expensiveMin: Number(risk.spike_fade_expensive_min_usd),
+    expensiveMax: Number(risk.spike_fade_expensive_max_usd),
+    cheapMin: Number(risk.spike_fade_cheap_min_usd),
+    cheapMax: Number(risk.spike_fade_cheap_max_usd),
+  });
+  risk.spike_fade_expensive_min_usd = spikeBands.expensiveMin;
+  risk.spike_fade_expensive_max_usd = spikeBands.expensiveMax;
+  risk.spike_fade_cheap_min_usd = spikeBands.cheapMin;
+  risk.spike_fade_cheap_max_usd = spikeBands.cheapMax;
+  if (Number(risk.spike_fade_until_minutes) < Number(risk.spike_fade_start_minutes)) {
+    risk.spike_fade_until_minutes = Number(risk.spike_fade_start_minutes);
+  }
+  const pairWin = reconcilePairLockWindow({
+    startMinutes: risk.pair_lock_start_minutes,
+    untilMinutes: risk.pair_lock_until_minutes,
+  });
+  risk.pair_lock_start_minutes = pairWin.startMinutes;
+  risk.pair_lock_until_minutes = pairWin.untilMinutes;
   if (risk.fixed_dollars_per_trade > risk.max_dollars_per_trade) {
     risk.fixed_dollars_per_trade = risk.max_dollars_per_trade;
   }

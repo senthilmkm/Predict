@@ -211,6 +211,30 @@ export interface RiskConfig {
   step_buy_max_ask_usd?: number;
   step_buy_skip_thin_bid?: boolean;
   step_buy_assets?: string[];
+  /** Spike fade Auto path. Missing → Off. */
+  spike_fade_enabled?: boolean;
+  spike_fade_start_minutes?: number;
+  spike_fade_until_minutes?: number;
+  spike_fade_expensive_min_usd?: number;
+  spike_fade_expensive_max_usd?: number;
+  spike_fade_cheap_min_usd?: number;
+  spike_fade_cheap_max_usd?: number;
+  spike_fade_take_ask_usd?: number;
+  spike_fade_stop_ask_usd?: number;
+  spike_fade_flatten_minutes?: number;
+  spike_fade_lot_count?: number;
+  spike_fade_skip_thin_bid?: boolean;
+  spike_fade_assets?: string[];
+  /** Pair lock Auto path. Missing → Off. */
+  pair_lock_enabled?: boolean;
+  pair_lock_start_minutes?: number;
+  pair_lock_until_minutes?: number;
+  pair_lock_runner_max_ask_usd?: number;
+  pair_lock_min_lock_usd?: number;
+  pair_lock_flatten_minutes?: number;
+  pair_lock_lot_count?: number;
+  pair_lock_skip_thin_bid?: boolean;
+  pair_lock_assets?: string[];
 }
 
 export interface AlertPref {
@@ -356,6 +380,28 @@ export function defaultAppConfig(): AppConfig {
       step_buy_max_ask_usd: 0.8,
       step_buy_skip_thin_bid: false,
       step_buy_assets: ASSETS_CATALOG.map((a) => a.key),
+      spike_fade_enabled: false,
+      spike_fade_start_minutes: 2,
+      spike_fade_until_minutes: 6,
+      spike_fade_expensive_min_usd: 0.75,
+      spike_fade_expensive_max_usd: 0.8,
+      spike_fade_cheap_min_usd: 0.2,
+      spike_fade_cheap_max_usd: 0.25,
+      spike_fade_take_ask_usd: 0.42,
+      spike_fade_stop_ask_usd: 0.1,
+      spike_fade_flatten_minutes: 3,
+      spike_fade_lot_count: 1,
+      spike_fade_skip_thin_bid: false,
+      spike_fade_assets: ASSETS_CATALOG.map((a) => a.key),
+      pair_lock_enabled: false,
+      pair_lock_start_minutes: 2,
+      pair_lock_until_minutes: 10,
+      pair_lock_runner_max_ask_usd: 0.6,
+      pair_lock_min_lock_usd: 0.05,
+      pair_lock_flatten_minutes: 3,
+      pair_lock_lot_count: 1,
+      pair_lock_skip_thin_bid: false,
+      pair_lock_assets: ASSETS_CATALOG.map((a) => a.key),
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

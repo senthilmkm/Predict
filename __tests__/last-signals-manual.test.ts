@@ -3,6 +3,8 @@ import {
   formatGapDisplay,
   formatLastMinuteWatchLine,
   formatStepBuyWatchLine,
+  formatSpikeFadeWatchLine,
+  formatPairLockWatchLine,
   formatTwapWatchLine,
   heldOpenFillForTicker,
   homeBuySkipReason,
@@ -268,6 +270,50 @@ describe('last signal extra line', () => {
         stepBuyHolding: true,
       })
     ).toEqual({ testID: 'skip-reason', text: 'step buy is holding this ticket' });
+    expect(
+      formatSpikeFadeWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 4,
+        startMinutes: 2,
+        untilMinutes: 6,
+        secondsLeft: 600,
+      })
+    ).toBe('Spike fade watching · 600s left');
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        spikeFadeHolding: true,
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'spike fade is holding this ticket' });
+    expect(
+      formatPairLockWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 4,
+        startMinutes: 2,
+        untilMinutes: 10,
+        secondsLeft: 600,
+      })
+    ).toBe('Pair lock watching · 600s left');
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        pairLockHolding: true,
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'pair lock is holding this ticket' });
   });
 
   test('Gold fade holding hides Home buttons and says so', () => {

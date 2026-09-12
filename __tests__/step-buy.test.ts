@@ -75,6 +75,7 @@ describe('Step buy path', () => {
     expect(normalizeStepBuyCushionPct(50)).toBe(50);
     expect(normalizeStepBuyAddBandUsd(-1)).toBe(0);
     expect(normalizeStepBuyAddBandUsd(0.024)).toBe(0.02);
+    expect(normalizeStepBuyAddBandUsd(0.2)).toBe(0.1);
     expect(normalizeStepBuyMaxLots(0)).toBe(1);
     expect(normalizeStepBuyMaxLots(99)).toBe(8);
     expect(normalizeStepBuyStopUsd(0)).toBe(0.01);
@@ -376,6 +377,7 @@ describe('Step buy path', () => {
     expect(PATH_INFO.stepBuy.body).toMatch(/Lot contracts/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Add wait/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Add band/);
+    expect(PATH_INFO.stepBuy.body).toMatch(/does not chase/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Max lots/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Stop adding with 30s left/);
     expect(PATH_INFO.stepBuy.body).toMatch(/5s grace/);

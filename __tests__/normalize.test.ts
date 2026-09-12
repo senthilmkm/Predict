@@ -230,7 +230,7 @@ describe('normalize / cushions', () => {
         step_buy_cushion_pct: 10,
         step_buy_lot_count: 0,
         step_buy_add_wait_minutes: 9,
-        step_buy_add_band_usd: 0.09,
+        step_buy_add_band_usd: 0.2,
         step_buy_max_lots: 99,
         step_buy_stop_usd: 0,
         step_buy_max_ask_usd: 0.99,
@@ -241,7 +241,7 @@ describe('normalize / cushions', () => {
     expect(stepOn.step_buy_cushion_pct).toBe(25);
     expect(stepOn.step_buy_lot_count).toBe(1);
     expect(stepOn.step_buy_add_wait_minutes).toBe(3);
-    expect(stepOn.step_buy_add_band_usd).toBe(0.05);
+    expect(stepOn.step_buy_add_band_usd).toBe(0.1);
     expect(stepOn.step_buy_max_lots).toBe(8);
     expect(stepOn.step_buy_stop_usd).toBe(0.01);
     expect(stepOn.step_buy_max_ask_usd).toBe(0.9);
@@ -253,6 +253,76 @@ describe('normalize / cushions', () => {
     expect(on.twap_lock_skip_thin_bid).toBe(true);
     expect(on.last_minute_skip_thin_bid).toBe(true);
     expect(on.step_buy_skip_thin_bid).toBe(true);
+    expect(d.spike_fade_enabled).toBe(false);
+    expect(d.spike_fade_start_minutes).toBe(2);
+    expect(d.spike_fade_until_minutes).toBe(6);
+    expect(d.spike_fade_expensive_min_usd).toBe(0.75);
+    expect(d.spike_fade_expensive_max_usd).toBe(0.8);
+    expect(d.spike_fade_cheap_min_usd).toBe(0.2);
+    expect(d.spike_fade_cheap_max_usd).toBe(0.25);
+    expect(d.spike_fade_take_ask_usd).toBe(0.42);
+    expect(d.spike_fade_stop_ask_usd).toBe(0.1);
+    expect(d.spike_fade_flatten_minutes).toBe(3);
+    expect(d.spike_fade_lot_count).toBe(1);
+    expect(d.spike_fade_skip_thin_bid).toBe(false);
+    expect(d.spike_fade_assets).toEqual(expect.arrayContaining(['Gold', 'BTC', 'ETH']));
+    expect(normalizeAppConfig({ risk: { spike_fade_assets: [] } } as any).risk.spike_fade_assets).toEqual([]);
+    const spikeOn = normalizeAppConfig({
+      risk: {
+        spike_fade_enabled: true,
+        spike_fade_start_minutes: 0,
+        spike_fade_until_minutes: 20,
+        spike_fade_expensive_min_usd: 0.82,
+        spike_fade_expensive_max_usd: 0.76,
+        spike_fade_cheap_min_usd: 0.28,
+        spike_fade_cheap_max_usd: 0.18,
+        spike_fade_take_ask_usd: 0.1,
+        spike_fade_stop_ask_usd: 0.01,
+        spike_fade_flatten_minutes: 9,
+        spike_fade_lot_count: 0,
+      },
+    } as any).risk;
+    expect(spikeOn.spike_fade_enabled).toBe(true);
+    expect(spikeOn.spike_fade_start_minutes).toBe(1);
+    expect(spikeOn.spike_fade_until_minutes).toBe(8);
+    expect(spikeOn.spike_fade_expensive_min_usd).toBeDefined();
+    expect(spikeOn.spike_fade_expensive_max_usd).toBeGreaterThanOrEqual(spikeOn.spike_fade_expensive_min_usd!);
+    expect(spikeOn.spike_fade_cheap_min_usd).toBeDefined();
+    expect(spikeOn.spike_fade_cheap_max_usd).toBeGreaterThanOrEqual(spikeOn.spike_fade_cheap_min_usd!);
+    expect(spikeOn.spike_fade_take_ask_usd).toBe(0.35);
+    expect(spikeOn.spike_fade_stop_ask_usd).toBe(0.05);
+    expect(spikeOn.spike_fade_flatten_minutes).toBe(5);
+    expect(spikeOn.spike_fade_lot_count).toBe(1);
+    expect(on.spike_fade_skip_thin_bid).toBe(true);
+    expect(d.pair_lock_enabled).toBe(false);
+    expect(d.pair_lock_start_minutes).toBe(2);
+    expect(d.pair_lock_until_minutes).toBe(10);
+    expect(d.pair_lock_runner_max_ask_usd).toBe(0.6);
+    expect(d.pair_lock_min_lock_usd).toBe(0.05);
+    expect(d.pair_lock_flatten_minutes).toBe(3);
+    expect(d.pair_lock_lot_count).toBe(1);
+    expect(d.pair_lock_skip_thin_bid).toBe(false);
+    expect(normalizeAppConfig({ risk: { pair_lock_assets: [] } } as any).risk.pair_lock_assets).toEqual([]);
+    const pairOn = normalizeAppConfig({
+      risk: {
+        pair_lock_enabled: true,
+        pair_lock_start_minutes: 0,
+        pair_lock_until_minutes: 4,
+        pair_lock_runner_max_ask_usd: 0.2,
+        pair_lock_min_lock_usd: 0.01,
+        pair_lock_flatten_minutes: 9,
+        pair_lock_lot_count: 0,
+      },
+    } as any).risk;
+    expect(pairOn.pair_lock_enabled).toBe(true);
+    expect(pairOn.pair_lock_start_minutes).toBe(1);
+    expect(pairOn.pair_lock_start_minutes).toBeDefined();
+    expect(pairOn.pair_lock_until_minutes).toBeGreaterThanOrEqual(pairOn.pair_lock_start_minutes!);
+    expect(pairOn.pair_lock_runner_max_ask_usd).toBe(0.4);
+    expect(pairOn.pair_lock_min_lock_usd).toBe(0.02);
+    expect(pairOn.pair_lock_flatten_minutes).toBe(5);
+    expect(pairOn.pair_lock_lot_count).toBe(1);
+    expect(on.pair_lock_skip_thin_bid).toBe(true);
     const split = normalizeAppConfig({
       risk: { cash_out_skip_thin_bid: true, gold_fade_skip_thin_bid: false },
     } as any).risk;

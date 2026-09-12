@@ -28,6 +28,8 @@ export interface SystemConfig {
     twapLock?: boolean;
     lastMinute?: boolean;
     stepBuy?: boolean;
+    spikeFade?: boolean;
+    pairLock?: boolean;
   };
   broadcast?: {
     templates?: Array<{

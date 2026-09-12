@@ -7,7 +7,7 @@ function moneyUsd(n: unknown): string {
 
 export function entryPathChipLabel(
   path: unknown
-): 'Home' | 'Auto' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | 'Step buy' | null {
+): 'Home' | 'Auto' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | 'Step buy' | 'Spike fade' | 'Pair lock' | null {
   const parsed = parseEntryPath(path);
   if (parsed === 'home') return 'Home';
   if (parsed === 'auto') return 'Auto';
@@ -16,6 +16,8 @@ export function entryPathChipLabel(
   if (parsed === 'twap_lock') return 'TWAP lock';
   if (parsed === 'last_minute') return 'Last-minute';
   if (parsed === 'step_buy') return 'Step buy';
+  if (parsed === 'spike_fade') return 'Spike fade';
+  if (parsed === 'pair_lock') return 'Pair lock';
   return null;
 }
 

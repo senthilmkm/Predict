@@ -26,7 +26,7 @@ export const CASH_OUT_STOP_MIN_USD = 0.03;
 export const CASH_OUT_STOP_MAX_USD = 0.1;
 export const CASH_OUT_DEFAULT_ASSETS: AssetKey[] = ['Gold'];
 
-export type TradeEntryPath = 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy';
+export type TradeEntryPath = 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock';
 export type CashOutHeldSide = 'YES' | 'NO';
 export type CashOutExitKind =
   | 'none'
@@ -309,6 +309,8 @@ export function parseTradeEntryPath(raw: unknown): TradeEntryPath | undefined {
   if (v === 'twap_lock' || v === 'twaplock' || v === 'twap') return 'twap_lock';
   if (v === 'last_minute' || v === 'lastminute' || v === 'last-minute') return 'last_minute';
   if (v === 'step_buy' || v === 'stepbuy' || v === 'step-buy') return 'step_buy';
+  if (v === 'spike_fade' || v === 'spikefade' || v === 'spike-fade') return 'spike_fade';
+  if (v === 'pair_lock' || v === 'pairlock' || v === 'pair-lock') return 'pair_lock';
   return undefined;
 }
 

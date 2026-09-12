@@ -229,6 +229,72 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Step buy stop';
     case 'step_buy_lot1_flatten':
       return 'Step buy lot 1 stop — sell all';
+    case 'spike_fade_admin_off':
+    case 'spike_fade_off':
+      return 'spike fade off';
+    case 'spike_fade_asset_off':
+      return 'spike fade asset off';
+    case 'spike_fade_twap_owns':
+      return 'twap lock owns this coin';
+    case 'spike_fade_last_minute_owns':
+      return 'last-minute owns new buys';
+    case 'spike_fade_holding_other_path':
+      return 'already holding';
+    case 'spike_fade_outside_window':
+      return 'Spike fade outside window';
+    case 'spike_fade_too_late':
+      return 'too little time left';
+    case 'spike_fade_no_ask':
+      return 'no ask';
+    case 'spike_fade_no_spike':
+      return 'no spike in band';
+    case 'spike_fade_cheap_off_band':
+      return 'cheap side off band';
+    case 'spike_fade_thin_bid':
+      return 'bid too thin';
+    case 'spike_fade_holding':
+      return 'spike fade is holding this ticket';
+    case 'spike_fade_take':
+      return 'Spike fade take';
+    case 'spike_fade_stop':
+      return 'Spike fade stop';
+    case 'spike_fade_flatten':
+      return 'Spike fade flatten';
+    case 'pair_lock_admin_off':
+    case 'pair_lock_off':
+      return 'pair lock off';
+    case 'pair_lock_asset_off':
+      return 'pair lock asset off';
+    case 'pair_lock_twap_owns':
+      return 'twap lock owns this coin';
+    case 'pair_lock_last_minute_owns':
+      return 'last-minute owns new buys';
+    case 'pair_lock_holding_other_path':
+      return 'already holding';
+    case 'pair_lock_outside_window':
+      return 'Pair lock outside window';
+    case 'pair_lock_too_late':
+      return 'too little time left';
+    case 'pair_lock_no_lean':
+      return 'no lean';
+    case 'pair_lock_no_ask':
+      return 'no ask';
+    case 'pair_lock_ask_rich':
+      return 'Kalshi ask is above your Pair lock runner max';
+    case 'pair_lock_thin_bid':
+      return 'bid too thin';
+    case 'pair_lock_holding':
+      return 'pair lock is holding this ticket';
+    case 'pair_lock_already_locked':
+      return 'pair already locked';
+    case 'pair_lock_no_runner':
+      return 'no pair lock runner';
+    case 'pair_lock_min_lock':
+      return 'Pair lock min lock not reached';
+    case 'pair_lock_flatten':
+      return 'Pair lock flatten';
+    case 'pair_lock_hedge':
+      return 'Pair lock hedge';
     case 'no_open_fill':
       return 'no open fill to sell';
     case 'market_closed':

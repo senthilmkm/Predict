@@ -377,7 +377,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Settings → Risk → Show opens Shared limits plus Home Buy and Auto-trade tabs.\n\n' +
             'Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.\n\n' +
-            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, Cash out, Gold fade, TWAP lock, Last-minute, and Step buy on Auto-trade). Cushions and keys are not wiped.',
+            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, and Pair lock on Auto-trade). Cushions and keys are not wiped.',
         },
         {
           id: 'smart-buy',
@@ -507,7 +507,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Step buy?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Step buy. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Step buy buys.\n\n' +
-            'After Start after minutes, if the live gap is at least Cushion % of that coin’s Cushions $ and the lean is YES or NO, Cloud buys Lot contracts at the live ask (lot 1). Every Add wait, it may add another lot only if Cushion % and the lean are still with you and the ask is the last fill or up to Add band richer. Stop adding with 30s left. Max lots is the cap. Size is Lot contracts × ask — not Auto $5.\n\n' +
+            'After Start after minutes, if the live gap is at least Cushion % of that coin’s Cushions $ and the lean is YES or NO, Cloud buys Lot contracts at the live ask (lot 1). Every Add wait, it may add another lot only if Cushion % and the lean are still with you and the ask is the last fill or up to Add band richer (0–10¢). If the ask has already jumped past that band, Cloud waits for it to come back — it does not chase. Stop adding with 30s left. Max lots is the cap. Size is Lot contracts × ask — not Auto $5.\n\n' +
             'From the first fill, a 1s watcher checks the ask. After Max lots it only watches for stops. A lot sells when ask ≤ that lot’s fill − Stop ¢ (bid IOC). If lot 1 stops, every remaining Step buy lot on that ticker sells. 5s grace after each fill. Protect skips these rows.\n\n' +
             'Window cap 1 blocks lot 1 if Auto / Home / Cash out already filled this coin. Later Step buy lots are extra. Open Step buy sits Auto / Home / Cash out / Last-minute out of that ticker. TWAP still owns BTC/ETH if that path is On. Last-minute owns new buys if it is in its buy window and Step buy has no lots yet.',
         },
@@ -520,6 +520,49 @@ export function getFaqCategories(): FaqCategory[] {
       ],
     },
     {
+      id: 'spike-fade',
+      title: 'Spike fade',
+      items: [
+        {
+          id: 'what-is-spike-fade',
+          q: 'What is Spike fade?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Spike fade. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Spike fade buys. This is not Gold fade. Gold fade stays Gold-only on a small $ gap and take/stop vs fill.\n\n' +
+            'After Start after and before Until minute (default minutes 2–6), if the expensive-side ask is in Expensive min…max (default 75–80¢) and the cheap-side ask is in Cheap min…max (default 20–25¢), Cloud buys the cheap side. Size is Lot contracts × live ask — not Auto $5. Example: YES $0.78 and NO $0.22 → buy NO. YES $0.82 or NO $0.18 → sit out.\n\n' +
+            'From the fill, a 1s watcher sells IOC at the bid: take when the cheap bid ≥ Take ask (default 42¢), stop when the cheap ask ≤ Stop ask (default 10¢), flatten when minutes left ≤ Flatten left (default 3) or the window ends. Always dumps — no hold to $1. 5s grace after fill. One lot per ticker per window. Protect skips these rows.\n\n' +
+            'While On for that chip and inside the enter window, Auto / Cash out / Gold fade sit that ticker out. After Until minute with no lot, those paths may use the coin again. Open Spike fade sits Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Pair lock out. TWAP still owns BTC/ETH if that path is On. Last-minute owns new buys if it is in its buy window and Spike fade has no lot yet.',
+        },
+        {
+          id: 'spike-fade-risk-hidden',
+          q: 'Why don’t I see Spike fade on Risk?',
+          a:
+            'The Admin portal Feature configs switch “Spike fade” is Off (default). When an admin turns it On, the block appears on Auto-trade. Your Spike fade switch stays Off until you turn it on.',
+        },
+      ],
+    },
+    {
+      id: 'pair-lock',
+      title: 'Pair lock',
+      items: [
+        {
+          id: 'what-is-pair-lock',
+          q: 'What is Pair lock?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Pair lock. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Pair lock buys.\n\n' +
+            'After Start after and before Until minute (default minutes 2–10), Cloud buys the Auto lean side if that ask is at or under Runner max ask (default 60¢). Size is Lot contracts × live ask — not Auto $5. Example: YES 52¢ → buy 1 YES.\n\n' +
+            'From that fill, a 1s watcher buys the opposite side when runner fill + opposite ask ≤ $1 − Min lock (default 5¢). 52¢ + 18¢ = 70¢ locks +30¢ at settlement. 50¢ + 50¢ sits out. Hedge count matches the runner. Window cap 1 blocks the runner only.\n\n' +
+            'A completed pair holds both sides to $1. No take, stop, Protect, or Home Sell. If the second leg is still missing and minutes left ≤ Flatten unmatched (default 3), or the window ends, Cloud sells the runner IOC at the bid. 5s grace after the runner fill.\n\n' +
+            'While On for that chip and inside the enter window, Auto / Cash out / Gold fade sit that ticker out. After Until minute with no runner, those paths may use the coin again. Open runner or open pair sits Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Spike fade out. TWAP still owns BTC/ETH if that path is On. Last-minute owns new buys if it is in its buy window and Pair lock has no runner and no pair. Spike fade and Step buy take first pick for new buys when they want the ticker. Protect skips these rows.',
+        },
+        {
+          id: 'pair-lock-risk-hidden',
+          q: 'Why don’t I see Pair lock on Risk?',
+          a:
+            'The Admin portal Feature configs switch “Pair lock” is Off (default). When an admin turns it On, the block appears on Auto-trade. Your Pair lock switch stays Off until you turn it on.',
+        },
+      ],
+    },
+    {
       id: 'skipthin',
       title: 'Skip thin bid',
       items: [
@@ -528,7 +571,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What does Skip thin bid do on each path?',
           a:
             'Each Cloud path has its own Skip thin bid checkbox (default Off), shown only when that path is On. Home Buy does not use it.\n\n' +
-            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The paths do not share one switch — Cash out and Gold fade can sell when the book thins; TWAP lock, Last-minute, and Step buy only skip the buy (Step buy still runs its ask stop).',
+            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The paths do not share one switch — Cash out, Gold fade, Spike fade, and Pair lock can sell when the book thins (Pair lock only dumps an unmatched runner); TWAP lock, Last-minute, and Step buy only skip the buy (Step buy still runs its ask stop).',
           table: {
             headers: ['Path', 'If thin', 'If book size unknown'],
             rows: [
@@ -555,6 +598,16 @@ export function getFaqCategories(): FaqCategory[] {
               [
                 'Step buy',
                 'Skip the buy only. Stops still run.',
+                'Fail closed — no buy',
+              ],
+              [
+                'Spike fade',
+                'Skip the buy. If you hold, sell / dump.',
+                'Fail closed — no buy',
+              ],
+              [
+                'Pair lock',
+                'Skip the buy. Unmatched runner can dump. Locked pair holds.',
                 'Fail closed — no buy',
               ],
             ],

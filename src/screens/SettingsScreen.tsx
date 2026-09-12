@@ -1067,10 +1067,12 @@ function RiskHelpModal({
             </HelpItem>
             <HelpItem title="Skip thin bid">
               Each Cloud path has its own checkbox (default Off), shown only when that path is On.
-              Home Buy does not use it. Cash out and Gold fade skip the buy and can sell if you
-              already hold; a book timeout does not skip or dump. TWAP lock, Last-minute, and Step
-              buy only skip the buy (Step buy still runs its ask stop); an unknown book size fails
-              closed (no buy). See FAQ.
+              Home Buy does not use it. Cash out, Gold fade, Spike fade, and Pair lock skip the buy
+              and can sell if you already hold (Pair lock only dumps an unmatched runner). Cash out /
+              Gold fade: a book timeout does not skip or dump. Spike fade and Pair lock fail-close
+              the buy if book size is unknown. TWAP lock, Last-minute, and Step buy only skip the
+              buy (Step buy still runs its ask stop); an unknown book size fails closed (no buy). See
+              FAQ.
             </HelpItem>
             <HelpItem title="Gold fade">
               Gold only. When the gap is at most Max gap, Cloud buys the cheaper ticket and sells
@@ -1098,17 +1100,36 @@ function RiskHelpModal({
               Checked Step buy assets that are also On in Cushions. Empty means no Step buy buys.
               After Start after minutes, buy Lot contracts if Cushion % of that coin’s Cushions $
               still holds and the lean is with you. Add another lot every Add wait only if the
-              thesis is still on and the ask is the last fill or up to Add band richer. Stop adding
+              thesis is still on and the ask is the last fill or up to Add band richer (0–10¢). If
+              the ask has already jumped past that band, Cloud waits — it does not chase. Stop adding
               with 30s left. A 1s watcher checks the ask from the first fill; after Max lots it only
               stops. Sell a lot when ask is Stop ¢ under that lot’s fill; lot 1 stop sells all
               remaining Step buy lots on that ticker. Window cap 1 blocks lot 1 only. Protect skips
               these rows. Default Off. Admin must enable the block first.
             </HelpItem>
+            <HelpItem title="Spike fade">
+              Checked Spike fade assets that are also On in Cushions. Empty means no Spike fade
+              buys. After Start after and before Until minute, if the expensive ask is in band and
+              the cheap ask is in band, Cloud buys the cheap side (Lot contracts × live ask). Take
+              when that bid ≥ Take ask. Stop when that ask ≤ Stop ask. Flatten with Flatten left or
+              window end. Always dumps. Not Gold fade. Window cap 1. Protect skips these rows.
+              Default Off. Admin must enable the block first.
+            </HelpItem>
+            <HelpItem title="Pair lock">
+              Checked Pair lock assets that are also On in Cushions. Empty means no Pair lock buys.
+              After Start after and before Until minute, buy the Auto lean side if the ask is at or
+              under Runner max ask (Lot contracts × live ask). Then a 1s watcher buys the opposite
+              side when runner fill + opposite ask ≤ $1 − Min lock. A completed pair holds both to
+              $1. If the second leg is missing, Flatten unmatched dumps the runner. Window cap 1
+              blocks the runner only. Protect skips these rows. Default Off. Admin must enable the
+              block first.
+            </HelpItem>
 
             <HelpItem title="Restore defaults">
               Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.
               Restore Home Buy / Restore Auto-trade resets only that tab (Smart buy, Protect money,
-              Cash out, Gold fade, TWAP lock, Last-minute, and Step buy are on Auto-trade). Cushions
+              Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, and Pair lock are on
+              Auto-trade). Cushions
               and keys stay.
             </HelpItem>
 

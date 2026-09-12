@@ -14,7 +14,11 @@ import { sendPushNotification } from './notifications';
 
 export function orderPlacedPathTag(
   raw: unknown
-): 'Home' | 'Auto' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | 'Step buy' | null {
+): 'Home' | 'Auto' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | 'Step buy' | 'Spike fade' | 'Pair lock' | 'Pair lock hedge' | null {
+  const alias = String(raw ?? '')
+    .toLowerCase()
+    .trim();
+  if (alias === 'pair_lock_hedge' || alias === 'pairlockhedge') return 'Pair lock hedge';
   const parsed = parseTradeEntryPath(raw);
   if (parsed === 'home') return 'Home';
   if (parsed === 'auto') return 'Auto';
@@ -23,6 +27,8 @@ export function orderPlacedPathTag(
   if (parsed === 'twap_lock') return 'TWAP lock';
   if (parsed === 'last_minute') return 'Last-minute';
   if (parsed === 'step_buy') return 'Step buy';
+  if (parsed === 'spike_fade') return 'Spike fade';
+  if (parsed === 'pair_lock') return 'Pair lock';
   return null;
 }
 

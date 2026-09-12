@@ -12,12 +12,16 @@ export type PathBuyCounts = {
   twapLock: PathBuyRow[];
   lastMinute: PathBuyRow[];
   stepBuy: PathBuyRow[];
+  spikeFade: PathBuyRow[];
+  pairLock: PathBuyRow[];
   homeTotal: number;
   autoTotal: number;
   cashOutTotal: number;
   twapLockTotal: number;
   lastMinuteTotal: number;
   stepBuyTotal: number;
+  spikeFadeTotal: number;
+  pairLockTotal: number;
 };
 
 function assetSortIndex(asset: string): number {
@@ -40,6 +44,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   const twapLock: Record<string, number> = {};
   const lastMinute: Record<string, number> = {};
   const stepBuy: Record<string, number> = {};
+  const spikeFade: Record<string, number> = {};
+  const pairLock: Record<string, number> = {};
   for (const t of trades || []) {
     if (!isEtToday(t.at, now)) continue;
     if (!isCountableWindowBuy(t)) continue;
@@ -51,6 +57,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     else if (path === 'twap_lock') twapLock[asset] = (twapLock[asset] || 0) + 1;
     else if (path === 'last_minute') lastMinute[asset] = (lastMinute[asset] || 0) + 1;
     else if (path === 'step_buy') stepBuy[asset] = (stepBuy[asset] || 0) + 1;
+    else if (path === 'spike_fade') spikeFade[asset] = (spikeFade[asset] || 0) + 1;
+    else if (path === 'pair_lock') pairLock[asset] = (pairLock[asset] || 0) + 1;
     else auto[asset] = (auto[asset] || 0) + 1;
   }
   const homeRows = grouped(home);
@@ -59,6 +67,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   const twapRows = grouped(twapLock);
   const lastMinuteRows = grouped(lastMinute);
   const stepBuyRows = grouped(stepBuy);
+  const spikeFadeRows = grouped(spikeFade);
+  const pairLockRows = grouped(pairLock);
   return {
     home: homeRows,
     auto: autoRows,
@@ -66,12 +76,16 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     twapLock: twapRows,
     lastMinute: lastMinuteRows,
     stepBuy: stepBuyRows,
+    spikeFade: spikeFadeRows,
+    pairLock: pairLockRows,
     homeTotal: homeRows.reduce((s, r) => s + r.count, 0),
     autoTotal: autoRows.reduce((s, r) => s + r.count, 0),
     cashOutTotal: cashOutRows.reduce((s, r) => s + r.count, 0),
     twapLockTotal: twapRows.reduce((s, r) => s + r.count, 0),
     lastMinuteTotal: lastMinuteRows.reduce((s, r) => s + r.count, 0),
     stepBuyTotal: stepBuyRows.reduce((s, r) => s + r.count, 0),
+    spikeFadeTotal: spikeFadeRows.reduce((s, r) => s + r.count, 0),
+    pairLockTotal: pairLockRows.reduce((s, r) => s + r.count, 0),
   };
 }
 
@@ -88,6 +102,8 @@ export function formatHomePathBuyLines(summary: PathBuyCounts): string[] {
   if (summary.twapLockTotal > 0) lines.push(`TWAP lock  ${formatAssetCounts(summary.twapLock)}`);
   if (summary.lastMinuteTotal > 0) lines.push(`Last-minute  ${formatAssetCounts(summary.lastMinute)}`);
   if (summary.stepBuyTotal > 0) lines.push(`Step buy  ${formatAssetCounts(summary.stepBuy)}`);
+  if (summary.spikeFadeTotal > 0) lines.push(`Spike fade  ${formatAssetCounts(summary.spikeFade)}`);
+  if (summary.pairLockTotal > 0) lines.push(`Pair lock  ${formatAssetCounts(summary.pairLock)}`);
   return lines;
 }
 
@@ -100,5 +116,7 @@ export function formatDashboardPathBuys(summary: PathBuyCounts): string | null {
   if (summary.twapLockTotal > 0) parts.push(`TWAP lock ${summary.twapLockTotal}`);
   if (summary.lastMinuteTotal > 0) parts.push(`Last-minute ${summary.lastMinuteTotal}`);
   if (summary.stepBuyTotal > 0) parts.push(`Step buy ${summary.stepBuyTotal}`);
+  if (summary.spikeFadeTotal > 0) parts.push(`Spike fade ${summary.spikeFadeTotal}`);
+  if (summary.pairLockTotal > 0) parts.push(`Pair lock ${summary.pairLockTotal}`);
   return parts.length ? parts.join(' · ') : null;
 }

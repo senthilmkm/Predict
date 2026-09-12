@@ -48,6 +48,8 @@ interface RuntimeState {
   twapLockFeatureOn: boolean;
   lastMinuteFeatureOn: boolean;
   stepBuyFeatureOn: boolean;
+  spikeFadeFeatureOn: boolean;
+  pairLockFeatureOn: boolean;
   activeBroadcast: ActiveBroadcast | null;
   cloudKillSwitch: boolean;
   ensure: () => AppRuntime;
@@ -89,6 +91,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   twapLockFeatureOn: false,
   lastMinuteFeatureOn: false,
   stepBuyFeatureOn: false,
+  spikeFadeFeatureOn: false,
+  pairLockFeatureOn: false,
   activeBroadcast: null,
   cloudKillSwitch: false,
   ensure: () => {
@@ -129,6 +133,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         twapLockFeatureOn: get().twapLockFeatureOn,
         lastMinuteFeatureOn: get().lastMinuteFeatureOn,
         stepBuyFeatureOn: get().stepBuyFeatureOn,
+        spikeFadeFeatureOn: get().spikeFadeFeatureOn,
+        pairLockFeatureOn: get().pairLockFeatureOn,
         activeBroadcast: get().activeBroadcast,
         cloudKillSwitch: get().cloudKillSwitch,
       });
@@ -270,6 +276,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
             twapLockFeatureOn: statusRes.systemConfig?.featureFlags?.twapLock === true,
             lastMinuteFeatureOn: statusRes.systemConfig?.featureFlags?.lastMinute === true,
             stepBuyFeatureOn: statusRes.systemConfig?.featureFlags?.stepBuy === true,
+            spikeFadeFeatureOn: statusRes.systemConfig?.featureFlags?.spikeFade === true,
+            pairLockFeatureOn: statusRes.systemConfig?.featureFlags?.pairLock === true,
             activeBroadcast: statusRes.activeBroadcast ?? null,
             cloudKillSwitch: statusRes.userDoc?.state === 'KILL_SWITCH',
           });
@@ -319,7 +327,9 @@ export function resetRuntimeStoreForTests() {
     goldFadeFeatureOn: false,
     twapLockFeatureOn: false,
     lastMinuteFeatureOn: false,
-  stepBuyFeatureOn: false,
+    stepBuyFeatureOn: false,
+    spikeFadeFeatureOn: false,
+  pairLockFeatureOn: false,
     activeBroadcast: null,
     cloudKillSwitch: false,
   });

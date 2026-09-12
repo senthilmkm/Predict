@@ -211,7 +211,7 @@ describe('Settings toggles', () => {
     expect(a).not.toMatch(/AVAX/);
   });
 
-  test('FAQ Skip thin bid table lists all five Cloud paths', async () => {
+  test('FAQ Skip thin bid table lists all Cloud paths', async () => {
     const s = await render(<SettingsHost />);
     await fireEvent.press(s.getByTestId('btn-open-settings-more'));
     await waitFor(() => expect(s.getByTestId('faq-accordion')).toBeTruthy());
@@ -219,8 +219,9 @@ describe('Settings toggles', () => {
     await fireEvent.press(s.getByTestId('faq-q-skip-thin-bid-paths'));
     await waitFor(() => expect(s.getByTestId('faq-table-skip-thin-bid-paths')).toBeTruthy());
     expect(s.getByText('If book size unknown')).toBeTruthy();
-    expect(s.getAllByText('Fail closed — no buy').length).toBe(3);
+    expect(s.getAllByText('Fail closed — no buy').length).toBe(5);
     expect(s.getByText('Does not skip or dump')).toBeTruthy();
+    expect(s.getAllByText('Spike fade').length).toBeGreaterThan(0);
   });
 
   test('5-tap version text unlocks Developer Diagnostics', async () => {
@@ -280,6 +281,8 @@ describe('Settings credentials', () => {
     expect(s.getByText('Gold fade')).toBeTruthy();
     expect(s.getByText('TWAP lock')).toBeTruthy();
     expect(s.getByText('Step buy')).toBeTruthy();
+    expect(s.getByText('Spike fade')).toBeTruthy();
+    expect(s.getByText('Pair lock')).toBeTruthy();
     expect(s.getAllByText(/Smart buy/).length).toBeGreaterThan(0);
     expect(s.getAllByText(/Min extra chance/).length).toBeGreaterThan(0);
     expect(s.getByText('Shared vs each tab')).toBeTruthy();
@@ -405,6 +408,7 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-step_buy_lot_count').props.children).toBe('1');
     expect(s.getByTestId('risk-value-auto-step_buy_add_wait_minutes').props.children).toBe('1 min');
     expect(s.getByTestId('risk-value-auto-step_buy_add_band_usd').props.children).toBe('2¢');
+    expect(String(s.getByTestId('step-buy-add-band-hint').props.children)).toMatch(/last fill/);
     expect(s.getByTestId('risk-value-auto-step_buy_max_lots').props.children).toBe('3');
     expect(s.getByTestId('risk-value-auto-step_buy_stop_usd').props.children).toBe('3¢');
     expect(s.getByTestId('risk-value-auto-step_buy_max_ask_usd').props.children).toMatch(/\$0\.80/);
@@ -413,6 +417,39 @@ describe('Settings credentials', () => {
     expect(String(s.getByTestId('step-buy-hint').props.children)).toMatch(/30s left/);
     expect(s.getByTestId('risk-toggle-step_buy_skip_thin_bid').props.accessibilityState.checked).toBe(false);
     expect(s.getByTestId('path-info-stepBuy')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-spike_fade_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ spikeFadeFeatureOn: true });
+    });
+    await waitFor(() => expect(s.getByTestId('risk-toggle-spike_fade_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-spike_fade_enabled').props.value).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-spike_fade_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.spike_fade_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-spike_fade_start_minutes').props.children).toBe('2 min');
+    expect(s.getByTestId('risk-value-auto-spike_fade_until_minutes').props.children).toBe('6');
+    expect(s.getByTestId('risk-value-auto-spike_fade_expensive_min_usd').props.children).toMatch(/\$0\.75/);
+    expect(s.getByTestId('risk-value-auto-spike_fade_take_ask_usd').props.children).toMatch(/\$0\.42/);
+    expect(s.getByTestId('risk-value-auto-spike_fade_stop_ask_usd').props.children).toMatch(/\$0\.10/);
+    expect(s.getByTestId('risk-value-auto-spike_fade_flatten_minutes').props.children).toBe('3 min');
+    expect(s.getByTestId('risk-value-auto-spike_fade_lot_count').props.children).toBe('1');
+    expect(s.getByTestId('spike-fade-asset-Gold')).toBeTruthy();
+    expect(s.getByTestId('path-info-spikeFade')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-pair_lock_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ pairLockFeatureOn: true });
+    });
+    await waitFor(() => expect(s.getByTestId('risk-toggle-pair_lock_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-pair_lock_enabled').props.value).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-pair_lock_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.pair_lock_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-pair_lock_start_minutes').props.children).toBe('2 min');
+    expect(s.getByTestId('risk-value-auto-pair_lock_until_minutes').props.children).toBe('10');
+    expect(s.getByTestId('risk-value-auto-pair_lock_runner_max_ask_usd').props.children).toMatch(/\$0\.60/);
+    expect(s.getByTestId('risk-value-auto-pair_lock_min_lock_usd').props.children).toMatch(/\$0\.05/);
+    expect(s.getByTestId('risk-value-auto-pair_lock_flatten_minutes').props.children).toBe('3 min');
+    expect(s.getByTestId('risk-value-auto-pair_lock_lot_count').props.children).toBe('1');
+    expect(s.getByTestId('pair-lock-asset-Gold')).toBeTruthy();
+    expect(s.getByTestId('path-info-pairLock')).toBeTruthy();
     expect(s.getByTestId('path-info-auto')).toBeTruthy();
     expect(s.getByTestId('path-info-smartBuy')).toBeTruthy();
     expect(s.getByTestId('path-info-protect')).toBeTruthy();

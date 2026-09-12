@@ -13,4 +13,6 @@ export * from './goldFade';
 export * from './twapLock';
 export * from './lastMinute';
 export * from './stepBuy';
+export * from './spikeFade';
+export * from './pairLock';
 export * from './skipThinBid';

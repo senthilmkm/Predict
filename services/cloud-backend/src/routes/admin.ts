@@ -26,6 +26,8 @@ import { mergeFeatureFlags, type FeatureFlags } from '../services/featureFlags';
 import { formatTwapLockWatcherChip, getTwapLockWatcherSnapshot } from '../services/twapLockWatcher';
 import { formatLastMinuteWatcherChip, getLastMinuteWatcherSnapshot } from '../services/lastMinuteWatcher';
 import { formatStepBuyWatcherChip, getStepBuyWatcherSnapshot } from '../services/stepBuyWatcher';
+import { formatSpikeFadeWatcherChip, getSpikeFadeWatcherSnapshot } from '../services/spikeFadeWatcher';
+import { formatPairLockWatcherChip, getPairLockWatcherSnapshot } from '../services/pairLockWatcher';
 import { mergeBroadcastConfig, type BroadcastConfig } from '../services/broadcast';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 import {
@@ -68,13 +70,15 @@ adminRouter.use(adminAuthMiddleware);
 // 2. System Overview & Key Metrics
 adminRouter.get('/overview', async (req: Request, res: Response) => {
   try {
-    const [users, trades, systemConfig, twapLockWatcher, lastMinuteWatcher, stepBuyWatcher] = await Promise.all([
+    const [users, trades, systemConfig, twapLockWatcher, lastMinuteWatcher, stepBuyWatcher, spikeFadeWatcher, pairLockWatcher] = await Promise.all([
       getAllUsers(),
       getAllTradesForAdmin(),
       getSystemConfig(),
       getTwapLockWatcherSnapshot(),
       getLastMinuteWatcherSnapshot(),
       getStepBuyWatcherSnapshot(),
+      getSpikeFadeWatcherSnapshot(),
+      getPairLockWatcherSnapshot(),
     ]);
 
     const tradeMetrics = computeOverviewTradeMetrics(trades);
@@ -126,6 +130,14 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
       stepBuyWatcher: {
         ...stepBuyWatcher,
         label: formatStepBuyWatcherChip(stepBuyWatcher),
+      },
+      spikeFadeWatcher: {
+        ...spikeFadeWatcher,
+        label: formatSpikeFadeWatcherChip(spikeFadeWatcher),
+      },
+      pairLockWatcher: {
+        ...pairLockWatcher,
+        label: formatPairLockWatcherChip(pairLockWatcher),
       },
     });
   } catch (err: any) {
@@ -201,6 +213,12 @@ function parseAdminFeatureFlagsPatch(raw: unknown): Partial<FeatureFlags> | unde
   }
   if (body.stepBuy !== undefined) {
     patch.stepBuy = body.stepBuy === true;
+  }
+  if (body.spikeFade !== undefined) {
+    patch.spikeFade = body.spikeFade === true;
+  }
+  if (body.pairLock !== undefined) {
+    patch.pairLock = body.pairLock === true;
   }
   return Object.keys(patch).length ? patch : undefined;
 }

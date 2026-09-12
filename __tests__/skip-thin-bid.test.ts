@@ -19,6 +19,8 @@ describe('per-path Skip thin bid', () => {
     expect(resolveSkipThinBid({ twap_lock_skip_thin_bid: true }, 'twap_lock', false)).toBe(false);
     expect(resolveSkipThinBid({ last_minute_skip_thin_bid: true }, 'last_minute')).toBe(true);
     expect(resolveSkipThinBid({ step_buy_skip_thin_bid: true }, 'step_buy')).toBe(true);
+    expect(resolveSkipThinBid({ spike_fade_skip_thin_bid: true }, 'spike_fade')).toBe(true);
+    expect(resolveSkipThinBid({ pair_lock_skip_thin_bid: true }, 'pair_lock')).toBe(true);
     expect(resolveSkipThinBid({}, 'cash_out')).toBe(false);
   });
 });

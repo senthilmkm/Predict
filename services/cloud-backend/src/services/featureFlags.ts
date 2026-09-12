@@ -17,6 +17,10 @@ export interface FeatureFlags {
   lastMinute: boolean;
   /** Step buy Auto path. Default Off — Admin must enable. */
   stepBuy: boolean;
+  /** Spike fade Auto path. Default Off — Admin must enable. */
+  spikeFade: boolean;
+  /** Pair lock Auto path. Default Off — Admin must enable. */
+  pairLock: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -28,6 +32,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   twapLock: false,
   lastMinute: false,
   stepBuy: false,
+  spikeFade: false,
+  pairLock: false,
 };
 
 export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): FeatureFlags {
@@ -40,6 +46,8 @@ export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): Featu
     twapLock: raw?.twapLock === true,
     lastMinute: raw?.lastMinute === true,
     stepBuy: raw?.stepBuy === true,
+    spikeFade: raw?.spikeFade === true,
+    pairLock: raw?.pairLock === true,
   };
 }
 

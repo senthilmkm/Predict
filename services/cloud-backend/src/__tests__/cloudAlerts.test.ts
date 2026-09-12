@@ -74,6 +74,17 @@ describe('cloud alerts persist + mute + settlement', () => {
     ).toBe('Order Placed · Step buy · Gold YES');
     expect(iocMissAlertTitle('step_buy')).toBe('IOC miss · Step buy');
     expect(
+      orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'NO', entryPath: 'spike_fade' })
+    ).toBe('Order Placed · Spike fade · Gold NO');
+    expect(iocMissAlertTitle('spike_fade')).toBe('IOC miss · Spike fade');
+    expect(
+      orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'YES', entryPath: 'pair_lock' })
+    ).toBe('Order Placed · Pair lock · Gold YES');
+    expect(orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'NO', entryPath: 'pair_lock_hedge' })).toBe(
+      'Order Placed · Pair lock hedge · Gold NO'
+    );
+    expect(iocMissAlertTitle('pair_lock')).toBe('IOC miss · Pair lock');
+    expect(
       iocMissAlertBody({
         asset: 'BTC',
         decision: 'YES',

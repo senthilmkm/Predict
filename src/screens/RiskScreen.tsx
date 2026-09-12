@@ -7,6 +7,8 @@ import {
   GOLD_FADE_RISK_FIELD_KEYS,
   LAST_MINUTE_RISK_FIELD_KEYS,
   STEP_BUY_RISK_FIELD_KEYS,
+  SPIKE_FADE_RISK_FIELD_KEYS,
+  PAIR_LOCK_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
   TWAP_LOCK_RISK_FIELD_KEYS,
   PROTECT_RISK_FIELD_KEYS,
@@ -25,6 +27,8 @@ import {
   normalizeLastMinuteSide,
 } from '../../packages/trading-core/src/lastMinute';
 import { normalizeStepBuyAssets } from '../../packages/trading-core/src/stepBuy';
+import { normalizeSpikeFadeAssets } from '../../packages/trading-core/src/spikeFade';
+import { normalizePairLockAssets } from '../../packages/trading-core/src/pairLock';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PATH_INFO } from '../content/pathInfo';
 
@@ -46,6 +50,8 @@ export function RiskScreen() {
   const twapLockFeatureOn = useRuntimeStore((s) => s.twapLockFeatureOn);
   const lastMinuteFeatureOn = useRuntimeStore((s) => s.lastMinuteFeatureOn);
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
+  const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
+  const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
   const [tab, setTab] = useState<TabId>('home');
   const [busy, setBusy] = useState(false);
 
@@ -234,6 +240,8 @@ export function RiskScreen() {
           {twapLockFeatureOn ? <TwapLockFields /> : null}
           {lastMinuteFeatureOn ? <LastMinuteFields /> : null}
           {stepBuyFeatureOn ? <StepBuyFields /> : null}
+          {spikeFadeFeatureOn ? <SpikeFadeFields /> : null}
+          {pairLockFeatureOn ? <PairLockFields /> : null}
         </>
       )}
 
@@ -667,7 +675,7 @@ function StepBuyFields() {
               const wait = meta.key === 'step_buy_add_wait_minutes';
               const band = meta.key === 'step_buy_add_band_usd';
               const stop = meta.key === 'step_buy_stop_usd';
-              return (
+              const stepper = (
                 <RiskStepper
                   key={meta.key}
                   meta={meta}
@@ -687,6 +695,17 @@ function StepBuyFields() {
                   onChange={(next) => setRiskField(meta.key, next as never)}
                 />
               );
+              if (!band) return stepper;
+              return (
+                <View key={meta.key}>
+                  {stepper}
+                  <Text style={styles.hint} testID="step-buy-add-band-hint">
+                    Lots 2+ only. Live ask must be the last fill, or up to this many ¢ richer
+                    (0–10¢). A 5¢ jump with a 2¢ band waits — Cloud does not chase. 0¢ = next ask
+                    must match the last fill.
+                  </Text>
+                </View>
+              );
             })}
           <View style={styles.field} testID="risk-field-auto-step_buy_assets">
             <Text style={styles.label}>Step buy assets</Text>
@@ -698,16 +717,14 @@ function StepBuyFields() {
                   <Pressable
                     key={key}
                     testID={`step-buy-asset-${key}`}
-                    style={[styles.tifChip, selected && styles.tifChipOn]}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
                     onPress={() => {
                       const cur = normalizeStepBuyAssets(config.risk.step_buy_assets);
                       const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
                       setRiskField('step_buy_assets', next);
                     }}
                   >
-                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>
-                      {selected ? '☑' : '☐'} {key}
-                    </Text>
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
                   </Pressable>
                 );
               })}
@@ -717,6 +734,190 @@ function StepBuyFields() {
             Lot 1 after Start after + Cushion % + lean. Later lots need Add wait, thesis still on,
             and ask in last fill … last fill + Add band. Stop adding with 30s left. Stop sells a lot
             when ask is Stop ¢ under that lot’s fill; lot 1 stop sells all remaining Step buy lots.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+function SpikeFadeFields() {
+  const config = useConfigStore((s) => s.config);
+  const setRiskField = useConfigStore((s) => s.setRiskField);
+  const on = Boolean(config.risk.spike_fade_enabled);
+  return (
+    <>
+      <View style={styles.field} testID="risk-field-auto-spike_fade_enabled">
+        <View style={styles.toggleRow}>
+          <View style={styles.labelWithInfo}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Spike fade</Text>
+            <PathInfoIcon title={PATH_INFO.spikeFade.title} body={PATH_INFO.spikeFade.body} testID="path-info-spikeFade" />
+          </View>
+          <Switch
+            testID="risk-toggle-spike_fade_enabled"
+            value={on}
+            onValueChange={(v) => setRiskField('spike_fade_enabled', v)}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        {on ? (
+          <Text style={styles.hint}>
+            Buy the cheap side when the expensive ask is in band. Always dumps — take, stop, or flatten.
+          </Text>
+        ) : null}
+      </View>
+      {on ? (
+        <View style={styles.pathInner}>
+          <SkipThinBidRow
+            testID="risk-toggle-spike_fade_skip_thin_bid"
+            value={Boolean(config.risk.spike_fade_skip_thin_bid)}
+            onChange={(v) => setRiskField('spike_fade_skip_thin_bid', v)}
+          />
+          {metaFor(SPIKE_FADE_RISK_FIELD_KEYS)
+            .filter((meta) => meta.key !== 'spike_fade_enabled')
+            .map((meta) => {
+              const start = meta.key === 'spike_fade_start_minutes';
+              const until = meta.key === 'spike_fade_until_minutes';
+              const flatten = meta.key === 'spike_fade_flatten_minutes';
+              return (
+                <RiskStepper
+                  key={meta.key}
+                  meta={meta}
+                  value={config.risk[meta.key]}
+                  testPrefix="auto"
+                  displayOverride={
+                    start
+                      ? `${Math.round(Number(config.risk.spike_fade_start_minutes) || 0)} min`
+                      : until
+                        ? `${Math.round(Number(config.risk.spike_fade_until_minutes) || 0)}`
+                        : flatten
+                          ? `${Math.round(Number(config.risk.spike_fade_flatten_minutes) || 0)} min`
+                          : undefined
+                  }
+                  onChange={(next) => setRiskField(meta.key, next as never)}
+                />
+              );
+            })}
+          <View style={styles.field} testID="risk-field-auto-spike_fade_assets">
+            <Text style={styles.label}>Spike fade assets</Text>
+            <Text style={styles.hint}>Also must be On in Cushions. Empty means no Spike fade buys.</Text>
+            <View style={styles.tifRow}>
+              {AssetRegistry.keys.map((key) => {
+                const selected = normalizeSpikeFadeAssets(config.risk.spike_fade_assets).includes(key);
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`spike-fade-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizeSpikeFadeAssets(config.risk.spike_fade_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('spike_fade_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={styles.hint} testID="spike-fade-hint">
+            After Start after and before Until minute. Expensive-side ask in Expensive min…max and
+            cheap-side ask in Cheap min…max → buy the cheap side. Take when that bid ≥ Take ask.
+            Stop when that ask ≤ Stop ask. Flatten with Flatten left. Always dumps. Gold fade stays
+            a separate Gold-only path.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+function PairLockFields() {
+  const config = useConfigStore((s) => s.config);
+  const setRiskField = useConfigStore((s) => s.setRiskField);
+  const on = Boolean(config.risk.pair_lock_enabled);
+  return (
+    <>
+      <View style={styles.field} testID="risk-field-auto-pair_lock_enabled">
+        <View style={styles.toggleRow}>
+          <View style={styles.labelWithInfo}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Pair lock</Text>
+            <PathInfoIcon title={PATH_INFO.pairLock.title} body={PATH_INFO.pairLock.body} testID="path-info-pairLock" />
+          </View>
+          <Switch
+            testID="risk-toggle-pair_lock_enabled"
+            value={on}
+            onValueChange={(v) => setRiskField('pair_lock_enabled', v)}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        {on ? (
+          <Text style={styles.hint}>
+            Buy the lean side, then the opposite when the pair spends less than $1 − Min lock. Flatten
+            unmatched only. A locked pair holds to settlement.
+          </Text>
+        ) : null}
+      </View>
+      {on ? (
+        <View style={styles.pathInner}>
+          <SkipThinBidRow
+            testID="risk-toggle-pair_lock_skip_thin_bid"
+            value={Boolean(config.risk.pair_lock_skip_thin_bid)}
+            onChange={(v) => setRiskField('pair_lock_skip_thin_bid', v)}
+          />
+          {metaFor(PAIR_LOCK_RISK_FIELD_KEYS)
+            .filter((meta) => meta.key !== 'pair_lock_enabled')
+            .map((meta) => {
+              const start = meta.key === 'pair_lock_start_minutes';
+              const until = meta.key === 'pair_lock_until_minutes';
+              const flatten = meta.key === 'pair_lock_flatten_minutes';
+              return (
+                <RiskStepper
+                  key={meta.key}
+                  meta={meta}
+                  value={config.risk[meta.key]}
+                  testPrefix="auto"
+                  displayOverride={
+                    start
+                      ? `${Math.round(Number(config.risk.pair_lock_start_minutes) || 0)} min`
+                      : until
+                        ? `${Math.round(Number(config.risk.pair_lock_until_minutes) || 0)}`
+                        : flatten
+                          ? `${Math.round(Number(config.risk.pair_lock_flatten_minutes) || 0)} min`
+                          : undefined
+                  }
+                  onChange={(next) => setRiskField(meta.key, next as never)}
+                />
+              );
+            })}
+          <View style={styles.field} testID="risk-field-auto-pair_lock_assets">
+            <Text style={styles.label}>Pair lock assets</Text>
+            <Text style={styles.hint}>Also must be On in Cushions. Empty means no Pair lock buys.</Text>
+            <View style={styles.tifRow}>
+              {AssetRegistry.keys.map((key) => {
+                const selected = normalizePairLockAssets(config.risk.pair_lock_assets).includes(key);
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`pair-lock-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizePairLockAssets(config.risk.pair_lock_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('pair_lock_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={styles.hint} testID="pair-lock-hint">
+            After Start after and before Until minute. Auto lean and Runner max ask → buy that side.
+            Hedge the other side when runner fill + opposite ask ≤ $1 − Min lock. Flatten unmatched
+            with Flatten unmatched. A completed pair holds to $1.
           </Text>
         </View>
       ) : null}

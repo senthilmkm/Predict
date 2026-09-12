@@ -101,6 +101,8 @@ describe('history trade display', () => {
     expect(entryPathChipLabel('twap_lock')).toBe('TWAP lock');
     expect(entryPathChipLabel('last_minute')).toBe('Last-minute');
     expect(entryPathChipLabel('step_buy')).toBe('Step buy');
+    expect(entryPathChipLabel('spike_fade')).toBe('Spike fade');
+    expect(entryPathChipLabel('pair_lock')).toBe('Pair lock');
     expect(entryPathChipLabel('manual_buy')).toBe('Home');
     expect(entryPathChipLabel(null)).toBeNull();
     expect(entryPathChipLabel(undefined)).toBeNull();

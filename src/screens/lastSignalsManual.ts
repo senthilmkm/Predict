@@ -16,6 +16,8 @@ import {
   normalizeLastMinuteWatchSeconds,
 } from '../../packages/trading-core/src/lastMinute';
 import { isStepBuyEnterPath, normalizeStepBuyStartMinutes } from '../../packages/trading-core/src/stepBuy';
+import { isSpikeFadeEnterPath, isSpikeFadeEnterWindow } from '../../packages/trading-core/src/spikeFade';
+import { isPairLockEnterPath, isPairLockEnterWindow } from '../../packages/trading-core/src/pairLock';
 
 export type GapLiveSide = 'above' | 'below';
 export type GapDisplayTone = 'with' | 'against' | 'neutral';
@@ -331,6 +333,106 @@ export function formatStepBuyWatchLine(opts: {
   return `Step buy watching · ${Math.round(left)}s left`;
 }
 
+export function formatSpikeFadeWatchLine(opts: {
+  adminEnabled: boolean;
+  userEnabled: boolean;
+  assetEnabled: boolean;
+  asset: string;
+  assets?: unknown;
+  secondsLeft: number | null;
+  minutesElapsed?: number | null;
+  startMinutes?: unknown;
+  untilMinutes?: unknown;
+  holding?: boolean;
+  autoDetail?: string | null;
+  autoStatus?: string | null;
+}): string | null {
+  if (
+    !isSpikeFadeEnterPath({
+      adminEnabled: opts.adminEnabled,
+      userEnabled: opts.userEnabled,
+      assetEnabled: opts.assetEnabled,
+      asset: opts.asset,
+      assets: opts.assets,
+    })
+  ) {
+    return null;
+  }
+  const left = opts.secondsLeft;
+  if (left == null || !Number.isFinite(left) || left <= 0) return null;
+  const inWindow =
+    opts.holding === true ||
+    isSpikeFadeEnterWindow({
+      minutesElapsed: opts.minutesElapsed,
+      startMinutes: opts.startMinutes,
+      untilMinutes: opts.untilMinutes,
+    });
+  if (!inWindow) return null;
+  const status = String(opts.autoStatus || '');
+  if (status === 'placed') return null;
+  if (status === 'skipped') {
+    const reason = String(opts.autoDetail || '')
+      .replace(/^skipped\s*·\s*/i, '')
+      .trim();
+    if (reason) return `Spike fade watching · ${reason}`;
+  }
+  if (status === 'failed') {
+    const detail = String(opts.autoDetail || '').trim();
+    if (detail) return `Spike fade watching · ${detail}`;
+  }
+  return `Spike fade watching · ${Math.round(left)}s left`;
+}
+
+export function formatPairLockWatchLine(opts: {
+  adminEnabled: boolean;
+  userEnabled: boolean;
+  assetEnabled: boolean;
+  asset: string;
+  assets?: unknown;
+  secondsLeft: number | null;
+  minutesElapsed?: number | null;
+  startMinutes?: unknown;
+  untilMinutes?: unknown;
+  holding?: boolean;
+  autoDetail?: string | null;
+  autoStatus?: string | null;
+}): string | null {
+  if (
+    !isPairLockEnterPath({
+      adminEnabled: opts.adminEnabled,
+      userEnabled: opts.userEnabled,
+      assetEnabled: opts.assetEnabled,
+      asset: opts.asset,
+      assets: opts.assets,
+    })
+  ) {
+    return null;
+  }
+  const left = opts.secondsLeft;
+  if (left == null || !Number.isFinite(left) || left <= 0) return null;
+  const inWindow =
+    opts.holding === true ||
+    isPairLockEnterWindow({
+      minutesElapsed: opts.minutesElapsed,
+      startMinutes: opts.startMinutes,
+      untilMinutes: opts.untilMinutes,
+    });
+  if (!inWindow) return null;
+  const status = String(opts.autoStatus || '');
+  if (status === 'placed') return null;
+  if (status === 'skipped') {
+    const reason = String(opts.autoDetail || '')
+      .replace(/^skipped\s*·\s*/i, '')
+      .trim();
+    if (reason) return `Pair lock watching · ${reason}`;
+  }
+  if (status === 'failed') {
+    const detail = String(opts.autoDetail || '').trim();
+    if (detail) return `Pair lock watching · ${detail}`;
+  }
+  return `Pair lock watching · ${Math.round(left)}s left`;
+}
+
 export function twapWatchSecondsLeft(closeUtc: unknown, nowMs: number): number | null {
   if (closeUtc == null) return null;
   const close = closeUtc instanceof Date ? closeUtc : new Date(String(closeUtc));
@@ -361,9 +463,13 @@ export function lastSignalExtraLine(opts: {
   twapLockHolding?: boolean;
   lastMinuteHolding?: boolean;
   stepBuyHolding?: boolean;
+  spikeFadeHolding?: boolean;
+  pairLockHolding?: boolean;
   twapWatchText?: string | null;
   lastMinuteWatchText?: string | null;
   stepBuyWatchText?: string | null;
+  spikeFadeWatchText?: string | null;
+  pairLockWatchText?: string | null;
 }): { testID: 'trade-action' | 'skip-reason'; text: string; placed?: boolean; failed?: boolean } | null {
   if (opts.err || !opts.isOpen || opts.noMarket) return null;
   if (opts.twapLockHolding) {
@@ -374,6 +480,12 @@ export function lastSignalExtraLine(opts: {
   }
   if (opts.stepBuyHolding) {
     return { testID: 'skip-reason', text: 'step buy is holding this ticket' };
+  }
+  if (opts.spikeFadeHolding) {
+    return { testID: 'skip-reason', text: 'spike fade is holding this ticket' };
+  }
+  if (opts.pairLockHolding) {
+    return { testID: 'skip-reason', text: 'pair lock is holding this ticket' };
   }
   if (opts.goldFadeHolding) {
     return { testID: 'skip-reason', text: 'gold fade is holding this ticket' };
@@ -389,6 +501,12 @@ export function lastSignalExtraLine(opts: {
   }
   if (opts.stepBuyWatchText) {
     return { testID: 'skip-reason', text: opts.stepBuyWatchText };
+  }
+  if (opts.spikeFadeWatchText) {
+    return { testID: 'skip-reason', text: opts.spikeFadeWatchText };
+  }
+  if (opts.pairLockWatchText) {
+    return { testID: 'skip-reason', text: opts.pairLockWatchText };
   }
   if (opts.manualKind === 'buy') {
     if (opts.tapSkipReason) return { testID: 'skip-reason', text: opts.tapSkipReason };
