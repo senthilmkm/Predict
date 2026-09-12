@@ -37,8 +37,17 @@ import {
 } from '../../packages/trading-core/src/twapLock';
 import {
   normalizeLastMinuteAssets,
+  normalizeLastMinuteBothGap,
+  normalizeLastMinuteBothMinAsk,
+  normalizeLastMinuteClipCount,
+  normalizeLastMinuteEnterSeconds,
+  normalizeLastMinuteLadderSeconds,
   normalizeLastMinuteMaxAskUsd,
+  normalizeLastMinuteMaxClips,
   normalizeLastMinuteSide,
+  normalizeLastMinuteStopSeconds,
+  normalizeLastMinuteWatchSeconds,
+  normalizeLastMinuteFlipSellUsd,
 } from '../../packages/trading-core/src/lastMinute';
 import {
   configForHomeBuy as mergeHomeBuyRisk,
@@ -167,6 +176,30 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     last_minute_side: normalizeLastMinuteSide(r.last_minute_side ?? d.last_minute_side),
     last_minute_max_ask_usd: normalizeLastMinuteMaxAskUsd(
       r.last_minute_max_ask_usd ?? d.last_minute_max_ask_usd
+    ),
+    last_minute_watch_seconds: normalizeLastMinuteWatchSeconds(
+      r.last_minute_watch_seconds ?? d.last_minute_watch_seconds
+    ),
+    last_minute_enter_seconds: normalizeLastMinuteEnterSeconds(
+      r.last_minute_enter_seconds ?? d.last_minute_enter_seconds,
+      r.last_minute_watch_seconds ?? d.last_minute_watch_seconds
+    ),
+    last_minute_stop_seconds: normalizeLastMinuteStopSeconds(
+      r.last_minute_stop_seconds ?? d.last_minute_stop_seconds,
+      r.last_minute_enter_seconds ?? d.last_minute_enter_seconds
+    ),
+    last_minute_ladder_seconds: normalizeLastMinuteLadderSeconds(
+      r.last_minute_ladder_seconds ?? d.last_minute_ladder_seconds
+    ),
+    last_minute_clip_count: normalizeLastMinuteClipCount(r.last_minute_clip_count ?? d.last_minute_clip_count),
+    last_minute_max_clips: normalizeLastMinuteMaxClips(r.last_minute_max_clips ?? d.last_minute_max_clips),
+    last_minute_both_min_ask: normalizeLastMinuteBothMinAsk(
+      r.last_minute_both_min_ask ?? d.last_minute_both_min_ask,
+      r.last_minute_max_ask_usd ?? d.last_minute_max_ask_usd
+    ),
+    last_minute_both_gap: normalizeLastMinuteBothGap(r.last_minute_both_gap ?? d.last_minute_both_gap),
+    last_minute_flip_sell_usd: normalizeLastMinuteFlipSellUsd(
+      r.last_minute_flip_sell_usd ?? d.last_minute_flip_sell_usd
     ),
     last_minute_skip_thin_bid: inheritSkipThinBid(
       r.last_minute_skip_thin_bid,

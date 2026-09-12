@@ -42,6 +42,9 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/TWAP lock/);
     expect(blob).toMatch(/Last-minute/);
     expect(blob).toMatch(/does not pull coins off those paths/);
+    expect(blob).toMatch(/clip ladder/);
+    expect(blob).toMatch(/Watch start/);
+    expect(blob).toMatch(/Sell if flip/);
     expect(blob).toMatch(/will not Cash out or Auto-lean that coin/);
     expect(blob).toMatch(/strike × 60/);
     expect(blob).toMatch(/cheaper ticket/);

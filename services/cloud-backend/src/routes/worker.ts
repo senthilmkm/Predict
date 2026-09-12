@@ -86,6 +86,10 @@ import {
 } from '../../../../packages/trading-core/src/goldFade';
 import { getMarketOrderbook, getMarketQuote } from '../../../../packages/trading-core/src/lean';
 import { pendingCashOutTradesForMarket, runCloudCashOutExits } from '../services/cloudCashOut';
+import {
+  pendingLastMinuteTradesForMarket,
+  runCloudLastMinuteFlipExits,
+} from '../services/cloudLastMinuteFlip';
 import { pendingGoldFadeTradesForMarket, runCloudGoldFadeExits } from '../services/cloudGoldFade';
 import {
   evaluateTwapLockEnter,
@@ -100,12 +104,20 @@ import {
   evaluateLastMinuteEnter,
   isLastMinuteEnterPath,
   isLastMinuteWatchWindow,
+  isLastMinuteWindow,
+  lastMinuteClipsForTicker,
+  lastMinuteTimingFromRisk,
+  lastMinuteAskUsd,
   lastMinuteTwapOwns,
+  normalizeLastMinuteFlipSellUsd,
+  normalizeLastMinuteBothGap,
+  normalizeLastMinuteBothMinAsk,
   normalizeLastMinuteMaxAskUsd,
   normalizeLastMinuteSide,
   pickLastMinuteSide,
   resolveLastMinuteCloseUtc,
   tickerHasOpenLastMinute,
+  tickerHasOpenOtherThanLastMinute,
 } from '../../../../packages/trading-core/src/lastMinute';
 import { resolveSkipThinBid } from '../../../../packages/trading-core/src/skipThinBid';
 import { cfbRtiBuffer, fetchCfbRtiPrints, ingestRecentCfbPrints } from '../services/cfbRti';
@@ -129,7 +141,7 @@ const cashOutWatchUsers = new Map<string, string[]>();
 const goldFadeWatchUsers = new Map<string, string[]>();
 /** Armed TWAP users with a BTC/ETH window in the last 70s — 1s sample + enter only. */
 const twapLockWatchUsers = new Map<string, string[]>();
-/** Armed Last-minute users with an enabled asset in the last 70s — 1s sample + enter. */
+/** Armed Last-minute users with an enabled asset in the watch window — 1s quotes + clip ladder. */
 const lastMinuteWatchUsers = new Map<string, string[]>();
 
 async function cashOutBestBidSize(
@@ -232,15 +244,86 @@ function skippedTradeAction(reason: string | undefined, at: string): LastTradeAc
 
 function lastMinutePickedSide(
   lean: { yes_ask?: number; no_ask?: number },
-  cfg: { risk?: { last_minute_side?: unknown; last_minute_max_ask_usd?: unknown } }
+  cfg: {
+    risk?: {
+      last_minute_side?: unknown;
+      last_minute_max_ask_usd?: unknown;
+      last_minute_both_min_ask?: unknown;
+      last_minute_both_gap?: unknown;
+    };
+  }
 ): 'YES' | 'NO' {
+  const maxAsk = normalizeLastMinuteMaxAskUsd(cfg.risk?.last_minute_max_ask_usd);
   const picked = pickLastMinuteSide({
     side: normalizeLastMinuteSide(cfg.risk?.last_minute_side),
-    yesAsk: ticketUsd(sideAskOf('YES', lean)),
-    noAsk: ticketUsd(sideAskOf('NO', lean)),
-    maxAsk: normalizeLastMinuteMaxAskUsd(cfg.risk?.last_minute_max_ask_usd),
+    yesAsk: lastMinuteAskUsd(lean.yes_ask),
+    noAsk: lastMinuteAskUsd(lean.no_ask),
+    maxAsk,
+    bothMinAsk: normalizeLastMinuteBothMinAsk(cfg.risk?.last_minute_both_min_ask, maxAsk),
+    bothGap: normalizeLastMinuteBothGap(cfg.risk?.last_minute_both_gap),
   });
   return picked.ok ? picked.decision : 'YES';
+}
+
+async function runLastMinuteFlipIfNeeded(opts: {
+  userId: string;
+  asset: string;
+  marketTicker: string;
+  cfg: { risk?: { last_minute_flip_sell_usd?: unknown; chase_above_ask_usd?: unknown } };
+  now: Date;
+  userTrades: TradeRecordDoc[];
+  lean: {
+    phase?: string;
+    yes_bid?: number | null;
+    yes_ask?: number | null;
+    no_bid?: number | null;
+    no_ask?: number | null;
+  };
+  userTokens: string[];
+  lastTradeAction: Partial<Record<string, LastTradeAction>>;
+  tickIso: string;
+  secret: { privateKeyPem?: string; keyId?: string } | null | undefined;
+}): Promise<number> {
+  if (normalizeLastMinuteFlipSellUsd(opts.cfg.risk?.last_minute_flip_sell_usd) <= 0) return 0;
+  if (pendingLastMinuteTradesForMarket(opts.userTrades, opts.marketTicker).length === 0) return 0;
+  if (!opts.secret?.privateKeyPem || !opts.secret.keyId) return 0;
+  const client = new KalshiClient(opts.secret.keyId, opts.secret.privateKeyPem, 'production');
+  const flipRes = await runCloudLastMinuteFlipExits({
+    userId: opts.userId,
+    asset: opts.asset,
+    ticker: opts.marketTicker,
+    lean: opts.lean,
+    trades: opts.userTrades,
+    flipSellUsd: opts.cfg.risk?.last_minute_flip_sell_usd,
+    slippageUsd: Math.min(0.05, Number(opts.cfg.risk?.chase_above_ask_usd) || 0.02),
+    dryRun: false,
+    now: opts.now,
+    place: (input) => client.placeOrder(input),
+  });
+  for (const alert of flipRes.alerts) {
+    await emitCloudAlert({
+      userId: opts.userId,
+      alertId: protectAlertId(alert.tradeId),
+      kind: 'protect_sell',
+      title: alert.title,
+      body: alert.body,
+      cfg: opts.cfg as never,
+      tokens: opts.userTokens,
+      collapseId: protectCollapseId(opts.userId, alert.tradeId),
+      asset: opts.asset,
+      ticker: opts.marketTicker,
+      tradeId: alert.tradeId,
+      at: opts.now.toISOString(),
+    });
+  }
+  if (flipRes.exited > 0) {
+    opts.lastTradeAction[opts.asset] = {
+      status: 'placed',
+      detail: `Last-minute flip · sold ${flipRes.exited}`,
+      at: opts.tickIso,
+    };
+  }
+  return flipRes.exited;
 }
 
 function sleepMs(ms: number): Promise<void> {
@@ -451,10 +534,44 @@ async function runOneTick() {
                 twapAssets: cfg.risk?.twap_lock_assets,
                 asset,
               });
-            const lastMinuteWatching = Boolean(
-              lastMinuteWanted && twapClose && isLastMinuteWatchWindow(now, twapClose)
+            const lastMinuteTimes = lastMinuteTimingFromRisk(cfg.risk);
+            let lastMinuteClips = lastMinuteClipsForTicker(userTrades, marketTicker);
+            if (
+              lastMinuteWanted &&
+              lastMinuteClips.count > 0 &&
+              loadTradeBook &&
+              user.kalshiConfigured &&
+              normalizeLastMinuteFlipSellUsd(cfg.risk?.last_minute_flip_sell_usd) > 0
+            ) {
+              if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
+              await runLastMinuteFlipIfNeeded({
+                userId,
+                asset,
+                marketTicker,
+                cfg,
+                now,
+                userTrades,
+                lean: {
+                  phase: lean.phase === 'live' ? 'live' : 'ended',
+                  yes_bid: lean.yes_bid,
+                  yes_ask: lean.yes_ask,
+                  no_bid: lean.no_bid,
+                  no_ask: lean.no_ask,
+                },
+                userTokens,
+                lastTradeAction,
+                tickIso,
+                secret: cachedSecret,
+              });
+              lastMinuteClips = lastMinuteClipsForTicker(userTrades, marketTicker);
+            }
+            const lastMinuteTick = Boolean(
+              lastMinuteWanted &&
+                twapClose &&
+                (lastMinuteClips.count > 0 ||
+                  isLastMinuteWindow(now, twapClose, lastMinuteTimes.enterSec, lastMinuteTimes.stopSec))
             );
-            const cashOutEnter = cashOutWanted && !goldFadeEnter && !twapLockWanted && !lastMinuteWatching;
+            const cashOutEnter = cashOutWanted && !goldFadeEnter && !twapLockWanted && !lastMinuteTick;
 
             if (
               protectEnabled &&
@@ -713,13 +830,13 @@ async function runOneTick() {
             if (!cfg.assets_enabled?.[asset]) {
               continue;
             }
-            if (!cashOutEnter && !goldFadeEnter && !twapLockWanted && !lastMinuteWatching && absGap < userCushion) {
+            if (!cashOutEnter && !goldFadeEnter && !twapLockWanted && !lastMinuteTick && absGap < userCushion) {
               delete lastTradeAction[asset];
               continue;
             }
             const windowCap = windowBuyCap(cfg.risk);
             const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
-            if (existingBuys >= windowCap) {
+            if (!(lastMinuteTick && lastMinuteClips.count > 0) && existingBuys >= windowCap) {
               lastTradeAction[asset] = skippedTradeAction('max_trades_asset_window', tickIso);
               continue;
             }
@@ -731,7 +848,7 @@ async function runOneTick() {
               lastTradeAction[asset] = skippedTradeAction('twap_lock_holding', tickIso);
               continue;
             }
-            if (!lastMinuteWatching && tickerHasOpenLastMinute(userTrades, marketTicker)) {
+            if (!lastMinuteTick && tickerHasOpenLastMinute(userTrades, marketTicker)) {
               lastTradeAction[asset] = skippedTradeAction('last_minute_holding', tickIso);
               continue;
             }
@@ -783,7 +900,7 @@ async function runOneTick() {
                   skipThinBid: twapThin,
                   bidSize: await cashOutBestBidSize(marketTicker, 'YES', twapThin),
                 })
-              : lastMinuteWatching
+              : lastMinuteTick
               ? evaluateLastMinuteEnter({
                   lean: leanForGate,
                   cfg,
@@ -793,8 +910,10 @@ async function runOneTick() {
                   openPositions,
                   tradesToday,
                   assetTradesInWindow: existingBuys,
+                  lastMinuteClips: lastMinuteClips.count,
+                  lastClipAt: lastMinuteClips.lastAt,
                   dailyPnlUsd,
-                  hasOpenOnTicker: tickerHasOpenFill(userTrades, marketTicker),
+                  hasOpenOnTicker: tickerHasOpenOtherThanLastMinute(userTrades, marketTicker),
                   skipThinBid: lastThin,
                   bidSize: await cashOutBestBidSize(
                     marketTicker,
@@ -836,7 +955,7 @@ async function runOneTick() {
                   });
             const entryPath = twapLockWanted
               ? 'twap_lock'
-              : lastMinuteWatching
+              : lastMinuteTick
                 ? 'last_minute'
                 : goldFadeEnter
                   ? 'gold_fade'
@@ -855,11 +974,14 @@ async function runOneTick() {
               continue;
             }
             if (!gate.ok || !gate.price || !gate.count) {
-              if (
-                gate.skip_reason === 'twap_lock_not_last_minute' ||
-                gate.skip_reason === 'last_minute_not_last_minute'
-              ) {
+              if (gate.skip_reason === 'twap_lock_not_last_minute') {
                 delete lastTradeAction[asset];
+                continue;
+              }
+              if (
+                gate.skip_reason === 'last_minute_not_last_minute' ||
+                gate.skip_reason === 'last_minute_ladder_wait'
+              ) {
                 continue;
               }
               lastTradeAction[asset] = skippedTradeAction(
@@ -882,9 +1004,14 @@ async function runOneTick() {
             const claimed = await tryAcquirePlaceLock({
               userId,
               ticker: marketTicker,
-              cap: windowCap,
+              cap: entryPath === 'last_minute' && lastMinuteClips.count > 0
+                ? lastMinuteTimes.maxClips
+                : windowCap,
               requestId: placeRequestId,
-              existingBuys,
+              existingBuys:
+                entryPath === 'last_minute' && lastMinuteClips.count > 0
+                  ? lastMinuteClips.count
+                  : existingBuys,
             });
             if (!claimed.ok) {
               lastTradeAction[asset] = skippedTradeAction(claimed.reason, tickIso);
@@ -1080,7 +1207,8 @@ async function runOneTick() {
               }
               const row = sharedLeans[a];
               const close = row ? resolveLastMinuteCloseUtc(row, now) : null;
-              return Boolean(close && isLastMinuteWatchWindow(now, close));
+              const watchSec = lastMinuteTimingFromRisk(cfg.risk).watchSec;
+              return Boolean(close && isLastMinuteWatchWindow(now, close, watchSec));
             });
             if (watchAssets.length) lastMinuteWatchUsers.set(userId, watchAssets);
             else lastMinuteWatchUsers.delete(userId);
@@ -1459,7 +1587,8 @@ export async function runLastMinuteWatchTick(): Promise<{
         const lean = sharedLeans[asset];
         if (!lean?.market_ticker) continue;
         const closeUtc = resolveLastMinuteCloseUtc(lean, now);
-        if (!closeUtc || !isLastMinuteWatchWindow(now, closeUtc)) continue;
+        const lastMinuteTimes = lastMinuteTimingFromRisk(cfg.risk);
+        if (!closeUtc || !isLastMinuteWatchWindow(now, closeUtc, lastMinuteTimes.watchSec)) continue;
         still.push(asset);
         if (
           lastMinuteTwapOwns({
@@ -1471,12 +1600,12 @@ export async function runLastMinuteWatchTick(): Promise<{
         ) {
           continue;
         }
-        if (!isTwapLockLastMinute(now, closeUtc)) continue;
         watched += 1;
         const marketTicker = lean.market_ticker;
         const windowCap = windowBuyCap(cfg.risk);
         const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
-        if (existingBuys >= windowCap) {
+        let lastMinuteClips = lastMinuteClipsForTicker(userTrades, marketTicker);
+        if (lastMinuteClips.count <= 0 && existingBuys >= windowCap) {
           lastTradeAction[asset] = skippedTradeAction('max_trades_asset_window', tickIso);
           continue;
         }
@@ -1486,8 +1615,36 @@ export async function runLastMinuteWatchTick(): Promise<{
           const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
           if (quote?.yes_ask_dollars != null) yesAsk = Number(quote.yes_ask_dollars);
           if (quote?.no_ask_dollars != null) noAsk = Number(quote.no_ask_dollars);
+          if (quote?.yes_bid_dollars != null) lean.yes_bid = Number(quote.yes_bid_dollars);
+          if (quote?.no_bid_dollars != null) lean.no_bid = Number(quote.no_bid_dollars);
         } catch {
           /* keep lean ask */
+        }
+        if (
+          normalizeLastMinuteFlipSellUsd(cfg.risk?.last_minute_flip_sell_usd) > 0 &&
+          pendingLastMinuteTradesForMarket(userTrades, marketTicker).length > 0
+        ) {
+          const secretForFlip = await getUserSecret(userId);
+          await runLastMinuteFlipIfNeeded({
+            userId,
+            asset,
+            marketTicker,
+            cfg,
+            now,
+            userTrades,
+            lean: {
+              phase: lean.phase === 'live' ? 'live' : 'ended',
+              yes_bid: lean.yes_bid,
+              yes_ask: yesAsk,
+              no_bid: lean.no_bid,
+              no_ask: noAsk,
+            },
+            userTokens,
+            lastTradeAction,
+            tickIso,
+            secret: secretForFlip,
+          });
+          lastMinuteClips = lastMinuteClipsForTicker(userTrades, marketTicker);
         }
         const skipThinBid = resolveSkipThinBid(cfg.risk, 'last_minute');
         const absGap = Number.isFinite(Number(lean.abs_gap))
@@ -1521,14 +1678,18 @@ export async function runLastMinuteWatchTick(): Promise<{
           openPositions,
           tradesToday,
           assetTradesInWindow: existingBuys,
+          lastMinuteClips: lastMinuteClips.count,
+          lastClipAt: lastMinuteClips.lastAt,
           dailyPnlUsd,
-          hasOpenOnTicker: tickerHasOpenFill(userTrades, marketTicker),
+          hasOpenOnTicker: tickerHasOpenOtherThanLastMinute(userTrades, marketTicker),
           skipThinBid,
           bidSize: await cashOutBestBidSize(marketTicker, pickedSide, skipThinBid),
         });
         if (!gate.ok || !gate.price || !gate.count) {
-          if (gate.skip_reason === 'last_minute_not_last_minute') {
-            delete lastTradeAction[asset];
+          if (
+            gate.skip_reason === 'last_minute_not_last_minute' ||
+            gate.skip_reason === 'last_minute_ladder_wait'
+          ) {
             continue;
           }
           lastTradeAction[asset] = skippedTradeAction(gate.skip_reason || 'notional_too_small', tickIso);
@@ -1545,9 +1706,9 @@ export async function runLastMinuteWatchTick(): Promise<{
         const claimed = await tryAcquirePlaceLock({
           userId,
           ticker: marketTicker,
-          cap: windowCap,
+          cap: lastMinuteClips.count > 0 ? lastMinuteTimes.maxClips : windowCap,
           requestId: placeRequestId,
-          existingBuys,
+          existingBuys: lastMinuteClips.count > 0 ? lastMinuteClips.count : existingBuys,
         });
         if (!claimed.ok) {
           lastTradeAction[asset] = skippedTradeAction(claimed.reason, tickIso);

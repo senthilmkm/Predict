@@ -530,7 +530,10 @@ function LastMinuteFields() {
           />
         </View>
         {on ? (
-          <Text style={styles.hint}>Last 60s, 1s watch, checked assets only. Hold to settlement</Text>
+          <Text style={styles.hint}>
+            Watch early, first clip only when Both still qualifies, then clip ladder. Hold to
+            settlement
+          </Text>
         ) : null}
       </View>
       {on ? (
@@ -542,15 +545,29 @@ function LastMinuteFields() {
           />
           {metaFor(LAST_MINUTE_RISK_FIELD_KEYS)
             .filter((meta) => meta.key !== 'last_minute_enabled')
-            .map((meta) => (
-              <RiskStepper
-                key={meta.key}
-                meta={meta}
-                value={config.risk[meta.key]}
-                testPrefix="auto"
-                onChange={(next) => setRiskField(meta.key, next as never)}
-              />
-            ))}
+            .map((meta) => {
+              const isGap = meta.key === 'last_minute_both_gap';
+              const isFlip = meta.key === 'last_minute_flip_sell_usd';
+              const flipUsd = Number(config.risk.last_minute_flip_sell_usd) || 0;
+              return (
+                <RiskStepper
+                  key={meta.key}
+                  meta={meta}
+                  value={config.risk[meta.key]}
+                  testPrefix="auto"
+                  displayOverride={
+                    isGap
+                      ? `${Math.round(Number(config.risk.last_minute_both_gap) * 100)}¢`
+                      : isFlip
+                        ? flipUsd <= 0
+                          ? 'Off'
+                          : `${Math.round(flipUsd * 100)}¢`
+                        : undefined
+                  }
+                  onChange={(next) => setRiskField(meta.key, next as never)}
+                />
+              );
+            })}
           <View style={styles.field} testID="risk-field-auto-last_minute_assets">
             <Text style={styles.label}>Last-minute assets</Text>
             <Text style={styles.hint}>Also must be On in Cushions. Empty means no Last-minute buys.</Text>
@@ -594,6 +611,15 @@ function LastMinuteFields() {
               })}
             </View>
           </View>
+          <Text style={styles.hint} testID="last-minute-hint">
+            Watch quotes from Watch start. First 1-contract clip only when Both still qualifies
+            (usually last 60–90s), not at minute 13. Then +clip every Ladder wait while it is still
+            the favorite and the live ask is at or under Entry ask. Stop with Stop seconds left or a
+            $1.00 ask. Window cap 1 still blocks the first clip if Auto or Cash out already filled
+            this coin; ladder clips after that first Last-minute fill are extra. Sell if flip is Off
+            unless you set it — then a real opposite-side flip of that many cents sells only those
+            lots and frees the clip slots.
+          </Text>
         </View>
       ) : null}
     </>

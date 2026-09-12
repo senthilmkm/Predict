@@ -485,9 +485,10 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Last-minute?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Last-minute. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Last-minute buys.\n\n' +
-            'In the last 60 seconds Cloud watches once per second and buys Yes, No, or the last-minute favorite if that side’s ask is at or under Entry ask (default $0.96). Both sits out a 50/50 book. Then it holds to settlement — no Protect, Cash out, fade, or Home Sell exit.\n\n' +
+            'Cloud watches 1s quotes from Watch start (default 150s / 2.5 minutes left). It does not buy at minute 13 on a 60–75¢ print. First clip is 1 contract only when Both still qualifies — favorite ≥ Both min, ≥ Both gap ahead, and live ask ≤ Entry ask. That usually appears in the last 60–90 seconds (First clip by, default 90s). Then clip ladder: every Ladder wait (default 2s), +Clip contracts if it is still the favorite and ask is still ≤ Entry ask. Stop with Stop seconds left (default 10s) or a $1.00 ask.\n\n' +
+            'Tune Watch start, First clip by, Stop, Ladder wait, Clip contracts, Max clips, Both min favorite, Both min gap, Sell if flip, Entry ask, Side, and assets on Risk. Both sits out a 50/50 book. Hold to settlement unless Sell if flip is On — then a real opposite-side flip of that many cents (default Off; 10¢ is a real flip, not a 1¢ dip) sells only those lots and frees the clip slots.\n\n' +
             'This is not TWAP lock. There is no $0 leftover math. Last seconds can flip. You can lose the full entry ask.\n\n' +
-            'Cash out and Auto already sit out the last minute, so Last-minute does not pull coins off those paths. Window cap 1 still applies: if Auto or Cash out already filled this coin this window, Last-minute sits out. If TWAP lock is On for BTC/ETH, those two stay with TWAP. This path’s Skip thin bid applies (unknown book fails closed). IOC only.',
+            'Cash out and Auto already sit out the last minute, so Last-minute does not pull coins off those paths. Window cap 1 still applies: if Auto or Cash out already filled this coin this window, the first clip sits out. After that first Last-minute fill, ladder adds are extra (up to Max clips). If TWAP lock is On for BTC/ETH, those two stay with TWAP. This path’s Skip thin bid applies (unknown book fails closed). IOC only.',
         },
         {
           id: 'lastminute-admin',

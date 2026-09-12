@@ -71,7 +71,7 @@ export async function tryAcquirePlaceLock(opts: {
   const userId = String(opts.userId || '').trim();
   const ticker = String(opts.ticker || '').trim();
   const requestId = String(opts.requestId || '').trim();
-  const cap = Math.min(5, Math.max(1, Math.round(Number(opts.cap) || 1)));
+  const cap = Math.min(25, Math.max(1, Math.round(Number(opts.cap) || 1)));
   const existing = Math.max(0, Math.round(Number(opts.existingBuys) || 0));
   if (!userId || !ticker || !requestId) {
     return { ok: false, reason: 'window_locked' };

@@ -150,6 +150,15 @@ describe('normalize / cushions', () => {
     expect(d.last_minute_enabled).toBe(false);
     expect(d.last_minute_side).toBe('yes');
     expect(d.last_minute_max_ask_usd).toBe(0.96);
+    expect(d.last_minute_watch_seconds).toBe(150);
+    expect(d.last_minute_enter_seconds).toBe(90);
+    expect(d.last_minute_stop_seconds).toBe(10);
+    expect(d.last_minute_ladder_seconds).toBe(2);
+    expect(d.last_minute_clip_count).toBe(1);
+    expect(d.last_minute_max_clips).toBe(5);
+    expect(d.last_minute_both_min_ask).toBe(0.9);
+    expect(d.last_minute_both_gap).toBe(0.1);
+    expect(d.last_minute_flip_sell_usd).toBe(0);
     expect(d.last_minute_assets).toEqual(expect.arrayContaining(['Gold', 'BTC', 'ETH']));
     expect(
       normalizeAppConfig({ risk: { last_minute_assets: [] } } as any).risk.last_minute_assets
@@ -176,6 +185,26 @@ describe('normalize / cushions', () => {
     expect(lastMin.last_minute_enabled).toBe(true);
     expect(lastMin.last_minute_side).toBe('both');
     expect(lastMin.last_minute_max_ask_usd).toBe(0.99);
+    const ladder = normalizeAppConfig({
+      risk: {
+        last_minute_watch_seconds: 200,
+        last_minute_enter_seconds: 160,
+        last_minute_stop_seconds: 1,
+        last_minute_ladder_seconds: 9,
+        last_minute_clip_count: 0,
+        last_minute_max_clips: 99,
+        last_minute_both_min_ask: 0.99,
+        last_minute_both_gap: 0.01,
+      },
+    } as any).risk;
+    expect(ladder.last_minute_watch_seconds).toBe(180);
+    expect(ladder.last_minute_enter_seconds).toBe(150);
+    expect(ladder.last_minute_stop_seconds).toBe(5);
+    expect(ladder.last_minute_ladder_seconds).toBe(5);
+    expect(ladder.last_minute_clip_count).toBe(1);
+    expect(ladder.last_minute_max_clips).toBe(20);
+    expect(ladder.last_minute_both_min_ask).toBe(0.95);
+    expect(ladder.last_minute_both_gap).toBe(0.05);
     expect(d.gold_fade_skip_thin_bid).toBe(false);
     expect(d.twap_lock_skip_thin_bid).toBe(false);
     expect(d.last_minute_skip_thin_bid).toBe(false);

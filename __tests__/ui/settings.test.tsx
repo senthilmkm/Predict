@@ -372,6 +372,15 @@ describe('Settings credentials', () => {
     await fireEvent(s.getByTestId('risk-toggle-last_minute_enabled'), 'valueChange', true);
     await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_enabled).toBe(true));
     expect(s.getByTestId('risk-value-auto-last_minute_max_ask_usd').props.children).toMatch(/\$0\.96/);
+    expect(s.getByTestId('risk-value-auto-last_minute_watch_seconds').props.children).toBe('150s');
+    expect(s.getByTestId('risk-value-auto-last_minute_enter_seconds').props.children).toBe('90s');
+    expect(s.getByTestId('risk-value-auto-last_minute_stop_seconds').props.children).toBe('10s');
+    expect(s.getByTestId('risk-value-auto-last_minute_ladder_seconds').props.children).toBe('2s');
+    expect(s.getByTestId('risk-value-auto-last_minute_clip_count').props.children).toBe('1');
+    expect(s.getByTestId('risk-value-auto-last_minute_max_clips').props.children).toBe('5');
+    expect(s.getByTestId('risk-value-auto-last_minute_both_min_ask').props.children).toMatch(/\$0\.90/);
+    expect(s.getByTestId('risk-value-auto-last_minute_both_gap').props.children).toBe('10¢');
+    expect(s.getByTestId('risk-value-auto-last_minute_flip_sell_usd').props.children).toBe('Off');
     expect(s.getByTestId('last-minute-asset-Gold')).toBeTruthy();
     expect(s.getByTestId('last-minute-asset-BTC')).toBeTruthy();
     expect(s.getByTestId('last-minute-side-yes')).toBeTruthy();

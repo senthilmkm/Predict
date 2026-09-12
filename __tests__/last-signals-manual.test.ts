@@ -207,6 +207,24 @@ describe('last signal extra line', () => {
       })
     ).toBe('Last-minute watching · 38s left');
     expect(
+      formatLastMinuteWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        secondsLeft: 120,
+      })
+    ).toBe('Last-minute watching · 120s left');
+    expect(
+      formatLastMinuteWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        secondsLeft: 160,
+      })
+    ).toBeNull();
+    expect(
       lastSignalExtraLine({
         manualKind: 'buy',
         autoTradeOn: true,

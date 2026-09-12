@@ -1084,10 +1084,14 @@ function RiskHelpModal({
             </HelpItem>
             <HelpItem title="Last-minute">
               Checked Last-minute assets that are also On in Cushions. Empty means no Last-minute
-              buys. Last 60 seconds, 1s watch. Buys Yes, No, or the last-minute favorite at or
-              under Entry ask (default $0.96). Not a lock. Does not pull coins off Cash out or
-              Auto. Window cap 1 still applies. TWAP lock keeps BTC/ETH if that path is On. Hold
-              to settlement. Default Off. Admin must enable the block first.
+              buys. Watch 1s quotes from Watch start (default 150s). First clip only when Both
+              still qualifies (usually last 60–90s), then clip ladder every Ladder wait while the
+              favorite ask is at or under Entry ask. Stop with ~10s left or a $1.00 ask. Not a
+              lock. Does not pull coins off Cash out or Auto. Window cap 1 still blocks the first
+              clip; ladder adds after that first Last-minute fill are extra. Sell if flip is Off
+              unless you set it — then only a real opposite-side flip sells those lots and frees
+              clip slots. TWAP lock keeps BTC/ETH if that path is On. Hold to settlement when flip
+              is Off. Default Off. Admin must enable the block first.
             </HelpItem>
 
             <HelpItem title="Restore defaults">

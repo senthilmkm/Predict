@@ -329,6 +329,7 @@ export function HomeScreen() {
         assetEnabled: config.assets_enabled?.[row.asset] !== false,
         asset: row.asset,
         assets: config.risk.last_minute_assets,
+        watchSeconds: config.risk.last_minute_watch_seconds,
         secondsLeft: twapWatchSecondsLeft(
           (leans[row.asset] as { close_utc?: string } | undefined)?.close_utc,
           nowMs

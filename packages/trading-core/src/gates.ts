@@ -161,7 +161,7 @@ export function formatSkipReason(reason: string | undefined): string {
     case 'last_minute_not_last_minute':
       return 'not last minute';
     case 'last_minute_ask_rich':
-      return 'ask too rich';
+      return 'Kalshi ask is above your Last-minute max';
     case 'last_minute_no_ask':
       return 'no ask';
     case 'last_minute_no_favorite':
@@ -174,8 +174,20 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'already holding';
     case 'last_minute_thin_bid':
       return 'bid too thin';
+    case 'last_minute_stop_window':
+      return 'Last-minute stop — no new clips';
+    case 'last_minute_max_clips':
+      return 'Last-minute max clips';
+    case 'last_minute_ladder_wait':
+      return 'Last-minute ladder wait';
     case 'last_minute_holding':
       return 'last-minute is holding this ticket';
+    case 'last_minute_flip':
+      return 'Last-minute flip sell';
+    case 'last_minute_no_flip':
+      return 'no Last-minute flip';
+    case 'last_minute_flip_off':
+      return 'Last-minute flip off';
     case 'no_open_fill':
       return 'no open fill to sell';
     case 'market_closed':

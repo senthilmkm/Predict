@@ -185,6 +185,16 @@ export interface RiskConfig {
   last_minute_side?: 'yes' | 'no' | 'both';
   /** Do not buy if the chosen side’s ask is above this. Default 0.96. Range 0.80–0.99. */
   last_minute_max_ask_usd?: number;
+  last_minute_watch_seconds?: number;
+  last_minute_enter_seconds?: number;
+  last_minute_stop_seconds?: number;
+  last_minute_ladder_seconds?: number;
+  last_minute_clip_count?: number;
+  last_minute_max_clips?: number;
+  last_minute_both_min_ask?: number;
+  last_minute_both_gap?: number;
+  /** 0 = Off. Sell a Last-minute lot when the other side is this much richer. */
+  last_minute_flip_sell_usd?: number;
   /** Last-minute Skip thin bid. Missing → inherit cash_out_skip_thin_bid. */
   last_minute_skip_thin_bid?: boolean;
   /** Assets on the Last-minute path. Missing → all catalog assets. Empty = no buys. */
@@ -312,6 +322,15 @@ export function defaultAppConfig(): AppConfig {
       last_minute_enabled: false,
       last_minute_side: 'yes',
       last_minute_max_ask_usd: 0.96,
+      last_minute_watch_seconds: 150,
+      last_minute_enter_seconds: 90,
+      last_minute_stop_seconds: 10,
+      last_minute_ladder_seconds: 2,
+      last_minute_clip_count: 1,
+      last_minute_max_clips: 5,
+      last_minute_both_min_ask: 0.9,
+      last_minute_both_gap: 0.1,
+      last_minute_flip_sell_usd: 0,
       last_minute_skip_thin_bid: false,
       last_minute_assets: ASSETS_CATALOG.map((a) => a.key),
     },

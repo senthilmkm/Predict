@@ -13,7 +13,7 @@ import {
 } from '../../packages/trading-core/src/twapLock';
 import {
   isLastMinuteEnterPath,
-  LAST_MINUTE_WATCH_SEC,
+  normalizeLastMinuteWatchSeconds,
 } from '../../packages/trading-core/src/lastMinute';
 
 export type GapLiveSide = 'above' | 'below';
@@ -242,7 +242,7 @@ export function formatTwapWatchLine(opts: {
   return `TWAP watching · ${Math.round(left)}s left`;
 }
 
-/** Last ~70s on an enabled Last-minute asset. TWAP line wins if both apply. */
+/** Watch window on an enabled Last-minute asset. TWAP line wins if both apply. */
 export function formatLastMinuteWatchLine(opts: {
   adminEnabled: boolean;
   userEnabled: boolean;
@@ -250,6 +250,7 @@ export function formatLastMinuteWatchLine(opts: {
   asset: string;
   assets?: unknown;
   secondsLeft: number | null;
+  watchSeconds?: unknown;
   autoDetail?: string | null;
   autoStatus?: string | null;
 }): string | null {
@@ -265,7 +266,8 @@ export function formatLastMinuteWatchLine(opts: {
     return null;
   }
   const left = opts.secondsLeft;
-  if (left == null || !Number.isFinite(left) || left <= 0 || left > LAST_MINUTE_WATCH_SEC) {
+  const watchSec = normalizeLastMinuteWatchSeconds(opts.watchSeconds);
+  if (left == null || !Number.isFinite(left) || left <= 0 || left > watchSec) {
     return null;
   }
   const status = String(opts.autoStatus || '');
