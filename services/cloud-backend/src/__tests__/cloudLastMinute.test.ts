@@ -3,6 +3,10 @@ import { app } from '../index';
 import { normalizeFeatureFlags } from '../services/featureFlags';
 import { pendingProtectTradesForMarket, runCloudProtectSells } from '../services/cloudProtectSell';
 import { evaluateLastMinuteEnter } from '../../../../packages/trading-core/src/lastMinute';
+import {
+  buildLastMinuteWatcherSnapshot,
+  formatLastMinuteWatcherChip,
+} from '../services/lastMinuteWatcher';
 import { defaultAppConfig } from '../../../../packages/trading-core/src/types';
 import { TradeRecordDoc } from '../services/firestore';
 
@@ -110,7 +114,10 @@ describe('Last-minute cloud wiring', () => {
             last_minute_enabled: true,
             last_minute_side: 'both',
             last_minute_max_ask_usd: 0.94,
+            last_minute_assets: ['Gold', 'WTI'],
+            last_minute_skip_thin_bid: true,
             twap_lock_enabled: true,
+            twap_lock_skip_thin_bid: false,
           },
         },
       });
@@ -118,7 +125,10 @@ describe('Last-minute cloud wiring', () => {
     expect(on.body.userDoc.config.risk.last_minute_enabled).toBe(true);
     expect(on.body.userDoc.config.risk.last_minute_side).toBe('both');
     expect(on.body.userDoc.config.risk.last_minute_max_ask_usd).toBe(0.94);
+    expect(on.body.userDoc.config.risk.last_minute_assets).toEqual(['Gold', 'WTI']);
+    expect(on.body.userDoc.config.risk.last_minute_skip_thin_bid).toBe(true);
     expect(on.body.userDoc.config.risk.twap_lock_enabled).toBe(true);
+    expect(on.body.userDoc.config.risk.twap_lock_skip_thin_bid).toBe(false);
     const off = await request(app)
       .post('/me/status')
       .set('Authorization', `Bearer ${uid}`)
@@ -130,5 +140,28 @@ describe('Last-minute cloud wiring', () => {
     expect(off.body.userDoc.config.risk.last_minute_enabled).toBe(false);
     expect(off.body.userDoc.config.risk.twap_lock_enabled).toBe(true);
     expect(off.body.userDoc.config.risk.last_minute_max_ask_usd).toBe(0.94);
+  });
+});
+
+describe('Last-minute watcher chip', () => {
+  test('idle when no users; watching lists coins and leftover seconds', () => {
+    const now = new Date('2026-09-12T00:44:20.000Z');
+    const close = new Date('2026-09-12T00:45:00.000Z');
+    expect(formatLastMinuteWatcherChip(null, now)).toBe('Last-minute watcher · idle');
+    const watching = buildLastMinuteWatcherSnapshot({
+      now,
+      watchUsers: new Map([['usr_1', ['BTC', 'ETH']]]),
+      closeByAsset: { BTC: close, ETH: close },
+    });
+    expect(watching.watching).toBe(true);
+    expect(watching.userCount).toBe(1);
+    expect(watching.assets).toEqual(['BTC', 'ETH']);
+    expect(watching.secondsLeft).toBe(40);
+    expect(formatLastMinuteWatcherChip(watching, now)).toBe(
+      'Last-minute watcher · 1 user · BTC ETH · 40s left'
+    );
+    expect(formatLastMinuteWatcherChip(watching, new Date(now.getTime() + 20_000))).toBe(
+      'Last-minute watcher · idle'
+    );
   });
 });

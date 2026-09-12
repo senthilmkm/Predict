@@ -1066,11 +1066,10 @@ function RiskHelpModal({
               Cuts a full $0 settle loss. You may get fewer $1 window wins.
             </HelpItem>
             <HelpItem title="Skip thin bid">
-              Default Off. When On, Cloud reads Kalshi’s order book. If the best bid has fewer
-              contracts than you are about to buy (or already hold), it skips the buy or sells
-              early. Does not change max ask, target, or stop. A book timeout does not skip or dump.
-              The same switch applies to Gold fade. For TWAP lock, an unknown book size skips the
-              buy (fail closed).
+              Each Cloud path has its own checkbox (default Off), shown only when that path is On.
+              Home Buy does not use it. Cash out and Gold fade skip the buy and can sell if you
+              already hold; a book timeout does not skip or dump. TWAP lock and Last-minute only
+              skip the buy and still hold; an unknown book size fails closed (no buy). See FAQ.
             </HelpItem>
             <HelpItem title="Gold fade">
               Gold only. When the gap is at most Max gap, Cloud buys the cheaper ticket and sells
@@ -1084,10 +1083,11 @@ function RiskHelpModal({
               Admin must enable the block first.
             </HelpItem>
             <HelpItem title="Last-minute">
-              Any asset you have On. Last 60 seconds, 1s watch. Buys Yes, No, or the last-minute
-              favorite at or under Entry ask (default $0.96). Not a lock. Does not pull coins off
-              Cash out or Auto. Window cap 1 still applies. TWAP lock keeps BTC/ETH if that path
-              is On. Hold to settlement. Default Off. Admin must enable the block first.
+              Checked Last-minute assets that are also On in Cushions. Empty means no Last-minute
+              buys. Last 60 seconds, 1s watch. Buys Yes, No, or the last-minute favorite at or
+              under Entry ask (default $0.96). Not a lock. Does not pull coins off Cash out or
+              Auto. Window cap 1 still applies. TWAP lock keeps BTC/ETH if that path is On. Hold
+              to settlement. Default Off. Admin must enable the block first.
             </HelpItem>
 
             <HelpItem title="Restore defaults">

@@ -248,6 +248,7 @@ export function formatLastMinuteWatchLine(opts: {
   userEnabled: boolean;
   assetEnabled: boolean;
   asset: string;
+  assets?: unknown;
   secondsLeft: number | null;
   autoDetail?: string | null;
   autoStatus?: string | null;
@@ -258,6 +259,7 @@ export function formatLastMinuteWatchLine(opts: {
       userEnabled: opts.userEnabled,
       assetEnabled: opts.assetEnabled,
       asset: opts.asset,
+      assets: opts.assets,
     })
   ) {
     return null;

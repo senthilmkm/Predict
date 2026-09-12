@@ -40,6 +40,8 @@ import {
 import {
   emitCloudAlert,
   fillAlertId,
+  iocMissAlertBody,
+  iocMissAlertTitle,
   missAlertId,
   orderPlacedAlertTitle,
   leanAlertSide,
@@ -105,12 +107,18 @@ import {
   resolveLastMinuteCloseUtc,
   tickerHasOpenLastMinute,
 } from '../../../../packages/trading-core/src/lastMinute';
+import { resolveSkipThinBid } from '../../../../packages/trading-core/src/skipThinBid';
 import { cfbRtiBuffer, fetchCfbRtiPrints, ingestRecentCfbPrints } from '../services/cfbRti';
 import {
   buildTwapLockWatcherSnapshot,
   persistTwapLockWatcherSnapshot,
   resetTwapLockWatcherMemoryForTests,
 } from '../services/twapLockWatcher';
+import {
+  buildLastMinuteWatcherSnapshot,
+  persistLastMinuteWatcherSnapshot,
+  resetLastMinuteWatcherMemoryForTests,
+} from '../services/lastMinuteWatcher';
 
 export const workerRouter = Router();
 
@@ -163,6 +171,30 @@ async function flushTwapLockWatcher(
   );
 }
 
+function lastMinuteWatcherCloseByAsset(
+  now: Date,
+  leans: Partial<Record<string, { close_utc?: string | Date | null }>>
+): Record<string, Date | null | undefined> {
+  const out: Record<string, Date | null | undefined> = {};
+  for (const asset of new Set([...lastMinuteWatchUsers.values()].flat())) {
+    out[asset] = resolveLastMinuteCloseUtc(leans[asset] || {}, now);
+  }
+  return out;
+}
+
+async function flushLastMinuteWatcher(
+  now: Date,
+  leans: Partial<Record<string, { close_utc?: string | Date | null }>>
+): Promise<void> {
+  await persistLastMinuteWatcherSnapshot(
+    buildLastMinuteWatcherSnapshot({
+      now,
+      watchUsers: lastMinuteWatchUsers,
+      closeByAsset: lastMinuteWatcherCloseByAsset(now, leans),
+    })
+  );
+}
+
 export function resetLeanAlertMemoryForTests(): void {
   leanAlertMemory.clear();
   cashOutWatchUsers.clear();
@@ -170,6 +202,7 @@ export function resetLeanAlertMemoryForTests(): void {
   twapLockWatchUsers.clear();
   lastMinuteWatchUsers.clear();
   resetTwapLockWatcherMemoryForTests();
+  resetLastMinuteWatcherMemoryForTests();
 }
 
 function loadLeanAlertsSent(userId: string, fromDoc: any): LeanAlertsSent {
@@ -252,6 +285,7 @@ async function runOneTick() {
     twapLockWatchUsers.clear();
     lastMinuteWatchUsers.clear();
     await flushTwapLockWatcher(now, {});
+    await flushLastMinuteWatcher(now, {});
     return { timestamp: now.toISOString(), activeUserCount: 0, results: [] };
   }
 
@@ -409,6 +443,7 @@ async function runOneTick() {
                 userEnabled: Boolean(cfg.risk?.last_minute_enabled),
                 assetEnabled: cfg.assets_enabled?.[asset] !== false,
                 asset,
+                assets: cfg.risk?.last_minute_assets,
               }) &&
               !lastMinuteTwapOwns({
                 twapAdminEnabled: featureFlags.twapLock,
@@ -522,11 +557,11 @@ async function runOneTick() {
                   cashOutBidUsd: Number(cfg.risk?.cash_out_bid_usd ?? 0.88),
                   cashOutMaxAskUsd: Number(cfg.risk?.cash_out_max_ask_usd ?? 0.82),
                   stopUsd: normalizeCashOutStopUsd(cfg.risk?.cash_out_stop_usd),
-                  skipThinBid: Boolean(cfg.risk?.cash_out_skip_thin_bid),
+                  skipThinBid: resolveSkipThinBid(cfg.risk, 'cash_out'),
                   bidSize: await cashOutBestBidSize(
                     marketTicker,
                     pendingCashOutTradesForMarket(userTrades, marketTicker)[0]?.decision || lean.decision,
-                    Boolean(cfg.risk?.cash_out_skip_thin_bid)
+                    resolveSkipThinBid(cfg.risk, 'cash_out')
                   ),
                   graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
                   slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
@@ -582,7 +617,7 @@ async function runOneTick() {
               if (secret?.privateKeyPem && secret.keyId) {
                 const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
                 const heldFade = pendingGoldFadeTradesForMarket(userTrades, marketTicker)[0];
-                const fadeSkipThin = Boolean(cfg.risk?.cash_out_skip_thin_bid);
+                const fadeSkipThin = resolveSkipThinBid(cfg.risk, 'gold_fade');
                 const fadeRes = await runCloudGoldFadeExits({
                   userId,
                   asset,
@@ -719,7 +754,10 @@ async function runOneTick() {
               timeseries: lean.timeseries,
               close_utc: lean.close_utc,
             };
-            const skipThinBid = Boolean(cfg.risk?.cash_out_skip_thin_bid);
+            const cashOutThin = resolveSkipThinBid(cfg.risk, 'cash_out');
+            const fadeThin = resolveSkipThinBid(cfg.risk, 'gold_fade');
+            const twapThin = resolveSkipThinBid(cfg.risk, 'twap_lock');
+            const lastThin = resolveSkipThinBid(cfg.risk, 'last_minute');
             const fadeSide = goldFadeCheapSide(leanForGate);
             if (twapLockWanted && twapClose && isTwapLockWatchWindow(now, twapClose)) {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
@@ -742,8 +780,8 @@ async function runOneTick() {
                   assetTradesInWindow: existingBuys,
                   dailyPnlUsd,
                   hasOpenOnTicker: tickerHasOpenFill(userTrades, marketTicker),
-                  skipThinBid,
-                  bidSize: await cashOutBestBidSize(marketTicker, 'YES', skipThinBid),
+                  skipThinBid: twapThin,
+                  bidSize: await cashOutBestBidSize(marketTicker, 'YES', twapThin),
                 })
               : lastMinuteWatching
               ? evaluateLastMinuteEnter({
@@ -757,11 +795,11 @@ async function runOneTick() {
                   assetTradesInWindow: existingBuys,
                   dailyPnlUsd,
                   hasOpenOnTicker: tickerHasOpenFill(userTrades, marketTicker),
-                  skipThinBid,
+                  skipThinBid: lastThin,
                   bidSize: await cashOutBestBidSize(
                     marketTicker,
                     lastMinutePickedSide(leanForGate, cfg),
-                    skipThinBid
+                    lastThin
                   ),
                 })
               : goldFadeEnter
@@ -774,8 +812,8 @@ async function runOneTick() {
                   assetTradesInWindow: existingBuys,
                   dailyPnlUsd,
                   hasOpenOnTicker: tickerHasOpenFill(userTrades, marketTicker),
-                  skipThinBid,
-                  bidSize: await cashOutBestBidSize(marketTicker, fadeSide || lean.decision, skipThinBid),
+                  skipThinBid: fadeThin,
+                  bidSize: await cashOutBestBidSize(marketTicker, fadeSide || lean.decision, fadeThin),
                 })
               : cashOutEnter
                 ? evaluateCashOutEnter({
@@ -787,8 +825,8 @@ async function runOneTick() {
                     assetTradesInWindow: existingBuys,
                     dailyPnlUsd,
                     hasOpenNonCashOutOnTicker: tickerHasOpenNonCashOut(userTrades, marketTicker),
-                    skipThinBid,
-                    bidSize: await cashOutBestBidSize(marketTicker, lean.decision, skipThinBid),
+                    skipThinBid: cashOutThin,
+                    bidSize: await cashOutBestBidSize(marketTicker, lean.decision, cashOutThin),
                   })
                 : evaluateStaticGate(leanForGate, cfg, {
                     openPositions,
@@ -959,8 +997,12 @@ async function runOneTick() {
                   userId,
                   alertId: missAlertId(tradeId),
                   kind: 'ioc_miss',
-                  title: 'IOC miss',
-                  body: `${asset} ${placeDecision} · IOC no fill`,
+                  title: iocMissAlertTitle(entryPath),
+                  body: iocMissAlertBody({
+                    asset,
+                    decision: String(placeDecision || ''),
+                    entryPath,
+                  }),
                   cfg,
                   tokens: userTokens,
                   asset: lean.asset,
@@ -1016,6 +1058,17 @@ async function runOneTick() {
             const watchAssets = assets.filter((a) => {
               if (cfg.assets_enabled?.[a] === false) return false;
               if (
+                !isLastMinuteEnterPath({
+                  adminEnabled: true,
+                  userEnabled: true,
+                  assetEnabled: true,
+                  asset: a,
+                  assets: cfg.risk?.last_minute_assets,
+                })
+              ) {
+                return false;
+              }
+              if (
                 lastMinuteTwapOwns({
                   twapAdminEnabled: featureFlags.twapLock,
                   twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
@@ -1056,6 +1109,7 @@ async function runOneTick() {
   }
 
   await flushTwapLockWatcher(now, sharedLeans);
+  await flushLastMinuteWatcher(now, sharedLeans);
   return { timestamp: now.toISOString(), activeUserCount: activeUsers.length, results };
 }
 
@@ -1171,7 +1225,7 @@ export async function runTwapLockWatchTick(): Promise<{
         } catch {
           /* keep lean ask */
         }
-        const skipThinBid = Boolean(cfg.risk?.cash_out_skip_thin_bid);
+        const skipThinBid = resolveSkipThinBid(cfg.risk, 'twap_lock');
         const absGap = Number.isFinite(Number(lean.abs_gap))
           ? Number(lean.abs_gap)
           : Math.abs((lean.live || 0) - (lean.strike || 0));
@@ -1339,7 +1393,9 @@ export async function runLastMinuteWatchTick(): Promise<{
   paused?: boolean;
 }> {
   if (lastMinuteWatchUsers.size === 0) {
-    return { timestamp: new Date().toISOString(), watched: 0 };
+    const now = new Date();
+    await flushLastMinuteWatcher(now, {});
+    return { timestamp: now.toISOString(), watched: 0 };
   }
   const now = new Date();
   const sysConfig = await getSystemConfig();
@@ -1350,6 +1406,7 @@ export async function runLastMinuteWatchTick(): Promise<{
   }
   if (!featureFlags.lastMinute) {
     lastMinuteWatchUsers.clear();
+    await flushLastMinuteWatcher(now, {});
     return { timestamp: now.toISOString(), watched: 0 };
   }
 
@@ -1432,7 +1489,7 @@ export async function runLastMinuteWatchTick(): Promise<{
         } catch {
           /* keep lean ask */
         }
-        const skipThinBid = Boolean(cfg.risk?.cash_out_skip_thin_bid);
+        const skipThinBid = resolveSkipThinBid(cfg.risk, 'last_minute');
         const absGap = Number.isFinite(Number(lean.abs_gap))
           ? Number(lean.abs_gap)
           : Math.abs((lean.live || 0) - (lean.strike || 0));
@@ -1585,6 +1642,25 @@ export async function runLastMinuteWatchTick(): Promise<{
               decision: placeDecision,
               at: now.toISOString(),
             });
+          } else if (!accepted) {
+            await emitCloudAlert({
+              userId,
+              alertId: missAlertId(tradeId),
+              kind: 'ioc_miss',
+              title: iocMissAlertTitle('last_minute'),
+              body: iocMissAlertBody({
+                asset,
+                decision: String(placeDecision || ''),
+                entryPath: 'last_minute',
+              }),
+              cfg,
+              tokens: userTokens,
+              asset: lean.asset,
+              ticker: marketTicker,
+              tradeId,
+              decision: placeDecision,
+              at: now.toISOString(),
+            });
           }
         } finally {
           await releasePlaceLock({ userId, ticker: marketTicker, requestId: placeRequestId });
@@ -1599,6 +1675,7 @@ export async function runLastMinuteWatchTick(): Promise<{
     }
   }
 
+  await flushLastMinuteWatcher(now, sharedLeans);
   return { timestamp: now.toISOString(), watched };
 }
 
@@ -1683,11 +1760,11 @@ export async function runCashOutBidWatchTick(): Promise<{
           cashOutBidUsd: Number(cfg.risk?.cash_out_bid_usd ?? 0.88),
           cashOutMaxAskUsd: Number(cfg.risk?.cash_out_max_ask_usd ?? 0.82),
           stopUsd: normalizeCashOutStopUsd(cfg.risk?.cash_out_stop_usd),
-          skipThinBid: Boolean(cfg.risk?.cash_out_skip_thin_bid),
+          skipThinBid: resolveSkipThinBid(cfg.risk, 'cash_out'),
           bidSize: await cashOutBestBidSize(
             marketTicker,
             pendingCashOutTradesForMarket(userTrades, marketTicker)[0]?.decision || lean.decision,
-            Boolean(cfg.risk?.cash_out_skip_thin_bid)
+            resolveSkipThinBid(cfg.risk, 'cash_out')
           ),
           graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
           slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
@@ -1751,7 +1828,7 @@ export async function runCashOutBidWatchTick(): Promise<{
       const secret = await getUserSecret(userId);
       if (!secret?.privateKeyPem || !secret.keyId) continue;
       const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
-      const fadeSkipThin = Boolean(cfg.risk?.cash_out_skip_thin_bid);
+      const fadeSkipThin = resolveSkipThinBid(cfg.risk, 'gold_fade');
       for (const asset of assets) {
         const lean = sharedLeans[asset];
         if (!lean?.market_ticker) continue;
@@ -1850,42 +1927,43 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
   const bidCheckSec = Math.min(flags.cashOutBidCheckSeconds, flags.goldFadeBidCheckSeconds);
   const tickCount = isTest ? 1 : Math.max(1, Math.floor(60 / intervalSec));
   const delayMs = intervalSec * 1000;
+  const minuteEndAt = Date.now() + (isTest ? 0 : 58_000);
   let lastResult: any = { activeUserCount: 0, results: [] };
 
   for (let i = 0; i < tickCount; i++) {
     lastResult = await runOneTick();
     if (lastResult?.paused) break;
-    if (i < tickCount - 1) {
-      const endAt = Date.now() + delayMs;
-      let nextWatch = Date.now() + bidCheckSec * 1000;
-      let nextTwap = Date.now() + 1000;
-      while (Date.now() <= endAt - 80) {
-        const nextAt = Math.min(nextWatch, nextTwap, endAt);
-        await sleepMs(Math.max(0, nextAt - Date.now()));
-        if (Date.now() > endAt - 80) break;
-        const lastMinuteWatching =
-          twapLockWatchUsers.size > 0 || lastMinuteWatchUsers.size > 0;
-        if (lastMinuteWatching && Date.now() + 20 >= nextTwap) {
-          if (twapLockWatchUsers.size > 0) {
-            const twap = await runTwapLockWatchTick();
-            if (twap.paused) break;
-          }
-          if (lastMinuteWatchUsers.size > 0) {
-            const lm = await runLastMinuteWatchTick();
-            if (lm.paused) break;
-          }
-          nextTwap += 1000;
-        } else if (!lastMinuteWatching) {
-          nextTwap = Date.now() + 1000;
+    if (isTest) break;
+    const lastSubTick = i >= tickCount - 1;
+    const endAt = lastSubTick ? minuteEndAt : Date.now() + delayMs;
+    if (Date.now() > endAt - 80) continue;
+    let nextWatch = Date.now() + bidCheckSec * 1000;
+    let nextTwap = Date.now() + 1000;
+    while (Date.now() <= endAt - 80) {
+      const nextAt = Math.min(nextWatch, nextTwap, endAt);
+      await sleepMs(Math.max(0, nextAt - Date.now()));
+      if (Date.now() > endAt - 80) break;
+      const lastMinuteWatching = twapLockWatchUsers.size > 0 || lastMinuteWatchUsers.size > 0;
+      if (lastMinuteWatching && Date.now() + 20 >= nextTwap) {
+        if (twapLockWatchUsers.size > 0) {
+          const twap = await runTwapLockWatchTick();
+          if (twap.paused) break;
         }
-        if (Date.now() + 20 >= nextWatch && Date.now() <= endAt - 80) {
-          const watch = await runCashOutBidWatchTick();
-          if (watch.paused) break;
-          nextWatch += bidCheckSec * 1000;
+        if (lastMinuteWatchUsers.size > 0) {
+          const lm = await runLastMinuteWatchTick();
+          if (lm.paused) break;
         }
+        nextTwap += 1000;
+      } else if (!lastMinuteWatching) {
+        nextTwap = Date.now() + 1000;
       }
-      await sleepMs(Math.max(0, endAt - Date.now()));
+      if (Date.now() + 20 >= nextWatch && Date.now() <= endAt - 80) {
+        const watch = await runCashOutBidWatchTick();
+        if (watch.paused) break;
+        nextWatch += bidCheckSec * 1000;
+      }
     }
+    if (!lastSubTick) await sleepMs(Math.max(0, endAt - Date.now()));
   }
 
   // Trading sub-ticks finish first. Purge last so we never delete a fill the tick just wrote.

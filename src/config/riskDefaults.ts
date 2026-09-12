@@ -3,7 +3,7 @@
  * Also seeded into phone storage (`foresight.risk.defaults.v3`) so
  * Settings → Restore defaults can reload them offline.
  */
-import { RiskConfig, TimeInForce } from './types';
+import { AssetRegistry, RiskConfig, TimeInForce } from './types';
 
 export const DEFAULT_RISK_CONFIG: RiskConfig = {
   fixed_dollars_per_trade: 5,
@@ -37,12 +37,16 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   gold_fade_take_usd: 0.06,
   gold_fade_stop_usd: 0.05,
   gold_fade_flatten_minutes: 3,
+  gold_fade_skip_thin_bid: false,
   twap_lock_enabled: false,
   twap_lock_assets: ['BTC', 'ETH'],
   twap_lock_max_ask_usd: 0.96,
+  twap_lock_skip_thin_bid: false,
   last_minute_enabled: false,
   last_minute_side: 'yes',
   last_minute_max_ask_usd: 0.96,
+  last_minute_skip_thin_bid: false,
+  last_minute_assets: AssetRegistry.keys,
 };
 
 export type RiskFieldGroup = 'size' | 'caps' | 'timing';

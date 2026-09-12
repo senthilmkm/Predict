@@ -12,3 +12,4 @@ export * from './cashOut';
 export * from './goldFade';
 export * from './twapLock';
 export * from './lastMinute';
+export * from './skipThinBid';

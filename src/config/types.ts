@@ -179,12 +179,20 @@ export interface RiskConfig {
   gold_fade_take_usd?: number;
   gold_fade_stop_usd?: number;
   gold_fade_flatten_minutes?: number;
+  /** Gold fade Skip thin bid. Missing → inherit cash_out_skip_thin_bid. */
+  gold_fade_skip_thin_bid?: boolean;
   twap_lock_enabled?: boolean;
   twap_lock_assets?: string[];
   twap_lock_max_ask_usd?: number;
+  /** TWAP lock Skip thin bid. Missing → inherit cash_out_skip_thin_bid. */
+  twap_lock_skip_thin_bid?: boolean;
   last_minute_enabled?: boolean;
   last_minute_side?: 'yes' | 'no' | 'both';
   last_minute_max_ask_usd?: number;
+  /** Last-minute Skip thin bid. Missing → inherit cash_out_skip_thin_bid. */
+  last_minute_skip_thin_bid?: boolean;
+  /** Assets on the Last-minute path. Missing → all catalog assets. Empty = no buys. */
+  last_minute_assets?: string[];
 }
 
 export interface AlertPref {
@@ -302,12 +310,16 @@ export function defaultAppConfig(): AppConfig {
       gold_fade_take_usd: 0.06,
       gold_fade_stop_usd: 0.05,
       gold_fade_flatten_minutes: 3,
+      gold_fade_skip_thin_bid: false,
       twap_lock_enabled: false,
       twap_lock_assets: ['BTC', 'ETH'],
       twap_lock_max_ask_usd: 0.96,
+      twap_lock_skip_thin_bid: false,
       last_minute_enabled: false,
       last_minute_side: 'yes',
       last_minute_max_ask_usd: 0.96,
+      last_minute_skip_thin_bid: false,
+      last_minute_assets: AssetRegistry.keys,
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

@@ -119,6 +119,8 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.worker.gcpProject).toBe('predict-trading-0904');
     expect(res.body.twapLockWatcher.label).toBe('TWAP watcher · idle');
     expect(res.body.twapLockWatcher.watching).toBe(false);
+    expect(res.body.lastMinuteWatcher.label).toBe('Last-minute watcher · idle');
+    expect(res.body.lastMinuteWatcher.watching).toBe(false);
   });
 
   test('4. GET /admin/api/users retrieves list of all enrolled users', async () => {

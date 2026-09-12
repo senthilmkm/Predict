@@ -82,7 +82,7 @@ export const PATH_INFO = {
     body:
       'Uses\n' +
       '• Checked Cash out assets, Enter cushion %, Cash out max ask / bid / stop\n' +
-      '• Skip thin bid (this switch)\n' +
+      '• This path’s Skip thin bid checkbox\n' +
       '• $ per trade and shared caps\n' +
       '• Minutes left floor of 3 (never last-minute)\n\n' +
       'Does not use\n' +
@@ -100,7 +100,7 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Gold only\n' +
       '• Max gap, max cheap ask, take, stop, flatten minutes\n' +
-      '• $ per trade, shared caps, Skip thin bid\n\n' +
+      '• $ per trade, shared caps, this path’s Skip thin bid\n\n' +
       'Does not use\n' +
       '• Auto max ask, Smart buy, Protect, Cash out bid/stop\n' +
       '• TWAP lock / Last-minute fields\n' +
@@ -116,7 +116,7 @@ export const PATH_INFO = {
       'Uses\n' +
       '• BTC / ETH chips, this path’s max ask\n' +
       '• $ per trade, window cap 1, shared caps\n' +
-      '• Skip thin bid (fail closed if book size unknown)\n' +
+      '• This path’s Skip thin bid (fail closed if book size unknown)\n' +
       '• IOC, 1-second CF Benchmarks watch in the last 60s\n' +
       '• $0 leftover lock only (banked ≥ strike × 60), Yes only\n\n' +
       'Does not use\n' +
@@ -131,10 +131,10 @@ export const PATH_INFO = {
     title: 'Last-minute',
     body:
       'Uses\n' +
-      '• Any asset you have On\n' +
+      '• Checked Last-minute assets that are also On in Cushions\n' +
       '• This path’s entry ask and Yes / No / Both\n' +
       '• $ per trade, window cap 1, shared caps\n' +
-      '• Skip thin bid, IOC, 1-second watch in the last 60s\n\n' +
+      '• This path’s Skip thin bid, IOC, 1-second watch in the last 60s\n\n' +
       'Does not use\n' +
       '• Cushions\n' +
       '• Auto max ask, Smart buy, chase, minutes left/elapsed, Auto TIF\n' +

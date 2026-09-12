@@ -1,5 +1,16 @@
 import { parseTradeEntryPath } from '../../../../packages/trading-core/src/cashOut';
 import { CloudAlertDoc, TradeRecordDoc, saveAlertRecord, updateTradeRecord } from './firestore';
+import {
+  claimLeanAlert,
+  fillPushEnabled,
+  leanAlertKey,
+  leanAlertPushTokens,
+  leanCollapseId,
+  leanPushEnabled,
+  type LeanAlertsSent,
+} from './leanAlerts';
+import { protectPushEnabled } from './cloudProtectSell';
+import { sendPushNotification } from './notifications';
 
 export function orderPlacedPathTag(
   raw: unknown
@@ -14,6 +25,11 @@ export function orderPlacedPathTag(
   return null;
 }
 
+export function pathTaggedAlertTitle(base: string, entryPath?: unknown): string {
+  const tag = orderPlacedPathTag(entryPath);
+  return tag ? `${base} · ${tag}` : base;
+}
+
 export function orderPlacedAlertTitle(opts: {
   live: boolean;
   asset: string;
@@ -25,17 +41,16 @@ export function orderPlacedAlertTitle(opts: {
   const rest = `${opts.asset} ${opts.decision}`.trim();
   return tag ? `${prefix} · ${tag} · ${rest}` : `${prefix} · ${rest}`;
 }
-import {
-  claimLeanAlert,
-  fillPushEnabled,
-  leanAlertKey,
-  leanAlertPushTokens,
-  leanCollapseId,
-  leanPushEnabled,
-  type LeanAlertsSent,
-} from './leanAlerts';
-import { protectPushEnabled } from './cloudProtectSell';
-import { sendPushNotification } from './notifications';
+
+export function iocMissAlertTitle(entryPath?: unknown): string {
+  return pathTaggedAlertTitle('IOC miss', entryPath);
+}
+
+export function iocMissAlertBody(opts: { asset: string; decision: string; entryPath?: unknown }): string {
+  const tag = orderPlacedPathTag(opts.entryPath);
+  const rest = `${opts.asset} ${opts.decision} · IOC no fill`.trim();
+  return tag ? `${tag} · ${rest}` : rest;
+}
 
 const MONEY_KINDS = new Set([
   'order_filled',
@@ -116,8 +131,12 @@ export function settlementAlertFromTrade(
   if (settledAt > nowMs + 60_000) return null;
   const pnlUsd = Math.round(Number(trade.pnlUsd || 0) * 100) / 100;
   if (!Number.isFinite(pnlUsd)) return null;
-  const title = trade.outcome === 'win' ? 'Trade won' : 'Trade lost';
-  const body = `${trade.asset} ${trade.decision} · P&L $${pnlUsd.toFixed(2)} · ${trade.ticker}`;
+  const title = pathTaggedAlertTitle(
+    trade.outcome === 'win' ? 'Trade won' : 'Trade lost',
+    trade.entryPath
+  );
+  const tag = orderPlacedPathTag(trade.entryPath);
+  const body = `${tag ? `${tag} · ` : ''}${trade.asset} ${trade.decision} · P&L $${pnlUsd.toFixed(2)} · ${trade.ticker}`;
   return { alertId: settleAlertId(trade.tradeId), title, body, pnlUsd };
 }
 

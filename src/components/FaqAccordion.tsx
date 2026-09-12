@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
-import { FaqItem, getFaqCategories } from '../content/faq';
+import { FaqItem, FaqTable, getFaqCategories } from '../content/faq';
 
 export function FaqAccordion() {
   const categories = useMemo(() => getFaqCategories(), []);
@@ -51,10 +51,36 @@ function FaqRow({
         <Text style={styles.chevron}>{open ? '−' : '+'}</Text>
       </Pressable>
       {open ? (
-        <Text style={styles.answer} testID={`faq-a-${item.id}`}>
-          {item.a}
-        </Text>
+        <View>
+          <Text style={styles.answer} testID={`faq-a-${item.id}`}>
+            {item.a}
+          </Text>
+          {item.table ? <FaqTableView table={item.table} testID={`faq-table-${item.id}`} /> : null}
+        </View>
       ) : null}
+    </View>
+  );
+}
+
+function FaqTableView({ table, testID }: { table: FaqTable; testID: string }) {
+  return (
+    <View style={styles.table} testID={testID}>
+      <View style={[styles.tableRow, styles.tableHead]}>
+        {table.headers.map((h) => (
+          <Text key={h} style={[styles.tableCell, styles.tableHeadText]}>
+            {h}
+          </Text>
+        ))}
+      </View>
+      {table.rows.map((row) => (
+        <View key={row[0]} style={styles.tableRow}>
+          {row.map((cell, i) => (
+            <Text key={`${row[0]}-${i}`} style={[styles.tableCell, i === 0 && styles.tablePath]}>
+              {cell}
+            </Text>
+          ))}
+        </View>
+      ))}
     </View>
   );
 }
@@ -109,5 +135,38 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 10,
     paddingBottom: 12,
+  },
+  table: {
+    marginHorizontal: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  tableHead: {
+    borderTopWidth: 0,
+    backgroundColor: 'rgba(198,167,94,0.12)',
+  },
+  tableCell: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+  },
+  tableHeadText: {
+    color: colors.gold,
+    fontWeight: '800',
+  },
+  tablePath: {
+    color: colors.textPrimary,
+    fontWeight: '800',
   },
 });

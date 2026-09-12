@@ -4,10 +4,16 @@
  */
 import { supportContactEmail } from '../config/appMeta';
 
+export type FaqTable = {
+  headers: string[];
+  rows: string[][];
+};
+
 export type FaqItem = {
   id: string;
   q: string;
   a: string;
+  table?: FaqTable;
 };
 
 export type FaqCategory = {
@@ -289,7 +295,7 @@ export function getFaqCategories(): FaqCategory[] {
             'Crypto can run 24/7. Other groups follow exchange hours (Eastern Time):\n' +
             '• US indexes: about 9:30 AM–4:00 PM ET, weekdays\n' +
             '• Gold, oil, and other Kalshi 15-minute commodities: poll whenever Kalshi lists a live book, including Friday night\n\n' +
-            'Home may show a weekend/holiday banner for stocks and forex. Crypto and commodities still lean when Kalshi has a book.',
+            'Home may show a one-line weekend/holiday banner for stocks and forex. Tap the i for hours. Crypto and commodities still lean when Kalshi has a book.',
         },
         {
           id: 'turn-off-asset',
@@ -418,7 +424,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Cash out.\n\n' +
             'Checked assets use Cash out instead of normal Auto. It buys when the gap is your Enter cushion % of the Cushions dollar (default 60%), the ask is at or under Max ask (default $0.82), and the book is tight. It then sells when the bid is up by Cash out bid minus max ask from what you paid (paid $0.82 → $0.88; paid $0.78 → $0.84). If the bid falls by Cash out stop below the fill (default 5¢), it sells to cut a full $0 loss. If the lean fully flips by a full cushion, it sells to get out. If none of those happen, the ticket settles $1 or $0 — no last-second dump.\n\n' +
-            'Skip thin bid (default Off): Cloud also looks at how many contracts sit on the bid. If that pile is smaller than the contracts you are about to buy, it skips. If you already hold and the pile shrinks below what you hold, it sells. Fetch failure does not skip or dump.\n\n' +
+            'Each path has its own Skip thin bid checkbox (default Off). See Skip thin bid in FAQ for what happens if the book is thin or unknown.\n\n' +
             'Home Buy and Cash out never share a ticker. Protect money does not sell Cash out lots.',
         },
         {
@@ -438,7 +444,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Gold fade?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Gold fade. Default Off. Gold only.\n\n' +
-            'When the gap (live vs strike) is at most Max gap (default $3), Cloud buys the cheaper ticket if that ask is at or under Max cheap ask (default $0.50) and the book is tight. It then sells all contracts if the bid is up Take profit from what you paid (default 6¢), hits Gold fade stop (default 5¢), the bid pile is thinner than you hold (when Skip thin bid is On), minutes left hit Flatten (default 3), the window ends, or the gap blows a full Gold cushion against you.\n\n' +
+            'When the gap (live vs strike) is at most Max gap (default $3), Cloud buys the cheaper ticket if that ask is at or under Max cheap ask (default $0.50) and the book is tight. It then sells all contracts if the bid is up Take profit from what you paid (default 6¢), hits Gold fade stop (default 5¢), the bid pile is thinner than you hold (when this path’s Skip thin bid is On), minutes left hit Flatten (default 3), the window ends, or the gap blows a full Gold cushion against you.\n\n' +
             'This is not Cash out. Cash out buys the favorite on a large gap and does not dump at the bell. Fade buys the cheap side on a small gap and always flattens. Home, Auto, and Cash out never share a ticker with a Gold fade lot. Protect money does not sell fade lots.',
         },
         {
@@ -459,7 +465,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → TWAP lock. Default Off. BTC and ETH only.\n\n' +
             'Kalshi crypto 15m settles on a 60-second average of official CF Benchmarks prints in the last minute. TWAP lock buys Yes only when the running sum already wins even if every leftover second is $0 (banked ≥ strike × 60). Max ask default $0.96 (range $0.90–$0.97). Then it holds to $1 — no stop, fade, or dump.\n\n' +
-            'Most windows do nothing. A true lock usually appears in the last 1–3 seconds, and only if the running average is already well above the strike. If Yes is 98–99¢, we skip. Missing a second or a bad book (when Skip thin bid is On) fails closed — no buy.\n\n' +
+            'Most windows do nothing. A true lock usually appears in the last 1–3 seconds, and only if the running average is already well above the strike. If Yes is 98–99¢, we skip. Missing a second or a bad book (when this path’s Skip thin bid is On) fails closed — no buy.\n\n' +
             'This is not Cash out and not Gold fade. While TWAP lock is On for BTC or ETH, Cloud will not Cash out or Auto-lean that coin — those paths would spend the window before a lock can appear. Home Buy is still a tap. Gold and other Cash out assets are unchanged. Protect money does not sell TWAP lock lots.',
         },
         {
@@ -478,16 +484,54 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'lastminute-how',
           q: 'What is Last-minute?',
           a:
-            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Last-minute. Default Off. Any asset you have On.\n\n' +
+            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Last-minute. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Last-minute buys.\n\n' +
             'In the last 60 seconds Cloud watches once per second and buys Yes, No, or the last-minute favorite if that side’s ask is at or under Entry ask (default $0.96). Both sits out a 50/50 book. Then it holds to settlement — no Protect, Cash out, fade, or Home Sell exit.\n\n' +
             'This is not TWAP lock. There is no $0 leftover math. Last seconds can flip. You can lose the full entry ask.\n\n' +
-            'Cash out and Auto already sit out the last minute, so Last-minute does not pull coins off those paths. Window cap 1 still applies: if Auto or Cash out already filled this coin this window, Last-minute sits out. If TWAP lock is On for BTC/ETH, those two stay with TWAP. Skip thin bid (above) applies. IOC only.',
+            'Cash out and Auto already sit out the last minute, so Last-minute does not pull coins off those paths. Window cap 1 still applies: if Auto or Cash out already filled this coin this window, Last-minute sits out. If TWAP lock is On for BTC/ETH, those two stay with TWAP. This path’s Skip thin bid applies (unknown book fails closed). IOC only.',
         },
         {
           id: 'lastminute-admin',
           q: 'Why don’t I see Last-minute on Risk?',
           a:
             'The Admin portal Feature configs switch “Last-minute” is Off (default). When an admin turns it On, the block appears on Auto-trade. Your Last-minute switch stays Off until you turn it on.',
+        },
+      ],
+    },
+    {
+      id: 'skipthin',
+      title: 'Skip thin bid',
+      items: [
+        {
+          id: 'skip-thin-bid-paths',
+          q: 'What does Skip thin bid do on each path?',
+          a:
+            'Each Cloud path has its own Skip thin bid checkbox (default Off), shown only when that path is On. Home Buy does not use it.\n\n' +
+            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The four paths do not share one switch — Cash out and Gold fade can sell when the book thins; TWAP lock and Last-minute only skip the buy and still hold.',
+          table: {
+            headers: ['Path', 'If thin', 'If book size unknown'],
+            rows: [
+              [
+                'Cash out',
+                'Skip the buy. If you already hold, sell.',
+                'Does not skip or dump',
+              ],
+              [
+                'Gold fade',
+                'Skip the buy. If you hold, sell / dump.',
+                'Same as Cash out',
+              ],
+              [
+                'TWAP lock',
+                'Skip the buy only. Still hold to $1.',
+                'Fail closed — no buy',
+              ],
+              [
+                'Last-minute',
+                'Skip the buy only. Still hold to settlement.',
+                'Fail closed — no buy',
+              ],
+            ],
+          },
         },
       ],
     },
@@ -613,4 +657,11 @@ export function getFaqCategories(): FaqCategory[] {
 
 export function flattenFaqItems(categories = getFaqCategories()): FaqItem[] {
   return categories.flatMap((c) => c.items);
+}
+
+export function faqItemSearchText(item: FaqItem): string {
+  const table = item.table
+    ? `\n${item.table.headers.join(' ')}\n${item.table.rows.map((row) => row.join(' ')).join('\n')}`
+    : '';
+  return `${item.q}\n${item.a}${table}`;
 }

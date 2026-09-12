@@ -359,6 +359,7 @@ describe('Cloud Cash out', () => {
           risk: {
             cash_out_enabled: true,
             cash_out_skip_thin_bid: true,
+            gold_fade_skip_thin_bid: false,
             cash_out_assets: ['Gold'],
             cash_out_max_ask_usd: 0.82,
             cash_out_bid_usd: 0.86,
@@ -368,6 +369,7 @@ describe('Cloud Cash out', () => {
       });
     expect(on.status).toBe(200);
     expect(on.body.userDoc.config.risk.cash_out_skip_thin_bid).toBe(true);
+    expect(on.body.userDoc.config.risk.gold_fade_skip_thin_bid).toBe(false);
     expect(on.body.userDoc.config.risk.cash_out_enabled).toBe(true);
     const off = await request(app)
       .post('/me/status')

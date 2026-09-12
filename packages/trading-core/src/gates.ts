@@ -156,6 +156,8 @@ export function formatSkipReason(reason: string | undefined): string {
     case 'last_minute_admin_off':
     case 'last_minute_off':
       return 'last-minute off';
+    case 'last_minute_asset_off':
+      return 'last-minute asset off';
     case 'last_minute_not_last_minute':
       return 'not last minute';
     case 'last_minute_ask_rich':

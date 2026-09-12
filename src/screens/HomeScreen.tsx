@@ -15,7 +15,13 @@ import { AssetKey, AssetRegistry, modeLabel } from '../config/types';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { LastTradeAction } from '../runtime/AppRuntime';
-import { getMarketScheduleNotice, isMarketOpen } from '../services/marketHours';
+import {
+  getMarketScheduleNotice,
+  getMarketScheduleNoticeDetail,
+  getMarketScheduleNoticeLine,
+  isMarketOpen,
+} from '../services/marketHours';
+import { PathInfoIcon } from '../components/PathInfoIcon';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { ManualSuccessFly } from '../components/ManualSuccessFly';
@@ -322,6 +328,7 @@ export function HomeScreen() {
         userEnabled: Boolean(config.risk.last_minute_enabled),
         assetEnabled: config.assets_enabled?.[row.asset] !== false,
         asset: row.asset,
+        assets: config.risk.last_minute_assets,
         secondsLeft: twapWatchSecondsLeft(
           (leans[row.asset] as { close_utc?: string } | undefined)?.close_utc,
           nowMs
@@ -339,6 +346,15 @@ export function HomeScreen() {
     () => formatHomePathBuyLines(summarizeTodayPathBuys(trades)),
     [trades]
   );
+  const scheduleNotice = useMemo(() => {
+    const at = new Date(nowMs);
+    const line = getMarketScheduleNoticeLine(at);
+    if (!line) return null;
+    return {
+      line,
+      detail: getMarketScheduleNoticeDetail(at) || getMarketScheduleNotice(at) || '',
+    };
+  }, [nowMs]);
 
   return (
     <View ref={homeRootRef} style={styles.root} collapsable={false}>
@@ -384,12 +400,16 @@ export function HomeScreen() {
         />
       </View>
 
-      {getMarketScheduleNotice(new Date(nowMs)) ? (
+      {scheduleNotice ? (
         <View style={styles.scheduleBanner} testID="home-market-schedule-banner">
-          <Text style={styles.scheduleTitle}>📅 Market Schedule Notice</Text>
-          <Text style={styles.scheduleBody}>
-            {getMarketScheduleNotice(new Date(nowMs))}
+          <Text style={styles.scheduleLine} numberOfLines={1} testID="home-market-schedule-line">
+            {scheduleNotice.line}
           </Text>
+          <PathInfoIcon
+            title="Market Schedule Notice"
+            body={scheduleNotice.detail}
+            testID="home-market-schedule-info"
+          />
         </View>
       ) : null}
 
@@ -885,9 +905,13 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
     borderWidth: 1,
     borderRadius: 12,
-    padding: spacing.md,
-    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
+  scheduleLine: { flex: 1, color: colors.gold, fontWeight: '700', fontSize: 12 },
   scheduleTitle: { color: colors.gold, fontWeight: '800', fontSize: 13 },
   scheduleBody: { color: colors.textPrimary, fontSize: 12, lineHeight: 17 },
   errorBanner: {

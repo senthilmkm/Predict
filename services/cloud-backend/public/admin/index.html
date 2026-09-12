@@ -78,9 +78,12 @@
 
       <div class="flex items-center gap-4">
         <!-- Worker Heartbeat Indicator -->
-        <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs">
-          <span class="w-2.5 h-2.5 rounded-full bg-slate-500" id="headerWorkerDot"></span>
-          <span id="headerWorkerStatus" class="text-slate-300 font-medium">Worker —</span>
+        <div class="flex items-center gap-2">
+          <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs">
+            <span class="w-2.5 h-2.5 rounded-full bg-slate-500" id="headerWorkerDot"></span>
+            <span id="headerWorkerStatus" class="text-slate-300 font-medium">Worker —</span>
+          </div>
+          <span id="headerLastMinuteChip" class="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30">Last-minute watcher · idle</span>
         </div>
 
         <!-- Broadcast (in-app Home banner) — next to Kill-Switch, not iPhone -->
@@ -332,10 +335,11 @@
             <h3 class="text-base font-bold text-white flex items-center gap-2 flex-wrap">
               <span>📈 Live Kalshi Trade Stream</span>
               <span id="twapWatcherChip" class="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30">TWAP watcher · idle</span>
+              <span id="lastMinuteWatcherChip" class="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30">Last-minute watcher · idle</span>
               <div class="tooltip-wrapper">
                 <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
                 <div class="tooltip-content">
-                  Filters run on the full trade set. Realized P&amp;L is the sum of matching live trades (SETTLED / win / loss / protect-sell exited), not only the rows on this page. Open fills show an em dash. Entered via is Home, Auto, or Cash out — blank on older rows that predate path tagging. Cash out sells add “sold @” under the buy price. The TWAP watcher chip is live last-70s status, not a table row.
+                  Filters run on the full trade set. Realized P&amp;L is the sum of matching live trades (SETTLED / win / loss / protect-sell exited), not only the rows on this page. Open fills show an em dash. Entered via is Home, Auto, or Cash out — blank on older rows that predate path tagging. Cash out sells add “sold @” under the buy price. TWAP and Last-minute watcher chips are live last-70s status, not table rows.
                 </div>
               </div>
             </h3>
@@ -1496,6 +1500,17 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
             chip.className = watching
               ? 'text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
               : 'text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30';
+          }
+          const lastMinuteWatching = data.lastMinuteWatcher?.watching === true && !String(data.lastMinuteWatcher?.label || '').includes('idle');
+          const lastMinuteLabel = data.lastMinuteWatcher?.label || 'Last-minute watcher · idle';
+          const lastMinuteClass = lastMinuteWatching
+            ? 'text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30'
+            : 'text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30';
+          for (const id of ['lastMinuteWatcherChip', 'headerLastMinuteChip']) {
+            const lastChip = document.getElementById(id);
+            if (!lastChip) continue;
+            lastChip.textContent = lastMinuteLabel;
+            lastChip.className = lastMinuteClass;
           }
         }
         if (data.ok && data.metrics) {

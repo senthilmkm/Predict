@@ -150,6 +150,14 @@ describe('normalize / cushions', () => {
     expect(d.last_minute_enabled).toBe(false);
     expect(d.last_minute_side).toBe('yes');
     expect(d.last_minute_max_ask_usd).toBe(0.96);
+    expect(d.last_minute_assets).toEqual(expect.arrayContaining(['Gold', 'BTC', 'ETH']));
+    expect(
+      normalizeAppConfig({ risk: { last_minute_assets: [] } } as any).risk.last_minute_assets
+    ).toEqual([]);
+    expect(
+      normalizeAppConfig({ risk: { last_minute_assets: ['Gold', 'NOPE'] } } as any).risk
+        .last_minute_assets
+    ).toEqual(['Gold']);
     expect(d.cash_out_assets).toEqual(['Gold']);
     const fadeOn = normalizeAppConfig({
       risk: { gold_fade_enabled: true, gold_fade_max_gap_usd: 2.4 },
@@ -168,10 +176,21 @@ describe('normalize / cushions', () => {
     expect(lastMin.last_minute_enabled).toBe(true);
     expect(lastMin.last_minute_side).toBe('both');
     expect(lastMin.last_minute_max_ask_usd).toBe(0.99);
+    expect(d.gold_fade_skip_thin_bid).toBe(false);
+    expect(d.twap_lock_skip_thin_bid).toBe(false);
+    expect(d.last_minute_skip_thin_bid).toBe(false);
     const on = normalizeAppConfig({
       risk: { cash_out_skip_thin_bid: true },
     } as any).risk;
     expect(on.cash_out_skip_thin_bid).toBe(true);
+    expect(on.gold_fade_skip_thin_bid).toBe(true);
+    expect(on.twap_lock_skip_thin_bid).toBe(true);
+    expect(on.last_minute_skip_thin_bid).toBe(true);
+    const split = normalizeAppConfig({
+      risk: { cash_out_skip_thin_bid: true, gold_fade_skip_thin_bid: false },
+    } as any).risk;
+    expect(split.gold_fade_skip_thin_bid).toBe(false);
+    expect(split.twap_lock_skip_thin_bid).toBe(true);
     const fixed = normalizeAppConfig({
       risk: { cash_out_max_ask_usd: 0.9, cash_out_bid_usd: 0.88, cash_out_enter_pct: 10 },
     } as any).risk;

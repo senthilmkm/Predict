@@ -24,6 +24,7 @@ import {
 } from '../../../../packages/trading-core/src/kalshiRetry';
 import { mergeFeatureFlags, type FeatureFlags } from '../services/featureFlags';
 import { formatTwapLockWatcherChip, getTwapLockWatcherSnapshot } from '../services/twapLockWatcher';
+import { formatLastMinuteWatcherChip, getLastMinuteWatcherSnapshot } from '../services/lastMinuteWatcher';
 import { mergeBroadcastConfig, type BroadcastConfig } from '../services/broadcast';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 import {
@@ -66,11 +67,12 @@ adminRouter.use(adminAuthMiddleware);
 // 2. System Overview & Key Metrics
 adminRouter.get('/overview', async (req: Request, res: Response) => {
   try {
-    const [users, trades, systemConfig, twapLockWatcher] = await Promise.all([
+    const [users, trades, systemConfig, twapLockWatcher, lastMinuteWatcher] = await Promise.all([
       getAllUsers(),
       getAllTradesForAdmin(),
       getSystemConfig(),
       getTwapLockWatcherSnapshot(),
+      getLastMinuteWatcherSnapshot(),
     ]);
 
     const tradeMetrics = computeOverviewTradeMetrics(trades);
@@ -114,6 +116,10 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
       twapLockWatcher: {
         ...twapLockWatcher,
         label: formatTwapLockWatcherChip(twapLockWatcher),
+      },
+      lastMinuteWatcher: {
+        ...lastMinuteWatcher,
+        label: formatLastMinuteWatcherChip(lastMinuteWatcher),
       },
     });
   } catch (err: any) {

@@ -1,4 +1,9 @@
-import { isMarketOpen, getMarketScheduleNotice } from '../src/services/marketHours';
+import {
+  isMarketOpen,
+  getMarketScheduleNotice,
+  getMarketScheduleNoticeDetail,
+  getMarketScheduleNoticeLine,
+} from '../src/services/marketHours';
 import { SERIES_BY_ASSET } from '../src/services/kalshi/client';
 
 describe('Market Hours Schedule', () => {
@@ -56,5 +61,12 @@ describe('Market Hours Schedule', () => {
     const notice = getMarketScheduleNotice(sat);
     expect(notice).toContain('Stock indices and forex are closed for the weekend');
     expect(notice).toContain('Kalshi commodity 15m');
+    expect(getMarketScheduleNoticeLine(sat)).toBe(
+      'Stock indices and forex are closed for the weekend.'
+    );
+    const detail = getMarketScheduleNoticeDetail(sat);
+    expect(detail).toContain('Kalshi commodity 15m');
+    expect(detail).toContain('Hours (ET)');
+    expect(detail).toContain('Stock indices: Mon–Fri 9:30 AM – 4:00 PM ET');
   });
 });

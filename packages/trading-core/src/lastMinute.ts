@@ -1,6 +1,7 @@
-import { AppConfig, AssetKey } from './types';
+import { AppConfig, ASSETS_CATALOG, AssetKey } from './types';
 import { evaluateStaticGate, GateResult, LeanSignal } from './gates';
 import { CashOutQuotes, isOpenLiveFill, openFillsForTicker, sideAskOf, ticketUsd } from './cashOut';
+import { resolveSkipThinBid } from './skipThinBid';
 import {
   isTwapLockLastMinute,
   isTwapLockWatchWindow,
@@ -39,6 +40,27 @@ export function normalizeLastMinuteMaxAskUsd(raw: unknown): number {
   );
 }
 
+export function lastMinuteDefaultAssets(): string[] {
+  return ASSETS_CATALOG.map((a) => a.key);
+}
+
+/** Missing → all catalog assets (old “any asset you have On”). Empty = no Last-minute buys. */
+export function normalizeLastMinuteAssets(raw: unknown): string[] {
+  const allowed = lastMinuteDefaultAssets();
+  const allowedSet = new Set(allowed);
+  if (raw == null || !Array.isArray(raw)) return allowed;
+  const out: string[] = [];
+  for (const item of raw) {
+    const k = String(item || '').trim();
+    if (allowedSet.has(k) && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
+export function isLastMinuteAssetSelected(assets: unknown, asset: string): boolean {
+  return normalizeLastMinuteAssets(assets).includes(String(asset));
+}
+
 export function normalizeLastMinuteSide(raw: unknown): LastMinuteSide {
   const v = String(raw ?? '')
     .toLowerCase()
@@ -55,14 +77,21 @@ export function isLastMinuteEntryPath(raw: unknown): boolean {
   return v === 'last_minute' || v === 'lastminute' || v === 'last-minute';
 }
 
-/** Admin On + user On + that asset is On. Does not reserve the coin from Cash out / Auto. */
+/** Admin On + user On + Cushions On + checked on this path. Does not reserve the coin from Cash out / Auto. */
 export function isLastMinuteEnterPath(opts: {
   adminEnabled: boolean;
   userEnabled: boolean;
   assetEnabled: boolean;
   asset: string;
+  assets?: unknown;
 }): boolean {
-  return Boolean(opts.adminEnabled && opts.userEnabled && opts.assetEnabled && String(opts.asset || '').trim());
+  return Boolean(
+    opts.adminEnabled &&
+      opts.userEnabled &&
+      opts.assetEnabled &&
+      String(opts.asset || '').trim() &&
+      isLastMinuteAssetSelected(opts.assets, opts.asset)
+  );
 }
 
 export function lastMinuteSecondsLeft(now: Date, closeUtc: Date): number {
@@ -193,7 +222,9 @@ export function evaluateLastMinuteEnter(opts: {
     last_minute_enabled?: boolean;
     last_minute_side?: LastMinuteSide;
     last_minute_max_ask_usd?: number;
+    last_minute_assets?: string[];
     cash_out_skip_thin_bid?: boolean;
+    last_minute_skip_thin_bid?: boolean;
     twap_lock_enabled?: boolean;
     twap_lock_assets?: string[];
   };
@@ -205,6 +236,9 @@ export function evaluateLastMinuteEnter(opts: {
   }
   if (!opts.cfg.assets_enabled?.[opts.lean.asset]) {
     return { ok: false, skip_reason: 'asset_disabled' };
+  }
+  if (!isLastMinuteAssetSelected(risk.last_minute_assets, opts.lean.asset)) {
+    return { ok: false, skip_reason: 'last_minute_asset_off' };
   }
   if (
     lastMinuteTwapOwns({
@@ -255,7 +289,7 @@ export function evaluateLastMinuteEnter(opts: {
   });
   if (!gate.ok) return gate;
 
-  const thinOn = opts.skipThinBid || Boolean(risk.cash_out_skip_thin_bid);
+  const thinOn = resolveSkipThinBid(risk, 'last_minute', opts.skipThinBid);
   if (thinOn) {
     const need = Math.floor(Number(gate.count) || 0);
     if (opts.bidSize == null || !Number.isFinite(Number(opts.bidSize))) {

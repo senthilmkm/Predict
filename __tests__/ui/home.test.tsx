@@ -75,6 +75,28 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('home-change-24h-label').props.children).toBe('Change (4h)');
   });
 
+  test('weekend schedule is one amber line with details behind the i', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-05T18:00:00Z'));
+    const Alert = require('react-native').Alert;
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      const s = await render(<HomeScreen />);
+      expect(s.getByTestId('home-market-schedule-banner')).toBeTruthy();
+      expect(s.getByTestId('home-market-schedule-line').props.children).toBe(
+        'Stock indices and forex are closed for the weekend.'
+      );
+      expect(s.queryByText('📅 Market Schedule Notice')).toBeNull();
+      await fireEvent.press(s.getByTestId('home-market-schedule-info'));
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Market Schedule Notice',
+        expect.stringContaining('Hours (ET)')
+      );
+    } finally {
+      nowSpy.mockRestore();
+      alertSpy.mockRestore();
+    }
+  });
+
   test('integration error banner includes support email from config.json', async () => {
     const rt = useRuntimeStore.getState().ensure();
     rt.status.lastError = 'Kalshi auth failed';

@@ -7,6 +7,8 @@ import {
   dailyLossAlertId,
   emitCloudAlert,
   fillAlertId,
+  iocMissAlertBody,
+  iocMissAlertTitle,
   leanAlertId,
   leanAlertSide,
   missAlertId,
@@ -66,6 +68,12 @@ describe('cloud alerts persist + mute + settlement', () => {
       orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'NO', entryPath: 'last_minute' })
     ).toBe('Order Placed · Last-minute · Gold NO');
     expect(orderPlacedAlertTitle({ live: true, asset: 'ETH', decision: 'YES' })).toBe('Order Placed · ETH YES');
+    expect(iocMissAlertTitle('last_minute')).toBe('IOC miss · Last-minute');
+    expect(iocMissAlertBody({ asset: 'BTC', decision: 'YES', entryPath: 'last_minute' })).toBe(
+      'Last-minute · BTC YES · IOC no fill'
+    );
+    expect(iocMissAlertTitle()).toBe('IOC miss');
+    expect(iocMissAlertBody({ asset: 'BTC', decision: 'YES' })).toBe('BTC YES · IOC no fill');
   });
 
   test('SKIP leans never persist and below-cushion does not write both sides', async () => {
@@ -444,6 +452,22 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(
       settlementAlertFromTrade({ ...won!, settlementAlertAt: nowIso } as any, new Date('2026-09-09T01:00:00.000Z'))
     ).toBeNull();
+    expect(
+      settlementAlertFromTrade({ ...won!, entryPath: 'last_minute' } as any, now)
+    ).toEqual({
+      alertId: 'settle:t_win',
+      title: 'Trade won · Last-minute',
+      body: 'Last-minute · BTC YES · P&L $4.00 · KXBTC15M-DONE',
+      pnlUsd: 4,
+    });
+    expect(
+      settlementAlertFromTrade({ ...won!, outcome: 'loss', entryPath: 'last_minute', pnlUsd: -2 } as any, now)
+    ).toEqual({
+      alertId: 'settle:t_win',
+      title: 'Trade lost · Last-minute',
+      body: 'Last-minute · BTC YES · P&L $-2.00 · KXBTC15M-DONE',
+      pnlUsd: -2,
+    });
 
     const emitted = await emitCloudAlert({
       userId: uid,

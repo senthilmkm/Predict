@@ -1,6 +1,7 @@
 import { AppConfig, AssetKey } from './types';
 import { evaluateStaticGate, GateResult, LeanSignal } from './gates';
 import { CashOutQuotes, isOpenLiveFill, openFillsForTicker, sideAskOf, ticketUsd } from './cashOut';
+import { resolveSkipThinBid } from './skipThinBid';
 
 export const TWAP_LOCK_ASSETS: AssetKey[] = ['BTC', 'ETH'];
 export const TWAP_LOCK_SAMPLE_COUNT = 60;
@@ -265,6 +266,7 @@ export function evaluateTwapLockEnter(opts: {
     twap_lock_assets?: string[];
     twap_lock_max_ask_usd?: number;
     cash_out_skip_thin_bid?: boolean;
+    twap_lock_skip_thin_bid?: boolean;
   };
   if (!opts.adminEnabled) {
     return { ok: false, skip_reason: 'twap_lock_admin_off' };
@@ -335,7 +337,7 @@ export function evaluateTwapLockEnter(opts: {
   });
   if (!gate.ok) return gate;
 
-  const thinOn = opts.skipThinBid || Boolean(risk.cash_out_skip_thin_bid);
+  const thinOn = resolveSkipThinBid(risk, 'twap_lock', opts.skipThinBid);
   if (thinOn) {
     const need = Math.floor(Number(gate.count) || 0);
     if (opts.bidSize == null || !Number.isFinite(Number(opts.bidSize))) {

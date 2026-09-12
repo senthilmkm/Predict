@@ -112,3 +112,25 @@ export function getMarketScheduleNotice(date: Date = new Date()): string | null 
 
   return null;
 }
+
+/** First sentence of the amber Home banner — details live behind the (i). */
+export function getMarketScheduleNoticeLine(date: Date = new Date()): string | null {
+  const full = getMarketScheduleNotice(date);
+  if (!full) return null;
+  const first = full.split('. ')[0]?.trim();
+  if (!first) return full;
+  return first.endsWith('.') ? first : `${first}.`;
+}
+
+export const MARKET_HOURS_DETAIL =
+  'Hours (ET)\n' +
+  '• Crypto: 24/7\n' +
+  '• Kalshi commodities (Gold, WTI, Silver, Copper, NG): poll when Kalshi lists a 15m book\n' +
+  '• Stock indices: Mon–Fri 9:30 AM – 4:00 PM ET\n' +
+  '• Forex: Sun 5:00 PM – Fri 5:00 PM ET';
+
+export function getMarketScheduleNoticeDetail(date: Date = new Date()): string | null {
+  const full = getMarketScheduleNotice(date);
+  if (!full) return null;
+  return `${full}\n\n${MARKET_HOURS_DETAIL}`;
+}

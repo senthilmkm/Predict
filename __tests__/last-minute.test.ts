@@ -2,6 +2,7 @@ import {
   evaluateLastMinuteEnter,
   isLastMinuteEnterPath,
   lastMinuteTwapOwns,
+  normalizeLastMinuteAssets,
   normalizeLastMinuteMaxAskUsd,
   normalizeLastMinuteSide,
   pickLastMinuteSide,
@@ -69,9 +70,21 @@ describe('Last-minute path', () => {
     expect(
       pickLastMinuteSide({ side: 'both', yesAsk: 0.96, noAsk: 0.04, maxAsk: 0.96 })
     ).toEqual({ ok: true, decision: 'YES', ask: 0.96 });
+    expect(normalizeLastMinuteAssets(undefined).includes('Gold')).toBe(true);
+    expect(normalizeLastMinuteAssets([])).toEqual([]);
+    expect(normalizeLastMinuteAssets(['Gold', 'Gold', 'NOPE'])).toEqual(['Gold']);
     expect(
       isLastMinuteEnterPath({ adminEnabled: true, userEnabled: true, assetEnabled: true, asset: 'WTI' })
     ).toBe(true);
+    expect(
+      isLastMinuteEnterPath({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'WTI',
+        assets: ['Gold'],
+      })
+    ).toBe(false);
     expect(
       lastMinuteTwapOwns({
         twapAdminEnabled: true,
@@ -141,6 +154,16 @@ describe('Last-minute path', () => {
     });
     expect(held.ok).toBe(false);
     expect(held.skip_reason).toBe('last_minute_holding_other_path');
+
+    const assetOff = evaluateLastMinuteEnter({
+      lean: lean(),
+      cfg: cfg({ risk: { last_minute_assets: ['BTC'] } }),
+      adminEnabled: true,
+      now: nowLast,
+    });
+    expect(assetOff.ok).toBe(false);
+    expect(assetOff.skip_reason).toBe('last_minute_asset_off');
+    expect(formatSkipReason('last_minute_asset_off')).toBe('last-minute asset off');
   });
 
   test('silent skip outside the last minute', () => {

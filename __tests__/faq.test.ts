@@ -1,4 +1,4 @@
-import { flattenFaqItems, getFaqCategories } from '../src/content/faq';
+import { faqItemSearchText, flattenFaqItems, getFaqCategories } from '../src/content/faq';
 import { supportContactEmail } from '../src/config/appMeta';
 
 describe('FAQ content', () => {
@@ -25,7 +25,7 @@ describe('FAQ content', () => {
   });
 
   test('includes disclaimer, cloud, window cap, and support facts', () => {
-    const blob = items.map((i) => `${i.q}\n${i.a}`).join('\n');
+    const blob = items.map((i) => faqItemSearchText(i)).join('\n');
     expect(blob).toMatch(/does not guarantee profits/i);
     expect(blob).toMatch(/not affiliated/i);
     expect(blob).toMatch(/financial, investment, legal, or trading advice/i);
@@ -34,6 +34,10 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/Cash out/);
     expect(blob).toMatch(/Cash out stop/);
     expect(blob).toMatch(/Skip thin bid/);
+    expect(blob).toMatch(/If book size unknown/);
+    expect(blob).toMatch(/Fail closed — no buy/);
+    expect(blob).toMatch(/Does not skip or dump/);
+    expect(categories.some((c) => c.id === 'skipthin')).toBe(true);
     expect(blob).toMatch(/Gold fade/);
     expect(blob).toMatch(/TWAP lock/);
     expect(blob).toMatch(/Last-minute/);

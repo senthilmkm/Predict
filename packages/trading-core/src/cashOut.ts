@@ -5,6 +5,7 @@ import {
   inProtectSellGrace,
   shouldProtectSell,
 } from './protectSell';
+import { resolveSkipThinBid } from './skipThinBid';
 
 export const CASH_OUT_SPREAD_MAX_USD = 0.06;
 export const CASH_OUT_MIN_MINUTES_LEFT = 3;
@@ -457,7 +458,7 @@ export function evaluateCashOutEnter(opts: {
   });
   if (
     gate.ok &&
-    (opts.skipThinBid || Boolean(risk.cash_out_skip_thin_bid)) &&
+    resolveSkipThinBid(risk, 'cash_out', opts.skipThinBid) &&
     isCashOutThinBid(opts.bidSize, gate.count)
   ) {
     return { ok: false, skip_reason: 'cash_out_thin_bid' };

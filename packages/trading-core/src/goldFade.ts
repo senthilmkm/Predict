@@ -12,6 +12,7 @@ import {
   ticketUsd,
 } from './cashOut';
 import { buildProtectSellOrder, inProtectSellGrace, shouldProtectSell } from './protectSell';
+import { resolveSkipThinBid } from './skipThinBid';
 
 export const GOLD_FADE_ASSET: AssetKey = 'Gold';
 export const GOLD_FADE_MAX_GAP_DEFAULT = 3;
@@ -184,6 +185,7 @@ export function evaluateGoldFadeEnter(opts: {
     gold_fade_max_gap_usd?: number;
     gold_fade_max_ask_usd?: number;
     gold_fade_flatten_minutes?: number;
+    gold_fade_skip_thin_bid?: boolean;
     cash_out_skip_thin_bid?: boolean;
   };
   if (!opts.adminEnabled) {
@@ -237,7 +239,7 @@ export function evaluateGoldFadeEnter(opts: {
   });
   if (
     gate.ok &&
-    (opts.skipThinBid || Boolean(risk.cash_out_skip_thin_bid)) &&
+    resolveSkipThinBid(risk, 'gold_fade', opts.skipThinBid) &&
     isCashOutThinBid(opts.bidSize, gate.count)
   ) {
     return { ok: false, skip_reason: 'gold_fade_thin_bid' };

@@ -23,6 +23,7 @@ import {
   normalizeCashOutStopUsd,
   reconcileCashOutTargets,
 } from '../../packages/trading-core/src/cashOut';
+import { inheritSkipThinBid } from '../../packages/trading-core/src/skipThinBid';
 import {
   normalizeGoldFadeFlattenMinutes,
   normalizeGoldFadeMaxAskUsd,
@@ -35,6 +36,7 @@ import {
   normalizeTwapLockMaxAskUsd,
 } from '../../packages/trading-core/src/twapLock';
 import {
+  normalizeLastMinuteAssets,
   normalizeLastMinuteMaxAskUsd,
   normalizeLastMinuteSide,
 } from '../../packages/trading-core/src/lastMinute';
@@ -154,15 +156,24 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     gold_fade_flatten_minutes: normalizeGoldFadeFlattenMinutes(
       r.gold_fade_flatten_minutes ?? d.gold_fade_flatten_minutes
     ),
+    gold_fade_skip_thin_bid: inheritSkipThinBid(r.gold_fade_skip_thin_bid, r.cash_out_skip_thin_bid === true),
     twap_lock_enabled: r.twap_lock_enabled === true,
     twap_lock_assets: normalizeTwapLockAssets(
       r.twap_lock_assets !== undefined ? r.twap_lock_assets : d.twap_lock_assets
     ),
     twap_lock_max_ask_usd: normalizeTwapLockMaxAskUsd(r.twap_lock_max_ask_usd ?? d.twap_lock_max_ask_usd),
+    twap_lock_skip_thin_bid: inheritSkipThinBid(r.twap_lock_skip_thin_bid, r.cash_out_skip_thin_bid === true),
     last_minute_enabled: r.last_minute_enabled === true,
     last_minute_side: normalizeLastMinuteSide(r.last_minute_side ?? d.last_minute_side),
     last_minute_max_ask_usd: normalizeLastMinuteMaxAskUsd(
       r.last_minute_max_ask_usd ?? d.last_minute_max_ask_usd
+    ),
+    last_minute_skip_thin_bid: inheritSkipThinBid(
+      r.last_minute_skip_thin_bid,
+      r.cash_out_skip_thin_bid === true
+    ),
+    last_minute_assets: normalizeLastMinuteAssets(
+      r.last_minute_assets !== undefined ? r.last_minute_assets : d.last_minute_assets
     ),
   };
   const targets = reconcileCashOutTargets(
