@@ -23,6 +23,10 @@ export interface SystemConfig {
     lastSignalsManualTrade?: boolean;
     cashOut?: boolean;
     cashOutBidCheckSeconds?: number;
+    goldFade?: boolean;
+    goldFadeBidCheckSeconds?: number;
+    twapLock?: boolean;
+    lastMinute?: boolean;
   };
   broadcast?: {
     templates?: Array<{

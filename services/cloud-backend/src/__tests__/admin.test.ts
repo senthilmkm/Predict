@@ -117,6 +117,8 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.worker.status).toBe('ACTIVE');
     expect(res.body.worker.tickIntervalSeconds).toBe(20);
     expect(res.body.worker.gcpProject).toBe('predict-trading-0904');
+    expect(res.body.twapLockWatcher.label).toBe('TWAP watcher · idle');
+    expect(res.body.twapLockWatcher.watching).toBe(false);
   });
 
   test('4. GET /admin/api/users retrieves list of all enrolled users', async () => {
@@ -311,6 +313,8 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.systemConfig.featureFlags.cashOut).toBe(true);
     expect(res.body.systemConfig.featureFlags.cashOutBidCheckSeconds).toBe(2);
     expect(res.body.systemConfig.featureFlags.lastSignalsManualTrade).toBe(true);
+    expect(res.body.systemConfig.featureFlags.twapLock).toBe(false);
+    expect(res.body.systemConfig.featureFlags.lastMinute).toBe(false);
   });
 
   test('12. GET /admin/api/trades filters by asset, status, user, and reports realized P&L', async () => {

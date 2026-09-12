@@ -25,9 +25,85 @@ export const CASH_OUT_STOP_MIN_USD = 0.03;
 export const CASH_OUT_STOP_MAX_USD = 0.1;
 export const CASH_OUT_DEFAULT_ASSETS: AssetKey[] = ['Gold'];
 
-export type TradeEntryPath = 'home' | 'auto' | 'cash_out';
+export type TradeEntryPath = 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute';
 export type CashOutHeldSide = 'YES' | 'NO';
-export type CashOutExitKind = 'none' | 'cash_out_bid' | 'cash_out_stop' | 'flip' | 'settle';
+export type CashOutExitKind =
+  | 'none'
+  | 'cash_out_bid'
+  | 'cash_out_stop'
+  | 'cash_out_thin_bid'
+  | 'flip'
+  | 'settle';
+
+export type OrderBookLevel = { priceUsd: number; size: number };
+export type CashOutOrderBook = { yes: OrderBookLevel[]; no: OrderBookLevel[] };
+
+function bookPriceUsd(raw: unknown): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const usd = n > 1 + 1e-9 ? n / 100 : n;
+  return ticketUsd(usd);
+}
+
+function parseBookSide(raw: unknown): OrderBookLevel[] {
+  if (!Array.isArray(raw)) return [];
+  const out: OrderBookLevel[] = [];
+  for (const row of raw) {
+    let price: number | null = null;
+    let size = 0;
+    if (Array.isArray(row) && row.length >= 2) {
+      price = bookPriceUsd(row[0]);
+      size = Number(row[1]);
+    } else if (row && typeof row === 'object') {
+      const o = row as { price?: unknown; price_dollars?: unknown; size?: unknown; count?: unknown; quantity?: unknown };
+      price = bookPriceUsd(o.price ?? o.price_dollars);
+      size = Number(o.size ?? o.count ?? o.quantity);
+    }
+    if (price == null || !Number.isFinite(size) || size <= 0) continue;
+    out.push({ priceUsd: price, size: Math.floor(size) });
+  }
+  return out;
+}
+
+/** Kalshi GET /markets/{ticker}/orderbook — yes/no levels in cents or dollars. */
+export function parseKalshiOrderbook(raw: unknown): CashOutOrderBook {
+  const root =
+    raw && typeof raw === 'object' && (raw as { orderbook?: unknown }).orderbook != null
+      ? (raw as { orderbook: Record<string, unknown> }).orderbook
+      : (raw as Record<string, unknown> | null);
+  if (!root || typeof root !== 'object') return { yes: [], no: [] };
+  return {
+    yes: parseBookSide(root.yes_dollars ?? root.yes),
+    no: parseBookSide(root.no_dollars ?? root.no),
+  };
+}
+
+/** Size at the best bid. Empty book → 0. Missing book → null (unknown). */
+export function bestBidSizeOnBook(
+  side: CashOutHeldSide,
+  book: CashOutOrderBook | null | undefined
+): number | null {
+  if (book == null) return null;
+  const levels = side === 'YES' ? book.yes : book.no;
+  if (!levels.length) return 0;
+  let best = levels[0].priceUsd;
+  for (const l of levels) {
+    if (l.priceUsd > best) best = l.priceUsd;
+  }
+  let size = 0;
+  for (const l of levels) {
+    if (Math.abs(l.priceUsd - best) < 1e-9) size += l.size;
+  }
+  return size;
+}
+
+/** True only when we have a size and it is smaller than contracts we need to sell. */
+export function isCashOutThinBid(bidSize: number | null | undefined, needCount: unknown): boolean {
+  const need = Math.floor(Number(needCount) || 0);
+  if (!(need > 0)) return false;
+  if (bidSize == null || !Number.isFinite(Number(bidSize))) return false;
+  return Number(bidSize) < need;
+}
 
 function clamp(n: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return min;
@@ -228,6 +304,9 @@ export function parseTradeEntryPath(raw: unknown): TradeEntryPath | undefined {
   if (v === 'home' || v === 'manual_buy' || v === 'manual') return 'home';
   if (v === 'auto' || v === 'auto_trade' || v === 'worker') return 'auto';
   if (v === 'cash_out' || v === 'cashout') return 'cash_out';
+  if (v === 'gold_fade' || v === 'goldfade' || v === 'fade') return 'gold_fade';
+  if (v === 'twap_lock' || v === 'twaplock' || v === 'twap') return 'twap_lock';
+  if (v === 'last_minute' || v === 'lastminute' || v === 'last-minute') return 'last_minute';
   return undefined;
 }
 
@@ -329,6 +408,8 @@ export function evaluateCashOutEnter(opts: {
   tradesToday?: number;
   assetTradesInWindow?: number;
   hasOpenNonCashOutOnTicker?: boolean;
+  skipThinBid?: boolean;
+  bidSize?: number | null;
 }): GateResult {
   const risk = opts.cfg.risk as AppConfig['risk'] & {
     cash_out_enabled?: boolean;
@@ -336,6 +417,7 @@ export function evaluateCashOutEnter(opts: {
     cash_out_max_ask_usd?: number;
     cash_out_bid_usd?: number;
     cash_out_enter_pct?: number;
+    cash_out_skip_thin_bid?: boolean;
   };
   if (!opts.adminEnabled) {
     return { ok: false, skip_reason: 'cash_out_admin_off' };
@@ -367,12 +449,20 @@ export function evaluateCashOutEnter(opts: {
     }
   }
 
-  return evaluateStaticGate(opts.lean, cashOutGateConfig(opts.cfg, opts.lean.asset), {
+  const gate = evaluateStaticGate(opts.lean, cashOutGateConfig(opts.cfg, opts.lean.asset), {
     openPositions: opts.openPositions,
     dailyPnlUsd: opts.dailyPnlUsd,
     tradesToday: opts.tradesToday,
     assetTradesInWindow: opts.assetTradesInWindow,
   });
+  if (
+    gate.ok &&
+    (opts.skipThinBid || Boolean(risk.cash_out_skip_thin_bid)) &&
+    isCashOutThinBid(opts.bidSize, gate.count)
+  ) {
+    return { ok: false, skip_reason: 'cash_out_thin_bid' };
+  }
+  return gate;
 }
 
 export function evaluateCashOutExit(opts: {
@@ -387,6 +477,9 @@ export function evaluateCashOutExit(opts: {
   filledAt?: string | Date | number | null;
   graceSeconds?: number;
   now?: Date;
+  skipThinBid?: boolean;
+  bidSize?: number | null;
+  needCount?: number | null;
 }): {
   sell: boolean;
   kind: CashOutExitKind;
@@ -450,6 +543,17 @@ export function evaluateCashOutExit(opts: {
       sell: true,
       kind: 'cash_out_bid',
       reason: 'bid_target',
+      bid,
+      target,
+      minGap: flip.minGap,
+      leanGap: flip.leanGap,
+    };
+  }
+  if (opts.skipThinBid && isCashOutThinBid(opts.bidSize, opts.needCount)) {
+    return {
+      sell: true,
+      kind: 'cash_out_thin_bid',
+      reason: 'thin_bid',
       bid,
       target,
       minGap: flip.minGap,

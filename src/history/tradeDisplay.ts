@@ -5,11 +5,16 @@ function moneyUsd(n: unknown): string {
   return Number.isFinite(v) ? v.toFixed(2) : '—';
 }
 
-export function entryPathChipLabel(path: unknown): 'Home' | 'Auto' | 'Cash out' | null {
+export function entryPathChipLabel(
+  path: unknown
+): 'Home' | 'Auto' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | null {
   const parsed = parseEntryPath(path);
   if (parsed === 'home') return 'Home';
   if (parsed === 'auto') return 'Auto';
   if (parsed === 'cash_out') return 'Cash out';
+  if (parsed === 'gold_fade') return 'Gold fade';
+  if (parsed === 'twap_lock') return 'TWAP lock';
+  if (parsed === 'last_minute') return 'Last-minute';
   return null;
 }
 

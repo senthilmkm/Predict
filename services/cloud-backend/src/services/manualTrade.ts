@@ -38,6 +38,9 @@ import { isCloudKalshiPaused, noteTransientKalshiFailure } from './kalshiPause';
 import { economicPayPrice, fillCountOf, liveCloudTradesToday, cloudDailyRealizedPnl } from './settlement';
 import { normalizeFeatureFlags } from './featureFlags';
 import { isCashOutEntryPath } from '../../../../packages/trading-core/src/cashOut';
+import { isGoldFadeEntryPath } from '../../../../packages/trading-core/src/goldFade';
+import { isTwapLockEntryPath } from '../../../../packages/trading-core/src/twapLock';
+import { isLastMinuteEntryPath } from '../../../../packages/trading-core/src/lastMinute';
 import { emitCloudAlert, fillAlertId, orderPlacedAlertTitle } from './cloudAlerts';
 import { fillCollapseId } from './leanAlerts';
 
@@ -257,6 +260,15 @@ async function executeManualBuy(opts: {
   if (held) {
     if (isCashOutEntryPath(held.entryPath)) {
       return fail(userId, 409, 'cash_out_holding', 'cash_out_holding', { asset, action: 'buy', ticker });
+    }
+    if (isGoldFadeEntryPath(held.entryPath)) {
+      return fail(userId, 409, 'gold_fade_holding', 'gold_fade_holding', { asset, action: 'buy', ticker });
+    }
+    if (isTwapLockEntryPath(held.entryPath)) {
+      return fail(userId, 409, 'twap_lock_holding', 'twap_lock_holding', { asset, action: 'buy', ticker });
+    }
+    if (isLastMinuteEntryPath(held.entryPath)) {
+      return fail(userId, 409, 'last_minute_holding', 'last_minute_holding', { asset, action: 'buy', ticker });
     }
     return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
   }
@@ -501,6 +513,15 @@ async function executeManualSell(opts: {
   }
   if (isCashOutEntryPath(held.entryPath)) {
     return fail(userId, 409, 'cash_out_holding', 'cash_out_holding', { asset, action: 'sell', ticker });
+  }
+  if (isGoldFadeEntryPath(held.entryPath)) {
+    return fail(userId, 409, 'gold_fade_holding', 'gold_fade_holding', { asset, action: 'sell', ticker });
+  }
+  if (isTwapLockEntryPath(held.entryPath)) {
+    return fail(userId, 409, 'twap_lock_holding', 'twap_lock_holding', { asset, action: 'sell', ticker });
+  }
+  if (isLastMinuteEntryPath(held.entryPath)) {
+    return fail(userId, 409, 'last_minute_holding', 'last_minute_holding', { asset, action: 'sell', ticker });
   }
 
   const order = buildProtectSellOrder({

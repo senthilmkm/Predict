@@ -153,8 +153,34 @@ export interface RiskConfig {
   cash_out_bid_usd?: number;
   /** Sell if held-side bid falls this far below fill. Default 0.05. Range 0.03–0.10. */
   cash_out_stop_usd?: number;
+  /** Skip buy / sell early when bid size < contracts. Default Off. */
+  cash_out_skip_thin_bid?: boolean;
   /** Assets on the Cash out path. Default Gold. Empty = no Cash out buys. */
   cash_out_assets?: string[];
+  /** Auto-trade Gold fade path. Missing → Off. */
+  gold_fade_enabled?: boolean;
+  /** Enter only if abs gap ≤ this. Default 3. Range 1–6. */
+  gold_fade_max_gap_usd?: number;
+  /** Cheap-side ask must be ≤ this. Default 0.50. */
+  gold_fade_max_ask_usd?: number;
+  /** Sell when held bid ≥ fill + this. Default 0.06. */
+  gold_fade_take_usd?: number;
+  /** Sell when held bid ≤ fill − this. Default 0.05. */
+  gold_fade_stop_usd?: number;
+  /** Sell all when minutes left ≤ this. Default 3. Range 2–5. */
+  gold_fade_flatten_minutes?: number;
+  /** Auto-trade TWAP lock path. Missing → Off. */
+  twap_lock_enabled?: boolean;
+  /** Assets on the TWAP lock path. Default BTC+ETH. Empty = no TWAP buys. */
+  twap_lock_assets?: string[];
+  /** Do not buy if Yes ask is above this. Default 0.96. Range 0.90–0.97. */
+  twap_lock_max_ask_usd?: number;
+  /** Last-minute Auto path. Missing → Off. */
+  last_minute_enabled?: boolean;
+  /** yes | no | both. Default yes. */
+  last_minute_side?: 'yes' | 'no' | 'both';
+  /** Do not buy if the chosen side’s ask is above this. Default 0.96. Range 0.80–0.99. */
+  last_minute_max_ask_usd?: number;
 }
 
 export interface AlertPref {
@@ -262,7 +288,20 @@ export function defaultAppConfig(): AppConfig {
       cash_out_max_ask_usd: 0.82,
       cash_out_bid_usd: 0.88,
       cash_out_stop_usd: 0.05,
+      cash_out_skip_thin_bid: false,
       cash_out_assets: ['Gold'],
+      gold_fade_enabled: false,
+      gold_fade_max_gap_usd: 3,
+      gold_fade_max_ask_usd: 0.5,
+      gold_fade_take_usd: 0.06,
+      gold_fade_stop_usd: 0.05,
+      gold_fade_flatten_minutes: 3,
+      twap_lock_enabled: false,
+      twap_lock_assets: ['BTC', 'ETH'],
+      twap_lock_max_ask_usd: 0.96,
+      last_minute_enabled: false,
+      last_minute_side: 'yes',
+      last_minute_max_ask_usd: 0.96,
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

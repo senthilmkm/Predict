@@ -1,5 +1,8 @@
 import { defaultAppConfig } from '../src/config/types';
 import {
+  formatGapDisplay,
+  formatLastMinuteWatchLine,
+  formatTwapWatchLine,
   heldOpenFillForTicker,
   homeBuySkipReason,
   lastSignalExtraLine,
@@ -15,6 +18,55 @@ describe('last signals manual kind', () => {
     noMarket: false,
     marketTicker: 'KXBTC15M-X',
   };
+
+  test('Home gap is ▲/▼, or with you / against you when holding', () => {
+    expect(
+      formatGapDisplay({
+        gap: 7.2,
+        assetKey: 'Gold',
+        live: 3687.2,
+        strike: 3680,
+        decision: 'YES',
+      })
+    ).toEqual({ text: '\u25B2 $7.20 (gap)', tone: 'neutral' });
+    expect(
+      formatGapDisplay({
+        gap: 7.2,
+        assetKey: 'Gold',
+        live: 3672.8,
+        strike: 3680,
+        decision: 'NO',
+      })
+    ).toEqual({ text: '\u25BC $7.20 (gap)', tone: 'neutral' });
+    expect(
+      formatGapDisplay({
+        gap: 7.2,
+        assetKey: 'Gold',
+        live: 3687.2,
+        strike: 3680,
+        heldSide: 'YES',
+      })
+    ).toEqual({ text: 'with you $7.20 (gap)', tone: 'with' });
+    expect(
+      formatGapDisplay({
+        gap: 7.2,
+        assetKey: 'Gold',
+        live: 3672.8,
+        strike: 3680,
+        decision: 'NO',
+        heldSide: 'YES',
+      })
+    ).toEqual({ text: 'against you $7.20 (gap)', tone: 'against' });
+    expect(
+      formatGapDisplay({
+        gap: 7.2,
+        assetKey: 'Gold',
+        live: 3672.8,
+        strike: 3680,
+        heldSide: 'NO',
+      })
+    ).toEqual({ text: 'with you $7.20 (gap)', tone: 'with' });
+  });
 
   test('feature off or kill hides buttons', () => {
     expect(lastSignalManualKind({ featureOn: false, killSwitch: false, row: yesRow })).toBe('none');
@@ -78,6 +130,108 @@ describe('last signal extra line', () => {
         cashOutHolding: true,
       })
     ).toEqual({ testID: 'skip-reason', text: 'cash out is holding this ticket' });
+  });
+
+  test('TWAP lock holding hides Home buttons and says so', () => {
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        autoDetail: 'placed YES · 5 @ $0.95',
+        autoStatus: 'placed',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        twapLockHolding: true,
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'twap lock is holding this ticket' });
+  });
+
+  test('TWAP watching line stays on the row even when Home Buy is showing', () => {
+    expect(
+      formatTwapWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assets: ['BTC', 'ETH'],
+        asset: 'BTC',
+        secondsLeft: 42,
+      })
+    ).toBe('TWAP watching · 42s left');
+    expect(
+      formatTwapWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assets: ['BTC', 'ETH'],
+        asset: 'BTC',
+        secondsLeft: 12,
+        autoStatus: 'skipped',
+        autoDetail: 'skipped · not locked',
+      })
+    ).toBe('TWAP watching · not locked');
+    expect(
+      formatTwapWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assets: ['BTC', 'ETH'],
+        asset: 'Gold',
+        secondsLeft: 12,
+      })
+    ).toBeNull();
+    expect(
+      formatTwapWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assets: ['BTC', 'ETH'],
+        asset: 'BTC',
+        secondsLeft: 400,
+      })
+    ).toBeNull();
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'buy',
+        autoTradeOn: true,
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        tapSkipReason: null,
+        twapWatchText: 'TWAP watching · 42s left',
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'TWAP watching · 42s left' });
+    expect(
+      formatLastMinuteWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        secondsLeft: 38,
+      })
+    ).toBe('Last-minute watching · 38s left');
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'buy',
+        autoTradeOn: true,
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        tapSkipReason: null,
+        lastMinuteWatchText: 'Last-minute watching · 38s left',
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'Last-minute watching · 38s left' });
+  });
+
+  test('Gold fade holding hides Home buttons and says so', () => {
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        autoDetail: 'placed YES · 10 @ $0.46',
+        autoStatus: 'placed',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        goldFadeHolding: true,
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'gold fade is holding this ticket' });
   });
 
   test('Buy showing with Auto skip hides Auto and shows nothing if Home would place', () => {

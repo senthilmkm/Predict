@@ -54,17 +54,16 @@ export function getETParts(date: Date = new Date()) {
 }
 
 /**
- * Evaluates whether market is open for trading & signal polling.
- * - BTC & ETH: 24/7 (Always OPEN)
- * - WTI, Gold, Silver, Copper, NG (Kalshi 15m commodities):
- *   - Friday 5:00 PM ET -> Sunday 6:00 PM ET: CLOSED (Weekend)
- *   - Holidays: CLOSED
- *   - Weekday 5:00–6:00 PM ET stays OPEN — Kalshi lists 15m contracts
- *     through the CME futures maintenance window.
+ * Evaluates whether we should poll this asset.
+ * - Crypto: 24/7
+ * - Kalshi 15m commodities (Gold, WTI, Silver, Copper, NG): always poll.
+ *   Kalshi lists Friday-night (and other) books after CME futures close.
+ *   No open Kalshi event → lean shows no market. Do not hard-close on CME weekend.
+ * - Stocks / forex: exchange hours only
  */
 export function isMarketOpen(asset: AssetKey, date: Date = new Date()): MarketHoursResult {
   const scheduleType = AssetRegistry.getScheduleType(asset);
-  if (scheduleType === 'CRYPTO_24_7') {
+  if (scheduleType === 'CRYPTO_24_7' || scheduleType === 'CME_COMMODITY') {
     return { open: true };
   }
 
@@ -88,42 +87,6 @@ export function isMarketOpen(asset: AssetKey, date: Date = new Date()): MarketHo
     return { open: true };
   }
 
-  // CME Holidays
-  if (CME_HOLIDAYS.has(monthDay)) {
-    return {
-      open: false,
-      reason: 'CME Market Holiday',
-      reopensAt: 'Next Business Day 6:00 PM ET',
-    };
-  }
-
-  // Saturday (Full Day Closed)
-  if (weekday === 'Sat') {
-    return {
-      open: false,
-      reason: 'Weekend halt',
-      reopensAt: 'Sun 6:00 PM ET',
-    };
-  }
-
-  // Friday Evening (Closed 5:00 PM ET onwards)
-  if (weekday === 'Fri' && hour >= 17) {
-    return {
-      open: false,
-      reason: 'Weekend halt',
-      reopensAt: 'Sun 6:00 PM ET',
-    };
-  }
-
-  // Sunday Before 6:00 PM ET
-  if (weekday === 'Sun' && hour < 18) {
-    return {
-      open: false,
-      reason: 'Weekend halt',
-      reopensAt: 'Sun 6:00 PM ET',
-    };
-  }
-
   return { open: true };
 }
 
@@ -135,7 +98,7 @@ export function getMarketScheduleNotice(date: Date = new Date()): string | null 
   const { weekday, hour, monthDay } = getETParts(date);
 
   if (CME_HOLIDAYS.has(monthDay)) {
-    return 'Commodity and stock markets are closed for the holiday. Polling active for 24/7 Crypto (BTC, ETH, SOL, DOGE, XRP, BNB). Non-crypto assets reopen next business day.';
+    return 'Stock indices are closed for the holiday. Crypto and Kalshi commodity 15m books still poll when Kalshi lists them.';
   }
 
   const isWeekend =
@@ -144,7 +107,7 @@ export function getMarketScheduleNotice(date: Date = new Date()): string | null 
     (weekday === 'Sun' && hour < 18);
 
   if (isWeekend) {
-    return 'Commodity and stock markets are closed for the weekend. Polling active for 24/7 Crypto (BTC, ETH, SOL, DOGE, XRP, BNB). Commodities reopen Sun 6:00 PM ET; Stock Indices Mon 9:30 AM ET.';
+    return 'Stock indices and forex are closed for the weekend. Crypto and Kalshi commodity 15m books still poll when Kalshi lists them. Stock indices reopen Mon 9:30 AM ET.';
   }
 
   return null;

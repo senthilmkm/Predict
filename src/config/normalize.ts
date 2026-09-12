@@ -24,6 +24,21 @@ import {
   reconcileCashOutTargets,
 } from '../../packages/trading-core/src/cashOut';
 import {
+  normalizeGoldFadeFlattenMinutes,
+  normalizeGoldFadeMaxAskUsd,
+  normalizeGoldFadeMaxGapUsd,
+  normalizeGoldFadeStopUsd,
+  normalizeGoldFadeTakeUsd,
+} from '../../packages/trading-core/src/goldFade';
+import {
+  normalizeTwapLockAssets,
+  normalizeTwapLockMaxAskUsd,
+} from '../../packages/trading-core/src/twapLock';
+import {
+  normalizeLastMinuteMaxAskUsd,
+  normalizeLastMinuteSide,
+} from '../../packages/trading-core/src/lastMinute';
+import {
   configForHomeBuy as mergeHomeBuyRisk,
   normalizeManualPathRisk,
 } from '../../packages/trading-core/src/pathRisk';
@@ -127,8 +142,27 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     cash_out_max_ask_usd: normalizeCashOutMaxAsk(r.cash_out_max_ask_usd ?? d.cash_out_max_ask_usd),
     cash_out_bid_usd: normalizeCashOutBid(r.cash_out_bid_usd ?? d.cash_out_bid_usd),
     cash_out_stop_usd: normalizeCashOutStopUsd(r.cash_out_stop_usd ?? d.cash_out_stop_usd),
+    cash_out_skip_thin_bid: r.cash_out_skip_thin_bid === true,
     cash_out_assets: normalizeCashOutAssets(
       r.cash_out_assets !== undefined ? r.cash_out_assets : d.cash_out_assets
+    ),
+    gold_fade_enabled: r.gold_fade_enabled === true,
+    gold_fade_max_gap_usd: normalizeGoldFadeMaxGapUsd(r.gold_fade_max_gap_usd ?? d.gold_fade_max_gap_usd),
+    gold_fade_max_ask_usd: normalizeGoldFadeMaxAskUsd(r.gold_fade_max_ask_usd ?? d.gold_fade_max_ask_usd),
+    gold_fade_take_usd: normalizeGoldFadeTakeUsd(r.gold_fade_take_usd ?? d.gold_fade_take_usd),
+    gold_fade_stop_usd: normalizeGoldFadeStopUsd(r.gold_fade_stop_usd ?? d.gold_fade_stop_usd),
+    gold_fade_flatten_minutes: normalizeGoldFadeFlattenMinutes(
+      r.gold_fade_flatten_minutes ?? d.gold_fade_flatten_minutes
+    ),
+    twap_lock_enabled: r.twap_lock_enabled === true,
+    twap_lock_assets: normalizeTwapLockAssets(
+      r.twap_lock_assets !== undefined ? r.twap_lock_assets : d.twap_lock_assets
+    ),
+    twap_lock_max_ask_usd: normalizeTwapLockMaxAskUsd(r.twap_lock_max_ask_usd ?? d.twap_lock_max_ask_usd),
+    last_minute_enabled: r.last_minute_enabled === true,
+    last_minute_side: normalizeLastMinuteSide(r.last_minute_side ?? d.last_minute_side),
+    last_minute_max_ask_usd: normalizeLastMinuteMaxAskUsd(
+      r.last_minute_max_ask_usd ?? d.last_minute_max_ask_usd
     ),
   };
   const targets = reconcileCashOutTargets(

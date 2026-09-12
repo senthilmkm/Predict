@@ -11,23 +11,14 @@ describe('Market Hours Schedule', () => {
     }
   });
 
-  it('closes WTI, Gold, Silver on Saturdays', () => {
-    // Saturday September 5, 2026 14:00 ET
+  it('polls WTI, Gold, Silver when Kalshi lists Friday-night and Saturday books', () => {
     const sat = new Date('2026-09-05T18:00:00Z');
-    const r = isMarketOpen('WTI', sat);
-    expect(r.open).toBe(false);
-    expect(r.reason).toBe('Weekend halt');
-    expect(r.reopensAt).toBe('Sun 6:00 PM ET');
-    expect(isMarketOpen('Gold', sat).open).toBe(false);
-    expect(isMarketOpen('Silver', sat).open).toBe(false);
-  });
-
-  it('closes WTI on Friday after 5:00 PM ET', () => {
-    // Friday September 4, 2026 17:30 ET (21:30 UTC in EDT)
+    expect(isMarketOpen('WTI', sat).open).toBe(true);
+    expect(isMarketOpen('Gold', sat).open).toBe(true);
+    expect(isMarketOpen('Silver', sat).open).toBe(true);
     const friEvening = new Date('2026-09-04T21:30:00Z');
-    const r = isMarketOpen('WTI', friEvening);
-    expect(r.open).toBe(false);
-    expect(r.reason).toBe('Weekend halt');
+    expect(isMarketOpen('WTI', friEvening).open).toBe(true);
+    expect(isMarketOpen('Gold', friEvening).open).toBe(true);
   });
 
   it('opens WTI on Friday before 5:00 PM ET', () => {
@@ -37,12 +28,9 @@ describe('Market Hours Schedule', () => {
     expect(r.open).toBe(true);
   });
 
-  it('closes WTI on Sunday before 6:00 PM ET and opens after 6:00 PM ET', () => {
-    // Sunday September 6, 2026 15:00 ET (19:00 UTC)
+  it('polls WTI on Sunday afternoon if Kalshi still lists a book', () => {
     const sunAfternoon = new Date('2026-09-06T19:00:00Z');
-    expect(isMarketOpen('WTI', sunAfternoon).open).toBe(false);
-
-    // Sunday September 6, 2026 18:30 ET (22:30 UTC)
+    expect(isMarketOpen('WTI', sunAfternoon).open).toBe(true);
     const sunEvening = new Date('2026-09-06T22:30:00Z');
     expect(isMarketOpen('WTI', sunEvening).open).toBe(true);
   });
@@ -66,7 +54,7 @@ describe('Market Hours Schedule', () => {
   it('generates schedule notice banner for full-day closures', () => {
     const sat = new Date('2026-09-05T18:00:00Z');
     const notice = getMarketScheduleNotice(sat);
-    expect(notice).toContain('Commodity and stock markets are closed for the weekend');
-    expect(notice).toContain('Polling active for 24/7 Crypto');
+    expect(notice).toContain('Stock indices and forex are closed for the weekend');
+    expect(notice).toContain('Kalshi commodity 15m');
   });
 });

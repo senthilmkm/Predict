@@ -49,6 +49,9 @@ export function pendingProtectTradesForMarket(
     (t) =>
       t.ticker === marketTicker &&
       t.entryPath !== 'cash_out' &&
+      t.entryPath !== 'gold_fade' &&
+      t.entryPath !== 'twap_lock' &&
+      t.entryPath !== 'last_minute' &&
       isOpenProtectCandidate(t, now)
   );
 }

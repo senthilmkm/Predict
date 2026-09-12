@@ -329,12 +329,13 @@
       <div class="glass-card rounded-2xl p-6">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <h3 class="text-base font-bold text-white flex items-center gap-2 flex-wrap">
               <span>📈 Live Kalshi Trade Stream</span>
+              <span id="twapWatcherChip" class="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30">TWAP watcher · idle</span>
               <div class="tooltip-wrapper">
                 <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
                 <div class="tooltip-content">
-                  Filters run on the full trade set. Realized P&amp;L is the sum of matching live trades (SETTLED / win / loss / protect-sell exited), not only the rows on this page. Open fills show an em dash. Entered via is Home, Auto, or Cash out — blank on older rows that predate path tagging. Cash out sells add “sold @” under the buy price.
+                  Filters run on the full trade set. Realized P&amp;L is the sum of matching live trades (SETTLED / win / loss / protect-sell exited), not only the rows on this page. Open fills show an em dash. Entered via is Home, Auto, or Cash out — blank on older rows that predate path tagging. Cash out sells add “sold @” under the buy price. The TWAP watcher chip is live last-70s status, not a table row.
                 </div>
               </div>
             </h3>
@@ -366,6 +367,9 @@
               <option value="home">Home</option>
               <option value="auto">Auto</option>
               <option value="cash_out">Cash out</option>
+              <option value="gold_fade">Gold fade</option>
+              <option value="twap_lock">TWAP lock</option>
+              <option value="last_minute">Last-minute</option>
             </select>
           </label>
           <label class="block">
@@ -663,6 +667,51 @@
             <input type="number" id="flagCashOutBidCheckSeconds" min="2" max="10" value="3" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markFeatureFormDirty()" oninput="markFeatureFormDirty()" />
             <span class="text-slate-500">After a Cash out fill (and the 45s wait), Cloud reads that ticket’s bid this often (2–10). Default 3. Not the Cloud tick interval.</span>
           </label>
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagGoldFade" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">Gold fade</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                Separate Auto path. Default Off. Gold only. Buys the cheaper ticket when the gap is small,
+                then sells for a few cents or dumps the lot (stop, thin bid, flatten, window end, flip).
+                Does not mix with Cash out / Home / Auto on the same ticker. Off hides the phone block and
+                blocks new fades. Open fade lots still exit.
+              </span>
+            </span>
+          </label>
+          <label class="block text-[11px] text-slate-400">
+            Gold fade bid check (seconds)
+            <input type="number" id="flagGoldFadeBidCheckSeconds" min="2" max="10" value="3" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markFeatureFormDirty()" oninput="markFeatureFormDirty()" />
+            <span class="text-slate-500">After a Gold fade fill (and the 45s wait), Cloud reads that ticket’s bid this often (2–10). Default 3.</span>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagTwapLock" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">TWAP lock</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                Separate Auto path. Default Off. BTC / ETH only. Buys Yes only when leftover seconds
+                can be $0 and Yes still wins (official CF Benchmarks 1s sum ≥ strike × 60), then holds
+                to $1. No stop, fade, or dump. Last-minute 1s watcher is hardcoded. Off hides the
+                phone block and blocks new TWAP lock buys. Open lots still hold to settlement.
+                Feed uses Kalshi’s official CF Benchmarks passthrough (existing Kalshi keys in Secret
+                Manager). Optional licensed CFB key: secret <span class="font-mono text-sky-400">predict-cfb-api-key</span>.
+                Do not turn On until a last-minute BRTI print is proven on a settled KXBTC15M window.
+              </span>
+            </span>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagLastMinute" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">Last-minute</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                Separate Auto path. Default Off. Any enabled asset. 1s watch in the last 60s. Buys Yes,
+                No, or the last-minute favorite at or under the user’s entry ask (default $0.96), then
+                holds to settlement. Not a $0 lock. Does not pull coins off Cash out or Auto. Window
+                cap 1 still applies. TWAP lock keeps BTC/ETH in the last minute if that path is On.
+                Off hides the phone block and blocks new Last-minute buys. Open lots still hold.
+              </span>
+            </span>
+          </label>
         </div>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p id="featureUnsavedHint" class="hidden text-[11px] text-amber-400 font-semibold">Unsaved changes — click Save feature configs.</p>
@@ -872,6 +921,15 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       }
       if (v === 'cash_out' || v === 'cashout') {
         return { label: 'Cash out', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
+      }
+      if (v === 'gold_fade' || v === 'goldfade' || v === 'fade') {
+        return { label: 'Gold fade', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' };
+      }
+      if (v === 'twap_lock' || v === 'twaplock' || v === 'twap') {
+        return { label: 'TWAP lock', cls: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' };
+      }
+      if (v === 'last_minute' || v === 'lastminute' || v === 'last-minute') {
+        return { label: 'Last-minute', cls: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' };
       }
       return { label: '—', cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' };
     }
@@ -1147,6 +1205,17 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
         const n = Number(flags.cashOutBidCheckSeconds);
         bidSec.value = String(Number.isFinite(n) ? Math.min(10, Math.max(2, Math.round(n))) : 3);
       }
+      const fade = document.getElementById('flagGoldFade');
+      if (fade) fade.checked = flags.goldFade === true;
+      const fadeSec = document.getElementById('flagGoldFadeBidCheckSeconds');
+      if (fadeSec) {
+        const n = Number(flags.goldFadeBidCheckSeconds);
+        fadeSec.value = String(Number.isFinite(n) ? Math.min(10, Math.max(2, Math.round(n))) : 3);
+      }
+      const twap = document.getElementById('flagTwapLock');
+      if (twap) twap.checked = flags.twapLock === true;
+      const lastMin = document.getElementById('flagLastMinute');
+      if (lastMin) lastMin.checked = flags.lastMinute === true;
     }
     async function saveFeatureSettings() {
       const status = document.getElementById('featureStatusMsg');
@@ -1160,6 +1229,10 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
               lastSignalsManualTrade: document.getElementById('flagLastSignalsManualTrade').checked,
               cashOut: document.getElementById('flagCashOut').checked,
               cashOutBidCheckSeconds: bidRaw,
+              goldFade: document.getElementById('flagGoldFade').checked,
+              goldFadeBidCheckSeconds: Number(document.getElementById('flagGoldFadeBidCheckSeconds').value),
+              twapLock: document.getElementById('flagTwapLock').checked,
+              lastMinute: document.getElementById('flagLastMinute').checked,
             },
           }),
         });
@@ -1414,6 +1487,16 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
           applyRetryForm(data.systemConfig);
           applyFeatureForm(data.systemConfig);
           applyBroadcastForm(data.systemConfig);
+        }
+        if (data.ok) {
+          const chip = document.getElementById('twapWatcherChip');
+          if (chip) {
+            const watching = data.twapLockWatcher?.watching === true && !String(data.twapLockWatcher?.label || '').includes('idle');
+            chip.textContent = data.twapLockWatcher?.label || 'TWAP watcher · idle';
+            chip.className = watching
+              ? 'text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+              : 'text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30';
+          }
         }
         if (data.ok && data.metrics) {
           document.getElementById('metricTotalUsers').innerText = data.metrics.totalUsers || 0;

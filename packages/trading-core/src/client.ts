@@ -253,6 +253,20 @@ export class KalshiClient {
     }
     return fields;
   }
+
+  /**
+   * Official CF Benchmarks print via Kalshi Trade API passthrough.
+   * GET /trade-api/v2/cfbenchmarks/values?id=BRTI → CFB /api/v1/values?id=BRTI
+   */
+  async getCfbIndexValue(indexId: string): Promise<{ ok: boolean; http_status: number; data: unknown }> {
+    const id = String(indexId || '').trim();
+    if (!id) return { ok: false, http_status: 0, data: null };
+    const { status, data } = await this.request(
+      'GET',
+      `/cfbenchmarks/values?id=${encodeURIComponent(id)}`
+    );
+    return { ok: status === 200, http_status: status, data };
+  }
 }
 
 export const SERIES_BY_ASSET: Record<string, string> = ASSETS_CATALOG.reduce((acc, asset) => {

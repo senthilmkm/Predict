@@ -9,3 +9,6 @@ export * from './orderFill';
 export * from './pathRisk';
 export * from './smartBuy';
 export * from './cashOut';
+export * from './goldFade';
+export * from './twapLock';
+export * from './lastMinute';

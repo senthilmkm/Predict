@@ -45,7 +45,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Only Kalshi 15-minute up/down contracts for the assets on the Cushions tab. Predict does not trade hourly, daily, or other longer Kalshi events. There is no 15-minute forex on Kalshi right now, so those pairs are not listed.\n\n' +
             'Crypto (24/7): BTC, ETH, SOL, DOGE, XRP, BNB.\n' +
-            'Commodities: Gold, Silver, WTI, Natural Gas, Copper. Nearly 24 hours; weekend pause and listed holidays. Kalshi 15-minute contracts stay open through the CME 5:00–6:00 PM ET futures desk halt.\n' +
+            'Commodities: Gold, Silver, WTI, Natural Gas, Copper. Follow Kalshi 15-minute books, including Friday night after CME futures close. If Kalshi has no open contract, Home shows no market.\n' +
             'US indexes: S&P 500, Nasdaq 100. Weekdays about 9:30 AM–4:00 PM ET only.\n\n' +
             'A new 15-minute window starts every quarter hour (10:00, 10:15, 10:30) only while Kalshi is listing that book. Closed hours show skip on Home — that is not a missing market.',
         },
@@ -66,6 +66,16 @@ export function getFaqCategories(): FaqCategory[] {
             'The extra distance live price must be past the strike before Predict calls YES or NO. Larger cushion = fewer, stricter signals.\n\n' +
             'Example: BTC default cushion is $175. If live is only $80 above the strike, that is not a YES yet.\n\n' +
             'Change cushions on the Cushions tab. You can also turn an asset off there without changing Risk.',
+        },
+        {
+          id: 'what-is-gap',
+          q: 'What is the gap on Home?',
+          a:
+            'Gap is the dollar distance between the live price and the strike. It is always a positive number. It does not by itself say which way live is.\n\n' +
+            '▲ live over strike.\n' +
+            '▼ live under strike.\n\n' +
+            'Those marks stay gray. They are not win or loss.\n\n' +
+            'If you already hold that 15-minute window, the line switches to “with you” (green) or “against you” (red) so you know whether the same gap is still on your side.',
         },
       ],
     },
@@ -278,8 +288,8 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Crypto can run 24/7. Other groups follow exchange hours (Eastern Time):\n' +
             '• US indexes: about 9:30 AM–4:00 PM ET, weekdays\n' +
-            '• Gold, oil, and other CME commodities: weekend pause and listed holidays. The Kalshi 15-minute book stays open 5:00–6:00 PM ET on weekdays\n\n' +
-            'Home may show a weekend/holiday banner. Closed assets are skipped; crypto can still lean.',
+            '• Gold, oil, and other Kalshi 15-minute commodities: poll whenever Kalshi lists a live book, including Friday night\n\n' +
+            'Home may show a weekend/holiday banner for stocks and forex. Crypto and commodities still lean when Kalshi has a book.',
         },
         {
           id: 'turn-off-asset',
@@ -361,7 +371,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Settings → Risk → Show opens Shared limits plus Home Buy and Auto-trade tabs.\n\n' +
             'Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.\n\n' +
-            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, and Cash out on Auto-trade). Cushions and keys are not wiped.',
+            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, Cash out, Gold fade, TWAP lock, and Last-minute on Auto-trade). Cushions and keys are not wiped.',
         },
         {
           id: 'smart-buy',
@@ -408,6 +418,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Cash out.\n\n' +
             'Checked assets use Cash out instead of normal Auto. It buys when the gap is your Enter cushion % of the Cushions dollar (default 60%), the ask is at or under Max ask (default $0.82), and the book is tight. It then sells when the bid is up by Cash out bid minus max ask from what you paid (paid $0.82 → $0.88; paid $0.78 → $0.84). If the bid falls by Cash out stop below the fill (default 5¢), it sells to cut a full $0 loss. If the lean fully flips by a full cushion, it sells to get out. If none of those happen, the ticket settles $1 or $0 — no last-second dump.\n\n' +
+            'Skip thin bid (default Off): Cloud also looks at how many contracts sit on the bid. If that pile is smaller than the contracts you are about to buy, it skips. If you already hold and the pile shrinks below what you hold, it sells. Fetch failure does not skip or dump.\n\n' +
             'Home Buy and Cash out never share a ticker. Protect money does not sell Cash out lots.',
         },
         {
@@ -415,6 +426,68 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'Why don’t I see Cash out on Risk?',
           a:
             'The Admin portal Feature configs switch “Cash out” is Off (default). When an admin turns it On, the block appears on Auto-trade. Bid check seconds (how often Cloud reads the bid after a fill) is also Admin-only.',
+        },
+      ],
+    },
+    {
+      id: 'goldfade',
+      title: 'Gold fade',
+      items: [
+        {
+          id: 'goldfade-how',
+          q: 'What is Gold fade?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Gold fade. Default Off. Gold only.\n\n' +
+            'When the gap (live vs strike) is at most Max gap (default $3), Cloud buys the cheaper ticket if that ask is at or under Max cheap ask (default $0.50) and the book is tight. It then sells all contracts if the bid is up Take profit from what you paid (default 6¢), hits Gold fade stop (default 5¢), the bid pile is thinner than you hold (when Skip thin bid is On), minutes left hit Flatten (default 3), the window ends, or the gap blows a full Gold cushion against you.\n\n' +
+            'This is not Cash out. Cash out buys the favorite on a large gap and does not dump at the bell. Fade buys the cheap side on a small gap and always flattens. Home, Auto, and Cash out never share a ticker with a Gold fade lot. Protect money does not sell fade lots.',
+        },
+        {
+          id: 'goldfade-admin',
+          q: 'Why don’t I see Gold fade on Risk?',
+          a:
+            'The Admin portal Feature configs switch “Gold fade” is Off (default). When an admin turns it On, the block appears on Auto-trade. Your Gold fade switch stays Off until you turn it on.',
+        },
+      ],
+    },
+    {
+      id: 'twaplock',
+      title: 'TWAP lock',
+      items: [
+        {
+          id: 'twaplock-how',
+          q: 'What is TWAP lock?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → TWAP lock. Default Off. BTC and ETH only.\n\n' +
+            'Kalshi crypto 15m settles on a 60-second average of official CF Benchmarks prints in the last minute. TWAP lock buys Yes only when the running sum already wins even if every leftover second is $0 (banked ≥ strike × 60). Max ask default $0.96 (range $0.90–$0.97). Then it holds to $1 — no stop, fade, or dump.\n\n' +
+            'Most windows do nothing. A true lock usually appears in the last 1–3 seconds, and only if the running average is already well above the strike. If Yes is 98–99¢, we skip. Missing a second or a bad book (when Skip thin bid is On) fails closed — no buy.\n\n' +
+            'This is not Cash out and not Gold fade. While TWAP lock is On for BTC or ETH, Cloud will not Cash out or Auto-lean that coin — those paths would spend the window before a lock can appear. Home Buy is still a tap. Gold and other Cash out assets are unchanged. Protect money does not sell TWAP lock lots.',
+        },
+        {
+          id: 'twaplock-admin',
+          q: 'Why don’t I see TWAP lock on Risk?',
+          a:
+            'The Admin portal Feature configs switch “TWAP lock” is Off (default). When an admin turns it On, the block appears on Auto-trade. Your TWAP lock switch stays Off until you turn it on. Cloud also needs a proven CF Benchmarks 1-second feed before Admin should turn this On in production.',
+        },
+      ],
+    },
+    {
+      id: 'lastminute',
+      title: 'Last-minute',
+      items: [
+        {
+          id: 'lastminute-how',
+          q: 'What is Last-minute?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Last-minute. Default Off. Any asset you have On.\n\n' +
+            'In the last 60 seconds Cloud watches once per second and buys Yes, No, or the last-minute favorite if that side’s ask is at or under Entry ask (default $0.96). Both sits out a 50/50 book. Then it holds to settlement — no Protect, Cash out, fade, or Home Sell exit.\n\n' +
+            'This is not TWAP lock. There is no $0 leftover math. Last seconds can flip. You can lose the full entry ask.\n\n' +
+            'Cash out and Auto already sit out the last minute, so Last-minute does not pull coins off those paths. Window cap 1 still applies: if Auto or Cash out already filled this coin this window, Last-minute sits out. If TWAP lock is On for BTC/ETH, those two stay with TWAP. Skip thin bid (above) applies. IOC only.',
+        },
+        {
+          id: 'lastminute-admin',
+          q: 'Why don’t I see Last-minute on Risk?',
+          a:
+            'The Admin portal Feature configs switch “Last-minute” is Off (default). When an admin turns it On, the block appears on Auto-trade. Your Last-minute switch stays Off until you turn it on.',
         },
       ],
     },
@@ -447,7 +520,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What do the Home money numbers mean?',
           a:
             'Cash and Predictions totals come from your Kalshi account (when keys work). Change (24h) is that Predictions total vs yesterday’s saved value — Kalshi-style, not only today’s Predict fills.\n\n' +
-            'Each asset row is the current lean, gap, and last action. Pull down to refresh.',
+            'Each asset row is the current lean, gap, and last action. Gap is the dollar distance between live price and strike. ▲ live over strike. ▼ live under strike (gray). If you already hold that window, it says “with you” (green) or “against you” (red) so you know whether to sell. Pull down to refresh.',
         },
         {
           id: 'history',

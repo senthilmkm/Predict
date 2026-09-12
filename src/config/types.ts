@@ -170,7 +170,21 @@ export interface RiskConfig {
   cash_out_bid_usd?: number;
   /** Sell if held-side bid falls this far below fill. Default $0.05. Range $0.03–$0.10. */
   cash_out_stop_usd?: number;
+  /** Skip buy / sell early when bid size < contracts. Default Off. */
+  cash_out_skip_thin_bid?: boolean;
   cash_out_assets?: string[];
+  gold_fade_enabled?: boolean;
+  gold_fade_max_gap_usd?: number;
+  gold_fade_max_ask_usd?: number;
+  gold_fade_take_usd?: number;
+  gold_fade_stop_usd?: number;
+  gold_fade_flatten_minutes?: number;
+  twap_lock_enabled?: boolean;
+  twap_lock_assets?: string[];
+  twap_lock_max_ask_usd?: number;
+  last_minute_enabled?: boolean;
+  last_minute_side?: 'yes' | 'no' | 'both';
+  last_minute_max_ask_usd?: number;
 }
 
 export interface AlertPref {
@@ -280,7 +294,20 @@ export function defaultAppConfig(): AppConfig {
       cash_out_max_ask_usd: 0.82,
       cash_out_bid_usd: 0.88,
       cash_out_stop_usd: 0.05,
+      cash_out_skip_thin_bid: false,
       cash_out_assets: ['Gold'],
+      gold_fade_enabled: false,
+      gold_fade_max_gap_usd: 3,
+      gold_fade_max_ask_usd: 0.5,
+      gold_fade_take_usd: 0.06,
+      gold_fade_stop_usd: 0.05,
+      gold_fade_flatten_minutes: 3,
+      twap_lock_enabled: false,
+      twap_lock_assets: ['BTC', 'ETH'],
+      twap_lock_max_ask_usd: 0.96,
+      last_minute_enabled: false,
+      last_minute_side: 'yes',
+      last_minute_max_ask_usd: 0.96,
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

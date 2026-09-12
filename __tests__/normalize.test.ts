@@ -137,7 +137,41 @@ describe('normalize / cushions', () => {
     expect(d.cash_out_max_ask_usd).toBe(0.82);
     expect(d.cash_out_bid_usd).toBe(0.88);
     expect(d.cash_out_stop_usd).toBe(0.05);
+    expect(d.cash_out_skip_thin_bid).toBe(false);
+    expect(d.gold_fade_enabled).toBe(false);
+    expect(d.gold_fade_max_gap_usd).toBe(3);
+    expect(d.gold_fade_max_ask_usd).toBe(0.5);
+    expect(d.gold_fade_take_usd).toBe(0.06);
+    expect(d.gold_fade_stop_usd).toBe(0.05);
+    expect(d.gold_fade_flatten_minutes).toBe(3);
+    expect(d.twap_lock_enabled).toBe(false);
+    expect(d.twap_lock_max_ask_usd).toBe(0.96);
+    expect(d.twap_lock_assets).toEqual(['BTC', 'ETH']);
+    expect(d.last_minute_enabled).toBe(false);
+    expect(d.last_minute_side).toBe('yes');
+    expect(d.last_minute_max_ask_usd).toBe(0.96);
     expect(d.cash_out_assets).toEqual(['Gold']);
+    const fadeOn = normalizeAppConfig({
+      risk: { gold_fade_enabled: true, gold_fade_max_gap_usd: 2.4 },
+    } as any).risk;
+    expect(fadeOn.gold_fade_enabled).toBe(true);
+    expect(fadeOn.gold_fade_max_gap_usd).toBe(2.5);
+    const twapOn = normalizeAppConfig({
+      risk: { twap_lock_enabled: true, twap_lock_max_ask_usd: 0.989, twap_lock_assets: ['BTC', 'Gold'] },
+    } as any).risk;
+    expect(twapOn.twap_lock_enabled).toBe(true);
+    expect(twapOn.twap_lock_max_ask_usd).toBe(0.97);
+    expect(twapOn.twap_lock_assets).toEqual(['BTC']);
+    const lastMin = normalizeAppConfig({
+      risk: { last_minute_enabled: true, last_minute_side: 'BOTH', last_minute_max_ask_usd: 1.2 },
+    } as any).risk;
+    expect(lastMin.last_minute_enabled).toBe(true);
+    expect(lastMin.last_minute_side).toBe('both');
+    expect(lastMin.last_minute_max_ask_usd).toBe(0.99);
+    const on = normalizeAppConfig({
+      risk: { cash_out_skip_thin_bid: true },
+    } as any).risk;
+    expect(on.cash_out_skip_thin_bid).toBe(true);
     const fixed = normalizeAppConfig({
       risk: { cash_out_max_ask_usd: 0.9, cash_out_bid_usd: 0.88, cash_out_enter_pct: 10 },
     } as any).risk;

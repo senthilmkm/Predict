@@ -1,3 +1,5 @@
+import request from 'supertest';
+import { app } from '../index';
 import { saveTradeRecord, getTradeRecords, resetSystemConfigCacheForTests } from '../services/firestore';
 import { pendingProtectTradesForMarket, runCloudProtectSells } from '../services/cloudProtectSell';
 import { pendingCashOutTradesForMarket, runCloudCashOutExits } from '../services/cloudCashOut';
@@ -300,5 +302,85 @@ describe('Cloud Cash out', () => {
     });
     expect(gate.ok).toBe(false);
     expect(gate.skip_reason).toBe('cash_out_holding_other_path');
+  });
+
+  test('thin bid sells after grace; Off and unknown book do not', async () => {
+    const userId = 'user_cout_thin';
+    const trade = filledTrade({ userId, executedAt: '2026-09-10T15:00:00.000Z' });
+    await saveTradeRecord(userId, trade);
+    const base = {
+      userId,
+      asset: 'Gold',
+      ticker: trade.ticker,
+      lean: { decision: 'YES' as const, abs_gap: 120, phase: 'live' as const, yes_bid: 0.72, yes_ask: 0.74 },
+      trades: [trade],
+      cushion: 175,
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      stopUsd: 0.05,
+      graceSeconds: 45,
+      slippageUsd: 0.02,
+      dryRun: false,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    };
+    const off = await runCloudCashOutExits({
+      ...base,
+      skipThinBid: false,
+      bidSize: 1,
+      place: async () => ({ ok: true, fill_count: 7, order_id: 'ord-off' }),
+    });
+    expect(off.exited).toBe(0);
+    const unknown = await runCloudCashOutExits({
+      ...base,
+      skipThinBid: true,
+      bidSize: null,
+      place: async () => ({ ok: true, fill_count: 7, order_id: 'ord-unk' }),
+    });
+    expect(unknown.exited).toBe(0);
+    const hit = await runCloudCashOutExits({
+      ...base,
+      skipThinBid: true,
+      bidSize: 1,
+      place: async () => ({ ok: true, fill_count: 7, order_id: 'ord-thin' }),
+    });
+    expect(hit.exited).toBe(1);
+    expect(hit.alerts[0].title).toBe('Cash out thin bid');
+  });
+
+  test('POST /me/status persists Skip thin bid to user config', async () => {
+    const uid = 'user_cout_thin_cfg';
+    const on = await request(app)
+      .post('/me/status')
+      .set('Authorization', `Bearer ${uid}`)
+      .send({
+        cloudTradingEnabled: true,
+        state: 'ARMED',
+        config: {
+          risk: {
+            cash_out_enabled: true,
+            cash_out_skip_thin_bid: true,
+            cash_out_assets: ['Gold'],
+            cash_out_max_ask_usd: 0.82,
+            cash_out_bid_usd: 0.86,
+            cash_out_stop_usd: 0.05,
+          },
+        },
+      });
+    expect(on.status).toBe(200);
+    expect(on.body.userDoc.config.risk.cash_out_skip_thin_bid).toBe(true);
+    expect(on.body.userDoc.config.risk.cash_out_enabled).toBe(true);
+    const off = await request(app)
+      .post('/me/status')
+      .set('Authorization', `Bearer ${uid}`)
+      .send({
+        cloudTradingEnabled: true,
+        state: 'ARMED',
+        config: {
+          risk: { cash_out_skip_thin_bid: false },
+        },
+      });
+    expect(off.status).toBe(200);
+    expect(off.body.userDoc.config.risk.cash_out_skip_thin_bid).toBe(false);
+    expect(off.body.userDoc.config.risk.cash_out_enabled).toBe(true);
   });
 });

@@ -1,11 +1,16 @@
 import { parseTradeEntryPath } from '../../../../packages/trading-core/src/cashOut';
 import { CloudAlertDoc, TradeRecordDoc, saveAlertRecord, updateTradeRecord } from './firestore';
 
-export function orderPlacedPathTag(raw: unknown): 'Home' | 'Auto' | 'Cash out' | null {
+export function orderPlacedPathTag(
+  raw: unknown
+): 'Home' | 'Auto' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | null {
   const parsed = parseTradeEntryPath(raw);
   if (parsed === 'home') return 'Home';
   if (parsed === 'auto') return 'Auto';
   if (parsed === 'cash_out') return 'Cash out';
+  if (parsed === 'gold_fade') return 'Gold fade';
+  if (parsed === 'twap_lock') return 'TWAP lock';
+  if (parsed === 'last_minute') return 'Last-minute';
   return null;
 }
 

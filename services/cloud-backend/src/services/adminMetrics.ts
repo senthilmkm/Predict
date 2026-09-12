@@ -2,7 +2,7 @@ import { parseTradeEntryPath } from '../../../../packages/trading-core/src/cashO
 import { TradeRecordDoc } from './firestore';
 import { cloudDailyRealizedPnl } from './settlement';
 
-export type TradeStreamEntryLabel = 'Home' | 'Auto' | 'Cash out' | '—';
+export type TradeStreamEntryLabel = 'Home' | 'Auto' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | '—';
 
 /** Admin stream label. Legacy rows with no path stay blank — do not guess. */
 export function tradeStreamEntryLabel(raw: unknown): TradeStreamEntryLabel {
@@ -10,6 +10,9 @@ export function tradeStreamEntryLabel(raw: unknown): TradeStreamEntryLabel {
   if (parsed === 'home') return 'Home';
   if (parsed === 'auto') return 'Auto';
   if (parsed === 'cash_out') return 'Cash out';
+  if (parsed === 'gold_fade') return 'Gold fade';
+  if (parsed === 'twap_lock') return 'TWAP lock';
+  if (parsed === 'last_minute') return 'Last-minute';
   return '—';
 }
 
@@ -65,7 +68,7 @@ export const TRADE_STREAM_DISPLAY_MAX = 500;
 export interface TradeStreamFilters {
   asset?: string;
   status?: string;
-  entryPath?: 'home' | 'auto' | 'cash_out';
+  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute';
   userId?: string;
   fromMs?: number;
   toMs?: number;

@@ -106,8 +106,74 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'no bid';
     case 'cash_out_spread_wide':
       return 'spread too wide';
+    case 'cash_out_thin_bid':
+      return 'bid too thin';
+    case 'gold_fade_admin_off':
+      return 'gold fade off';
+    case 'gold_fade_off':
+      return 'gold fade off';
+    case 'gold_fade_not_gold':
+      return 'gold fade off';
+    case 'gold_fade_gap_wide':
+      return 'gap too wide to fade';
+    case 'gold_fade_ask_rich':
+      return 'cheap side not cheap';
+    case 'gold_fade_spread_wide':
+      return 'spread too wide';
+    case 'gold_fade_no_cheap_side':
+      return 'no cheaper side';
+    case 'gold_fade_thin_bid':
+      return 'bid too thin';
+    case 'gold_fade_holding_other_path':
+      return 'Home, Auto, or Cash out already holding';
+    case 'gold_fade_too_late':
+      return 'too little time left';
+    case 'gold_fade_holding':
+      return 'gold fade is holding this ticket';
     case 'cash_out_holding':
       return 'cash out is holding this ticket';
+    case 'twap_lock_admin_off':
+    case 'twap_lock_off':
+      return 'twap lock off';
+    case 'twap_lock_asset_off':
+      return 'twap asset off';
+    case 'twap_lock_not_last_minute':
+      return 'not last minute';
+    case 'twap_lock_not_locked':
+      return 'not locked';
+    case 'twap_lock_ask_rich':
+      return 'ask too rich';
+    case 'twap_lock_feed':
+      return 'lock feed';
+    case 'twap_lock_holding_other_path':
+      return 'already holding';
+    case 'twap_lock_too_late':
+      return 'too late';
+    case 'twap_lock_thin_bid':
+      return 'bid too thin';
+    case 'twap_lock_holding':
+      return 'twap lock is holding this ticket';
+    case 'last_minute_admin_off':
+    case 'last_minute_off':
+      return 'last-minute off';
+    case 'last_minute_not_last_minute':
+      return 'not last minute';
+    case 'last_minute_ask_rich':
+      return 'ask too rich';
+    case 'last_minute_no_ask':
+      return 'no ask';
+    case 'last_minute_no_favorite':
+      return 'no last-minute favorite';
+    case 'last_minute_no_close':
+      return 'no close time';
+    case 'last_minute_twap_owns':
+      return 'twap lock owns this coin';
+    case 'last_minute_holding_other_path':
+      return 'already holding';
+    case 'last_minute_thin_bid':
+      return 'bid too thin';
+    case 'last_minute_holding':
+      return 'last-minute is holding this ticket';
     case 'no_open_fill':
       return 'no open fill to sell';
     case 'market_closed':

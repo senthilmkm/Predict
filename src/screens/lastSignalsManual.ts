@@ -1,11 +1,79 @@
 import { TradeRecord } from '../storage/repos';
-import { AppConfig } from '../config/types';
+import { AppConfig, AssetRegistry } from '../config/types';
 import { configForHomeBuy } from '../config/normalize';
 import { evaluateStaticGate } from '../engine/gates';
 import {
   countWindowBuysForTicker,
   formatSkipReason,
 } from '../../packages/trading-core/src/gates';
+import {
+  isTwapLockEnterPath,
+  TWAP_LOCK_WATCH_SEC,
+  twapLockSecondsLeft,
+} from '../../packages/trading-core/src/twapLock';
+import {
+  isLastMinuteEnterPath,
+  LAST_MINUTE_WATCH_SEC,
+} from '../../packages/trading-core/src/lastMinute';
+
+export type GapLiveSide = 'above' | 'below';
+export type GapDisplayTone = 'with' | 'against' | 'neutral';
+
+/** Live vs strike. YES/NO is only a fallback when live/strike are missing. */
+export function liveVsStrike(
+  live?: number | null,
+  strike?: number | null,
+  decision?: string
+): GapLiveSide | null {
+  const l = Number(live);
+  const s = Number(strike);
+  if (Number.isFinite(l) && Number.isFinite(s)) {
+    return l >= s ? 'above' : 'below';
+  }
+  if (decision === 'YES') return 'above';
+  if (decision === 'NO') return 'below';
+  return null;
+}
+
+export function formatGapAmount(gap: number, assetKey?: string): string {
+  const abs = Math.abs(gap);
+  const bounds = assetKey ? AssetRegistry.getCushionBounds(assetKey) : null;
+  const decimals = bounds?.step ? (String(bounds.step).split('.')[1]?.length || 2) : 2;
+  const prec = Math.max(decimals, abs < 0.01 ? 4 : abs < 1 ? 3 : 2);
+  return `$${abs.toFixed(prec)}`;
+}
+
+/**
+ * Home gap line: ▲ / ▼ vs strike when flat; with you / against you when holding.
+ */
+export function formatGapDisplay(opts: {
+  gap: number | undefined | null;
+  assetKey?: string;
+  live?: number | null;
+  strike?: number | null;
+  decision?: string;
+  heldSide?: 'YES' | 'NO' | null;
+}): { text: string; tone: GapDisplayTone } {
+  if (opts.gap == null || !Number.isFinite(Number(opts.gap))) {
+    return { text: '', tone: 'neutral' };
+  }
+  const amt = formatGapAmount(Number(opts.gap), opts.assetKey);
+  const dir = liveVsStrike(opts.live, opts.strike, opts.decision);
+  const held = opts.heldSide;
+  if (held === 'YES' || held === 'NO') {
+    if (dir) {
+      const withYou = (held === 'YES' && dir === 'above') || (held === 'NO' && dir === 'below');
+      return {
+        text: withYou ? `with you ${amt} (gap)` : `against you ${amt} (gap)`,
+        tone: withYou ? 'with' : 'against',
+      };
+    }
+    return { text: `${amt} (gap)`, tone: 'neutral' };
+  }
+  if (dir === 'above') return { text: `\u25B2 ${amt} (gap)`, tone: 'neutral' };
+  if (dir === 'below') return { text: `\u25BC ${amt} (gap)`, tone: 'neutral' };
+  return { text: `${amt} (gap)`, tone: 'neutral' };
+}
 
 export interface LastSignalRowInput {
   asset: string;
@@ -135,8 +203,94 @@ export function skipSignalReason(phase?: string | null): string {
   return 'below cushion';
 }
 
+/** Last ~70s on a TWAP coin. Stays on the row even if Home Buy is showing. */
+export function formatTwapWatchLine(opts: {
+  adminEnabled: boolean;
+  userEnabled: boolean;
+  assets: unknown;
+  asset: string;
+  secondsLeft: number | null;
+  autoDetail?: string | null;
+  autoStatus?: string | null;
+}): string | null {
+  if (
+    !isTwapLockEnterPath({
+      adminEnabled: opts.adminEnabled,
+      userEnabled: opts.userEnabled,
+      assets: opts.assets,
+      asset: opts.asset,
+    })
+  ) {
+    return null;
+  }
+  const left = opts.secondsLeft;
+  if (left == null || !Number.isFinite(left) || left <= 0 || left > TWAP_LOCK_WATCH_SEC) {
+    return null;
+  }
+  const status = String(opts.autoStatus || '');
+  if (status === 'placed') return null;
+  if (status === 'skipped') {
+    const reason = String(opts.autoDetail || '')
+      .replace(/^skipped\s*·\s*/i, '')
+      .trim();
+    if (reason) return `TWAP watching · ${reason}`;
+  }
+  if (status === 'failed') {
+    const detail = String(opts.autoDetail || '').trim();
+    if (detail) return `TWAP watching · ${detail}`;
+  }
+  return `TWAP watching · ${Math.round(left)}s left`;
+}
+
+/** Last ~70s on an enabled Last-minute asset. TWAP line wins if both apply. */
+export function formatLastMinuteWatchLine(opts: {
+  adminEnabled: boolean;
+  userEnabled: boolean;
+  assetEnabled: boolean;
+  asset: string;
+  secondsLeft: number | null;
+  autoDetail?: string | null;
+  autoStatus?: string | null;
+}): string | null {
+  if (
+    !isLastMinuteEnterPath({
+      adminEnabled: opts.adminEnabled,
+      userEnabled: opts.userEnabled,
+      assetEnabled: opts.assetEnabled,
+      asset: opts.asset,
+    })
+  ) {
+    return null;
+  }
+  const left = opts.secondsLeft;
+  if (left == null || !Number.isFinite(left) || left <= 0 || left > LAST_MINUTE_WATCH_SEC) {
+    return null;
+  }
+  const status = String(opts.autoStatus || '');
+  if (status === 'placed') return null;
+  if (status === 'skipped') {
+    const reason = String(opts.autoDetail || '')
+      .replace(/^skipped\s*·\s*/i, '')
+      .trim();
+    if (reason) return `Last-minute watching · ${reason}`;
+  }
+  if (status === 'failed') {
+    const detail = String(opts.autoDetail || '').trim();
+    if (detail) return `Last-minute watching · ${detail}`;
+  }
+  return `Last-minute watching · ${Math.round(left)}s left`;
+}
+
+export function twapWatchSecondsLeft(closeUtc: unknown, nowMs: number): number | null {
+  if (closeUtc == null) return null;
+  const close = closeUtc instanceof Date ? closeUtc : new Date(String(closeUtc));
+  if (!Number.isFinite(close.getTime())) return null;
+  return twapLockSecondsLeft(new Date(nowMs), close);
+}
+
 /**
  * One extra line on a Last signals row.
+ * TWAP last-minute watch stays on the coin even if Home Buy is showing.
  * Home Buy skip → that skip only (never Auto-trade's skip), even if Buy is hidden.
  * Sell showing → Cloud place/resting detail only (never Auto skip).
  * No Home skip and no button → Auto-trade last action, or the SKIP reason for this phase.
@@ -153,10 +307,30 @@ export function lastSignalExtraLine(opts: {
   tapSkipReason?: string | null;
   phase?: string | null;
   cashOutHolding?: boolean;
+  goldFadeHolding?: boolean;
+  twapLockHolding?: boolean;
+  lastMinuteHolding?: boolean;
+  twapWatchText?: string | null;
+  lastMinuteWatchText?: string | null;
 }): { testID: 'trade-action' | 'skip-reason'; text: string; placed?: boolean; failed?: boolean } | null {
   if (opts.err || !opts.isOpen || opts.noMarket) return null;
+  if (opts.twapLockHolding) {
+    return { testID: 'skip-reason', text: 'twap lock is holding this ticket' };
+  }
+  if (opts.lastMinuteHolding) {
+    return { testID: 'skip-reason', text: 'last-minute is holding this ticket' };
+  }
+  if (opts.goldFadeHolding) {
+    return { testID: 'skip-reason', text: 'gold fade is holding this ticket' };
+  }
   if (opts.cashOutHolding) {
     return { testID: 'skip-reason', text: 'cash out is holding this ticket' };
+  }
+  if (opts.twapWatchText) {
+    return { testID: 'skip-reason', text: opts.twapWatchText };
+  }
+  if (opts.lastMinuteWatchText) {
+    return { testID: 'skip-reason', text: opts.lastMinuteWatchText };
   }
   if (opts.manualKind === 'buy') {
     if (opts.tapSkipReason) return { testID: 'skip-reason', text: opts.tapSkipReason };

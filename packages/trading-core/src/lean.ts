@@ -6,6 +6,7 @@ import {
   timeoutRetryWaitMs,
 } from './kalshiRetry';
 import { sanitizeTimeseries } from './smartBuy';
+import { CashOutOrderBook, parseKalshiOrderbook } from './cashOut';
 
 const PUBLIC_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
@@ -38,6 +39,8 @@ export interface LeanResult {
   timeseries?: { t: number; v: number }[];
   /** Exact minutes until close (not floored). */
   minutes_remaining?: number;
+  /** ISO close time for TWAP last-minute math. */
+  close_utc?: string;
 }
 
 const LEAN_FETCH_TIMEOUT_MS = 12_000;
@@ -47,6 +50,8 @@ const QUOTE_CACHE_TTL_MS = 5_000;
 type CacheEntry<T> = { at: number; value: T };
 const eventsCache = new Map<string, CacheEntry<any>>();
 const quoteCache = new Map<string, CacheEntry<any>>();
+const orderbookCache = new Map<string, CacheEntry<CashOutOrderBook | null>>();
+const ORDERBOOK_CACHE_TTL_MS = 3_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -176,15 +181,41 @@ export async function getCurrentOrNext15mMarket(
   return { phase: 'unknown', row: candidates[0] };
 }
 
-export async function getMarketQuote(ticker: string, fetchImpl: typeof fetch = fetch) {
+export async function getMarketQuote(
+  ticker: string,
+  fetchImpl: typeof fetch = fetch,
+  opts?: { skipCache?: boolean }
+) {
   const cached = quoteCache.get(ticker);
-  if (cached && Date.now() - cached.at < QUOTE_CACHE_TTL_MS) {
+  if (!opts?.skipCache && cached && Date.now() - cached.at < QUOTE_CACHE_TTL_MS) {
     return cached.value;
   }
   const resp = await jsonGet(`${PUBLIC_BASE}/markets/${encodeURIComponent(ticker)}`, fetchImpl);
   const market = resp.market;
   quoteCache.set(ticker, { at: Date.now(), value: market });
   return market;
+}
+
+/** Public Kalshi book. null = fetch failed (treat as unknown, not thin). */
+export async function getMarketOrderbook(
+  ticker: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<CashOutOrderBook | null> {
+  const tkr = String(ticker || '').trim();
+  if (!tkr) return null;
+  const cached = orderbookCache.get(tkr);
+  if (cached && Date.now() - cached.at < ORDERBOOK_CACHE_TTL_MS) {
+    return cached.value;
+  }
+  try {
+    const resp = await jsonGet(`${PUBLIC_BASE}/markets/${encodeURIComponent(tkr)}/orderbook`, fetchImpl);
+    const book = parseKalshiOrderbook(resp);
+    orderbookCache.set(tkr, { at: Date.now(), value: book });
+    return book;
+  } catch {
+    orderbookCache.set(tkr, { at: Date.now(), value: null });
+    return null;
+  }
 }
 
 export async function getKalshiEventLiveSpot(
@@ -357,5 +388,6 @@ export async function computeLean(
     price_source: priceSource,
     cushion,
     timeseries,
+    close_utc: close ? close.toISOString() : undefined,
   };
 }

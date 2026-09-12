@@ -101,6 +101,69 @@ export async function getUserSecret(userId: string): Promise<UserKalshiSecret | 
   }
 }
 
+export const CFB_API_KEY_SECRET_ID = 'predict-cfb-api-key';
+
+export type CfbApiCredentials = {
+  username?: string;
+  key: string;
+};
+
+let cfbCredsCache: { at: number; value: CfbApiCredentials | null } | null = null;
+const CFB_CREDS_TTL_MS = 60_000;
+
+function projectId(): string {
+  return process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-trading-0904';
+}
+
+function parseCfbSecretPayload(raw: string): CfbApiCredentials | null {
+  const text = String(raw || '').trim();
+  if (!text || text === 'UNSET') return null;
+  try {
+    const obj = JSON.parse(text) as Record<string, unknown>;
+    const key = String(obj.key ?? obj.apiKey ?? obj.api_key ?? obj.password ?? '').trim();
+    const username = String(obj.username ?? obj.user ?? obj.id ?? '').trim();
+    if (!key) return null;
+    return username ? { username, key } : { key };
+  } catch {
+    const colon = text.indexOf(':');
+    if (colon > 0 && colon < text.length - 1) {
+      return { username: text.slice(0, colon).trim(), key: text.slice(colon + 1).trim() };
+    }
+    return { key: text };
+  }
+}
+
+/** Env CFB_API_KEY wins. Else Secret Manager predict-cfb-api-key. Cached 60s. */
+export async function getCfbApiCredentials(): Promise<CfbApiCredentials | null> {
+  const fromEnv = parseCfbSecretPayload(String(process.env.CFB_API_KEY || ''));
+  if (fromEnv) return fromEnv;
+  if (cfbCredsCache && Date.now() - cfbCredsCache.at < CFB_CREDS_TTL_MS) {
+    return cfbCredsCache.value;
+  }
+  const sm = getClient();
+  if (!sm) {
+    cfbCredsCache = { at: Date.now(), value: null };
+    return null;
+  }
+  try {
+    const name = `projects/${projectId()}/secrets/${CFB_API_KEY_SECRET_ID}/versions/latest`;
+    const [version] = await sm.accessSecretVersion({ name });
+    const payloadStr = version.payload?.data?.toString() || '';
+    const parsed = parseCfbSecretPayload(payloadStr);
+    cfbCredsCache = { at: Date.now(), value: parsed };
+    return parsed;
+  } catch {
+    cfbCredsCache = { at: Date.now(), value: null };
+    return null;
+  }
+}
+
+export function resetCfbApiCredentialsCacheForTests(): void {
+  cfbCredsCache = null;
+}
+
+export { parseCfbSecretPayload };
+
 export async function deleteUserSecret(userId: string): Promise<void> {
   localSecretStore.delete(userId);
 

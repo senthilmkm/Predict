@@ -133,6 +133,9 @@ describe('admin overview metrics', () => {
     expect(tradeStreamEntryLabel('manual_buy')).toBe('Home');
     expect(tradeStreamEntryLabel('auto')).toBe('Auto');
     expect(tradeStreamEntryLabel('cash_out')).toBe('Cash out');
+    expect(tradeStreamEntryLabel('gold_fade')).toBe('Gold fade');
+    expect(tradeStreamEntryLabel('twap_lock')).toBe('TWAP lock');
+    expect(tradeStreamEntryLabel('last_minute')).toBe('Last-minute');
     expect(tradeStreamEntryLabel(undefined)).toBe('—');
     expect(tradeStreamEntryLabel('other')).toBe('—');
 

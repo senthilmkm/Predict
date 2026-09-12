@@ -29,7 +29,20 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   cash_out_max_ask_usd: 0.82,
   cash_out_bid_usd: 0.88,
   cash_out_stop_usd: 0.05,
+  cash_out_skip_thin_bid: false,
   cash_out_assets: ['Gold'],
+  gold_fade_enabled: false,
+  gold_fade_max_gap_usd: 3,
+  gold_fade_max_ask_usd: 0.5,
+  gold_fade_take_usd: 0.06,
+  gold_fade_stop_usd: 0.05,
+  gold_fade_flatten_minutes: 3,
+  twap_lock_enabled: false,
+  twap_lock_assets: ['BTC', 'ETH'],
+  twap_lock_max_ask_usd: 0.96,
+  last_minute_enabled: false,
+  last_minute_side: 'yes',
+  last_minute_max_ask_usd: 0.96,
 };
 
 export type RiskFieldGroup = 'size' | 'caps' | 'timing';
@@ -167,6 +180,105 @@ export const RISK_FIELD_META: {
     min: 0.03,
     max: 0.1,
   },
+  {
+    key: 'cash_out_skip_thin_bid',
+    label: 'Skip thin bid',
+    group: 'timing',
+    kind: 'toggle',
+    step: 0,
+    min: 0,
+    max: 1,
+  },
+  {
+    key: 'gold_fade_enabled',
+    label: 'Gold fade',
+    group: 'timing',
+    kind: 'toggle',
+    step: 0,
+    min: 0,
+    max: 1,
+  },
+  {
+    key: 'gold_fade_max_gap_usd',
+    label: 'Max gap',
+    group: 'timing',
+    kind: 'money',
+    step: 0.5,
+    min: 1,
+    max: 6,
+  },
+  {
+    key: 'gold_fade_max_ask_usd',
+    label: 'Max cheap ask',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.35,
+    max: 0.55,
+  },
+  {
+    key: 'gold_fade_take_usd',
+    label: 'Take profit',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.05,
+    max: 0.1,
+  },
+  {
+    key: 'gold_fade_stop_usd',
+    label: 'Gold fade stop',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.03,
+    max: 0.1,
+  },
+  {
+    key: 'gold_fade_flatten_minutes',
+    label: 'Flatten with min left',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 2,
+    max: 5,
+  },
+  {
+    key: 'twap_lock_enabled',
+    label: 'TWAP lock',
+    group: 'timing',
+    kind: 'toggle',
+    step: 0,
+    min: 0,
+    max: 1,
+  },
+  {
+    key: 'twap_lock_max_ask_usd',
+    label: 'Max ask',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.9,
+    max: 0.97,
+  },
+  {
+    key: 'last_minute_enabled',
+    label: 'Last-minute',
+    group: 'timing',
+    kind: 'toggle',
+    step: 0,
+    min: 0,
+    max: 1,
+  },
+  {
+    key: 'last_minute_max_ask_usd',
+    label: 'Entry ask',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.8,
+    max: 0.99,
+  },
 ];
 
 export const TIME_IN_FORCE_OPTIONS: { value: TimeInForce; label: string }[] = [
@@ -210,12 +322,35 @@ export const CASH_OUT_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'cash_out_max_ask_usd',
   'cash_out_bid_usd',
   'cash_out_stop_usd',
+  'cash_out_skip_thin_bid',
+];
+
+export const GOLD_FADE_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'gold_fade_enabled',
+  'gold_fade_max_gap_usd',
+  'gold_fade_max_ask_usd',
+  'gold_fade_take_usd',
+  'gold_fade_stop_usd',
+  'gold_fade_flatten_minutes',
+];
+
+export const TWAP_LOCK_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'twap_lock_enabled',
+  'twap_lock_max_ask_usd',
+];
+
+export const LAST_MINUTE_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'last_minute_enabled',
+  'last_minute_max_ask_usd',
 ];
 
 export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   ...SMART_BUY_RISK_FIELD_KEYS,
   ...PROTECT_RISK_FIELD_KEYS,
   ...CASH_OUT_RISK_FIELD_KEYS,
+  ...GOLD_FADE_RISK_FIELD_KEYS,
+  ...TWAP_LOCK_RISK_FIELD_KEYS,
+  ...LAST_MINUTE_RISK_FIELD_KEYS,
 ];
 
 export function cloneDefaultRisk(): RiskConfig {

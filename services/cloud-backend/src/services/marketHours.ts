@@ -1,20 +1,10 @@
+import { AssetRegistry } from 'trading-core';
+
 export interface MarketHoursResult {
   open: boolean;
   reason?: string;
   reopensAt?: string;
 }
-
-// Known CME Commodity Holidays (YYYY-MM-DD in ET)
-const CME_HOLIDAYS = new Set([
-  '2026-01-01', // New Year's Day
-  '2026-04-03', // Good Friday
-  '2026-05-25', // Memorial Day
-  '2026-07-03', // Independence Day (Observed)
-  '2026-09-07', // Labor Day
-  '2026-11-26', // Thanksgiving Day
-  '2026-12-25', // Christmas Day
-  '2027-01-01', // New Year's Day 2027
-]);
 
 export function getETParts(date: Date = new Date()) {
   try {
@@ -50,42 +40,32 @@ export function getETParts(date: Date = new Date()) {
 }
 
 /**
- * Evaluates whether market is open for trading & signal polling in GCP Cloud Run.
- * - BTC & ETH: 24/7 (Always OPEN)
- * - WTI, Gold, Silver, Copper, NG (Kalshi 15m commodities):
- *   - Friday 5:00 PM ET -> Sunday 6:00 PM ET: CLOSED (Weekend)
- *   - Holidays: CLOSED
- *   - Weekday 5:00–6:00 PM ET stays OPEN — Kalshi lists 15m contracts
- *     through the CME futures maintenance window.
+ * Evaluates whether Cloud should poll this asset.
+ * - Crypto: 24/7
+ * - Kalshi 15m commodities: always poll (Kalshi lists Friday-night books after CME close)
+ * - Stocks / forex: exchange hours only
  */
-import { AssetRegistry } from 'trading-core';
-
 function getSchedule(asset: string): string {
-  try {
-    if (typeof AssetRegistry?.getScheduleType === 'function') {
-      const st = AssetRegistry.getScheduleType(asset);
-      if (st) return st;
-    }
-  } catch { }
+  if (['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'SUI', 'LINK'].includes(asset)) return 'CRYPTO_24_7';
+  if (['SPX', 'NDX'].includes(asset)) return 'US_STOCK_HOURS';
+  if (['EURUSD', 'GBPUSD', 'USDJPY'].includes(asset)) return 'FOREX_HOURS';
+  if (['WTI', 'Gold', 'Silver', 'COPPER', 'NG'].includes(asset)) return 'CME_COMMODITY';
   try {
     if (typeof AssetRegistry?.get === 'function') {
       const def = AssetRegistry.get(asset);
       if (def?.scheduleType) return def.scheduleType;
     }
-  } catch { }
-  if (['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'SUI', 'LINK'].includes(asset)) return 'CRYPTO_24_7';
-  if (['SPX', 'NDX'].includes(asset)) return 'US_STOCK_HOURS';
-  if (['EURUSD', 'GBPUSD', 'USDJPY'].includes(asset)) return 'FOREX_HOURS';
-  return 'CME_COMMODITY';
+  } catch { /* fall through */ }
+  return 'CRYPTO_24_7';
 }
 
 export function isMarketOpen(asset: string, date: Date = new Date()): MarketHoursResult {
   const scheduleType = getSchedule(asset);
-  if (scheduleType === 'CRYPTO_24_7') {
+  if (scheduleType === 'CRYPTO_24_7' || scheduleType === 'CME_COMMODITY') {
     return { open: true };
   }
 
-  const { weekday, hour, minute, monthDay } = getETParts(date);
+  const { weekday, hour, minute } = getETParts(date);
 
   if (scheduleType === 'US_STOCK_HOURS') {
     if (['Sat', 'Sun'].includes(weekday)) {
@@ -103,42 +83,6 @@ export function isMarketOpen(asset: string, date: Date = new Date()): MarketHour
       return { open: false, reason: 'Forex weekend halt', reopensAt: 'Sun 5:00 PM ET' };
     }
     return { open: true };
-  }
-
-  // CME Holidays
-  if (CME_HOLIDAYS.has(monthDay)) {
-    return {
-      open: false,
-      reason: 'CME Market Holiday',
-      reopensAt: 'Next Business Day 6:00 PM ET',
-    };
-  }
-
-  // Saturday (Full Day Closed)
-  if (weekday === 'Sat') {
-    return {
-      open: false,
-      reason: 'Weekend halt',
-      reopensAt: 'Sun 6:00 PM ET',
-    };
-  }
-
-  // Friday Evening (Closed 5:00 PM ET onwards)
-  if (weekday === 'Fri' && hour >= 17) {
-    return {
-      open: false,
-      reason: 'Weekend halt',
-      reopensAt: 'Sun 6:00 PM ET',
-    };
-  }
-
-  // Sunday Before 6:00 PM ET
-  if (weekday === 'Sun' && hour < 18) {
-    return {
-      open: false,
-      reason: 'Weekend halt',
-      reopensAt: 'Sun 6:00 PM ET',
-    };
   }
 
   return { open: true };

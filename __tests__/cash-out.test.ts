@@ -27,6 +27,9 @@ import {
   normalizeCashOutMaxAsk,
   normalizeCashOutStopUsd,
   openCashOutAssets,
+  parseKalshiOrderbook,
+  bestBidSizeOnBook,
+  isCashOutThinBid,
   parseTradeEntryPath,
   reconcileCashOutTargets,
   sideAskOf,
@@ -247,6 +250,65 @@ describe('Cash out enter', () => {
     expect(evaluateCashOutEnter({ lean: goldLean(), cfg: bad, adminEnabled: true }).skip_reason).toBe(
       'cash_out_invalid_targets'
     );
+  });
+
+  test('thin bid skips buy only when the switch is On and size is known', () => {
+    const okOff = evaluateCashOutEnter({
+      lean: goldLean(),
+      cfg: cfg(),
+      adminEnabled: true,
+      skipThinBid: false,
+      bidSize: 1,
+    });
+    expect(okOff.ok).toBe(true);
+    const unknown = evaluateCashOutEnter({
+      lean: goldLean(),
+      cfg: cfg(),
+      adminEnabled: true,
+      skipThinBid: true,
+      bidSize: null,
+    });
+    expect(unknown.ok).toBe(true);
+    const thin = evaluateCashOutEnter({
+      lean: goldLean(),
+      cfg: cfg(),
+      adminEnabled: true,
+      skipThinBid: true,
+      bidSize: 1,
+    });
+    expect(thin.ok).toBe(false);
+    expect(thin.skip_reason).toBe('cash_out_thin_bid');
+    const thick = evaluateCashOutEnter({
+      lean: goldLean(),
+      cfg: cfg(),
+      adminEnabled: true,
+      skipThinBid: true,
+      bidSize: 20,
+    });
+    expect(thick.ok).toBe(true);
+  });
+
+  test('order book parser uses best-bid size; empty is 0; missing is unknown', () => {
+    const book = parseKalshiOrderbook({
+      orderbook: {
+        yes: [
+          [82, 2],
+          [81, 40],
+        ],
+        no: [[18, 9]],
+      },
+    });
+    expect(bestBidSizeOnBook('YES', book)).toBe(2);
+    expect(bestBidSizeOnBook('NO', book)).toBe(9);
+    expect(bestBidSizeOnBook('YES', parseKalshiOrderbook({ orderbook: { yes: [], no: [] } }))).toBe(0);
+    expect(bestBidSizeOnBook('YES', null)).toBeNull();
+    expect(isCashOutThinBid(2, 3)).toBe(true);
+    expect(isCashOutThinBid(3, 3)).toBe(false);
+    expect(isCashOutThinBid(null, 3)).toBe(false);
+    const dollars = parseKalshiOrderbook({
+      orderbook: { yes_dollars: [['0.82', 5]], no_dollars: [['0.17', 4]] },
+    });
+    expect(bestBidSizeOnBook('YES', dollars)).toBe(5);
   });
 
   test('NO enter uses NO ask/bid', () => {
@@ -523,6 +585,75 @@ describe('Cash out exit', () => {
     expect(end.sell).toBe(false);
   });
 
+  test('thin bid sells after grace, not during grace or after window end', () => {
+    const hold = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.8, yes_ask: 0.82 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.82,
+      skipThinBid: true,
+      bidSize: 1,
+      needCount: 3,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    });
+    expect(hold.kind).toBe('cash_out_thin_bid');
+    expect(hold.sell).toBe(true);
+
+    const grace = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.8, yes_ask: 0.82 },
+      cashOutBidUsd: 0.88,
+      fillPayUsd: 0.82,
+      skipThinBid: true,
+      bidSize: 1,
+      needCount: 3,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:00:20.000Z'),
+    });
+    expect(grace.reason).toBe('grace_after_fill');
+
+    const ended = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.8, yes_ask: 0.82 },
+      cashOutBidUsd: 0.88,
+      fillPayUsd: 0.82,
+      skipThinBid: true,
+      bidSize: 1,
+      needCount: 3,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'ended' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:14:00.000Z'),
+    });
+    expect(ended.sell).toBe(false);
+
+    const profitFirst = evaluateCashOutExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.88, yes_ask: 0.9 },
+      cashOutBidUsd: 0.88,
+      cashOutMaxAskUsd: 0.82,
+      fillPayUsd: 0.82,
+      skipThinBid: true,
+      bidSize: 1,
+      needCount: 3,
+      lean: { decision: 'YES', abs_gap: 120, phase: 'live' },
+      cushion: 175,
+      filledAt,
+      graceSeconds: 45,
+      now: new Date('2026-09-10T15:01:00.000Z'),
+    });
+    expect(profitFirst.kind).toBe('cash_out_bid');
+  });
+
   test('sell order matches Protect: YES hits bid minus slip', () => {
     const order = buildCashOutSellOrder({
       heldSide: 'YES',
@@ -574,6 +705,7 @@ describe('Cash out path book', () => {
   test('skip labels', () => {
     expect(formatSkipReason('cash_out_holding')).toBe('cash out is holding this ticket');
     expect(formatSkipReason('cash_out_spread_wide')).toBe('spread too wide');
+    expect(formatSkipReason('cash_out_thin_bid')).toBe('bid too thin');
     expect(formatSkipReason('cash_out_holding_other_path')).toBe('Home or Auto already holding');
   });
 });

@@ -59,6 +59,12 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(orderPlacedAlertTitle({ live: false, asset: 'BTC', decision: 'YES', entryPath: 'auto' })).toBe(
       'Dry-Run Order · Auto · BTC YES'
     );
+    expect(
+      orderPlacedAlertTitle({ live: true, asset: 'BTC', decision: 'YES', entryPath: 'twap_lock' })
+    ).toBe('Order Placed · TWAP lock · BTC YES');
+    expect(
+      orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'NO', entryPath: 'last_minute' })
+    ).toBe('Order Placed · Last-minute · Gold NO');
     expect(orderPlacedAlertTitle({ live: true, asset: 'ETH', decision: 'YES' })).toBe('Order Placed · ETH YES');
   });
 

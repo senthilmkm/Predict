@@ -44,6 +44,9 @@ interface RuntimeState {
   change24hWindowMs: number | null;
   lastSignalsManualTrade: boolean;
   cashOutFeatureOn: boolean;
+  goldFadeFeatureOn: boolean;
+  twapLockFeatureOn: boolean;
+  lastMinuteFeatureOn: boolean;
   activeBroadcast: ActiveBroadcast | null;
   cloudKillSwitch: boolean;
   ensure: () => AppRuntime;
@@ -81,6 +84,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   change24hWindowMs: null,
   lastSignalsManualTrade: true,
   cashOutFeatureOn: false,
+  goldFadeFeatureOn: false,
+  twapLockFeatureOn: false,
+  lastMinuteFeatureOn: false,
   activeBroadcast: null,
   cloudKillSwitch: false,
   ensure: () => {
@@ -117,6 +123,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         change24hWindowMs: null,
         lastSignalsManualTrade: get().lastSignalsManualTrade,
         cashOutFeatureOn: get().cashOutFeatureOn,
+        goldFadeFeatureOn: get().goldFadeFeatureOn,
+        twapLockFeatureOn: get().twapLockFeatureOn,
+        lastMinuteFeatureOn: get().lastMinuteFeatureOn,
         activeBroadcast: get().activeBroadcast,
         cloudKillSwitch: get().cloudKillSwitch,
       });
@@ -254,6 +263,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           set({
             lastSignalsManualTrade: statusRes.systemConfig?.featureFlags?.lastSignalsManualTrade !== false,
             cashOutFeatureOn: statusRes.systemConfig?.featureFlags?.cashOut === true,
+            goldFadeFeatureOn: statusRes.systemConfig?.featureFlags?.goldFade === true,
+            twapLockFeatureOn: statusRes.systemConfig?.featureFlags?.twapLock === true,
+            lastMinuteFeatureOn: statusRes.systemConfig?.featureFlags?.lastMinute === true,
             activeBroadcast: statusRes.activeBroadcast ?? null,
             cloudKillSwitch: statusRes.userDoc?.state === 'KILL_SWITCH',
           });
@@ -300,6 +312,9 @@ export function resetRuntimeStoreForTests() {
     change24hWindowMs: null,
     lastSignalsManualTrade: true,
     cashOutFeatureOn: false,
+    goldFadeFeatureOn: false,
+    twapLockFeatureOn: false,
+    lastMinuteFeatureOn: false,
     activeBroadcast: null,
     cloudKillSwitch: false,
   });

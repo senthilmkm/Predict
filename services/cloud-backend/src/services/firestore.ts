@@ -50,7 +50,7 @@ export interface TradeRecordDoc {
   /** Admin stream only. Cash out sell price (stored or derived). */
   sellPriceUsd?: number | null;
   /** How the fill was opened. Protect / Home sell / Cash out must not overwrite. */
-  entryPath?: 'home' | 'auto' | 'cash_out';
+  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute';
 }
 
 export interface CloudAlertDoc {

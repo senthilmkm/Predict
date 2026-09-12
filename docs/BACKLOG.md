@@ -1,5 +1,19 @@
 # Predict App — Product Backlog & Future Enhancements
 
+## Gold fade (built, Admin Off)
+
+Admin feature flag + user Risk toggle. Gold-only cheap-side scalp. Design: [GOLD_FADE.md](./GOLD_FADE.md).
+
+## TWAP lock (built, Admin Off)
+
+Admin feature flag + user Risk toggle. BTC/ETH last-minute Yes total lock. Hold to $1. Design: [TWAP_LOCK.md](./TWAP_LOCK.md). Do not turn live Admin On until the CF Benchmarks 1Hz feed is proven.
+
+## Last-minute (built, Admin Off)
+
+Admin feature flag + user Risk toggle. Any enabled asset. Last 60s 1s watch. Yes / No / Both at this path’s entry ask. Hold to settlement. Not a lock. Does not reserve coins from Cash out / Auto. Design: [LAST_MINUTE.md](./LAST_MINUTE.md).
+
+---
+
 ## 📌 Feature: Link Apple ID for Cross-Device Cloud Backup & Recovery
 
 ### 🎯 Purpose & Business Goal

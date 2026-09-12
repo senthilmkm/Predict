@@ -232,6 +232,9 @@ describe('evaluateStaticGate edge cases', () => {
     expect(formatSkipReason('smart_buy_no_path')).toBe('need a longer price path');
     expect(formatSkipReason('cash_out_holding')).toBe('cash out is holding this ticket');
     expect(formatSkipReason('cash_out_spread_wide')).toBe('spread too wide');
+    expect(formatSkipReason('cash_out_thin_bid')).toBe('bid too thin');
+    expect(formatSkipReason('gold_fade_gap_wide')).toBe('gap too wide to fade');
+    expect(formatSkipReason('gold_fade_thin_bid')).toBe('bid too thin');
   });
 });
 

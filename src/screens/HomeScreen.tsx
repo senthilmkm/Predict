@@ -24,23 +24,18 @@ import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/mon
 import { cloudClient } from '../services/cloud/cloudClient';
 import { formatHomePathBuyLines, summarizeTodayPathBuys } from '../storage/todayPathBuys';
 import {
+  formatGapDisplay,
   heldOpenFillForTicker,
   homeBuySkipReason,
+  formatLastMinuteWatchLine,
+  formatTwapWatchLine,
   lastSignalExtraLine,
   lastSignalManualKind,
   lastSignalOfferKind,
+  twapWatchSecondsLeft,
 } from './lastSignalsManual';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
-
-export function formatGapDisplay(gap: number | undefined | null, assetKey?: string): string {
-  if (gap == null || !Number.isFinite(gap)) return '';
-  const abs = Math.abs(gap);
-  const bounds = assetKey ? AssetRegistry.getCushionBounds(assetKey) : null;
-  const decimals = bounds?.step ? (String(bounds.step).split('.')[1]?.length || 2) : 2;
-  const prec = Math.max(decimals, abs < 0.01 ? 4 : abs < 1 ? 3 : 2);
-  return `gap $${abs.toFixed(prec)}`;
-}
 
 function windowToHomeLocal(
   root: { measureInWindow?: (cb: (x: number, y: number) => void) => void } | null,
@@ -102,6 +97,8 @@ export function HomeScreen() {
   const lastSignalsManualTrade = useRuntimeStore((s) => s.lastSignalsManualTrade);
   const activeBroadcast = useRuntimeStore((s) => s.activeBroadcast);
   const cloudKillSwitch = useRuntimeStore((s) => s.cloudKillSwitch);
+  const twapLockFeatureOn = useRuntimeStore((s) => s.twapLockFeatureOn);
+  const lastMinuteFeatureOn = useRuntimeStore((s) => s.lastMinuteFeatureOn);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
@@ -127,6 +124,19 @@ export function HomeScreen() {
     }, 10000);
     return () => clearInterval(id);
   }, [refreshCloudSnapshot]);
+
+  useEffect(() => {
+    const twapWatch = twapLockFeatureOn && config.risk.twap_lock_enabled;
+    const lastMinuteWatch = lastMinuteFeatureOn && config.risk.last_minute_enabled;
+    if (!twapWatch && !lastMinuteWatch) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [
+    config.risk.twap_lock_enabled,
+    config.risk.last_minute_enabled,
+    twapLockFeatureOn,
+    lastMinuteFeatureOn,
+  ]);
 
   // 1. On Mount: Fetch Cloud Snapshot & Balances
   useEffect(() => {
@@ -233,6 +243,8 @@ export function HomeScreen() {
       asset,
       decision: !open || noMarket ? 'SKIP' : (lean?.decision ?? '—'),
       gap: open ? lean?.abs_gap : undefined,
+      live: open ? lean?.live : undefined,
+      strike: open ? lean?.strike : undefined,
       at,
       err,
       trade: open ? (tradeActions[asset] as LastTradeAction | undefined) : undefined,
@@ -262,7 +274,11 @@ export function HomeScreen() {
   const decoratedRows = signalRows.map((row) => {
     const held = heldOpenFillForTicker(trades, row.marketTicker);
     const cashOutHeld = held?.entry_path === 'cash_out';
-    const manualKind = cashOutHeld
+    const goldFadeHeld = held?.entry_path === 'gold_fade';
+    const twapLockHeld = held?.entry_path === 'twap_lock';
+    const lastMinuteHeld = held?.entry_path === 'last_minute';
+    const pathHeld = cashOutHeld || goldFadeHeld || twapLockHeld || lastMinuteHeld;
+    const manualKind = pathHeld
       ? 'none'
       : lastSignalManualKind({
           featureOn,
@@ -286,6 +302,33 @@ export function HomeScreen() {
       tapSkipReason,
       phase: (leans[row.asset] as { phase?: string } | undefined)?.phase,
       cashOutHolding: cashOutHeld,
+      goldFadeHolding: goldFadeHeld,
+      twapLockHolding: twapLockHeld,
+      lastMinuteHolding: lastMinuteHeld,
+      twapWatchText: formatTwapWatchLine({
+        adminEnabled: twapLockFeatureOn,
+        userEnabled: Boolean(config.risk.twap_lock_enabled),
+        assets: config.risk.twap_lock_assets,
+        asset: row.asset,
+        secondsLeft: twapWatchSecondsLeft(
+          (leans[row.asset] as { close_utc?: string } | undefined)?.close_utc,
+          nowMs
+        ),
+        autoDetail: row.trade?.detail,
+        autoStatus: row.trade?.status,
+      }),
+      lastMinuteWatchText: formatLastMinuteWatchLine({
+        adminEnabled: lastMinuteFeatureOn,
+        userEnabled: Boolean(config.risk.last_minute_enabled),
+        assetEnabled: config.assets_enabled?.[row.asset] !== false,
+        asset: row.asset,
+        secondsLeft: twapWatchSecondsLeft(
+          (leans[row.asset] as { close_utc?: string } | undefined)?.close_utc,
+          nowMs
+        ),
+        autoDetail: row.trade?.detail,
+        autoStatus: row.trade?.status,
+      }),
     });
     const offerKind = lastSignalOfferKind(manualKind, tapSkipReason);
     return { ...row, held, manualKind: offerKind, placing: Boolean(placing[row.asset]), extraLine };
@@ -620,6 +663,8 @@ function LastSignalRow({
     asset: AssetKey;
     decision: string;
     gap?: number;
+    live?: number;
+    strike?: number;
     at?: string;
     err?: string;
     trade?: LastTradeAction;
@@ -627,7 +672,7 @@ function LastSignalRow({
     noMarket: boolean;
     manualKind: 'buy' | 'sell' | 'none';
     placing: boolean;
-    held?: { side: 'YES' | 'NO' } | null;
+    held?: { side: 'YES' | 'NO'; entry_path?: string | null } | null;
     extraLine?: {
       testID: 'trade-action' | 'skip-reason';
       text: string;
@@ -639,6 +684,14 @@ function LastSignalRow({
 }) {
   const btnRef = React.useRef<View>(null);
   const actionable = row.manualKind !== 'none';
+  const gap = formatGapDisplay({
+    gap: row.gap,
+    assetKey: row.asset,
+    live: row.live,
+    strike: row.strike,
+    decision: row.decision,
+    heldSide: row.held?.side,
+  });
   const btnLabel =
     row.placing
       ? 'Placing…'
@@ -694,8 +747,17 @@ function LastSignalRow({
           >
             {row.err ? 'ERR' : row.decision}
           </Text>
-          {!row.err && row.gap != null ? (
-            <Text style={styles.signalMeta}>{formatGapDisplay(row.gap, row.asset)}</Text>
+          {!row.err && gap.text ? (
+            <Text
+              style={[
+                styles.signalMeta,
+                gap.tone === 'with' && { color: colors.win },
+                gap.tone === 'against' && { color: colors.loss },
+              ]}
+              testID={`signal-gap-${row.asset}`}
+            >
+              {gap.text}
+            </Text>
           ) : null}
         </View>
         {row.err ? (
@@ -921,7 +983,7 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   signalDecision: { color: colors.accent, fontWeight: '800', minWidth: 36 },
-  signalMeta: { color: colors.mute, fontSize: 12 },
+  signalMeta: { color: colors.mute, fontSize: 12, flexShrink: 1 },
   signalErr: { color: colors.loss, fontSize: 11, marginTop: 2, marginLeft: 52 },
   tradeAction: {
     color: colors.textSecondary,

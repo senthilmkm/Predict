@@ -38,6 +38,7 @@ export interface LeanResult {
   timeseries?: { t: number; v: number }[];
   /** Exact minutes until close (not floored). */
   minutes_remaining?: number;
+  close_utc?: string;
 }
 
 const LEAN_FETCH_TIMEOUT_MS = 12_000;
@@ -376,5 +377,6 @@ export async function computeLean(
     price_source: priceSource,
     cushion,
     timeseries,
+    close_utc: close ? close.toISOString() : undefined,
   };
 }

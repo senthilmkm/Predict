@@ -264,6 +264,9 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(s.getByTestId('modal-risk-help')).toBeTruthy());
     expect(s.getByText('Protect money (early sell)')).toBeTruthy();
     expect(s.getByText('Cash out stop')).toBeTruthy();
+    expect(s.getByText('Skip thin bid')).toBeTruthy();
+    expect(s.getByText('Gold fade')).toBeTruthy();
+    expect(s.getByText('TWAP lock')).toBeTruthy();
     expect(s.getAllByText(/Smart buy/).length).toBeGreaterThan(0);
     expect(s.getAllByText(/Min extra chance/).length).toBeGreaterThan(0);
     expect(s.getByText('Shared vs each tab')).toBeTruthy();
@@ -295,7 +298,64 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(s.getByTestId('risk-toggle-cash_out_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-value-auto-cash_out_enter_pct').props.children).toBe('60%');
     expect(s.getByTestId('risk-value-auto-cash_out_stop_usd').props.children).toBe('5¢');
+    expect(s.queryByTestId('risk-toggle-gold_fade_enabled')).toBeNull();
+    expect(s.getByTestId('risk-toggle-cash_out_skip_thin_bid').props.value).toBe(false);
+    expect(s.getByTestId('risk-toggle-cash_out_skip_thin_bid').props.disabled).toBe(true);
+    expect(useConfigStore.getState().config.risk.cash_out_skip_thin_bid).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-cash_out_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.cash_out_enabled).toBe(true));
+    expect(s.getByTestId('risk-toggle-cash_out_skip_thin_bid').props.disabled).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-cash_out_skip_thin_bid'), 'valueChange', true);
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.risk.cash_out_skip_thin_bid).toBe(true)
+    );
     expect(s.getByTestId('cash-out-asset-Gold')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-gold_fade_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ goldFadeFeatureOn: true });
+    });
+    await waitFor(() => expect(s.getByTestId('risk-toggle-gold_fade_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-gold_fade_enabled').props.value).toBe(false);
+    expect(s.getByTestId('risk-toggle-gold_fade_enabled').props.disabled).toBeFalsy();
+    expect(useConfigStore.getState().config.risk.gold_fade_enabled).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-gold_fade_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.gold_fade_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-gold_fade_take_usd').props.children).toBe('6¢');
+    expect(s.getByTestId('risk-value-auto-gold_fade_stop_usd').props.children).toBe('5¢');
+    expect(s.getByTestId('gold-fade-hint')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-twap_lock_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ twapLockFeatureOn: true });
+    });
+    await waitFor(() => expect(s.getByTestId('risk-toggle-twap_lock_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-twap_lock_enabled').props.value).toBe(false);
+    expect(useConfigStore.getState().config.risk.twap_lock_enabled).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-twap_lock_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.twap_lock_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-twap_lock_max_ask_usd').props.children).toMatch(/\$0\.96/);
+    expect(s.getByTestId('twap-lock-asset-BTC')).toBeTruthy();
+    expect(s.getByTestId('twap-lock-asset-ETH')).toBeTruthy();
+    expect(s.getByTestId('twap-lock-hint')).toBeTruthy();
+    expect(s.getByTestId('path-info-twapLock')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-last_minute_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ lastMinuteFeatureOn: true });
+    });
+    await waitFor(() => expect(s.getByTestId('risk-toggle-last_minute_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-last_minute_enabled').props.value).toBe(false);
+    expect(useConfigStore.getState().config.risk.last_minute_enabled).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-last_minute_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-last_minute_max_ask_usd').props.children).toMatch(/\$0\.96/);
+    expect(s.getByTestId('last-minute-side-yes')).toBeTruthy();
+    expect(s.getByTestId('last-minute-side-no')).toBeTruthy();
+    expect(s.getByTestId('last-minute-side-both')).toBeTruthy();
+    expect(s.getByTestId('path-info-lastMinute')).toBeTruthy();
+    expect(s.getByTestId('path-info-auto')).toBeTruthy();
+    expect(s.getByTestId('path-info-smartBuy')).toBeTruthy();
+    expect(s.getByTestId('path-info-protect')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('last-minute-side-both'));
+    await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_side).toBe('both'));
     expect(s.getByTestId('risk-field-auto-smart_buy_enabled')).toBeTruthy();
     expect(s.getByTestId('risk-value-auto-smart_buy_min_edge_usd').props.children).toMatch(/\$0\.08/);
     expect(useConfigStore.getState().config.risk.smart_buy_enabled).toBe(true);

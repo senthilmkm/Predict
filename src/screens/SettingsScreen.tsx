@@ -862,7 +862,9 @@ function RiskHelpModal({
               would pass. Ask too rich and other Home skips hide it. If Auto-trade is On and its
               Risk tab also passes, Cloud can still buy that same lean on the worker tick, as long
               as shared caps allow (max trades / asset / 15m window, max trades / day, max open,
-              daily loss). Sell is in that same block if you already hold that 15-minute window. One
+              daily loss). Sell is in that same block if you already hold that 15-minute window. The
+              gap line then says “with you” (still on your side) or “against you” (flipped — consider
+              Sell). When you are not holding, ▲ / ▼ is live vs strike (not a win/loss color). One
               tap tells Cloud Run to place now. The phone never talks to Kalshi. No confirm sheet.
               Kill Switch hides the buttons. If the Admin flag is Off, buttons disappear and Cloud
               rejects taps.{'\n\n'}
@@ -1063,11 +1065,35 @@ function RiskHelpModal({
               If the bid falls this far below what you paid, Cloud sells (default 5¢). Range 3¢–10¢.
               Cuts a full $0 settle loss. You may get fewer $1 window wins.
             </HelpItem>
+            <HelpItem title="Skip thin bid">
+              Default Off. When On, Cloud reads Kalshi’s order book. If the best bid has fewer
+              contracts than you are about to buy (or already hold), it skips the buy or sells
+              early. Does not change max ask, target, or stop. A book timeout does not skip or dump.
+              The same switch applies to Gold fade. For TWAP lock, an unknown book size skips the
+              buy (fail closed).
+            </HelpItem>
+            <HelpItem title="Gold fade">
+              Gold only. When the gap is at most Max gap, Cloud buys the cheaper ticket and sells
+              the whole lot on take profit, stop, thin bid, flatten minutes, window end, or a full
+              cushion flip. Default Off. Admin must enable the block first. Not Cash out.
+            </HelpItem>
+            <HelpItem title="TWAP lock">
+              BTC and ETH only. While On, those coins leave Cash out and normal Auto. Cloud buys
+              Yes only when leftover seconds can be $0 and Yes still wins, if the ask is at or
+              under Max ask (default $0.96). Then hold to $1. Most windows: no trade. Default Off.
+              Admin must enable the block first.
+            </HelpItem>
+            <HelpItem title="Last-minute">
+              Any asset you have On. Last 60 seconds, 1s watch. Buys Yes, No, or the last-minute
+              favorite at or under Entry ask (default $0.96). Not a lock. Does not pull coins off
+              Cash out or Auto. Window cap 1 still applies. TWAP lock keeps BTC/ETH if that path
+              is On. Hold to settlement. Default Off. Admin must enable the block first.
+            </HelpItem>
 
             <HelpItem title="Restore defaults">
               Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.
               Restore Home Buy / Restore Auto-trade resets only that tab (Smart buy, Protect money,
-              and Cash out are on Auto-trade). Cushions and keys stay.
+              Cash out, Gold fade, TWAP lock, and Last-minute are on Auto-trade). Cushions and keys stay.
             </HelpItem>
 
             <Text style={styles.modalSection}>Kalshi credentials</Text>

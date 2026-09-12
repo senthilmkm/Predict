@@ -23,6 +23,7 @@ import {
   parseHttpCodeList,
 } from '../../../../packages/trading-core/src/kalshiRetry';
 import { mergeFeatureFlags, type FeatureFlags } from '../services/featureFlags';
+import { formatTwapLockWatcherChip, getTwapLockWatcherSnapshot } from '../services/twapLockWatcher';
 import { mergeBroadcastConfig, type BroadcastConfig } from '../services/broadcast';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 import {
@@ -65,10 +66,11 @@ adminRouter.use(adminAuthMiddleware);
 // 2. System Overview & Key Metrics
 adminRouter.get('/overview', async (req: Request, res: Response) => {
   try {
-    const [users, trades, systemConfig] = await Promise.all([
+    const [users, trades, systemConfig, twapLockWatcher] = await Promise.all([
       getAllUsers(),
       getAllTradesForAdmin(),
       getSystemConfig(),
+      getTwapLockWatcherSnapshot(),
     ]);
 
     const tradeMetrics = computeOverviewTradeMetrics(trades);
@@ -108,6 +110,10 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
         subTicksPerMinute: subTicks,
         gcpRegion: process.env.GCP_REGION || 'us-east1',
         gcpProject: process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-trading-0904',
+      },
+      twapLockWatcher: {
+        ...twapLockWatcher,
+        label: formatTwapLockWatcherChip(twapLockWatcher),
       },
     });
   } catch (err: any) {
@@ -168,6 +174,18 @@ function parseAdminFeatureFlagsPatch(raw: unknown): Partial<FeatureFlags> | unde
   }
   if (body.cashOutBidCheckSeconds !== undefined) {
     patch.cashOutBidCheckSeconds = Number(body.cashOutBidCheckSeconds);
+  }
+  if (body.goldFade !== undefined) {
+    patch.goldFade = body.goldFade === true;
+  }
+  if (body.goldFadeBidCheckSeconds !== undefined) {
+    patch.goldFadeBidCheckSeconds = Number(body.goldFadeBidCheckSeconds);
+  }
+  if (body.twapLock !== undefined) {
+    patch.twapLock = body.twapLock === true;
+  }
+  if (body.lastMinute !== undefined) {
+    patch.lastMinute = body.lastMinute === true;
   }
   return Object.keys(patch).length ? patch : undefined;
 }

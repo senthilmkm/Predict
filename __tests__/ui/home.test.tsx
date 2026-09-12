@@ -158,7 +158,7 @@ describe('HomeScreen', () => {
     });
     const s = await render(<HomeScreen />);
     expect(s.getByTestId('signal-decision-BTC').props.children).toBe('SKIP');
-    expect(s.getByText(/gap \$400/)).toBeTruthy();
+    expect(s.getByTestId('signal-gap-BTC').props.children).toBe('\u25B2 $400.00 (gap)');
     expect(s.getByTestId('skip-reason-BTC').props.children).toBe('next window');
   });
 
@@ -335,6 +335,7 @@ describe('HomeScreen', () => {
     const on = await render(<HomeScreen />);
     expect(on.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
     expect(on.getByText('Buy YES')).toBeTruthy();
+    expect(on.getByTestId('signal-gap-BTC').props.children).toBe('\u25B2 $400.00 (gap)');
     expect(on.getByTestId('home-buy-sell-label')).toBeTruthy();
   });
 
@@ -408,6 +409,7 @@ describe('HomeScreen', () => {
     const s = await render(<HomeScreen />);
     await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
     expect(s.getByText('Sell YES')).toBeTruthy();
+    expect(s.getByTestId('signal-gap-BTC').props.children).toBe('against you $10.00 (gap)');
     expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
     expect(s.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
