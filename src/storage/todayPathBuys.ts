@@ -93,7 +93,7 @@ function formatAssetCounts(rows: PathBuyRow[]): string {
   return rows.map((r) => `${r.asset} ${r.count}`).join(' · ');
 }
 
-/** Home strip: `Home  BTC 2 · Gold 1` then `Auto  ETH 1`. Hide a path at 0. */
+/** Dashboard path split: `Home  BTC 2 · Gold 1` then `Auto  ETH 1`. Hide a path at 0. */
 export function formatHomePathBuyLines(summary: PathBuyCounts): string[] {
   const lines: string[] = [];
   if (summary.homeTotal > 0) lines.push(`Home  ${formatAssetCounts(summary.home)}`);

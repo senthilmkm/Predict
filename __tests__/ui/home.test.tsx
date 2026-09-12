@@ -9,6 +9,7 @@ import {
 } from '../../src/platform/storage';
 import { useConfigStore } from '../../src/state/configStore';
 import { resetRuntimeStoreForTests, useRuntimeStore } from '../../src/state/runtimeStore';
+import { resetPinnedPathsStoreForTests, usePinnedPathsStore } from '../../src/state/pinnedPathsStore';
 import { defaultAppConfig } from '../../src/config/types';
 import { HomeScreen } from '../../src/screens/HomeScreen';
 import { heldOpenFillForTicker } from '../../src/screens/lastSignalsManual';
@@ -30,6 +31,7 @@ beforeEach(() => {
   setKeyValueStore(new MemoryKeyValueStore());
   setSecureStore(new MemoryKeyValueStore());
   resetRuntimeStoreForTests();
+  resetPinnedPathsStoreForTests();
   useConfigStore.setState({ config: defaultAppConfig(), hydrated: true });
 });
 
@@ -52,14 +54,30 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('home-today-trades')).toBeTruthy();
     expect(s.getByText('Predict trades today')).toBeTruthy();
     expect(s.queryByTestId('home-today-path-buys')).toBeNull();
+    expect(s.queryByTestId('home-pinned-paths')).toBeNull();
     expect(s.getByText('Cash')).toBeTruthy();
     expect(s.getByTestId('home-heartbeat')).toBeTruthy();
+    expect(s.getByTestId('home-status-bell')).toBeTruthy();
+    expect(s.queryByText('Alerts on · not trading')).toBeNull();
+    expect(s.queryByTestId('home-status-detail')).toBeNull();
     expect(s.queryByTestId('btn-kill-switch')).toBeNull();
     expect(s.queryByTestId('btn-toggle-dev-tools')).toBeNull();
     expect(s.queryByTestId('btn-toggle-poller')).toBeNull();
     expect(s.queryByTestId('btn-tick-once')).toBeNull();
     expect(s.getByTestId('support-contact')).toBeTruthy();
     expect(s.getByText(/senthil930@gmail\.com/)).toBeTruthy();
+  });
+
+  test('pinned path chips open that path only', async () => {
+    const onOpen = jest.fn();
+    usePinnedPathsStore.setState({ ids: ['lastMinute', 'pairLock'], hydrated: true });
+    useRuntimeStore.setState({ lastMinuteFeatureOn: true, pairLockFeatureOn: true });
+    const s = await render(<HomeScreen onOpenPinnedPath={onOpen} />);
+    expect(s.getByTestId('home-pinned-paths')).toBeTruthy();
+    expect(s.getByTestId('home-pin-lastMinute')).toBeTruthy();
+    expect(s.queryByTestId('home-pin-cashOut')).toBeNull();
+    await fireEvent.press(s.getByTestId('home-pin-pairLock'));
+    expect(onOpen).toHaveBeenCalledWith('pairLock');
   });
 
   test('Predictions change shows a dollar value and a shorter window until 24h exists', async () => {
@@ -299,8 +317,15 @@ describe('HomeScreen', () => {
       config: { ...defaultAppConfig(), auto_trade_enabled: true, poll_interval_seconds: 20 },
     });
     const s = await render(<HomeScreen />);
-    expect(s.getByText(/Live · cloud 20s/)).toBeTruthy();
-    expect(s.queryByText(/Stale · cloud/)).toBeNull();
+    expect(s.getByTestId('home-status-tick').props.children).toBe('20s');
+    expect(s.getByText('Auto')).toBeTruthy();
+    expect(s.queryByText(/Stale/)).toBeNull();
+    expect(s.queryByText(/Live · Cloud tick/)).toBeNull();
+    await fireEvent.press(s.getByTestId('home-heartbeat'));
+    expect(s.getByTestId('home-status-detail')).toBeTruthy();
+    expect(s.getByText('Alerts on · auto-trading')).toBeTruthy();
+    expect(s.getByText(/Live · Cloud tick 20s/)).toBeTruthy();
+    expect(s.queryByText(/Stale · Cloud tick/)).toBeNull();
     const lastTickLabel = String(s.getByTestId('home-last-tick').props.children);
     expect(lastTickLabel).toMatch(/Last tick /);
     expect(lastTickLabel).not.toMatch(/40m ago/);
@@ -437,7 +462,7 @@ describe('HomeScreen', () => {
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
   });
 
-  test('path-buy strip shows Home / Auto fills and Sell row keeps placed @', async () => {
+  test('Home has no path-buy strip and Sell row keeps placed @', async () => {
     useConfigStore.setState({
       config: { ...defaultAppConfig(), assets_enabled: { BTC: true, Gold: true, ETH: true } as any },
       hydrated: true,
@@ -545,8 +570,8 @@ describe('HomeScreen', () => {
       ],
     });
     const s = await render(<HomeScreen />);
-    expect(s.getByTestId('home-today-path-buys-home').props.children).toBe('Home  BTC 2 · Gold 1');
-    expect(s.getByTestId('home-today-path-buys-auto').props.children).toBe('Auto  ETH 1');
+    expect(s.queryByTestId('home-today-path-buys')).toBeNull();
+    expect(s.queryByText('Home  BTC 2 · Gold 1')).toBeNull();
     expect(s.queryByText(/Manual/i)).toBeNull();
     await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
     expect(s.getByTestId('home-buy-sell-label')).toBeTruthy();

@@ -11,7 +11,8 @@ import {
   View,
 } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
-import { AssetKey, AssetRegistry, modeLabel } from '../config/types';
+import { AssetKey, AssetRegistry } from '../config/types';
+import { homeStatusPillModel } from './homeStatusPill';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { LastTradeAction } from '../runtime/AppRuntime';
@@ -22,13 +23,14 @@ import {
   isMarketOpen,
 } from '../services/marketHours';
 import { PathInfoIcon } from '../components/PathInfoIcon';
+import { PathFocusId, pathTileById } from '../content/pathCatalog';
+import { usePinnedPathsStore } from '../state/pinnedPathsStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { ManualSuccessFly } from '../components/ManualSuccessFly';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/moneyFormat';
 import { cloudClient } from '../services/cloud/cloudClient';
-import { formatHomePathBuyLines, summarizeTodayPathBuys } from '../storage/todayPathBuys';
 import {
   formatGapDisplay,
   heldOpenFillForTicker,
@@ -43,6 +45,7 @@ import {
   lastSignalOfferKind,
   twapWatchSecondsLeft,
 } from './lastSignalsManual';
+import { formatTickerOverlapLine } from './tickerOverlap';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -85,7 +88,11 @@ function windowToHomeLocal(
   });
 }
 
-export function HomeScreen() {
+export function HomeScreen({
+  onOpenPinnedPath,
+}: {
+  onOpenPinnedPath?: (focus: PathFocusId) => void;
+} = {}) {
   const config = useConfigStore((s) => s.config);
   const status = useRuntimeStore((s) => s.status);
   const stats = useRuntimeStore((s) => s.stats);
@@ -106,13 +113,18 @@ export function HomeScreen() {
   const lastSignalsManualTrade = useRuntimeStore((s) => s.lastSignalsManualTrade);
   const activeBroadcast = useRuntimeStore((s) => s.activeBroadcast);
   const cloudKillSwitch = useRuntimeStore((s) => s.cloudKillSwitch);
+  const cashOutFeatureOn = useRuntimeStore((s) => s.cashOutFeatureOn);
+  const goldFadeFeatureOn = useRuntimeStore((s) => s.goldFadeFeatureOn);
   const twapLockFeatureOn = useRuntimeStore((s) => s.twapLockFeatureOn);
   const lastMinuteFeatureOn = useRuntimeStore((s) => s.lastMinuteFeatureOn);
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
+  const pinnedIds = usePinnedPathsStore((s) => s.ids);
+  const hydratePins = usePinnedPathsStore((s) => s.hydrate);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [statusOpen, setStatusOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [placing, setPlacing] = useState<Record<string, boolean>>({});
   const [fly, setFly] = useState<{ id: string; text: string; startX: number; startY: number } | null>(
@@ -124,10 +136,11 @@ export function HomeScreen() {
 
   useEffect(() => {
     mountedRef.current = true;
+    void hydratePins();
     return () => {
       mountedRef.current = false;
     };
-  }, []);
+  }, [hydratePins]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -321,6 +334,9 @@ export function HomeScreen() {
       manualKind === 'buy'
         ? homeBuySkipReason({ cfg: config, lean: leans[row.asset] as any, trades })
         : null;
+    const leanRow = leans[row.asset] as
+      | { phase?: string; close_utc?: string; minutes_elapsed?: number }
+      | undefined;
     const extraLine = lastSignalExtraLine({
       manualKind,
       autoTradeOn,
@@ -331,7 +347,47 @@ export function HomeScreen() {
       noMarket: row.noMarket,
       err: row.err,
       tapSkipReason,
-      phase: (leans[row.asset] as { phase?: string } | undefined)?.phase,
+      phase: leanRow?.phase,
+      overlapText: formatTickerOverlapLine({
+        asset: row.asset,
+        ticker: row.marketTicker,
+        decision: row.decision,
+        trades,
+        now: new Date(nowMs),
+        closeUtc: leanRow?.close_utc,
+        minutesElapsed: leanRow?.minutes_elapsed,
+        homeOn: featureOn && !cloudKillSwitch,
+        autoOn: autoTradeOn,
+        cashOutAdmin: cashOutFeatureOn,
+        cashOutOn: Boolean(config.risk.cash_out_enabled),
+        cashOutAssets: config.risk.cash_out_assets,
+        goldFadeAdmin: goldFadeFeatureOn,
+        goldFadeOn: Boolean(config.risk.gold_fade_enabled),
+        twapAdmin: twapLockFeatureOn,
+        twapOn: Boolean(config.risk.twap_lock_enabled),
+        twapAssets: config.risk.twap_lock_assets,
+        lastMinuteAdmin: lastMinuteFeatureOn,
+        lastMinuteOn: Boolean(config.risk.last_minute_enabled),
+        lastMinuteAssets: config.risk.last_minute_assets,
+        lastMinuteWatchSec: config.risk.last_minute_watch_seconds,
+        lastMinuteEnterSec: config.risk.last_minute_enter_seconds,
+        lastMinuteStopSec: config.risk.last_minute_stop_seconds,
+        stepBuyAdmin: stepBuyFeatureOn,
+        stepBuyOn: Boolean(config.risk.step_buy_enabled),
+        stepBuyAssets: config.risk.step_buy_assets,
+        stepBuyStartMinutes: config.risk.step_buy_start_minutes,
+        spikeFadeAdmin: spikeFadeFeatureOn,
+        spikeFadeOn: Boolean(config.risk.spike_fade_enabled),
+        spikeFadeAssets: config.risk.spike_fade_assets,
+        spikeFadeStartMinutes: config.risk.spike_fade_start_minutes,
+        spikeFadeUntilMinutes: config.risk.spike_fade_until_minutes,
+        pairLockAdmin: pairLockFeatureOn,
+        pairLockOn: Boolean(config.risk.pair_lock_enabled),
+        pairLockAssets: config.risk.pair_lock_assets,
+        pairLockStartMinutes: config.risk.pair_lock_start_minutes,
+        pairLockUntilMinutes: config.risk.pair_lock_until_minutes,
+        assetEnabled: config.assets_enabled?.[row.asset] !== false,
+      }),
       cashOutHolding: cashOutHeld,
       goldFadeHolding: goldFadeHeld,
       twapLockHolding: twapLockHeld,
@@ -421,10 +477,30 @@ export function HomeScreen() {
   });
   const actionRows = decoratedRows.filter((r) => r.manualKind === 'buy' || r.manualKind === 'sell');
   const otherRows = decoratedRows.filter((r) => r.manualKind === 'none');
-  const todayPathBuyLines = useMemo(
-    () => formatHomePathBuyLines(summarizeTodayPathBuys(trades)),
-    [trades]
-  );
+  const visiblePinnedPaths = useMemo(() => {
+    const flags: Record<string, boolean> = {
+      cashOutFeatureOn,
+      goldFadeFeatureOn,
+      twapLockFeatureOn,
+      lastMinuteFeatureOn,
+      stepBuyFeatureOn,
+      spikeFadeFeatureOn,
+      pairLockFeatureOn,
+    };
+    return pinnedIds.filter((id) => {
+      const tile = pathTileById(id);
+      return !tile.adminFlag || flags[tile.adminFlag];
+    });
+  }, [
+    pinnedIds,
+    cashOutFeatureOn,
+    goldFadeFeatureOn,
+    twapLockFeatureOn,
+    lastMinuteFeatureOn,
+    stepBuyFeatureOn,
+    spikeFadeFeatureOn,
+    pairLockFeatureOn,
+  ]);
   const scheduleNotice = useMemo(() => {
     const at = new Date(nowMs);
     const line = getMarketScheduleNoticeLine(at);
@@ -456,6 +532,18 @@ export function HomeScreen() {
             Predict
           </Text>
           <Text style={styles.tag}>Prediction trades, with a buffer.</Text>
+          <HomeStatusPill
+            config={config}
+            running={Boolean(config.auto_trade_enabled || status?.running)}
+            lastPulseAt={status?.cloudLastTickAt ?? status?.lastTickAt ?? status?.lastPulseAt}
+            intervalSec={config.poll_interval_seconds}
+            nowMs={nowMs}
+            open={statusOpen}
+            onPress={() => {
+              setStatusOpen((v) => !v);
+              void refreshCloudSnapshot();
+            }}
+          />
         </View>
         <View style={styles.heroRight}>
           <PortfolioSummary
@@ -466,17 +554,6 @@ export function HomeScreen() {
             change24hWindowMs={change24hWindowMs}
           />
         </View>
-      </View>
-
-      <View style={styles.chipRow}>
-        <Chip label={modeLabel(config)} accent />
-        <HeartbeatChip
-          running={Boolean(config.auto_trade_enabled || status?.running)}
-          lastPulseAt={status?.cloudLastTickAt ?? status?.lastTickAt ?? status?.lastPulseAt}
-          intervalSec={config.poll_interval_seconds}
-          nowMs={nowMs}
-          onPress={() => void refreshCloudSnapshot()}
-        />
       </View>
 
       {scheduleNotice ? (
@@ -535,19 +612,27 @@ export function HomeScreen() {
           </Text>
         )}
       </View>
-      {todayPathBuyLines.length > 0 ? (
-        <View style={styles.pathBuyCard} testID="home-today-path-buys">
-          {todayPathBuyLines.map((line) => (
-            <Text
-              key={line}
-              style={styles.pathBuyLine}
-              testID={
-                line.startsWith('Home') ? 'home-today-path-buys-home' : 'home-today-path-buys-auto'
-              }
-            >
-              {line}
-            </Text>
-          ))}
+
+      {visiblePinnedPaths.length > 0 ? (
+        <View style={styles.pinnedRow} testID="home-pinned-paths">
+          <Text style={styles.todayLabel}>Pinned paths</Text>
+          <View style={styles.pinnedChips}>
+            {visiblePinnedPaths.map((id) => {
+              const tile = pathTileById(id);
+              return (
+                <Pressable
+                  key={id}
+                  testID={`home-pin-${id}`}
+                  style={styles.pinnedChip}
+                  onPress={() => onOpenPinnedPath?.(id)}
+                  accessibilityLabel={`${tile.title}. Edit path.`}
+                >
+                  <Text style={styles.pinnedChipText}>{tile.title}</Text>
+                  <Text style={styles.pinnedChipDot}> · edit</Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       ) : null}
 
@@ -696,60 +781,89 @@ function relativeAge(iso: string, nowMs: number): string {
   return `${Math.floor(min / 60)}h ago`;
 }
 
-function HeartbeatChip({
+function HomeStatusPill({
+  config,
   running,
   lastPulseAt,
   intervalSec,
   nowMs,
+  open,
   onPress,
 }: {
+  config: { auto_trade_enabled: boolean; alerts_enabled: boolean };
   running: boolean;
   lastPulseAt: string | null | undefined;
   intervalSec: number;
   nowMs: number;
-  onPress?: () => void;
+  open: boolean;
+  onPress: () => void;
 }) {
-  const ageSec =
-    lastPulseAt && Number.isFinite(new Date(lastPulseAt).getTime())
-      ? Math.max(0, Math.floor((nowMs - new Date(lastPulseAt).getTime()) / 1000))
-      : null;
-  // Age is Cloud Run last tick when synced. Phone JS freezes on lock; that is not a Cloud outage.
-  const staleAfter = Math.max(120, intervalSec * 4 + 60);
-  const stale = running && ageSec != null && ageSec > staleAfter;
-  const dotColor = !running ? colors.mute : stale ? colors.warn : colors.win;
-  const label = !running ? 'Idle' : stale ? `Stale · cloud ${intervalSec}s` : `Live · cloud ${intervalSec}s`;
-  const ageLabel = running && ageSec != null ? `${ageSec}s ago` : running ? '…' : null;
+  const model = homeStatusPillModel({
+    config,
+    running,
+    lastPulseAt,
+    intervalSec,
+    nowMs,
+  });
+  const dotColor =
+    model.tone === 'live' ? colors.win : model.tone === 'stale' ? colors.warn : colors.mute;
+  const tickColor =
+    model.tone === 'live' ? colors.win : model.tone === 'stale' ? colors.warn : colors.mute;
 
   return (
-    <Pressable style={styles.chip} testID="home-heartbeat" onPress={onPress} hitSlop={6}>
-      <View
-        style={[
-          styles.heartDot,
-          {
-            backgroundColor: dotColor,
-            opacity: running ? 1 : 0.45,
-          },
-        ]}
-        testID="home-heartbeat-dot"
-      />
-      <Text
-        style={[
-          styles.chipText,
-          running && !stale && { color: colors.win },
-          stale && { color: colors.warn },
-        ]}
+    <View style={styles.statusWrap}>
+      <Pressable
+        style={styles.statusPill}
+        testID="home-heartbeat"
+        onPress={onPress}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`${model.modeLine}. ${model.tickLine}`}
+        accessibilityState={{ expanded: open }}
       >
-        {label}
-        {ageLabel ? ` · ${ageLabel}` : ''}
-      </Text>
-    </Pressable>
-  );
-}
-
-function Chip({ label, accent }: { label: string; accent?: boolean }) {
-  return (
-    <View style={[styles.chip, accent && { borderColor: colors.accent }]}>
-      <Text style={[styles.chipText, accent && { color: colors.accent }]}>{label}</Text>
+        <View
+          style={[
+            styles.heartDot,
+            {
+              backgroundColor: dotColor,
+              opacity: model.tone === 'idle' ? 0.45 : 1,
+            },
+          ]}
+          testID="home-heartbeat-dot"
+        />
+        {model.paused ? (
+          <Text style={[styles.statusTick, { color: colors.mute }]}>Paused</Text>
+        ) : (
+          <>
+            {model.showAuto ? <Text style={styles.statusAuto}>Auto</Text> : null}
+            {model.showBell ? (
+              <Text style={styles.statusBell} testID="home-status-bell">
+                🔔
+              </Text>
+            ) : null}
+            <Text style={styles.statusDot}>·</Text>
+            <Text style={[styles.statusTick, { color: tickColor }]} testID="home-status-tick">
+              {model.tickLabel}
+            </Text>
+          </>
+        )}
+      </Pressable>
+      {open ? (
+        <View style={styles.statusDetail} testID="home-status-detail">
+          <Text style={styles.statusDetailMode} testID="home-status-mode">
+            {model.modeLine}
+          </Text>
+          <Text
+            style={[
+              styles.statusDetailTick,
+              model.tone === 'live' && { color: colors.win },
+              model.tone === 'stale' && { color: colors.warn },
+            ]}
+          >
+            {model.tickLine}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -961,23 +1075,38 @@ const styles = StyleSheet.create({
   },
   cashValue: { color: colors.textPrimary, fontSize: 15, fontWeight: '800' },
   cashLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '500', marginTop: 2 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  chip: {
+  statusWrap: { alignSelf: 'flex-start', maxWidth: '100%', marginTop: 2 },
+  statusPill: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
-  chipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  statusAuto: { color: colors.gold, fontSize: 12, fontWeight: '700' },
+  statusBell: { fontSize: 11, lineHeight: 14 },
+  statusDot: { color: colors.mute, fontSize: 12, fontWeight: '700' },
+  statusTick: { fontSize: 12, fontWeight: '700' },
+  statusDetail: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: colors.surfaceElevated,
+    gap: 3,
+  },
+  statusDetailMode: { color: colors.textPrimary, fontSize: 12, fontWeight: '700' },
+  statusDetailTick: { color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
   heartDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   scheduleBanner: {
     backgroundColor: 'rgba(255, 171, 0, 0.08)',
@@ -1032,17 +1161,28 @@ const styles = StyleSheet.create({
   },
   todayLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
   todayValue: { color: colors.textPrimary, fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  pathBuyCard: {
+  pinnedRow: {
     backgroundColor: colors.surface,
     borderRadius: 10,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 2,
-    marginTop: -8,
+    gap: 6,
   },
-  pathBuyLine: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', lineHeight: 16 },
+  pinnedChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  pinnedChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pinnedChipText: { color: colors.textPrimary, fontSize: 12, fontWeight: '700' },
+  pinnedChipDot: { color: colors.mute, fontSize: 12, fontWeight: '600' },
   valueSmall: { color: colors.textPrimary, fontSize: 14, marginTop: 4, lineHeight: 20 },
   signalRow: {
     flexDirection: 'row',

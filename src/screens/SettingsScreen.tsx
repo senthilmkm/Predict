@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme/tokens';
 import {
   ALERT_RETENTION_DEFAULT_DAYS,
@@ -41,6 +44,10 @@ import {
 } from '../services/credentials';
 import { KalshiClient } from '../services/kalshi/client';
 import { assertPemLooksValid } from '../services/kalshi/sign';
+import { PathInfoIcon } from '../components/PathInfoIcon';
+import { PathFocusId } from '../content/pathCatalog';
+import { PathsPickerSheet } from './PathsPickerSheet';
+import { usePinnedPathsStore } from '../state/pinnedPathsStore';
 
 async function pickPemFromDevice(): Promise<string | null> {
   const DocumentPicker = await import('expo-document-picker');
@@ -77,9 +84,11 @@ const MIN_BUSY_MS =
 export function SettingsScreen({
   onOpenAccountAndMore,
   onOpenRisk,
+  onOpenPathsGuide,
 }: {
   onOpenAccountAndMore?: () => void;
-  onOpenRisk?: () => void;
+  onOpenRisk?: (focus: PathFocusId) => void;
+  onOpenPathsGuide?: () => void;
 } = {}) {
   const config = useConfigStore((s) => s.config);
   const setConfig = useConfigStore((s) => s.setConfig);
@@ -136,10 +145,26 @@ export function SettingsScreen({
   const busyLock = React.useRef(false);
   const [riskHelpOpen, setRiskHelpOpen] = useState(false);
   const [credsHelpOpen, setCredsHelpOpen] = useState(false);
+  const [pathsOpen, setPathsOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
+  const hydratePins = usePinnedPathsStore((s) => s.hydrate);
+
+  type HubSheet = 'paths' | 'alerts' | 'keys' | null;
+  function showHubSheet(next: HubSheet) {
+    setPathsOpen(next === 'paths');
+    setAlertsOpen(next === 'alerts');
+    setKeysOpen(next === 'keys');
+    setRiskHelpOpen(false);
+    setCredsHelpOpen(false);
+  }
+  const insets = useSafeAreaInsets();
+  const sheetLift = Math.max(insets.bottom, 8) + 56;
 
   useEffect(() => {
     void hasCredentials().then(setHasCreds);
-  }, []);
+    void hydratePins();
+  }, [hydratePins]);
 
   /** Safe against stale Zustand HMR instances missing newer actions. */
   function runPruneAlerts(): number {
@@ -468,21 +493,19 @@ export function SettingsScreen({
 
   return (
     <View style={styles.root} testID="screen-settings">
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void onRefresh()}
-            tintColor={colors.accent}
-            colors={[colors.accent]}
-          />
-        }
-      >
+      <View style={styles.hubDock} testID="settings-hub-dock">
         <View style={styles.statusCard} testID="settings-mode">
-          <Text style={styles.statusEyebrow}>Current mode</Text>
-          <Text style={styles.statusTitle}>{modeLabel(config)}</Text>
-          <Text style={styles.statusHint}>{modeHint(config)}</Text>
+          <View style={styles.statusTop}>
+            <View style={styles.controlCopy}>
+              <Text style={styles.statusEyebrow}>Current mode</Text>
+              <Text style={styles.statusTitle}>{modeLabel(config)}</Text>
+            </View>
+            <PathInfoIcon
+              title="Current mode"
+              body={modeHint(config)}
+              testID="settings-mode-info"
+            />
+          </View>
         </View>
         {feedback ? (
           <Text style={styles.actionFeedback} testID="settings-message">
@@ -490,14 +513,20 @@ export function SettingsScreen({
           </Text>
         ) : null}
 
-        <Text style={styles.section}>Auto-trade</Text>
         <View style={styles.controlCard}>
           <View style={styles.controlRow}>
             <View style={styles.controlCopy}>
-              <Text style={styles.controlTitle}>Place orders automatically</Text>
-              <Text style={styles.controlHint}>
-                Real Kalshi orders when cushions and risk gates pass. Face ID required to turn on.
-              </Text>
+              <View style={styles.titleWithInfo}>
+                <Text style={styles.controlTitle}>Auto-trade</Text>
+                <PathInfoIcon
+                  title="Auto-trade"
+                  body={
+                    'Face ID is required to turn on. Real Kalshi orders when a path and shared limits pass. Off = research and alerts only — Home Buy / Sell taps can still place. Auto-trading runs 24/7 on Cloud Run. Independent from alerts.'
+                  }
+                  testID="settings-autotrade-info"
+                />
+              </View>
+              <Text style={styles.controlHint}>Face ID to turn on.</Text>
             </View>
             <Switch
               testID="toggle-autotrade"
@@ -510,47 +539,177 @@ export function SettingsScreen({
           </View>
           {config.auto_trade_enabled ? (
             <Text style={styles.liveWarn} testID="autotrade-live-warn">
-              Auto-trade is active. 24/7 background trading runs securely on GCP Cloud Run.
+              Live on Cloud
             </Text>
-          ) : (
-            <Text style={styles.controlHint}>
-              Off = research & alerts only. No automatic buys or sells.
-            </Text>
-          )}
+          ) : null}
         </View>
 
-        <View style={styles.collapseHeader}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionInline}>Risk</Text>
+        <Text style={styles.keysLine} testID="creds-status">
+          {hasCreds ? 'Kalshi keys saved' : 'Kalshi keys not set'}
+        </Text>
+
+        <View style={styles.hubGrid}>
+          <Pressable
+            style={styles.hubTile}
+            testID="tile-paths"
+            onPress={() => showHubSheet('paths')}
+            accessibilityLabel="Paths. Pick one path. Pin up to 3 for Home."
+          >
+            <View style={styles.hubTileTop}>
+              <Text style={styles.hubTitle}>Paths</Text>
+              <Pressable
+                testID="btn-risk-help"
+                style={styles.infoBtn}
+                onPress={() => {
+                  showHubSheet(null);
+                  setRiskHelpOpen(true);
+                }}
+                accessibilityLabel="Settings guide — what do these settings mean"
+                hitSlop={8}
+              >
+                <Text style={styles.infoBtnText}>i</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.hubSub}>Risk knobs · pin 3</Text>
             <Pressable
-              testID="btn-risk-help"
-              style={styles.infoBtn}
-              onPress={() => setRiskHelpOpen(true)}
-              accessibilityLabel="Settings guide — what do these settings mean"
+              onPress={() => showHubSheet('paths')}
+              testID="btn-toggle-risk"
               hitSlop={8}
             >
-              <Text style={styles.infoBtnText}>i</Text>
+              <Text style={styles.hubLink}>Open</Text>
             </Pressable>
-          </View>
+          </Pressable>
+
           <Pressable
-            onPress={() => onOpenRisk?.()}
-            testID="btn-toggle-risk"
-            hitSlop={8}
+            style={styles.hubTile}
+            testID="tile-alerts"
+            onPress={() => showHubSheet('alerts')}
+            accessibilityLabel="Alerts. Pings and history."
           >
-            <Text style={styles.collapseHint}>Show</Text>
+            <View style={styles.hubTileTop}>
+              <Text style={styles.hubTitle}>Alerts</Text>
+              <PathInfoIcon
+                title="Notify on lean signals"
+                body={
+                  'Off = no new lean rows and no lock-screen pings (including fills). Money rows still collect in Alerts. To hear fills but not leans, leave this On and mute Lean signals on the bell.'
+                }
+                testID="alerts-notify-hint"
+              />
+            </View>
+            <Text style={styles.hubSub}>Pings and history</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.hubTile}
+            testID="tile-keys"
+            onPress={() => showHubSheet('keys')}
+            accessibilityLabel="Kalshi keys. Unlock, test, wipe."
+          >
+            <View style={styles.hubTileTop}>
+              <Text style={styles.hubTitle}>Kalshi keys</Text>
+              <Pressable
+                testID="btn-kalshi-creds-help"
+                style={styles.infoBtn}
+                onPress={() => {
+                  showHubSheet(null);
+                  setCredsHelpOpen(true);
+                }}
+                accessibilityLabel="How to get Kalshi API key"
+                hitSlop={8}
+              >
+                <Text style={styles.infoBtnText}>i</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.hubSub}>Unlock, test, wipe</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.hubTile}
+            testID="btn-open-settings-more"
+            onPress={() => {
+              showHubSheet(null);
+              onOpenAccountAndMore?.();
+            }}
+            accessibilityLabel="Account and more: subscription, ID, legal, FAQ"
+          >
+            <Text style={styles.hubTitle}>Account</Text>
+            <Text style={styles.hubSub}>Subscription, FAQ</Text>
           </Pressable>
         </View>
+      </View>
 
-        <Text style={styles.section}>Alerts</Text>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
+        {devUnlocked ? (
+          <View style={styles.controlCard} testID="dev-diagnostics-card">
+            <Text style={styles.sectionNoTop}>Developer Diagnostics</Text>
+            <Row
+              testID="toggle-poller"
+              label="Live Feed Polling"
+              value={status?.running ? 'Active' : 'Paused'}
+              busy={busyKey === 'poller'}
+              busyLabel={status?.running ? 'Pausing…' : 'Activating…'}
+              disabled={anyBusy}
+              onPress={() => void togglePoller()}
+            />
+            <ActionButton
+              testID="btn-tick-once"
+              variant="slim"
+              label="Tick once"
+              busyLabel="Ticking once…"
+              busy={false}
+              disabled={anyBusy}
+              onPress={() => void tickOnce()}
+            />
+          </View>
+        ) : null}
+
+        <Text style={styles.section}>Support</Text>
+        <SupportContactFooter />
+        <Pressable
+          testID="settings-version-text"
+          onPress={handleVersionPress}
+          style={styles.versionWrap}
+          hitSlop={8}
+        >
+          <Text style={styles.versionText}>
+            Predict v1.0.0 (57.0){devUnlocked ? ' · Dev Mode' : ''}
+          </Text>
+        </Pressable>
+      </ScrollView>
+
+        <View
+          testID="modal-alerts-sheet"
+          style={
+            alertsOpen
+              ? [styles.sheetOverlayAbs, { paddingBottom: sheetLift, paddingTop: 48 }]
+              : styles.sheetCollapsed
+          }
+          pointerEvents="auto"
+        >
+          {alertsOpen ? (
+            <Pressable style={styles.sheetScrim} onPress={() => showHubSheet(null)} />
+          ) : null}
+            <View style={styles.sheetCard} testID={alertsOpen ? 'alerts-sheet-open' : undefined}>
+              <View style={styles.sheetHead}>
+                <Text style={styles.sheetTitle}>Alerts</Text>
+                <Pressable testID="btn-close-alerts-sheet" onPress={() => showHubSheet(null)} hitSlop={10}>
+                  <Text style={styles.sheetClose}>Close</Text>
+                </Pressable>
+              </View>
         <View style={styles.controlCard}>
           <View style={styles.controlRow}>
             <View style={styles.controlCopy}>
               <Text style={styles.controlTitle}>Notify on lean signals</Text>
-              <Text style={styles.controlHint} testID="alerts-notify-hint">
-                Off = no new lean rows and no lock-screen pings (including fills). Money rows still
-                collect in Alerts. To hear fills but not leans, leave this On and mute Lean signals
-                on the bell.
-              </Text>
             </View>
             <Switch
               testID="toggle-alerts"
@@ -608,22 +767,39 @@ export function SettingsScreen({
           Default {ALERT_RETENTION_DEFAULT_DAYS}d · {ALERT_RETENTION_MIN_DAYS}–
           {ALERT_RETENTION_MAX_DAYS}d. Prune removes older alerts on this phone and in Cloud.
         </Text>
-
-        <View style={styles.sectionRow}>
-          <Text style={[styles.section, styles.sectionNoTop]}>Kalshi credentials</Text>
-          <Pressable
-            testID="btn-kalshi-creds-help"
-            style={styles.infoBtn}
-            onPress={() => setCredsHelpOpen(true)}
-            accessibilityLabel="How to get Kalshi API key"
-            hitSlop={8}
-          >
-            <Text style={styles.infoBtnText}>i</Text>
-          </Pressable>
+            </View>
         </View>
-        <Text style={styles.meta} testID="creds-status">
-          {hasCreds ? 'Saved in Secure Store' : 'Not set'}
-        </Text>
+
+        <View
+          testID="modal-keys-sheet"
+          style={
+            keysOpen
+              ? [styles.sheetOverlayAbs, { paddingBottom: sheetLift, paddingTop: 48 }]
+              : styles.sheetCollapsed
+          }
+          pointerEvents="auto"
+        >
+          {keysOpen ? (
+            <Pressable style={styles.sheetScrim} onPress={() => showHubSheet(null)} />
+          ) : null}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.sheetAvoid}
+          >
+            <View style={styles.sheetCard} testID={keysOpen ? 'keys-sheet-open' : undefined}>
+              <View style={styles.sheetGrab} />
+              <View style={styles.sheetHead}>
+                <Text style={styles.sheetTitle}>Kalshi credentials</Text>
+                <Pressable testID="btn-close-keys-sheet" onPress={() => showHubSheet(null)} hitSlop={10}>
+                  <Text style={styles.sheetClose}>Close</Text>
+                </Pressable>
+              </View>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                style={styles.sheetScroll}
+                contentContainerStyle={styles.sheetScrollContent}
+              >
 
         {!showSecrets ? (
           <ActionButton
@@ -745,58 +921,27 @@ export function SettingsScreen({
         <Text style={styles.warn}>
           Paste your Kalshi API key ID and private key PEM. Saved credentials enable 24/7 cloud auto-trading on GCP.
         </Text>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
 
-        {devUnlocked ? (
-          <View style={styles.controlCard} testID="dev-diagnostics-card">
-            <Text style={styles.sectionNoTop}>Developer Diagnostics</Text>
-            <Row
-              testID="toggle-poller"
-              label="Live Feed Polling"
-              value={status?.running ? 'Active' : 'Paused'}
-              busy={busyKey === 'poller'}
-              busyLabel={status?.running ? 'Pausing…' : 'Activating…'}
-              disabled={anyBusy}
-              onPress={() => void togglePoller()}
-            />
-            <ActionButton
-              testID="btn-tick-once"
-              variant="slim"
-              label="Tick once"
-              busyLabel="Ticking once…"
-              busy={false}
-              disabled={anyBusy}
-              onPress={() => void tickOnce()}
-            />
-          </View>
-        ) : null}
-
-        <Pressable
-          testID="btn-open-settings-more"
-          style={styles.moreRow}
-          onPress={() => onOpenAccountAndMore?.()}
-          accessibilityLabel="Account and more: subscription, ID, legal, FAQ"
-        >
-          <View style={styles.moreCopy}>
-            <Text style={styles.sectionInline}>Account & more</Text>
-            <Text style={styles.hint}>Subscription, ID, legal, FAQ</Text>
-          </View>
-          <Text style={styles.moreChevron}>›</Text>
-        </Pressable>
-
-        <Text style={styles.section}>Support</Text>
-        <SupportContactFooter />
-        <Pressable
-          testID="settings-version-text"
-          onPress={handleVersionPress}
-          style={styles.versionWrap}
-          hitSlop={8}
-        >
-          <Text style={styles.versionText}>
-            Predict v1.0.0 (57.0){devUnlocked ? ' · Dev Mode' : ''}
-          </Text>
-        </Pressable>
-      </ScrollView>
-
+      <PathsPickerSheet
+        visible={pathsOpen}
+        onClose={() => showHubSheet(null)}
+        onOpenPath={(id) => {
+          showHubSheet(null);
+          onOpenRisk?.(id);
+        }}
+        onOpenGuide={
+          onOpenPathsGuide
+            ? () => {
+                showHubSheet(null);
+                onOpenPathsGuide();
+              }
+            : undefined
+        }
+      />
       <KalshiCredsHelpModal visible={credsHelpOpen} onClose={() => setCredsHelpOpen(false)} />
       <RiskHelpModal visible={riskHelpOpen} onClose={() => setRiskHelpOpen(false)} />
       <AutoTradeRiskAcceptModal
@@ -833,9 +978,9 @@ function RiskHelpModal({
           </View>
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             <Text style={styles.modalLead}>
-              Plain-English guide to every setting in this app. Settings → Risk → Show opens Shared
-              limits (one Kalshi account) plus Home Buy and Auto-trade tabs. If a path fails a limit,
-              Last signals shows one skip line for the button you can tap — not two competing skips.
+              Plain-English guide to every setting in this app. Settings → Paths opens one path at a
+              time. Shared limits still apply to every buy. If a path fails a limit, Last signals
+              shows one skip line for the button you can tap — not two competing skips.
             </Text>
             <Text style={styles.modalLead}>
               Important: Trading involves risk of loss. Predict does not guarantee profits or
@@ -868,7 +1013,7 @@ function RiskHelpModal({
               tap tells Cloud Run to place now. The phone never talks to Kalshi. No confirm sheet.
               Kill Switch hides the buttons. If the Admin flag is Off, buttons disappear and Cloud
               rejects taps.{'\n\n'}
-              A tap uses Settings → Risk → Home Buy (size, minutes left/elapsed, max ask, time in
+              A tap uses Settings → Paths → Home Buy (size, minutes left/elapsed, max ask, time in
               force, chase). Shared limits apply to both Home Buy and Auto-trade. A Home Buy skip
               stays on the row when Buy is hidden — not Auto-trade’s skip. You can lose the full
               notional. GTC can rest. IOC can miss.
@@ -928,8 +1073,10 @@ function RiskHelpModal({
               is protect-sold. That is safer and perfectly fine.
             </HelpItem>
             <HelpItem title="Max trades / day">
-              Total new trades allowed today across all assets. Stops new buys for the day once this
-              number is reached.
+              Filled buys allowed today across all assets. A later sell of that same fill is not a
+              second trade. IOC misses do not count. Extra Last-minute clips, Step buy lots, and a
+              Pair lock hedge each count as their own filled buy. Stops new buys for the day once
+              this number is reached.
             </HelpItem>
             <HelpItem title="Max trades / asset / 15m window">
               How many new buys of the same asset are allowed in one 15-minute contract.{'\n\n'}
@@ -1326,6 +1473,15 @@ function Row({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  hubDock: {
+    zIndex: 40,
+    elevation: 40,
+    backgroundColor: colors.bg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: 8,
+    gap: 5,
+  },
   content: { padding: spacing.lg, gap: 5, paddingBottom: 48 },
   mode: { color: colors.gold, fontSize: 17, fontWeight: '700', marginBottom: 2 },
   statusCard: {
@@ -1333,11 +1489,93 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    gap: 4,
+    marginBottom: 2,
+  },
+  statusTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  titleWithInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  keysLine: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+    marginBottom: 2,
+  },
+  hubGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  hubTile: {
+    width: '48.3%',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minHeight: 78,
+  },
+  hubTileTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  hubTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '800' },
+  hubSub: { color: colors.mute, fontSize: 11, lineHeight: 14, marginTop: 4 },
+  hubLink: { color: colors.accent, fontSize: 11, fontWeight: '700', marginTop: 6 },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
+  sheetOverlayAbs: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    zIndex: 20,
+  },
+  sheetCollapsed: {
+    height: 0,
+    overflow: 'hidden',
+  },
+  sheetScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  sheetAvoid: { width: '100%', maxHeight: '100%' },
+  sheetCard: {
+    backgroundColor: '#151c25',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 12,
+    maxHeight: '100%',
+    gap: 8,
+  },
+  sheetGrab: {
+    width: 36,
+    height: 4,
+    borderRadius: 99,
+    backgroundColor: '#3a4654',
+    alignSelf: 'center',
     marginBottom: 4,
   },
+  sheetScroll: { flexGrow: 0 },
+  sheetScrollContent: { gap: 8, paddingBottom: 8 },
+  sheetHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sheetTitle: { color: colors.textPrimary, fontSize: 16, fontWeight: '800' },
+  sheetClose: { color: colors.accent, fontWeight: '800', fontSize: 14 },
   statusEyebrow: {
     color: colors.mute,
     fontSize: 11,
@@ -1360,9 +1598,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    gap: 10,
+    gap: 6,
   },
   controlRow: {
     flexDirection: 'row',
@@ -1382,15 +1620,9 @@ const styles = StyleSheet.create({
   },
   liveWarn: {
     color: colors.gold,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
-    backgroundColor: 'rgba(198, 167, 94, 0.12)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.gold,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
   },
   connectionTestResult: {
     fontSize: 13,

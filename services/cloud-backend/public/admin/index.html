@@ -678,7 +678,7 @@
           <label class="block text-[11px] text-slate-400">
             Bid check (seconds)
             <input type="number" id="flagCashOutBidCheckSeconds" min="2" max="10" value="3" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markFeatureFormDirty()" oninput="markFeatureFormDirty()" />
-            <span class="text-slate-500">After a Cash out fill (and the 45s wait), Cloud reads that ticket’s bid this often (2–10). Default 3. Not the Cloud tick interval.</span>
+            <span class="text-slate-500">Unused for timing. Open Cash out, Gold fade, and Protect lots dump on the same 1s live quote as the path watchers (only while a lot is open). This field is kept so older Admin saves still load.</span>
           </label>
           <label class="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" id="flagGoldFade" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
@@ -695,7 +695,7 @@
           <label class="block text-[11px] text-slate-400">
             Gold fade bid check (seconds)
             <input type="number" id="flagGoldFadeBidCheckSeconds" min="2" max="10" value="3" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markFeatureFormDirty()" oninput="markFeatureFormDirty()" />
-            <span class="text-slate-500">After a Gold fade fill (and the 45s wait), Cloud reads that ticket’s bid this often (2–10). Default 3.</span>
+            <span class="text-slate-500">Unused for timing. Gold fade take / stop / flatten use the same 1s dump quote while a fade lot is open.</span>
           </label>
           <label class="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" id="flagTwapLock" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />

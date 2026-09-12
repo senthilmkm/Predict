@@ -14,6 +14,9 @@ import { defaultAppConfig } from '../../src/config/types';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { SettingsMoreScreen } from '../../src/screens/SettingsMoreScreen';
 import { RiskScreen } from '../../src/screens/RiskScreen';
+import { PathsGuideScreen } from '../../src/screens/PathsGuideScreen';
+import { PathFocusId } from '../../src/content/pathCatalog';
+import { resetPinnedPathsStoreForTests } from '../../src/state/pinnedPathsStore';
 import { generateKeyPairSync } from 'crypto';
 import { saveCredentials, hasCredentials, clearCredentials } from '../../src/services/credentials';
 import { KalshiClient } from '../../src/services/kalshi/client';
@@ -21,17 +24,23 @@ import { KalshiClient } from '../../src/services/kalshi/client';
 function SettingsHost() {
   const [more, setMore] = useState(false);
   const [risk, setRisk] = useState(false);
+  const [guide, setGuide] = useState(false);
+  const [riskFocus, setRiskFocus] = useState<PathFocusId | undefined>();
   return (
     <View testID="settings-host">
       <View
         testID="settings-home-slot"
         // Keep Settings mounted while More/Risk is open (mirrors root stack).
-        style={more || risk ? { height: 0, overflow: 'hidden' } : undefined}
-        pointerEvents={more || risk ? 'none' : 'auto'}
+        style={more || risk || guide ? { height: 0, overflow: 'hidden' } : undefined}
+        pointerEvents={more || risk || guide ? 'none' : 'auto'}
       >
         <SettingsScreen
           onOpenAccountAndMore={() => setMore(true)}
-          onOpenRisk={() => setRisk(true)}
+          onOpenRisk={(focus) => {
+            setRiskFocus(focus);
+            setRisk(true);
+          }}
+          onOpenPathsGuide={() => setGuide(true)}
         />
       </View>
       {risk ? (
@@ -39,7 +48,15 @@ function SettingsHost() {
           <Pressable testID="btn-risk-back" onPress={() => setRisk(false)}>
             <Text>Back</Text>
           </Pressable>
-          <RiskScreen />
+          <RiskScreen focus={riskFocus} />
+        </View>
+      ) : null}
+      {guide ? (
+        <View>
+          <Pressable testID="btn-guide-back" onPress={() => setGuide(false)}>
+            <Text>Back</Text>
+          </Pressable>
+          <PathsGuideScreen />
         </View>
       ) : null}
       {more ? (
@@ -60,8 +77,25 @@ function reset() {
   setKeyValueStore(new MemoryKeyValueStore());
   setSecureStore(new MemoryKeyValueStore());
   resetRuntimeStoreForTests();
+  resetPinnedPathsStoreForTests();
   useConfigStore.setState({ config: defaultAppConfig(), hydrated: true });
   return clearCredentials();
+}
+
+async function openFocusedPath(
+  s: Awaited<ReturnType<typeof render>>,
+  id: PathFocusId
+) {
+  if (s.queryByTestId('screen-risk')) {
+    await fireEvent.press(s.getByTestId('btn-risk-back'));
+    await waitFor(() => expect(s.queryByTestId('screen-risk')).toBeNull());
+  }
+  if (!s.queryByTestId(`path-tile-${id}`)) {
+    await fireEvent.press(s.getByTestId('btn-toggle-risk'));
+    await waitFor(() => expect(s.getByTestId(`path-tile-${id}`)).toBeTruthy());
+  }
+  await fireEvent.press(s.getByTestId(`path-tile-${id}`));
+  await waitFor(() => expect(s.getByTestId('screen-risk')).toBeTruthy());
 }
 
 describe('Settings toggles', () => {
@@ -81,6 +115,7 @@ describe('Settings toggles', () => {
     const s = await render(<SettingsScreen />);
     expect(s.getByTestId('screen-settings')).toBeTruthy();
     expect(useConfigStore.getState().config.poll_interval_seconds).toBe(20);
+    await fireEvent.press(s.getByTestId('tile-alerts'));
     await fireEvent(s.getByTestId('toggle-alerts'), 'valueChange', false);
     await waitFor(() => expect(useConfigStore.getState().config.alerts_enabled).toBe(false));
     await fireEvent(s.getByTestId('toggle-autotrade'), 'valueChange', true);
@@ -132,9 +167,8 @@ describe('Settings toggles', () => {
     expect(s.queryByTestId('section-faq')).toBeNull();
     expect(s.queryByTestId('faq-accordion')).toBeNull();
     expect(s.getByTestId('support-contact')).toBeTruthy();
-    expect(String(s.getByTestId('alerts-notify-hint').props.children)).toMatch(
-      /mute Lean signals on the bell/i
-    );
+    expect(s.getByTestId('alerts-notify-hint')).toBeTruthy();
+    expect(s.getByLabelText(/Notify on lean signals info/i)).toBeTruthy();
 
     const homeTexts: string[] = [];
     const walkHome = (n: { children?: Array<string | { children?: unknown[] }> }) => {
@@ -144,12 +178,11 @@ describe('Settings toggles', () => {
       }
     };
     walkHome(s.getByTestId('screen-settings'));
-    const kalshiAt = homeTexts.indexOf('Kalshi credentials');
-    const riskAt = homeTexts.indexOf('Risk');
+    const pathsAt = homeTexts.indexOf('Paths');
     const alertsAt = homeTexts.indexOf('Alerts');
-    expect(kalshiAt).toBeGreaterThan(-1);
-    expect(riskAt).toBeGreaterThan(-1);
-    expect(alertsAt).toBeGreaterThan(riskAt);
+    const kalshiAt = homeTexts.indexOf('Kalshi keys');
+    expect(pathsAt).toBeGreaterThan(-1);
+    expect(alertsAt).toBeGreaterThan(pathsAt);
     expect(kalshiAt).toBeGreaterThan(alertsAt);
 
     await fireEvent.press(s.getByTestId('btn-open-settings-more'));
@@ -251,6 +284,7 @@ describe('Settings credentials', () => {
       publicKeyEncoding: { type: 'spki', format: 'pem' },
     });
     const s = await render(<SettingsScreen />);
+    await fireEvent.press(s.getByTestId('tile-keys'));
     await fireEvent.press(s.getByTestId('btn-unlock-creds'));
     await waitFor(() => expect(s.getByTestId('input-key-id')).toBeTruthy());
     await fireEvent.changeText(s.getByTestId('input-key-id'), 'test-key-id');
@@ -296,21 +330,25 @@ describe('Settings credentials', () => {
 
   test('protect money toggle appears under Risk Auto-trade tab', async () => {
     const s = await render(<SettingsHost />);
-    await fireEvent.press(s.getByTestId('btn-toggle-risk'));
-    await waitFor(() => expect(s.getByTestId('screen-risk')).toBeTruthy());
-    expect(s.getByTestId('risk-tab-home')).toBeTruthy();
+    await openFocusedPath(s, 'shared');
+    expect(s.queryByTestId('risk-tab-home')).toBeNull();
     expect(s.getByTestId('risk-field-shared-max_trades_per_asset_per_window')).toBeTruthy();
     expect(s.getByTestId('risk-value-shared-max_trades_per_asset_per_window').props.children).toBe('1');
-    expect(s.getByTestId('tif-home-immediate_or_cancel')).toBeTruthy();
+    expect(s.queryByTestId('tif-home-immediate_or_cancel')).toBeNull();
     expect(s.queryByTestId('risk-toggle-protect_sell_enabled')).toBeNull();
     expect(s.queryByTestId('risk-toggle-smart_buy_enabled')).toBeNull();
-    await fireEvent.press(s.getByTestId('risk-tab-auto'));
+    await openFocusedPath(s, 'home');
+    expect(s.getByTestId('tif-home-immediate_or_cancel')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-protect_sell_enabled')).toBeNull();
+    await openFocusedPath(s, 'auto');
     await waitFor(() => expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-toggle-smart_buy_enabled')).toBeTruthy();
     expect(s.queryByTestId('risk-toggle-cash_out_enabled')).toBeNull();
     await waitFor(() => {
       useRuntimeStore.setState({ cashOutFeatureOn: true });
     });
+    expect(s.queryByTestId('risk-toggle-cash_out_enabled')).toBeNull();
+    await openFocusedPath(s, 'cashOut');
     await waitFor(() => expect(s.getByTestId('risk-toggle-cash_out_enabled')).toBeTruthy());
     expect(s.queryByTestId('risk-value-auto-cash_out_enter_pct')).toBeNull();
     expect(s.queryByTestId('risk-toggle-cash_out_skip_thin_bid')).toBeNull();
@@ -331,6 +369,7 @@ describe('Settings credentials', () => {
     await waitFor(() => {
       useRuntimeStore.setState({ goldFadeFeatureOn: true });
     });
+    await openFocusedPath(s, 'goldFade');
     await waitFor(() => expect(s.getByTestId('risk-toggle-gold_fade_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-toggle-gold_fade_enabled').props.value).toBe(false);
     expect(s.getByTestId('risk-toggle-gold_fade_enabled').props.disabled).toBeFalsy();
@@ -351,6 +390,7 @@ describe('Settings credentials', () => {
     await waitFor(() => {
       useRuntimeStore.setState({ twapLockFeatureOn: true });
     });
+    await openFocusedPath(s, 'twapLock');
     await waitFor(() => expect(s.getByTestId('risk-toggle-twap_lock_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-toggle-twap_lock_enabled').props.value).toBe(false);
     expect(useConfigStore.getState().config.risk.twap_lock_enabled).toBe(false);
@@ -368,6 +408,7 @@ describe('Settings credentials', () => {
     await waitFor(() => {
       useRuntimeStore.setState({ lastMinuteFeatureOn: true });
     });
+    await openFocusedPath(s, 'lastMinute');
     await waitFor(() => expect(s.getByTestId('risk-toggle-last_minute_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-toggle-last_minute_enabled').props.value).toBe(false);
     expect(useConfigStore.getState().config.risk.last_minute_enabled).toBe(false);
@@ -396,6 +437,7 @@ describe('Settings credentials', () => {
     await waitFor(() => {
       useRuntimeStore.setState({ stepBuyFeatureOn: true });
     });
+    await openFocusedPath(s, 'stepBuy');
     await waitFor(() => expect(s.getByTestId('risk-toggle-step_buy_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-toggle-step_buy_enabled').props.value).toBe(false);
     expect(useConfigStore.getState().config.risk.step_buy_enabled).toBe(false);
@@ -421,6 +463,7 @@ describe('Settings credentials', () => {
     await waitFor(() => {
       useRuntimeStore.setState({ spikeFadeFeatureOn: true });
     });
+    await openFocusedPath(s, 'spikeFade');
     await waitFor(() => expect(s.getByTestId('risk-toggle-spike_fade_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-toggle-spike_fade_enabled').props.value).toBe(false);
     await fireEvent(s.getByTestId('risk-toggle-spike_fade_enabled'), 'valueChange', true);
@@ -438,6 +481,7 @@ describe('Settings credentials', () => {
     await waitFor(() => {
       useRuntimeStore.setState({ pairLockFeatureOn: true });
     });
+    await openFocusedPath(s, 'pairLock');
     await waitFor(() => expect(s.getByTestId('risk-toggle-pair_lock_enabled')).toBeTruthy());
     expect(s.getByTestId('risk-toggle-pair_lock_enabled').props.value).toBe(false);
     await fireEvent(s.getByTestId('risk-toggle-pair_lock_enabled'), 'valueChange', true);
@@ -450,11 +494,13 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-pair_lock_lot_count').props.children).toBe('1');
     expect(s.getByTestId('pair-lock-asset-Gold')).toBeTruthy();
     expect(s.getByTestId('path-info-pairLock')).toBeTruthy();
+    await openFocusedPath(s, 'lastMinute');
+    await fireEvent.press(s.getByTestId('last-minute-side-both'));
+    await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_side).toBe('both'));
+    await openFocusedPath(s, 'auto');
     expect(s.getByTestId('path-info-auto')).toBeTruthy();
     expect(s.getByTestId('path-info-smartBuy')).toBeTruthy();
     expect(s.getByTestId('path-info-protect')).toBeTruthy();
-    await fireEvent.press(s.getByTestId('last-minute-side-both'));
-    await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_side).toBe('both'));
     expect(s.getByTestId('risk-field-auto-smart_buy_enabled')).toBeTruthy();
     expect(s.getByTestId('risk-value-auto-smart_buy_min_edge_usd').props.children).toMatch(/\$0\.08/);
     expect(useConfigStore.getState().config.risk.smart_buy_enabled).toBe(true);
@@ -470,7 +516,7 @@ describe('Settings credentials', () => {
       expect(useConfigStore.getState().config.risk.time_in_force).toBe('good_till_canceled')
     );
     expect(useConfigStore.getState().config.manual_risk.time_in_force).toBe('immediate_or_cancel');
-    await fireEvent.press(s.getByTestId('risk-tab-home'));
+    await openFocusedPath(s, 'home');
     await waitFor(() => expect(s.getByTestId('risk-up-home-min_minutes_left')).toBeTruthy());
     await fireEvent.press(s.getByTestId('risk-up-home-min_minutes_left'));
     await waitFor(() =>
@@ -500,6 +546,7 @@ describe('Settings credentials', () => {
 
     try {
       const s = await render(<SettingsScreen />);
+      await fireEvent.press(s.getByTestId('tile-keys'));
       await fireEvent.press(s.getByTestId('btn-test-connection'));
       await waitFor(() =>
         expect(String(s.getByTestId('connection-test-result').props.children)).toMatch(
@@ -535,6 +582,7 @@ describe('Settings credentials', () => {
         env: 'production',
       });
       const s = await render(<SettingsScreen />);
+      await fireEvent.press(s.getByTestId('tile-keys'));
       await fireEvent.press(s.getByTestId('btn-wipe-creds'));
       expect(spy).toHaveBeenCalled();
       const [title, message, buttons] = spy.mock.calls[0];
@@ -563,6 +611,7 @@ describe('Settings credentials', () => {
         env: 'production',
       });
       const s = await render(<SettingsScreen />);
+      await fireEvent.press(s.getByTestId('tile-keys'));
       await fireEvent.press(s.getByTestId('btn-wipe-creds'));
       expect(await hasCredentials()).toBe(true);
       expect(s.getByTestId('creds-status').props.children).toMatch(/Saved/i);
@@ -576,6 +625,7 @@ describe('Settings credentials', () => {
     const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     try {
       const s = await render(<SettingsScreen />);
+      await fireEvent.press(s.getByTestId('tile-keys'));
       await fireEvent.press(s.getByTestId('btn-test-connection'));
       await waitFor(() =>
         expect(String(s.getByTestId('connection-test-result').props.children)).toMatch(
@@ -587,14 +637,61 @@ describe('Settings credentials', () => {
     }
   });
 
+  test('tapping Alerts closes Kalshi keys so only one sheet shows', async () => {
+    const s = await render(<SettingsScreen />);
+    await fireEvent.press(s.getByTestId('tile-keys'));
+    await waitFor(() => expect(s.getByTestId('keys-sheet-open')).toBeTruthy());
+    expect(s.queryByTestId('alerts-sheet-open')).toBeNull();
+    await fireEvent.press(s.getByTestId('tile-alerts'));
+    await waitFor(() => expect(s.getByTestId('alerts-sheet-open')).toBeTruthy());
+    expect(s.queryByTestId('keys-sheet-open')).toBeNull();
+    await fireEvent.press(s.getByTestId('tile-paths'));
+    await waitFor(() => expect(s.getByTestId('modal-paths-picker')).toBeTruthy());
+    expect(s.queryByTestId('alerts-sheet-open')).toBeNull();
+    expect(s.queryByTestId('keys-sheet-open')).toBeNull();
+  });
+
   test('Risk Show opens the Risk screen; Back returns to Settings', async () => {
     const s = await render(<SettingsHost />);
     await fireEvent.press(s.getByTestId('btn-toggle-risk'));
+    await waitFor(() => expect(s.getByTestId('modal-paths-picker')).toBeTruthy());
+    expect(s.queryByTestId('screen-risk')).toBeNull();
+    await fireEvent.press(s.getByTestId('path-tile-shared'));
     await waitFor(() => expect(s.getByTestId('screen-risk')).toBeTruthy());
     expect(s.getByTestId('btn-restore-shared-risk')).toBeTruthy();
-    expect(s.getByTestId('btn-restore-risk-tab')).toBeTruthy();
+    expect(s.queryByTestId('btn-restore-risk-tab')).toBeNull();
     await fireEvent.press(s.getByTestId('btn-risk-back'));
     await waitFor(() => expect(s.queryByTestId('screen-risk')).toBeNull());
     expect(s.getByTestId('screen-settings')).toBeTruthy();
+  });
+
+  test('Paths guide opens from the picker and pins stay at three', async () => {
+    const Alert = require('react-native').Alert;
+    const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      const s = await render(<SettingsHost />);
+      await fireEvent.press(s.getByTestId('btn-toggle-risk'));
+      await waitFor(() => expect(s.getByTestId('modal-paths-picker')).toBeTruthy());
+      expect(s.queryByTestId('path-tile-cashOut')).toBeNull();
+      await fireEvent.press(s.getByTestId('btn-paths-guide'));
+      await waitFor(() => expect(s.getByTestId('screen-paths-guide')).toBeTruthy());
+      expect(s.getByTestId('guide-card-pairLock')).toBeTruthy();
+      await fireEvent.press(s.getByTestId('btn-guide-back'));
+      await waitFor(() => expect(s.queryByTestId('screen-paths-guide')).toBeNull());
+      await fireEvent.press(s.getByTestId('btn-toggle-risk'));
+      await waitFor(() => expect(s.getByTestId('modal-paths-picker')).toBeTruthy());
+      await fireEvent.press(s.getByTestId('pin-path-shared'));
+      await fireEvent.press(s.getByTestId('pin-path-home'));
+      await fireEvent.press(s.getByTestId('pin-path-auto'));
+      await waitFor(() => {
+        useRuntimeStore.setState({ lastMinuteFeatureOn: true });
+      });
+      await waitFor(() => expect(s.getByTestId('path-tile-lastMinute')).toBeTruthy());
+      await fireEvent.press(s.getByTestId('pin-path-lastMinute'));
+      expect(spy).toHaveBeenCalled();
+      expect(String(spy.mock.calls[0][0])).toMatch(/Three pins max/i);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -1,4 +1,5 @@
 import { getMarketQuote } from 'trading-core';
+import { isCountableWindowBuy } from '../../../../packages/trading-core/src/gates';
 import { etDateKey } from '../util/time';
 import { TradeRecordDoc, updateTradeRecord } from './firestore';
 
@@ -101,10 +102,11 @@ export function applyMarketResult(
   };
 }
 
+/** Filled buys today (ET). IOC misses, dry-run, and a later sell of the same fill do not add a row. */
 export function liveCloudTradesToday(trades: TradeRecordDoc[], now = new Date()): TradeRecordDoc[] {
   const day = etDateKey(now);
   return trades.filter((t) => {
-    if (t.dryRun) return false;
+    if (!isCountableWindowBuy(t)) return false;
     try {
       return etDateKey(new Date(t.executedAt)) === day;
     } catch {

@@ -15,8 +15,9 @@ export const PATH_INFO = {
       '• Asset on/off (Cushions tab)\n' +
       '• Path-only fields (ask, minutes, Protect, Smart buy, Last-minute clips)\n\n' +
       'Isolation\n' +
+      '• Max trades / day counts each filled buy. A sell of that fill does not add another. IOC misses do not count\n' +
       '• Window cap 1 is one fill per coin per 15m window for Home / Auto / Cash out / fade / TWAP / Last-minute first clip / Step buy lot 1 / Spike fade / Pair lock runner\n' +
-      '• Last-minute ladder clips after that first Last-minute fill are extra (up to Max clips)\n' +
+      '• Last-minute ladder clips after that first Last-minute fill are extra (up to Max clips/asset)\n' +
       '• Step buy lots after lot 1 are extra (up to Max lots)\n' +
       '• Pair lock hedge is extra (same count as the runner)',
   },
@@ -150,14 +151,14 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Last-minute asset chips, and that asset On (Cushions tab on/off only — not the $ gap)\n' +
       '• Entry ask, Side (Yes / No / Both), Both min favorite, Both min gap\n' +
-      '• Watch start, First clip by, Stop with, Ladder wait, Clip contracts, Max clips\n' +
+      '• Watch start, First clip by, Stop with, Ladder wait, Clip contracts/asset, Max clips/asset\n' +
       '• Sell if flip ≥ (0 = Off). Sells a lot only when the other side is that much richer\n' +
       '• Shared: max open, trades/day, daily loss stop\n' +
       '• Window cap 1 for the first clip only\n' +
       '• IOC, 1-second quotes from Watch start\n\n' +
       'Does not use\n' +
       '• Cushions $ gap. If the gap already reached cushion, play Auto / Home / Cash out — not this path\n' +
-      '• Auto $ per trade (size is Clip contracts × live ask)\n' +
+      '• Auto $ per trade (size is Clip contracts/asset × live ask)\n' +
       '• Auto max ask, Smart buy, chase, minutes left/elapsed, Auto TIF\n' +
       '• Protect, Cash out, Gold fade, TWAP $0 lock, Home Sell\n' +
       '• Skip thin bid unless you turn that checkbox On (default Off — 1-contract IOC just misses if the book is thin)\n\n' +
@@ -165,7 +166,7 @@ export const PATH_INFO = {
       '• Leftover path when the cushion thesis never showed\n' +
       '• Does not pull coins off Cash out or Auto — those paths already sit out the last minute\n' +
       '• Window cap 1: if Auto, Home, or Cash out already filled this coin this window, the first clip sits out\n' +
-      '• After that first Last-minute fill, ladder adds are extra (up to Max clips of open lots)\n' +
+      '• After that first Last-minute fill, ladder adds are extra (up to Max clips/asset of open lots)\n' +
       '• A flip sell frees that clip slot so the path can buy the new favorite\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Open Step buy lots sit this ticker out\n' +

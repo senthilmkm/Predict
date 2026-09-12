@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Predict — Every trading path, explained simply</title>
+  <meta name="description" content="A plain-English guide to every Predict iOS path: Home, Auto, Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, and Pair lock." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B0E14;
+      --bg-card: rgba(22, 29, 39, 0.82);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #F2F5F7;
+      --muted: #94A3B8;
+      --dim: #64748B;
+      --accent: #3DB8A0;
+      --accent-soft: rgba(61, 184, 160, 0.14);
+      --gold: #C6A75E;
+      --gold-soft: rgba(198, 167, 94, 0.16);
+      --rose: #F07178;
+      --amber: #FFAB00;
+      --home: #7DD3C7;
+      --auto: #8BB4F7;
+      --cash: #C6A75E;
+      --fade: #E8B86D;
+      --twap: #9B8CFF;
+      --last: #F0A0C0;
+      --step: #7ECEA8;
+      --spike: #F2A07B;
+      --pair: #86C5E0;
+      --protect: #E08B8B;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    .glow {
+      position: fixed;
+      top: -180px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1100px;
+      height: 640px;
+      background: radial-gradient(ellipse at center, rgba(61,184,160,.16) 0%, rgba(198,167,94,.07) 42%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+    header {
+      padding: 22px 0;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(11,14,20,.86);
+      backdrop-filter: blur(16px);
+      z-index: 20;
+    }
+    .nav { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .mark {
+      width: 34px; height: 34px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--gold), var(--accent));
+      color: #0B0E14; font-weight: 800; display: grid; place-items: center;
+    }
+    .brand-name { color: var(--gold); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 14px 18px; justify-content: flex-end; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; }
+    .nav-links a:hover { color: var(--text); }
+    .hero { padding: 72px 0 36px; }
+    .kicker { color: var(--gold); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { font-size: clamp(36px, 6vw, 58px); line-height: 1.08; letter-spacing: -0.03em; margin: 12px 0 18px; max-width: 16ch; }
+    .lede { font-size: 19px; color: var(--muted); max-width: 720px; }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+    .pill {
+      border: 1px solid var(--border); background: var(--bg-card);
+      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--muted);
+    }
+    .toc {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px; margin: 36px 0 12px;
+    }
+    .toc a {
+      display: block; text-decoration: none; color: var(--text);
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 14px 12px; font-size: 14px; font-weight: 700;
+    }
+    .toc a span { display: block; color: var(--dim); font-size: 11px; font-weight: 600; margin-top: 4px; }
+    .toc a:hover { border-color: var(--accent); }
+    section { padding: 56px 0 8px; }
+    h2 { font-size: 30px; letter-spacing: -0.03em; margin-bottom: 10px; }
+    .sub { color: var(--muted); max-width: 720px; margin-bottom: 28px; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 22px; padding: 28px; margin-bottom: 22px;
+    }
+    .card h3 { font-size: 24px; letter-spacing: -0.02em; margin-bottom: 8px; }
+    .tag {
+      display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .08em;
+      text-transform: uppercase; padding: 4px 8px; border-radius: 999px; margin-bottom: 10px;
+    }
+    .example {
+      margin: 18px 0; padding: 16px 18px; border-radius: 14px;
+      background: rgba(255,255,255,.03); border: 1px solid var(--border);
+    }
+    .example strong { color: var(--gold); }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
+    .box { background: rgba(0,0,0,.18); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .box h4 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 8px; }
+    .box ul { padding-left: 16px; color: var(--muted); font-size: 14px; }
+    .box.risk { border-color: rgba(240,113,120,.28); }
+    .box.iso { border-color: rgba(61,184,160,.22); }
+    .box.limit { border-color: rgba(255,171,0,.22); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; position: sticky; top: 70px; background: #121722; }
+    .scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-card); }
+    .scroll table { min-width: 1100px; }
+    .yes { color: var(--accent); font-weight: 700; }
+    .no { color: var(--rose); font-weight: 700; }
+    .maybe { color: var(--amber); font-weight: 700; }
+    .knobs { width: 100%; }
+    .knobs td:first-child { font-weight: 700; color: var(--text); white-space: nowrap; }
+    .note { color: var(--dim); font-size: 13px; margin-top: 14px; }
+    footer { padding: 48px 0 64px; color: var(--dim); font-size: 13px; border-top: 1px solid var(--border); margin-top: 48px; }
+    @media (max-width: 800px) {
+      .grid-3 { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+      h1 { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+  <header>
+    <div class="wrap nav">
+      <a class="brand" href="./index.html"><span class="mark">P</span><span class="brand-name">Predict</span></a>
+      <nav class="nav-links">
+        <a href="#how">How it works</a>
+        <a href="#shared">Shared limits</a>
+        <a href="#compare">Compare</a>
+        <a href="#isolate">Isolation</a>
+        <a href="./disclaimer.html">Risk</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <div class="kicker">iOS app · Kalshi 15-minute markets</div>
+      <h1>Every Predict path, in plain English.</h1>
+      <p class="lede">Predict watches short Kalshi contracts and can buy or sell for you. The phone shows the picture. Cloud places live orders. You pick a path. Each path has one job, its own knobs, and clear “do not mix” rules.</p>
+      <div class="pills">
+        <span class="pill">Home Buy</span>
+        <span class="pill">Auto-trade</span>
+        <span class="pill">Smart buy</span>
+        <span class="pill">Protect money</span>
+        <span class="pill">Cash out</span>
+        <span class="pill">Gold fade</span>
+        <span class="pill">TWAP lock</span>
+        <span class="pill">Last-minute</span>
+        <span class="pill">Step buy</span>
+        <span class="pill">Spike fade</span>
+        <span class="pill">Pair lock</span>
+      </div>
+    </div>
+
+    <div class="toc">
+      <a href="#how">How Predict works<span>15-minute tickets, Cloud, cushions</span></a>
+      <a href="#shared">Shared limits<span>Day cap, window cap, max open</span></a>
+      <a href="#home">Home Buy<span>You tap. Real money.</span></a>
+      <a href="#auto">Auto-trade<span>Cushion lean, Cloud buys</span></a>
+      <a href="#cash">Cash out<span>Partial cushion, take the bid</span></a>
+      <a href="#gold">Gold fade<span>Gold only, always dumps</span></a>
+      <a href="#twap">TWAP lock<span>BTC / ETH, hold to $1</span></a>
+      <a href="#last">Last-minute<span>Late clips if cushion never came</span></a>
+      <a href="#step">Step buy<span>Add lots if the lean holds</span></a>
+      <a href="#spike">Spike fade<span>Buy the cheap side of a spike</span></a>
+      <a href="#pair">Pair lock<span>Buy both sides under $1</span></a>
+      <a href="#compare">Compare all paths<span>One big table</span></a>
+      <a href="#isolate">Isolation chart<span>Who sits out for whom</span></a>
+    </div>
+
+    <section id="how">
+      <h2>How Predict works</h2>
+      <p class="sub">Think of each coin as a new 15-minute ticket: “Will Gold be above this line when the clock ends?” Yes costs some cents. No costs the rest. One side pays $1. The other pays $0.</p>
+      <div class="card">
+        <p>You turn assets On in <strong>Cushions</strong>. That tab also sets a dollar gap — how far live price should be from the line before a cushion path may buy. Special paths (Last-minute, Spike fade, Pair lock, TWAP) often ignore that dollar gap and only check the On/Off chip.</p>
+        <p style="margin-top:12px">The iPhone never talks to Kalshi. Cloud Run does. Home is a tap. Auto paths run on a timer. Most buys are IOC: fill now or cancel. A miss is not a fill and does not use the day cap.</p>
+        <div class="example"><strong>Simple picture.</strong> Gold 3:00–3:15. Live gold is $20 above the line. If your Gold cushion is $15, Auto may buy YES. If the gap is only $2, Auto sits out. Last-minute might still try near 3:14 if that path is On and nobody already owns the ticket.</div>
+      </div>
+    </section>
+
+    <section id="shared">
+      <h2>Shared limits</h2>
+      <p class="sub">These four knobs sit on Settings → Risk → Shared. They apply to Home and every Auto path. They do not care which path you like.</p>
+      <div class="card">
+        <table class="knobs">
+          <tr><td>Max open positions</td><td>Default 5. How many unfinished tickets you may hold at once. Set 1 if you want one thing at a time.</td></tr>
+          <tr><td>Max trades / day</td><td>Default 100. Counts <em>filled buys only</em>. A later sell of that fill is not a second trade. IOC misses do not count. Extra Last-minute clips, Step buy lots, and a Pair lock hedge each count as their own filled buy.</td></tr>
+          <tr><td>Max trades / asset / 15m window</td><td>Default 1. One new fill per coin per 15-minute contract for Home, Auto, Cash out, Gold fade, TWAP, Last-minute first clip, Step buy lot 1, Spike fade, and the Pair lock runner. Extra clips, extra lots, and the hedge are extra.</td></tr>
+          <tr><td>Daily loss stop</td><td>Default $50. If locked-in losses hit this number, new buys stop for the day.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Does not use Cushions $ or asset chips</li><li>Window cap 1 is per coin, per 15 minutes</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Day cap is all assets together</li><li>Raising window cap above 1 can stack the same coin</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>A high day cap + many extra lots can spend fast</li><li>Loss stop is a brake, not a refund</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="home">
+      <div class="card">
+        <span class="tag" style="background:rgba(125,211,199,.15);color:var(--home)">Tap path</span>
+        <h3 id="home">Home Buy</h3>
+        <p>You look at Last signals and tap Buy. Cloud places that order. Auto-trade can be Off. It is still real money.</p>
+        <div class="example"><strong>Example.</strong> Gold shows YES, the gap is past your cushion, Home size is $5, ask is 62¢. You tap Buy. Cloud buys about 8 contracts. If Protect is On later, Protect may sell that Home fill. Home Sell is always IOC.</div>
+        <table class="knobs">
+          <tr><td>$ per trade / min / max</td><td>How much cash this tap may spend. Default $5 / $1 / $5. Use Home tab, not Auto tab.</td></tr>
+          <tr><td>Minutes elapsed / left</td><td>Default 2 and 2. Skip the noisy open and the last two minutes.</td></tr>
+          <tr><td>Max entry ask</td><td>Default $0.90. Do not tap a very expensive ticket.</td></tr>
+          <tr><td>Time in force</td><td>Default IOC. FOK = all or nothing. GTC can rest until the window ends.</td></tr>
+          <tr><td>Chase above ask</td><td>Default 2¢. Tiny extra on the buy. Home Sell uses this as slippage.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Does not use Smart buy</li><li>Will not buy a ticker Cash out, Gold fade, TWAP, Last-minute, Step buy, Spike fade, or Pair lock already holds</li><li>A Home fill uses window cap 1</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>You must tap</li><li>Cushions On + $ gap must pass</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>A tap spends even if Auto is Off</li><li>You can lose the full ask if it settles against you</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="auto">
+      <div class="card">
+        <span class="tag" style="background:rgba(139,180,247,.15);color:var(--auto)">Cushion path</span>
+        <h3>Auto-trade</h3>
+        <p>Cloud buys the lean when the dollar gap is big enough, on a schedule. This is the “the move already happened” path.</p>
+        <div class="example"><strong>Example.</strong> WTI cushion $1.50. Live WTI is $2.10 above the line. Auto is On, $5, ask 58¢. Cloud buys YES. It will not chase the last minute (default minutes left = 2).</div>
+        <table class="knobs">
+          <tr><td>$ / min / max</td><td>Auto size. Separate from Home. Default $5.</td></tr>
+          <tr><td>Minutes elapsed / left</td><td>Default 2 / 2. Auto sits out the last minute on purpose.</td></tr>
+          <tr><td>Max entry ask / TIF / chase</td><td>Default $0.90, IOC, 2¢. Chase is also Protect sell slippage.</td></tr>
+          <tr><td>Smart buy</td><td>Default On. After cushion passes, also require Min extra chance (default 8¢). Home ignores this.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Will not enter a ticker another path already holds</li><li>BTC/ETH leave Auto if TWAP lock is On</li><li>If you set minutes left to 0, Auto can collide with Last-minute — window cap 1 wins</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Needs full Cushions $</li><li>If cushion already hit, you do not need Last-minute on that coin</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>A late, rich ask can still lose</li><li>Smart buy does not guarantee more wins</li></ul></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="tag" style="background:rgba(224,139,139,.15);color:var(--protect)">Exit only</span>
+        <h3>Protect money</h3>
+        <p>Does not buy. It can sell an Auto or Home fill if the gap grows enough after a wait. Default Off.</p>
+        <div class="example"><strong>Example.</strong> You bought Gold YES. Cushion $15. Ratio 1.00×. After 45 seconds, if the gap is still $15 or more, Cloud sells IOC at the bid.</div>
+        <table class="knobs">
+          <tr><td>On / Off</td><td>Default Off. Auto-trade Off does not turn Protect Off.</td></tr>
+          <tr><td>Sell when gap ≥ cushion ×</td><td>Default 1.00×. 1.5× waits for a bigger gap.</td></tr>
+          <tr><td>Wait after fill</td><td>Default 45s. So your own print does not dump you.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Skips Cash out, Gold fade, TWAP, Last-minute, Step buy, Spike fade, Pair lock — those paths exit themselves</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Home and Auto fills only</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>You may sell a ticket that would have paid $1</li><li>Bid slippage can be worse than the ask you paid</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="cash">
+      <div class="card">
+        <span class="tag" style="background:var(--gold-soft);color:var(--cash)">Partial cushion</span>
+        <h3>Cash out</h3>
+        <p>Buy when part of the cushion is already there, then try to sell into a richer bid. Admin must turn the block On first. Your switch stays Off until you turn it on. Empty chips = no Cash out buys.</p>
+        <div class="example"><strong>Example.</strong> Gold cushion $175. Enter 60% = $105. Max ask 82¢, bid 88¢, stop 5¢. Gap hits $110, YES ask 80¢. Cloud buys. If the bid rises by the same edge you planned (or hits 88¢ if you paid 82¢), it sells. If the bid falls 5¢ below your fill, it sells.</div>
+        <table class="knobs">
+          <tr><td>Enter cushion %</td><td>Default 60%. Not the full Cushions $.</td></tr>
+          <tr><td>Max ask / bid</td><td>Default $0.82 / $0.88. Bid must stay above max ask.</td></tr>
+          <tr><td>Stop</td><td>Default 5¢ under fill. Range 3–10¢.</td></tr>
+          <tr><td>Skip thin bid</td><td>Default Off. On = skip the buy, and sell if you already hold and the bid pile is thin.</td></tr>
+          <tr><td>Assets</td><td>Must also be On in Cushions. Uses Auto $ per trade.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Checked coins use Cash out instead of normal Auto</li><li>Never shares an open ticker with Home, fade, TWAP, Last-minute, or Step buy</li><li>BTC/ETH leave Cash out while TWAP is On</li><li>Does not last-minute chase. Last-minute may still use an empty window</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Minutes-left floor of 3 — never last minute</li><li>No Smart buy, no Protect, no Auto max ask</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>Partial cushion can still reverse</li><li>Stop can cut a full $0 settle, and also cut a $1 win</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="gold">
+      <div class="card">
+        <span class="tag" style="background:var(--gold-soft);color:var(--fade)">Gold only</span>
+        <h3>Gold fade</h3>
+        <p>When Gold is barely moving, buy the cheaper ticket and always get out. Not Cash out. Not Spike fade. Admin On first. Default Off.</p>
+        <div class="example"><strong>Example.</strong> Gold gap is $2 (under Max gap $3). Cheap ask is 48¢. Cloud buys the cheap side. Take +6¢, stop −5¢, or flatten with 3 minutes left. Window end also dumps. A full cushion flip dumps on the way out.</div>
+        <table class="knobs">
+          <tr><td>Max gap</td><td>Default $3. Enter only when the dollar gap is this small or smaller.</td></tr>
+          <tr><td>Max cheap ask</td><td>Default 50¢. The cheap ticket cannot be rich.</td></tr>
+          <tr><td>Take / stop / flatten</td><td>Default +6¢ / −5¢ / 3 minutes left.</td></tr>
+          <tr><td>Skip thin bid</td><td>Default Off. On can skip or dump if the book is thin.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Gold only</li><li>Does not share an open ticker with Home, Auto, Cash out, TWAP, Last-minute, or Step buy</li><li>Always dumps — no hold to $1</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Ignores Cushions $ to enter</li><li>Uses Auto $ per trade</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>A quiet Gold can still run</li><li>Flatten and window-end sells can lock a loss</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="twap">
+      <div class="card">
+        <span class="tag" style="background:rgba(155,140,255,.16);color:var(--twap)">BTC / ETH</span>
+        <h3>TWAP lock</h3>
+        <p>Only BTC and ETH. Only when leftover seconds can still be $0 and Yes still wins. Then hold to $1. Most windows: no trade. Admin On first. Default Off.</p>
+        <div class="example"><strong>Example.</strong> ETH has 40 seconds left. Banked price already covers the strike for a $0 leftover. Yes ask is 96¢ or less. Cloud buys Yes and holds to settlement. No stop. No dump.</div>
+        <table class="knobs">
+          <tr><td>Assets</td><td>BTC / ETH chips. Those assets must be On.</td></tr>
+          <tr><td>Max ask</td><td>Default $0.96. Range 90–97¢.</td></tr>
+          <tr><td>Skip thin bid</td><td>Default Off. On = fail closed (no buy) if book size is unknown or thin.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Checked coins leave Cash out and Auto for the whole 15 minutes</li><li>Last-minute, Step buy, Spike fade, and Pair lock do not fight TWAP on those coins</li><li>Hold to $1</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Yes only</li><li>$0 leftover lock only</li><li>Uses Auto $ per trade</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>If the lock was wrong, you can lose almost the full ask</li><li>No early exit</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="last">
+      <div class="card">
+        <span class="tag" style="background:rgba(240,160,192,.16);color:var(--last)">Late leftover</span>
+        <h3>Last-minute</h3>
+        <p>The cushion never showed. In the last seconds, buy the expensive favorite in small clips. Not a lock. Admin On first. Empty chips = no buys. Default Off.</p>
+        <div class="example"><strong>Example.</strong> ETH had no Auto fill. With 80 seconds left, Yes is 88¢ and No is 12¢. Side = Both. Cloud buys Yes clips, then may add more every Ladder wait, until Max clips, Stop with ~10s, or a $1.00 ask. If flip is Off, it holds to settlement.</div>
+        <table class="knobs">
+          <tr><td>Entry ask</td><td>Most you will pay. Default in the high 80s–90s range.</td></tr>
+          <tr><td>Side</td><td>Yes, No, or Both. Both = expensive side only, not 50/50. Never Yes and No in the same window.</td></tr>
+          <tr><td>Both min favorite / gap</td><td>Both only fires when the favorite is rich enough and the two asks are far enough apart.</td></tr>
+          <tr><td>Watch start / First clip by / Stop with</td><td>When quotes start, when the first clip may fire, when new clips stop (default about 10s left).</td></tr>
+          <tr><td>Ladder wait / Clip contracts / Max clips</td><td>Pause between adds, size of each clip, max open clips.</td></tr>
+          <tr><td>Sell if flip ≥</td><td>Default Off (0). If set, sell only on a real opposite-side flip that rich. Does not sell just because your fill looks worse.</td></tr>
+          <tr><td>Skip thin bid</td><td>Default Off. On = skip the buy only.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Does not pull coins off Cash out or Auto — those already sit out the last minute</li><li>Window cap 1 blocks the first clip if Home / Auto / Cash out / Pair lock runner already filled this coin</li><li>Later clips are extra</li><li>TWAP owns BTC/ETH if On</li><li>Open Step buy, Spike fade, or Pair lock sit this ticker out</li><li>If Last-minute is in its buy window and those paths have no lot/runner, Last-minute owns new buys</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Ignores Cushions $</li><li>Size is Clip × live ask, not Auto $5</li><li>Protect and Home Sell do not exit these lots</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>Last seconds can flip</li><li>You can lose the full entry ask</li><li>Many clips = many day-cap fills</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="step">
+      <div class="card">
+        <span class="tag" style="background:rgba(126,206,168,.16);color:var(--step)">Add if thesis holds</span>
+        <h3>Step buy</h3>
+        <p>Buy a small lot after the window is underway, only if a slice of the cushion is still true. Add more only if the ask has not run away. Admin On first. Empty chips = no buys. Default Off.</p>
+        <div class="example"><strong>Example.</strong> Gold, Start after 5 minutes, Cushion % 50%, lot 1 contract, Add wait 1 minute, Add band 2¢, Max lots 3, Stop 3¢. At minute 5 the lean is YES and 50% of the Gold cushion still holds. Cloud buys 1 YES. A minute later, if YES ask is the last fill or at most 2¢ richer, it adds. If the ask already jumped 8¢, it waits — it does not chase. If ask falls 3¢ under a lot’s fill, that lot sells. Lot 1 stop sells every remaining Step buy lot on that ticker.</div>
+        <table class="knobs">
+          <tr><td>Start after</td><td>Default 5 minutes into the window.</td></tr>
+          <tr><td>Cushion %</td><td>Default 50% of that coin’s Cushions $. Needed for lot 1 and every add.</td></tr>
+          <tr><td>Lot / Add wait / Add band / Max lots</td><td>Default 1 contract, 1 min, 2¢, 3 lots. Band is lots 2+ only. Band 0 = next ask must match last fill.</td></tr>
+          <tr><td>Stop / Entry ask</td><td>Default 3¢ under that lot’s fill / $0.80 max.</td></tr>
+          <tr><td>Skip thin bid</td><td>Default Off. On = skip the buy. Stops still run.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Follows Auto lean. Never both sides</li><li>Window cap 1 blocks lot 1 only</li><li>Open Step buy: Home / Auto / Cash out / Last-minute / Pair lock sit out</li><li>Last-minute owns new buys if it is in its window and Step buy has no lots yet</li><li>Protect skips these rows</li><li>Stop adding with 30s left (not a knob). Stops still run</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Size is Lot × live ask</li><li>5s grace after each fill</li><li>Sold lots free Max lots slots</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>Adding into a fading move stacks losses</li><li>Lot 1 stop dumps the whole stack</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="spike">
+      <div class="card">
+        <span class="tag" style="background:rgba(242,160,123,.16);color:var(--spike)">Fade the spike</span>
+        <h3>Spike fade</h3>
+        <p>When one side is very expensive and the other is very cheap, buy the cheap side and always dump. Not Gold fade. Gold fade stays Gold-only. Does not use Cushions $. Admin On first. Empty chips = no buys. Default Off.</p>
+        <div class="example"><strong>Example.</strong> DOGE at minute 3. YES ask 78¢ (inside 75–80¢). NO ask 22¢ (inside 20–25¢). Cloud buys NO. Take when that bid ≥ 42¢. Stop when that ask ≤ 10¢. Flatten with 3 minutes left or window end. Always sells. If YES is 82¢ or NO is 18¢, it sits out — the band missed.</div>
+        <table class="knobs">
+          <tr><td>Start after / Until minute</td><td>Default minutes 2–6. After Until, no new Spike fade buys. An open lot still exits.</td></tr>
+          <tr><td>Expensive min/max</td><td>Default 75–80¢. The rich side must sit in this band.</td></tr>
+          <tr><td>Cheap min/max</td><td>Default 20–25¢. The cheap side must sit in this band.</td></tr>
+          <tr><td>Take ask / Stop ask / Flatten left</td><td>Default 42¢ bid / 10¢ ask / 3 minutes. Always dumps.</td></tr>
+          <tr><td>Lot contracts</td><td>Default 1. Size is Lot × live ask, not Auto $5.</td></tr>
+          <tr><td>Skip thin bid</td><td>Default Off. On = fail closed on buy; can dump if the bid pile is thinner than you hold.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Always the cheap side, not Auto lean</li><li>One lot per ticker. Never YES and NO together</li><li>Inside the enter window, Auto / Cash out / Gold fade sit that ticker out</li><li>Open Spike fade sits Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Pair lock out</li><li>Last-minute owns new buys if it is in its window and Spike fade has no lot</li><li>Protect skips these rows</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Cushions tab only supplies On/Off</li><li>Window cap 1</li><li>5s grace after fill</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>A “spike” can keep going</li><li>Always dumps — you will not ride to $1</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pair">
+      <div class="card">
+        <span class="tag" style="background:rgba(134,197,224,.16);color:var(--pair)">Both sides</span>
+        <h3>Pair lock</h3>
+        <p>Buy the lean as a runner. Later buy the other side only if the pair still locks a profit under $1. Hold both to settlement. This is the only path that may hold YES and NO on the same ticker. Admin On first. Empty chips = no buys. Default Off.</p>
+        <div class="example"><strong>Example.</strong> Gold 3:00–3:15. At 3:02 YES is 52¢ (under Runner max 60¢). Cloud buys 1 YES. Hedge only if NO ≤ 43¢ (because 52¢ + NO + 5¢ Min lock must stay ≤ $1). At 3:08 NO is 18¢. Cloud buys 1 NO. Spent 70¢. Locked +30¢. Holds both to 3:15. If no NO by 3:12 (3 minutes left), it sells the YES at the bid.</div>
+        <table class="knobs">
+          <tr><td>Start after / Until minute</td><td>Default 2 / 10. Until must be ≥ Start after. After Until, no new runner. An open runner may still hedge.</td></tr>
+          <tr><td>Runner max ask</td><td>Default 60¢. Range 40–70¢.</td></tr>
+          <tr><td>Min lock</td><td>Default 5¢. Hedge only if runner fill + hedge ask ≤ $1 − Min lock. 50+50 sits out.</td></tr>
+          <tr><td>Flatten unmatched</td><td>Default 3 minutes left. Dumps the runner only if the second leg is missing. A locked pair never flattens.</td></tr>
+          <tr><td>Lot contracts</td><td>Default 1. Hedge count matches the runner.</td></tr>
+          <tr><td>Skip thin bid</td><td>Default Off. On = fail closed on buys. Unmatched flatten can dump if the bid pile is thinner than you hold.</td></tr>
+        </table>
+        <div class="grid-3">
+          <div class="box iso"><h4>Isolation</h4><ul><li>Window cap 1 blocks the runner only. Hedge is extra</li><li>Open runner or pair: Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Spike fade sit out</li><li>If Last-minute is in its buy window and Pair lock has no runner and no pair, Last-minute owns new buys</li><li>Spike fade and Step buy take first pick for new buys when they want the ticker</li><li>TWAP still owns BTC/ETH if On</li><li>Protect and Home Sell skip these rows</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Does not use Auto $5 or Cushions $</li><li>No take/stop on a locked pair</li><li>Does not hedge another path’s lot</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>Naked runner from fill until flatten</li><li>If the Auto lean is wrong, flatten is the exit</li><li>Kalshi fees are not in Min lock — Min lock is a ¢ buffer</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="compare">
+      <h2>Compare every path</h2>
+      <p class="sub">One row per path. “Hold to $1” means it does not take profit or stop unless a note says otherwise.</p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>What it buys</th>
+              <th>When</th>
+              <th>Size</th>
+              <th>How it exits</th>
+              <th>Hold to $1?</th>
+              <th>Uses Cushions $?</th>
+              <th>Both sides?</th>
+              <th>Admin first?</th>
+              <th>Default</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Home Buy</td>
+              <td>The lean you see</td>
+              <td>You tap</td>
+              <td>Home $</td>
+              <td>You Sell, or Protect if On</td>
+              <td class="maybe">Unless you sell</td>
+              <td class="yes">Yes</td>
+              <td class="no">No</td>
+              <td class="no">No</td>
+              <td>Always there</td>
+            </tr>
+            <tr>
+              <td>Auto-trade</td>
+              <td>Auto lean</td>
+              <td>After elapsed, before last minutes, cushion clears</td>
+              <td>Auto $</td>
+              <td>Protect if On, else settle</td>
+              <td class="maybe">Unless Protect</td>
+              <td class="yes">Yes, full</td>
+              <td class="no">No</td>
+              <td class="no">No</td>
+              <td>Off</td>
+            </tr>
+            <tr>
+              <td>Smart buy</td>
+              <td>Does not buy alone — filters Auto</td>
+              <td>After Auto gates pass</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td class="no">No</td>
+              <td>On</td>
+            </tr>
+            <tr>
+              <td>Protect money</td>
+              <td>None</td>
+              <td>After wait, gap ≥ cushion × ratio</td>
+              <td>—</td>
+              <td>IOC sell of Home / Auto</td>
+              <td class="no">Sells</td>
+              <td class="yes">Yes, for the sell test</td>
+              <td class="no">No</td>
+              <td class="no">No</td>
+              <td>Off</td>
+            </tr>
+            <tr>
+              <td>Cash out</td>
+              <td>Lean, cheaper entry</td>
+              <td>Partial cushion, minutes left ≥ 3</td>
+              <td>Auto $</td>
+              <td>Target bid, stop, thin bid</td>
+              <td class="no">Tries to sell</td>
+              <td class="yes">Enter %</td>
+              <td class="no">No</td>
+              <td class="yes">Yes</td>
+              <td>Off</td>
+            </tr>
+            <tr>
+              <td>Gold fade</td>
+              <td>Cheap Gold side</td>
+              <td>Gap small</td>
+              <td>Auto $</td>
+              <td>Take, stop, flatten, window end</td>
+              <td class="no">Always dumps</td>
+              <td class="no">No (On/Off only)</td>
+              <td class="no">No</td>
+              <td class="yes">Yes</td>
+              <td>Off</td>
+            </tr>
+            <tr>
+              <td>TWAP lock</td>
+              <td>BTC/ETH Yes only</td>
+              <td>Last ~60s, $0 leftover lock</td>
+              <td>Auto $</td>
+              <td>None — hold</td>
+              <td class="yes">Yes</td>
+              <td class="no">On/Off only</td>
+              <td class="no">No</td>
+              <td class="yes">Yes</td>
+              <td>Off</td>
+            </tr>
+            <tr>
+              <td>Last-minute</td>
+              <td>Expensive favorite</td>
+              <td>Last 1–2 minutes if window empty</td>
+              <td>Clip × ask</td>
+              <td>Hold, or flip if you set it</td>
+              <td class="maybe">Yes if flip Off</td>
+              <td class="no">On/Off only</td>
+              <td class="no">Never both</td>
+              <td class="yes">Yes</td>
+              <td>Off</td>
+            </tr>
+            <tr>
+              <td>Step buy</td>
+              <td>Auto lean, then add</td>
+              <td>After Start after, Cushion % holds</td>
+              <td>Lot × ask</td>
+              <td>Per-lot stop (lot 1 stop dumps all)</td>
+              <td class="maybe">Unless stop</td>
+              <td class="yes">Cushion %</td>
+              <td class="no">No</td>
+              <td class="yes">Yes</td>
+              <td>Off</td>
+            </tr>
+            <tr>
+              <td>Spike fade</td>
+              <td>Always cheap side</td>
+              <td>Minutes 2–6 if both asks in band</td>
+              <td>Lot × ask</td>
+              <td>Take, stop, flatten, window end</td>
+              <td class="no">Always dumps</td>
+              <td class="no">On/Off only</td>
+              <td class="no">No</td>
+              <td class="yes">Yes</td>
+              <td>Off</td>
+            </tr>
+            <tr>
+              <td>Pair lock</td>
+              <td>Lean runner, then opposite hedge</td>
+              <td>Minutes 2–10 if runner ask cheap enough</td>
+              <td>Lot × ask, twice if hedged</td>
+              <td>Flatten unmatched only; locked pair holds</td>
+              <td class="yes">Locked pair yes</td>
+              <td class="no">On/Off only</td>
+              <td class="yes">Yes, when hedged</td>
+              <td class="yes">Yes</td>
+              <td>Off</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Cloud pick order for a new buy on the same ticker: TWAP (BTC/ETH) → Last-minute if it is in its buy window and nobody is already holding → Spike fade if it wants the slice → Step buy → Pair lock → Gold fade → Cash out → Auto.</p>
+    </section>
+
+    <section id="isolate">
+      <h2>Isolation chart</h2>
+      <p class="sub">Read a row as “this path wants a new buy.” Read a column as “this other path already holds that same 15-minute ticker.” Sit out means no new buy. Extra means it may add on its own path only.</p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>New buy by ↓ / already holding →</th>
+              <th>Home / Auto fill</th>
+              <th>Cash out</th>
+              <th>Gold fade</th>
+              <th>TWAP (BTC/ETH On)</th>
+              <th>Last-minute lots</th>
+              <th>Step buy lots</th>
+              <th>Spike fade lot</th>
+              <th>Pair lock runner or pair</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Home Buy</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+            </tr>
+            <tr>
+              <td>Auto-trade</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Leaves BTC/ETH</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out / sit out in Spike window</td>
+              <td class="no">Sit out / sit out in Pair window</td>
+            </tr>
+            <tr>
+              <td>Cash out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Leaves BTC/ETH</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out in Spike window</td>
+              <td class="no">Sit out in Pair window</td>
+            </tr>
+            <tr>
+              <td>Gold fade</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="maybe">N/A (Gold)</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out</td>
+              <td class="no">Sit out in Spike window</td>
+              <td class="no">Sit out in Pair window</td>
+            </tr>
+            <tr>
+              <td>TWAP lock</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Window cap 1</td>
+              <td class="maybe">N/A</td>
+              <td class="no">Already holding</td>
+              <td class="no">Sits Last-minute out on BTC/ETH</td>
+              <td class="no">Sits Step out on BTC/ETH</td>
+              <td class="no">Sits Spike out on BTC/ETH</td>
+              <td class="no">Sits Pair out on BTC/ETH</td>
+            </tr>
+            <tr>
+              <td>Last-minute first clip</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Sit out</td>
+              <td class="no">TWAP owns BTC/ETH</td>
+              <td class="maybe">Extra clips only</td>
+              <td class="no">Sit out if lots exist; owns new buys if none and in LM window</td>
+              <td class="no">Sit out if lot exists; owns new buys if none and in LM window</td>
+              <td class="no">Sit out if runner/pair; owns new buys if none and in LM window</td>
+            </tr>
+            <tr>
+              <td>Step buy lot 1</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Sit out</td>
+              <td class="no">TWAP owns BTC/ETH</td>
+              <td class="no">Last-minute owns if in its window</td>
+              <td class="maybe">Extra lots</td>
+              <td class="no">Sit out if Spike holding or Spike wants the slice</td>
+              <td class="no">Sit out if Pair holding</td>
+            </tr>
+            <tr>
+              <td>Spike fade</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Sit out</td>
+              <td class="no">TWAP owns BTC/ETH</td>
+              <td class="no">Last-minute owns if in its window</td>
+              <td class="no">Sit out if Step lots exist</td>
+              <td class="no">One lot only</td>
+              <td class="no">Sit out if Pair holding</td>
+            </tr>
+            <tr>
+              <td>Pair lock runner</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Window cap 1</td>
+              <td class="no">Sit out</td>
+              <td class="no">TWAP owns BTC/ETH</td>
+              <td class="no">Last-minute owns if in its window</td>
+              <td class="no">Sit out if Step lots exist</td>
+              <td class="no">Sit out if Spike holding or Spike wants the slice</td>
+              <td class="maybe">Hedge is extra; no second runner</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">After Spike fade Until minute with no lot, or Pair lock Until minute with no runner, Auto / Cash out / Gold fade may use the coin again. Window cap 1 still applies. Protect never sells Step buy, Spike fade, Pair lock, Cash out, Gold fade, TWAP, or Last-minute — those paths exit themselves or hold.</p>
+    </section>
+
+    <section>
+      <h2>Skip thin bid, in one breath</h2>
+      <div class="card">
+        <p>Each Cloud path has its own checkbox. Default Off. Home Buy does not use it.</p>
+        <table class="knobs" style="margin-top:14px">
+          <tr><td>Cash out / Gold fade</td><td>Skip the buy. If you already hold, can sell. A book timeout does not skip or dump.</td></tr>
+          <tr><td>Spike fade / Pair lock</td><td>Skip the buy if the book is unknown (fail closed). Can dump if the bid pile is thinner than you hold. Pair lock only dumps an unmatched runner — a locked pair holds.</td></tr>
+          <tr><td>TWAP / Last-minute / Step buy</td><td>Skip the buy only. Step buy stops still run. Unknown book size fails closed (no buy).</td></tr>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Predict is an iOS app for Kalshi 15-minute markets. Cloud places live orders. This page is a guide, not advice. You can lose the money you spend on a ticket. Read <a href="./disclaimer.html">Risk</a> and <a href="./terms.html">Terms</a>.</p>
+      <p style="margin-top:10px"><a href="./index.html">Home</a> · <a href="./support.html">Support</a> · senthil930@gmail.com</p>
+    </div>
+  </footer>
+</body>
+</html>

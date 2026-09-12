@@ -40,6 +40,28 @@ export function isOpenProtectCandidate(trade: TradeRecordDoc, now = new Date()):
   return isProtectClaimable(trade, now);
 }
 
+/** Home / Auto lots Protect can dump — 1s watch these assets only. */
+export function openProtectWatchAssets(trades: TradeRecordDoc[], now = new Date()): string[] {
+  const out: string[] = [];
+  for (const t of trades || []) {
+    if (
+      t.entryPath === 'cash_out' ||
+      t.entryPath === 'gold_fade' ||
+      t.entryPath === 'twap_lock' ||
+      t.entryPath === 'last_minute' ||
+      t.entryPath === 'step_buy' ||
+      t.entryPath === 'spike_fade' ||
+      t.entryPath === 'pair_lock'
+    ) {
+      continue;
+    }
+    if (!isOpenProtectCandidate(t, now)) continue;
+    const asset = String(t.asset || '').trim();
+    if (asset && !out.includes(asset)) out.push(asset);
+  }
+  return out;
+}
+
 export function pendingProtectTradesForMarket(
   trades: TradeRecordDoc[],
   marketTicker: string,

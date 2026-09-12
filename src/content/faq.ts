@@ -215,7 +215,7 @@ export function getFaqCategories(): FaqCategory[] {
             'One tap tells Cloud Run to place now. The phone never talks to Kalshi. There is no confirm sheet.\n\n' +
             'Purpose: trade without Auto-trade, or take a contract you see while the app is open even if Auto-trade is On.\n\n' +
             'A tap uses Settings → Risk → Home Buy: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, and chase. Shared limits (max open, trades/day, 15m window, daily loss) and cushions apply to both Home Buy and Auto-trade. Auto-trade uses the Auto-trade tab, including Protect money.\n\n' +
-            'Last signals shows one extra line: a Home Buy skip stays on that YES/NO row (Buy is hidden). Auto-trade skips are not shown on that row. If there is no Home skip and no Buy/Sell, Auto-trade’s last skip/place can show.\n\n' +
+            'Last signals shows one extra line. If the same coin is on more than one path, that line names who is holding or who already filled this window, and who sits out (for example “Spike fade already filled this window — Last-minute sits out”). Otherwise a Home Buy skip stays on that YES/NO row (Buy is hidden). Auto-trade skips are not shown on that row. If there is no Home skip and no Buy/Sell, Auto-trade’s last skip/place can show.\n\n' +
             'Success shows a gold “Gold buy success” chip flying up from the button — not a popup. Failures show an error popup.\n\n' +
             'You can lose the full amount of that order. GTC can rest on the book. IOC can miss. If the Admin flag Last signals Buy / Sell is Off, buttons disappear and Cloud rejects taps.',
         },
@@ -330,7 +330,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What are max open positions, max trades / day, and daily loss stop?',
           a:
             'Max open = how many unsettled Predict trades you may hold at once. Example: 1 means no new buy until the open one settles or is protect-sold.\n\n' +
-            'Max trades / day = total new buys today across all assets.\n\n' +
+            'Max trades / day = filled buys today across all assets. A later sell of that same fill is not a second trade. IOC misses do not count. Extra Last-minute clips, Step buy lots, and a Pair lock hedge each count as their own filled buy.\n\n' +
             'Daily loss stop = if today’s locked-in losses reach this dollar amount (default $50), new buys stop for the day. It is a brake, not a reverse of past losses.',
         },
         {
@@ -485,10 +485,10 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Last-minute?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Last-minute. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Last-minute buys.\n\n' +
-            'Cloud watches 1s quotes from Watch start (default 150s / 2.5 minutes left). It does not buy at minute 13 on a 60–75¢ print. First clip is 1 contract only when Both still qualifies — favorite ≥ Both min, ≥ Both gap ahead, and live ask ≤ Entry ask. That usually appears in the last 60–90 seconds (First clip by, default 90s). Then clip ladder: every Ladder wait (default 2s), +Clip contracts if it is still the favorite and ask is still ≤ Entry ask. Stop with Stop seconds left (default 10s) or a $1.00 ask.\n\n' +
-            'Tune Watch start, First clip by, Stop, Ladder wait, Clip contracts, Max clips, Both min favorite, Both min gap, Sell if flip, Entry ask, Side, and assets on Risk. Both sits out a 50/50 book. Hold to settlement unless Sell if flip is On — then a real opposite-side flip of that many cents (default Off; 10¢ is a real flip, not a 1¢ dip) sells only those lots and frees the clip slots.\n\n' +
+            'Cloud watches 1s quotes from Watch start (default 150s / 2.5 minutes left). It does not buy at minute 13 on a 60–75¢ print. First clip is 1 contract only when Both still qualifies — favorite ≥ Both min, ≥ Both gap ahead, and live ask ≤ Entry ask. That usually appears in the last 60–90 seconds (First clip by, default 90s). Then clip ladder: every Ladder wait (default 2s), +Clip contracts/asset if it is still the favorite and ask is still ≤ Entry ask. Stop with Stop seconds left (default 10s) or a $1.00 ask.\n\n' +
+            'Tune Watch start, First clip by, Stop, Ladder wait, Clip contracts/asset, Max clips/asset, Both min favorite, Both min gap, Sell if flip, Entry ask, Side, and assets on Risk. Both sits out a 50/50 book. Hold to settlement unless Sell if flip is On — then a real opposite-side flip of that many cents (default Off; 10¢ is a real flip, not a 1¢ dip) sells only those lots and frees the clip slots.\n\n' +
             'This is not TWAP lock. There is no $0 leftover math. Last seconds can flip. You can lose the full entry ask.\n\n' +
-            'Cash out and Auto already sit out the last minute, so Last-minute does not pull coins off those paths. Window cap 1 still applies: if Auto or Cash out already filled this coin this window, the first clip sits out. After that first Last-minute fill, ladder adds are extra (up to Max clips). If TWAP lock is On for BTC/ETH, those two stay with TWAP. This path’s Skip thin bid applies (unknown book fails closed). IOC only.',
+            'Cash out and Auto already sit out the last minute, so Last-minute does not pull coins off those paths. Window cap 1 still applies: if Auto or Cash out already filled this coin this window, the first clip sits out. After that first Last-minute fill, ladder adds are extra (up to Max clips/asset). If TWAP lock is On for BTC/ETH, those two stay with TWAP. This path’s Skip thin bid applies (unknown book fails closed). IOC only.',
         },
         {
           id: 'lastminute-admin',
@@ -652,7 +652,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'History = every Predict fill and alert on this phone, with filters (pending, win, loss, miss). Status dots: green settled win / still favorable, yellow checking, red unfavorable or settled loss, gray IOC miss.\n\n' +
             'Home pulls Cloud alerts after each poll so a lean can show in History without opening this tab.\n\n' +
-            'Dashboard = today’s Predict stats (ET): win rate, closed P&L from Predict fills today, W/L, pending, IOC misses, alerts logged, unread. A by-asset card lists W/L, P&L, and won-at / lost-at contract prices (what you bought the ticket for). Closed P&L is not the same as Change (24h).\n\n' +
+            'Dashboard = today’s Predict stats (ET): win rate, closed P&L from Predict fills today, W/L, pending, IOC misses, alerts logged, unread. The Trades card shows fill totals by path (Home / Auto / …). A “Fills today by path” card above Closed P&L by asset splits those fills by coin. The by-asset card lists W/L, P&L, and won-at / lost-at contract prices (what you bought the ticket for). Closed P&L is not the same as Change (24h).\n\n' +
             'Bell (top right) = new alerts since you last opened Alerts (bell page or History → Alerts). Leaving that list clears the badge. Bell mute is only the lock-screen ping (see “Mute vs Notify on lean signals”). Delete still removes rows.',
         },
         {
@@ -707,7 +707,7 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'no-order',
           q: 'Home says “no order” — is that a bug?',
           a:
-            'Last signals shows at most one extra line so Auto-trade and Home Buy do not fight on the same card:\n\n' +
+            'Last signals shows at most one extra line so Auto-trade and Home Buy do not fight on the same card. If two paths share a ticker, the line says who owns that window and who sits out.\n\n' +
             '• SKIP (amber) — not a buy. The line under it is the reason: “below cushion” only when this 15-minute market is live and the gap is still inside your cushion. “next window” = the next 15-minute market is not open yet. “window ended” = this 15-minute market already closed. A large gap can still show on those last two; that is not a cushion miss.\n\n' +
             '• YES/NO with a Home skip under it (Buy hidden) — Cloud would reject the same Home Buy gate (ask too rich, too early, too little time, size too small, shared cap). Auto-trade’s skip is not shown on that row.\n\n' +
             '• YES/NO with Buy showing and no skip — a tap would place under Home Buy rules. Auto-trade may have skipped; that is not shown next to Buy.\n\n' +

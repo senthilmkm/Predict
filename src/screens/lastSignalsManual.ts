@@ -470,8 +470,21 @@ export function lastSignalExtraLine(opts: {
   stepBuyWatchText?: string | null;
   spikeFadeWatchText?: string | null;
   pairLockWatchText?: string | null;
+  overlapText?: string | null;
 }): { testID: 'trade-action' | 'skip-reason'; text: string; placed?: boolean; failed?: boolean } | null {
   if (opts.err || !opts.isOpen || opts.noMarket) return null;
+  if (opts.manualKind === 'sell') {
+    const detail = String(opts.autoDetail || '').trim();
+    const status = String(opts.autoStatus || '');
+    const isPlace =
+      status === 'placed' || /^placed\b/i.test(detail) || /^resting\b/i.test(detail);
+    if (isPlace && detail) {
+      return { testID: 'trade-action', text: detail, placed: true };
+    }
+  }
+  if (opts.overlapText) {
+    return { testID: 'skip-reason', text: opts.overlapText };
+  }
   if (opts.twapLockHolding) {
     return { testID: 'skip-reason', text: 'twap lock is holding this ticket' };
   }

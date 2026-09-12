@@ -12,6 +12,8 @@ import { DashboardScreen } from '../screens/DashboardScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SettingsMoreScreen } from '../screens/SettingsMoreScreen';
 import { RiskScreen } from '../screens/RiskScreen';
+import { PathsGuideScreen } from '../screens/PathsGuideScreen';
+import { PathFocusId, pathTileById } from '../content/pathCatalog';
 import { AlertsHubScreen } from '../screens/AlertsHubScreen';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { exportAndShareHistory } from '../services/exportHistory';
@@ -122,7 +124,13 @@ function MainTabs({ navigation }: any) {
         headerRight: () => <HeaderActions navigation={navigation} />,
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Predict' }} />
+      <Tab.Screen name="Home" options={{ title: 'Predict' }}>
+        {() => (
+          <HomeScreen
+            onOpenPinnedPath={(focus) => navigation.navigate('RiskSettings', { focus })}
+          />
+        )}
+      </Tab.Screen>
       <Tab.Screen name="Cushions" component={CushionsScreen} />
       <Tab.Screen name="History" component={HistoryScreen} />
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
@@ -130,7 +138,8 @@ function MainTabs({ navigation }: any) {
         {() => (
           <SettingsScreen
             onOpenAccountAndMore={() => navigation.navigate('SettingsMore')}
-            onOpenRisk={() => navigation.navigate('RiskSettings')}
+            onOpenRisk={(focus: PathFocusId) => navigation.navigate('RiskSettings', { focus })}
+            onOpenPathsGuide={() => navigation.navigate('PathsGuide')}
           />
         )}
       </Tab.Screen>
@@ -159,9 +168,22 @@ export function RootNavigator() {
         <Stack.Screen
           name="RiskSettings"
           component={RiskScreen}
+          options={({ route }) => {
+            const focus = (route.params as { focus?: PathFocusId } | undefined)?.focus;
+            return {
+              title: focus ? pathTileById(focus).title : 'Risk',
+              headerBackTitle: 'Back',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.textPrimary,
+            };
+          }}
+        />
+        <Stack.Screen
+          name="PathsGuide"
+          component={PathsGuideScreen}
           options={{
-            title: 'Risk',
-            headerBackTitle: 'Settings',
+            title: 'How paths work',
+            headerBackTitle: 'Back',
             headerStyle: { backgroundColor: colors.surface },
             headerTintColor: colors.textPrimary,
           }}

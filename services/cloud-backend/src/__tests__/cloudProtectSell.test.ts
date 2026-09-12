@@ -8,6 +8,7 @@ import {
 } from '../services/firestore';
 import {
   evaluateCloudProtectSell,
+  openProtectWatchAssets,
   pendingProtectTradesForMarket,
   protectCollapseId,
   protectPushEnabled,
@@ -139,6 +140,16 @@ describe('cloud protect-sell', () => {
         now,
       }).reason
     ).toBe('protect_off');
+  });
+
+  test('1s protect watch lists Home/Auto lots only, not path lots', () => {
+    const now = new Date('2026-09-07T15:01:00.000Z');
+    const home = filledTrade({ tradeId: 'h1', asset: 'BTC', entryPath: 'home' });
+    const auto = filledTrade({ tradeId: 'a1', asset: 'ETH', entryPath: 'auto' });
+    const path = filledTrade({ tradeId: 'p1', asset: 'Gold', entryPath: 'cash_out' });
+    const twap = filledTrade({ tradeId: 't1', asset: 'BTC', entryPath: 'twap_lock' });
+    expect(openProtectWatchAssets([home, auto, path, twap], now).sort()).toEqual(['BTC', 'ETH']);
+    expect(pendingProtectTradesForMarket([path, twap], path.ticker, now)).toHaveLength(0);
   });
 
   test('ratio 0.5 can sell below the entry cushion', () => {

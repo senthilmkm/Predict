@@ -164,6 +164,38 @@ describe('Cloud trade book ↔ /me/trades', () => {
     expect(cloudDailyRealizedPnl(today)).toBe(4);
   });
 
+  test('day cap counts filled buys only; miss and sell-of-same-fill are not extra', () => {
+    const now = new Date('2026-09-12T16:00:00.000Z');
+    const today = liveCloudTradesToday(
+      [
+        filledTrade({
+          tradeId: 'buy-fill',
+          executedAt: '2026-09-12T15:00:00.000Z',
+          status: 'SETTLED',
+          outcome: 'exited',
+          fillCount: 1,
+          pnlUsd: -0.4,
+        }) as any,
+        filledTrade({
+          tradeId: 'ioc-miss',
+          executedAt: '2026-09-12T15:01:00.000Z',
+          status: 'CANCELLED',
+          outcome: 'miss',
+          fillCount: 0,
+        }) as any,
+        filledTrade({
+          tradeId: 'clip-fill',
+          executedAt: '2026-09-12T15:02:00.000Z',
+          status: 'FILLED',
+          outcome: 'pending',
+          fillCount: 1,
+        }) as any,
+      ],
+      now
+    );
+    expect(today.map((t) => t.tradeId)).toEqual(['buy-fill', 'clip-fill']);
+  });
+
   test('NO win uses economic payPrice not the YES quote', () => {
     const patch = applyMarketResult(
       filledTrade({

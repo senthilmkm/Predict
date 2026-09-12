@@ -10,6 +10,7 @@ import {
   countWindowBuysForTicker,
   evaluateStaticGate,
   formatSkipReason,
+  skipReasonForWindowCap,
   windowBuyCap,
 } from '../../../../packages/trading-core/src/gates';
 import { isGoodTillCanceled, resolvedPlaceFillCount } from '../../../../packages/trading-core/src/orderFill';
@@ -33,6 +34,7 @@ import {
   type LeanAlertsSent,
 } from '../services/leanAlerts';
 import {
+  openProtectWatchAssets,
   pendingProtectTradesForMarket,
   protectCollapseId,
   runCloudProtectSells,
@@ -60,6 +62,13 @@ import {
   settlePendingCloudTrades,
 } from '../services/settlement';
 import { isCloudKalshiPaused, noteTransientKalshiFailure, resetKalshiPauseForTests } from '../services/kalshiPause';
+import {
+  collectWatchAssets,
+  fetchAskQuotesOnce,
+  leanWithSnapshotQuote,
+  uniqueTickersFromLeans,
+  type OneSecondMarketSnapshot,
+} from '../services/oneSecondMarket';
 import { tryAcquirePlaceLock, releasePlaceLock } from '../services/placeLock';
 import { normalizeFeatureFlags } from '../services/featureFlags';
 import {
@@ -199,6 +208,144 @@ const lastMinuteWatchUsers = new Map<string, string[]>();
 const stepBuyWatchUsers = new Map<string, string[]>();
 const spikeFadeWatchUsers = new Map<string, string[]>();
 const pairLockWatchUsers = new Map<string, string[]>();
+/** Home / Auto lots while Protect is On — 1s dump only. */
+const protectWatchUsers = new Map<string, string[]>();
+
+function oneSecondWatchAssets(): AssetKey[] {
+  return collectWatchAssets(
+    twapLockWatchUsers,
+    lastMinuteWatchUsers,
+    stepBuyWatchUsers,
+    spikeFadeWatchUsers,
+    pairLockWatchUsers,
+    cashOutWatchUsers,
+    goldFadeWatchUsers,
+    protectWatchUsers
+  );
+}
+
+function oneSecondDumpWatching(): boolean {
+  return cashOutWatchUsers.size > 0 || goldFadeWatchUsers.size > 0 || protectWatchUsers.size > 0;
+}
+
+function oneSecondPathWatching(): boolean {
+  return (
+    twapLockWatchUsers.size > 0 ||
+    lastMinuteWatchUsers.size > 0 ||
+    stepBuyWatchUsers.size > 0 ||
+    spikeFadeWatchUsers.size > 0 ||
+    pairLockWatchUsers.size > 0
+  );
+}
+
+async function ingestCfbPrintsForAssets(watchAssets: AssetKey[], now: Date): Promise<void> {
+  if (!watchAssets.length) return;
+  const platformCreds = await getCfbApiCredentials();
+  let sharedKalshi: KalshiClient | null = null;
+  if (!platformCreds) {
+    const userIds = [
+      ...twapLockWatchUsers.keys(),
+      ...lastMinuteWatchUsers.keys(),
+      ...stepBuyWatchUsers.keys(),
+      ...spikeFadeWatchUsers.keys(),
+      ...pairLockWatchUsers.keys(),
+      ...cashOutWatchUsers.keys(),
+      ...goldFadeWatchUsers.keys(),
+      ...protectWatchUsers.keys(),
+    ];
+    for (const userId of userIds) {
+      const secret = await getUserSecret(userId);
+      if (secret?.privateKeyPem && secret.keyId) {
+        sharedKalshi = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        break;
+      }
+    }
+    if (!sharedKalshi) return;
+  }
+  await Promise.all(
+    watchAssets.map(async (asset) => {
+      try {
+        const prints = await fetchCfbRtiPrints(asset, {
+          now,
+          kalshi: sharedKalshi,
+          credentials: platformCreds,
+        });
+        ingestRecentCfbPrints(asset, prints, now);
+      } catch (err: any) {
+        noteTransientKalshiFailure(err);
+      }
+    })
+  );
+}
+
+async function computeWatchLeans(
+  watchAssets: AssetKey[],
+  now: Date
+): Promise<Partial<Record<AssetKey, any>>> {
+  const leans: Partial<Record<AssetKey, any>> = {};
+  await Promise.all(
+    watchAssets.map(async (asset) => {
+      try {
+        if (!isMarketOpen(asset, now).open) return;
+        leans[asset] = await computeLean(asset, 0.0, fetch, now);
+      } catch (err: any) {
+        noteTransientKalshiFailure(err);
+      }
+    })
+  );
+  return leans;
+}
+
+export async function buildOneSecondMarketSnapshot(
+  watchAssets: AssetKey[],
+  now: Date
+): Promise<OneSecondMarketSnapshot> {
+  await ingestCfbPrintsForAssets(watchAssets, now);
+  const leans = await computeWatchLeans(watchAssets, now);
+  const quotes = await fetchAskQuotesOnce(uniqueTickersFromLeans(leans), (ticker) =>
+    getMarketQuote(ticker, fetch, { skipCache: true })
+  );
+  return { now, leans, quotes };
+}
+
+function snapshotLeansForAssets(
+  snapshot: OneSecondMarketSnapshot | null | undefined,
+  watchAssets: AssetKey[]
+): Partial<Record<AssetKey, any>> {
+  const leans: Partial<Record<AssetKey, any>> = {};
+  if (!snapshot) return leans;
+  for (const asset of watchAssets) {
+    if (snapshot.leans[asset]) leans[asset] = snapshot.leans[asset];
+  }
+  return leans;
+}
+
+async function sharedLeansForWatch(
+  watchAssets: AssetKey[],
+  now: Date,
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<Partial<Record<AssetKey, any>>> {
+  if (snapshot) return snapshotLeansForAssets(snapshot, watchAssets);
+  return computeWatchLeans(watchAssets, now);
+}
+
+async function overlayWatchLean(
+  lean: any,
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<any> {
+  if (snapshot) return leanWithSnapshotQuote(lean, snapshot.quotes);
+  const next = { ...lean };
+  try {
+    const quote = await getMarketQuote(next.market_ticker, fetch, { skipCache: true });
+    if (quote?.yes_ask_dollars != null) next.yes_ask = Number(quote.yes_ask_dollars);
+    if (quote?.no_ask_dollars != null) next.no_ask = Number(quote.no_ask_dollars);
+    if (quote?.yes_bid_dollars != null) next.yes_bid = Number(quote.yes_bid_dollars);
+    if (quote?.no_bid_dollars != null) next.no_bid = Number(quote.no_bid_dollars);
+  } catch {
+    /* keep lean */
+  }
+  return next;
+}
 
 async function cashOutBestBidSize(
   ticker: string,
@@ -342,6 +489,7 @@ export function resetLeanAlertMemoryForTests(): void {
   stepBuyWatchUsers.clear();
   spikeFadeWatchUsers.clear();
   pairLockWatchUsers.clear();
+  protectWatchUsers.clear();
   resetTwapLockWatcherMemoryForTests();
   resetLastMinuteWatcherMemoryForTests();
   resetStepBuyWatcherMemoryForTests();
@@ -524,6 +672,7 @@ async function runOneTick() {
     stepBuyWatchUsers.clear();
     spikeFadeWatchUsers.clear();
     pairLockWatchUsers.clear();
+    protectWatchUsers.clear();
     await flushTwapLockWatcher(now, {});
     await flushLastMinuteWatcher(now, {});
     await flushStepBuyWatcher(now, {});
@@ -2002,6 +2151,12 @@ async function runOneTick() {
           const stillOpenFade = openGoldFadeAssets(userTrades);
           if (stillOpenFade.length) goldFadeWatchUsers.set(userId, stillOpenFade);
           else goldFadeWatchUsers.delete(userId);
+          const stillOpenProtect =
+            protectEnabled && user.state !== 'KILL_SWITCH'
+              ? openProtectWatchAssets(userTrades, now)
+              : [];
+          if (stillOpenProtect.length) protectWatchUsers.set(userId, stillOpenProtect);
+          else protectWatchUsers.delete(userId);
           if (
             featureFlags.twapLock &&
             cfg.auto_trade_enabled &&
@@ -2227,17 +2382,18 @@ async function runOneTick() {
 }
 
 /** Last-minute 1s sample + Yes enter only. No exits — hold to $1. */
-export async function runTwapLockWatchTick(): Promise<{
+export async function runTwapLockWatchTick(
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
   timestamp: string;
   watched: number;
   paused?: boolean;
 }> {
+  const now = snapshot?.now ?? new Date();
   if (twapLockWatchUsers.size === 0) {
-    const now = new Date();
     await flushTwapLockWatcher(now, {});
     return { timestamp: now.toISOString(), watched: 0 };
   }
-  const now = new Date();
   const sysConfig = await getSystemConfig();
   const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
   setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
@@ -2251,38 +2407,30 @@ export async function runTwapLockWatchTick(): Promise<{
   }
 
   const watchAssets = [...new Set([...twapLockWatchUsers.values()].flat())] as AssetKey[];
-  const platformCreds = await getCfbApiCredentials();
-  let sharedKalshi: KalshiClient | null = null;
-  if (!platformCreds) {
-    for (const userId of twapLockWatchUsers.keys()) {
-      const secret = await getUserSecret(userId);
-      if (secret?.privateKeyPem && secret.keyId) {
-        sharedKalshi = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
-        break;
+  if (!snapshot) {
+    const platformCreds = await getCfbApiCredentials();
+    let sharedKalshi: KalshiClient | null = null;
+    if (!platformCreds) {
+      for (const userId of twapLockWatchUsers.keys()) {
+        const secret = await getUserSecret(userId);
+        if (secret?.privateKeyPem && secret.keyId) {
+          sharedKalshi = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+          break;
+        }
+      }
+      if (!sharedKalshi) {
+        return { timestamp: now.toISOString(), watched: 0 };
       }
     }
-    if (!sharedKalshi) {
-      return { timestamp: now.toISOString(), watched: 0 };
-    }
+    await Promise.all(
+      watchAssets.map(async (asset) => {
+        const prints = await fetchCfbRtiPrints(asset, { now, kalshi: sharedKalshi, credentials: platformCreds });
+        ingestRecentCfbPrints(asset, prints, now);
+      })
+    );
   }
-  await Promise.all(
-    watchAssets.map(async (asset) => {
-      const prints = await fetchCfbRtiPrints(asset, { now, kalshi: sharedKalshi, credentials: platformCreds });
-      ingestRecentCfbPrints(asset, prints, now);
-    })
-  );
 
-  const sharedLeans: Partial<Record<AssetKey, any>> = {};
-  await Promise.all(
-    watchAssets.map(async (asset) => {
-      try {
-        if (!isMarketOpen(asset, now).open) return;
-        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
-      } catch (err: any) {
-        noteTransientKalshiFailure(err);
-      }
-    })
-  );
+  const sharedLeans = await sharedLeansForWatch(watchAssets, now, snapshot);
 
   const activeUsers = await getEnrolledActiveUsers();
   const byId = new Map(activeUsers.map((u) => [u.userId, u]));
@@ -2328,16 +2476,14 @@ export async function runTwapLockWatchTick(): Promise<{
         const windowCap = windowBuyCap(cfg.risk);
         const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
         if (existingBuys >= windowCap) {
-          lastTradeAction[asset] = skippedTradeAction('max_trades_asset_window', tickIso);
+          lastTradeAction[asset] = skippedTradeAction(
+            skipReasonForWindowCap(userTrades, marketTicker),
+            tickIso
+          );
           continue;
         }
-        let yesAsk = lean.yes_ask;
-        try {
-          const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
-          if (quote?.yes_ask_dollars != null) yesAsk = Number(quote.yes_ask_dollars);
-        } catch {
-          /* keep lean ask */
-        }
+        const quoted = await overlayWatchLean(lean, snapshot);
+        let yesAsk = quoted.yes_ask;
         const skipThinBid = resolveSkipThinBid(cfg.risk, 'twap_lock');
         const absGap = Number.isFinite(Number(lean.abs_gap))
           ? Number(lean.abs_gap)
@@ -2354,9 +2500,9 @@ export async function runTwapLockWatchTick(): Promise<{
           minutes_remaining: lean.minutes_remaining,
           phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
           yes_ask: yesAsk ?? undefined,
-          no_ask: lean.no_ask ?? undefined,
-          yes_bid: lean.yes_bid ?? undefined,
-          no_bid: lean.no_bid ?? undefined,
+          no_ask: quoted.no_ask ?? undefined,
+          yes_bid: quoted.yes_bid ?? undefined,
+          no_bid: quoted.no_bid ?? undefined,
           timeseries: lean.timeseries,
           close_utc: lean.close_utc,
         };
@@ -2521,17 +2667,18 @@ export async function runTwapLockWatchTick(): Promise<{
 }
 
 /** Last-minute 1s sample. No lock math. Hold to settlement. */
-export async function runLastMinuteWatchTick(): Promise<{
+export async function runLastMinuteWatchTick(
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
   timestamp: string;
   watched: number;
   paused?: boolean;
 }> {
+  const now = snapshot?.now ?? new Date();
   if (lastMinuteWatchUsers.size === 0) {
-    const now = new Date();
     await flushLastMinuteWatcher(now, {});
     return { timestamp: now.toISOString(), watched: 0 };
   }
-  const now = new Date();
   const sysConfig = await getSystemConfig();
   const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
   setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
@@ -2545,17 +2692,7 @@ export async function runLastMinuteWatchTick(): Promise<{
   }
 
   const watchAssets = [...new Set([...lastMinuteWatchUsers.values()].flat())] as AssetKey[];
-  const sharedLeans: Partial<Record<AssetKey, any>> = {};
-  await Promise.all(
-    watchAssets.map(async (asset) => {
-      try {
-        if (!isMarketOpen(asset, now).open) return;
-        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
-      } catch (err: any) {
-        noteTransientKalshiFailure(err);
-      }
-    })
-  );
+  const sharedLeans = await sharedLeansForWatch(watchAssets, now, snapshot);
 
   const activeUsers = await getEnrolledActiveUsers();
   const byId = new Map(activeUsers.map((u) => [u.userId, u]));
@@ -2604,6 +2741,7 @@ export async function runLastMinuteWatchTick(): Promise<{
             asset,
           })
         ) {
+          lastTradeAction[asset] = skippedTradeAction('last_minute_twap_owns', tickIso);
           continue;
         }
         watched += 1;
@@ -2612,20 +2750,15 @@ export async function runLastMinuteWatchTick(): Promise<{
         const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
         let lastMinuteClips = lastMinuteClipsForTicker(userTrades, marketTicker);
         if (lastMinuteClips.count <= 0 && existingBuys >= windowCap) {
-          lastTradeAction[asset] = skippedTradeAction('max_trades_asset_window', tickIso);
+          lastTradeAction[asset] = skippedTradeAction(
+            skipReasonForWindowCap(userTrades, marketTicker),
+            tickIso
+          );
           continue;
         }
-        let yesAsk = lean.yes_ask;
-        let noAsk = lean.no_ask;
-        try {
-          const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
-          if (quote?.yes_ask_dollars != null) yesAsk = Number(quote.yes_ask_dollars);
-          if (quote?.no_ask_dollars != null) noAsk = Number(quote.no_ask_dollars);
-          if (quote?.yes_bid_dollars != null) lean.yes_bid = Number(quote.yes_bid_dollars);
-          if (quote?.no_bid_dollars != null) lean.no_bid = Number(quote.no_bid_dollars);
-        } catch {
-          /* keep lean ask */
-        }
+        const quoted = await overlayWatchLean(lean, snapshot);
+        let yesAsk = quoted.yes_ask;
+        let noAsk = quoted.no_ask;
         if (
           normalizeLastMinuteFlipSellUsd(cfg.risk?.last_minute_flip_sell_usd) > 0 &&
           pendingLastMinuteTradesForMarket(userTrades, marketTicker).length > 0
@@ -2640,9 +2773,9 @@ export async function runLastMinuteWatchTick(): Promise<{
             userTrades,
             lean: {
               phase: lean.phase === 'live' ? 'live' : 'ended',
-              yes_bid: lean.yes_bid,
+              yes_bid: quoted.yes_bid,
               yes_ask: yesAsk,
-              no_bid: lean.no_bid,
+              no_bid: quoted.no_bid,
               no_ask: noAsk,
             },
             userTokens,
@@ -2669,8 +2802,8 @@ export async function runLastMinuteWatchTick(): Promise<{
           phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
           yes_ask: yesAsk ?? undefined,
           no_ask: noAsk ?? undefined,
-          yes_bid: lean.yes_bid ?? undefined,
-          no_bid: lean.no_bid ?? undefined,
+          yes_bid: quoted.yes_bid ?? undefined,
+          no_bid: quoted.no_bid ?? undefined,
           timeseries: lean.timeseries,
           close_utc: lean.close_utc,
         };
@@ -2848,17 +2981,18 @@ export async function runLastMinuteWatchTick(): Promise<{
   return { timestamp: now.toISOString(), watched };
 }
 
-export async function runStepBuyWatchTick(): Promise<{
+export async function runStepBuyWatchTick(
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
   timestamp: string;
   watched: number;
   paused?: boolean;
 }> {
+  const now = snapshot?.now ?? new Date();
   if (stepBuyWatchUsers.size === 0) {
-    const now = new Date();
     await flushStepBuyWatcher(now, {});
     return { timestamp: now.toISOString(), watched: 0 };
   }
-  const now = new Date();
   const sysConfig = await getSystemConfig();
   const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
   setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
@@ -2871,17 +3005,7 @@ export async function runStepBuyWatchTick(): Promise<{
     return { timestamp: now.toISOString(), watched: 0 };
   }
   const watchAssets = [...new Set([...stepBuyWatchUsers.values()].flat())] as AssetKey[];
-  const sharedLeans: Partial<Record<AssetKey, any>> = {};
-  await Promise.all(
-    watchAssets.map(async (asset) => {
-      try {
-        if (!isMarketOpen(asset, now).open) return;
-        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
-      } catch (err: any) {
-        noteTransientKalshiFailure(err);
-      }
-    })
-  );
+  const sharedLeans = await sharedLeansForWatch(watchAssets, now, snapshot);
   const activeUsers = await getEnrolledActiveUsers();
   const byId = new Map(activeUsers.map((u) => [u.userId, u]));
   let watched = 0;
@@ -2923,22 +3047,15 @@ export async function runStepBuyWatchTick(): Promise<{
             asset,
           })
         ) {
+          lastTradeAction[asset] = skippedTradeAction('step_buy_twap_owns', tickIso);
           continue;
         }
         still.push(asset);
         watched += 1;
-        const marketTicker = lean.market_ticker;
-        let yesAsk = lean.yes_ask;
-        let noAsk = lean.no_ask;
-        try {
-          const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
-          if (quote?.yes_ask_dollars != null) yesAsk = Number(quote.yes_ask_dollars);
-          if (quote?.no_ask_dollars != null) noAsk = Number(quote.no_ask_dollars);
-          if (quote?.yes_bid_dollars != null) lean.yes_bid = Number(quote.yes_bid_dollars);
-          if (quote?.no_bid_dollars != null) lean.no_bid = Number(quote.no_bid_dollars);
-        } catch {
-          /* keep lean */
-        }
+        const quoted = await overlayWatchLean(lean, snapshot);
+        const marketTicker = quoted.market_ticker;
+        let yesAsk = quoted.yes_ask;
+        let noAsk = quoted.no_ask;
         let stepBuyLots = stepBuyLotsForTicker(userTrades, marketTicker);
         if (stepBuyLots.count > 0) {
           const secret = await getUserSecret(userId);
@@ -2950,9 +3067,9 @@ export async function runStepBuyWatchTick(): Promise<{
               ticker: marketTicker,
               lean: {
                 phase: lean.phase === 'live' ? 'live' : 'ended',
-                yes_bid: lean.yes_bid,
+                yes_bid: quoted.yes_bid,
                 yes_ask: yesAsk,
-                no_bid: lean.no_bid,
+                no_bid: quoted.no_bid,
                 no_ask: noAsk,
               },
               trades: userTrades,
@@ -3018,8 +3135,8 @@ export async function runStepBuyWatchTick(): Promise<{
           phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
           yes_ask: yesAsk ?? undefined,
           no_ask: noAsk ?? undefined,
-          yes_bid: lean.yes_bid ?? undefined,
-          no_bid: lean.no_bid ?? undefined,
+          yes_bid: quoted.yes_bid ?? undefined,
+          no_bid: quoted.no_bid ?? undefined,
           timeseries: lean.timeseries,
           close_utc: lean.close_utc,
         };
@@ -3204,17 +3321,18 @@ export async function runStepBuyWatchTick(): Promise<{
   return { timestamp: now.toISOString(), watched };
 }
 
-export async function runSpikeFadeWatchTick(): Promise<{
+export async function runSpikeFadeWatchTick(
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
   timestamp: string;
   watched: number;
   paused?: boolean;
 }> {
+  const now = snapshot?.now ?? new Date();
   if (spikeFadeWatchUsers.size === 0) {
-    const now = new Date();
     await flushSpikeFadeWatcher(now, {});
     return { timestamp: now.toISOString(), watched: 0 };
   }
-  const now = new Date();
   const sysConfig = await getSystemConfig();
   const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
   setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
@@ -3227,17 +3345,7 @@ export async function runSpikeFadeWatchTick(): Promise<{
     return { timestamp: now.toISOString(), watched: 0 };
   }
   const watchAssets = [...new Set([...spikeFadeWatchUsers.values()].flat())] as AssetKey[];
-  const sharedLeans: Partial<Record<AssetKey, any>> = {};
-  await Promise.all(
-    watchAssets.map(async (asset) => {
-      try {
-        if (!isMarketOpen(asset, now).open) return;
-        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
-      } catch (err: any) {
-        noteTransientKalshiFailure(err);
-      }
-    })
-  );
+  const sharedLeans = await sharedLeansForWatch(watchAssets, now, snapshot);
   const activeUsers = await getEnrolledActiveUsers();
   const byId = new Map(activeUsers.map((u) => [u.userId, u]));
   let watched = 0;
@@ -3279,20 +3387,13 @@ export async function runSpikeFadeWatchTick(): Promise<{
             asset,
           })
         ) {
+          lastTradeAction[asset] = skippedTradeAction('spike_fade_twap_owns', tickIso);
           continue;
         }
         still.push(asset);
         watched += 1;
-        const marketTicker = lean.market_ticker;
-        try {
-          const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
-          if (quote?.yes_ask_dollars != null) lean.yes_ask = Number(quote.yes_ask_dollars);
-          if (quote?.no_ask_dollars != null) lean.no_ask = Number(quote.no_ask_dollars);
-          if (quote?.yes_bid_dollars != null) lean.yes_bid = Number(quote.yes_bid_dollars);
-          if (quote?.no_bid_dollars != null) lean.no_bid = Number(quote.no_bid_dollars);
-        } catch {
-          /* keep lean */
-        }
+        const quoted = await overlayWatchLean(lean, snapshot);
+        const marketTicker = quoted.market_ticker;
         if (pendingSpikeFadeTradesForMarket(userTrades, marketTicker).length > 0) {
           const secret = await getUserSecret(userId);
           if (secret?.privateKeyPem && secret.keyId) {
@@ -3307,10 +3408,10 @@ export async function runSpikeFadeWatchTick(): Promise<{
                 phase: lean.phase === 'live' ? 'live' : 'ended',
                 minutes_left: lean.minutes_left,
                 minutes_remaining: lean.minutes_remaining,
-                yes_bid: lean.yes_bid,
-                yes_ask: lean.yes_ask,
-                no_bid: lean.no_bid,
-                no_ask: lean.no_ask,
+                yes_bid: quoted.yes_bid,
+                yes_ask: quoted.yes_ask,
+                no_bid: quoted.no_bid,
+                no_ask: quoted.no_ask,
               },
               trades: userTrades,
               takeAskUsd: cfg.risk?.spike_fade_take_ask_usd,
@@ -3381,10 +3482,10 @@ export async function runSpikeFadeWatchTick(): Promise<{
           minutes_elapsed: lean.minutes_elapsed || 0,
           minutes_remaining: lean.minutes_remaining,
           phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
-          yes_ask: lean.yes_ask ?? undefined,
-          no_ask: lean.no_ask ?? undefined,
-          yes_bid: lean.yes_bid ?? undefined,
-          no_bid: lean.no_bid ?? undefined,
+          yes_ask: quoted.yes_ask ?? undefined,
+          no_ask: quoted.no_ask ?? undefined,
+          yes_bid: quoted.yes_bid ?? undefined,
+          no_bid: quoted.no_bid ?? undefined,
           timeseries: lean.timeseries,
           close_utc: lean.close_utc,
         };
@@ -3559,17 +3660,18 @@ export async function runSpikeFadeWatchTick(): Promise<{
   return { timestamp: now.toISOString(), watched };
 }
 
-export async function runPairLockWatchTick(): Promise<{
+export async function runPairLockWatchTick(
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
   timestamp: string;
   watched: number;
   paused?: boolean;
 }> {
+  const now = snapshot?.now ?? new Date();
   if (pairLockWatchUsers.size === 0) {
-    const now = new Date();
     await flushPairLockWatcher(now, {});
     return { timestamp: now.toISOString(), watched: 0 };
   }
-  const now = new Date();
   const sysConfig = await getSystemConfig();
   const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
   setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
@@ -3582,17 +3684,7 @@ export async function runPairLockWatchTick(): Promise<{
     return { timestamp: now.toISOString(), watched: 0 };
   }
   const watchAssets = [...new Set([...pairLockWatchUsers.values()].flat())] as AssetKey[];
-  const sharedLeans: Partial<Record<AssetKey, any>> = {};
-  await Promise.all(
-    watchAssets.map(async (asset) => {
-      try {
-        if (!isMarketOpen(asset, now).open) return;
-        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
-      } catch (err: any) {
-        noteTransientKalshiFailure(err);
-      }
-    })
-  );
+  const sharedLeans = await sharedLeansForWatch(watchAssets, now, snapshot);
   const activeUsers = await getEnrolledActiveUsers();
   const byId = new Map(activeUsers.map((u) => [u.userId, u]));
   let watched = 0;
@@ -3634,20 +3726,13 @@ export async function runPairLockWatchTick(): Promise<{
             asset,
           })
         ) {
+          lastTradeAction[asset] = skippedTradeAction('pair_lock_twap_owns', tickIso);
           continue;
         }
         still.push(asset);
         watched += 1;
-        const marketTicker = lean.market_ticker;
-        try {
-          const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
-          if (quote?.yes_ask_dollars != null) lean.yes_ask = Number(quote.yes_ask_dollars);
-          if (quote?.no_ask_dollars != null) lean.no_ask = Number(quote.no_ask_dollars);
-          if (quote?.yes_bid_dollars != null) lean.yes_bid = Number(quote.yes_bid_dollars);
-          if (quote?.no_bid_dollars != null) lean.no_bid = Number(quote.no_bid_dollars);
-        } catch {
-          /* keep lean */
-        }
+        const quoted = await overlayWatchLean(lean, snapshot);
+        const marketTicker = quoted.market_ticker;
         let lots = pairLockLotsForTicker(userTrades, marketTicker);
         const pairSkipThin = resolveSkipThinBid(cfg.risk, 'pair_lock');
         if (lots.unmatched) {
@@ -3657,10 +3742,10 @@ export async function runPairLockWatchTick(): Promise<{
             const watch = evaluatePairLockWatch({
               lots,
               quotes: {
-                yes_bid: lean.yes_bid,
-                yes_ask: lean.yes_ask,
-                no_bid: lean.no_bid,
-                no_ask: lean.no_ask,
+                yes_bid: quoted.yes_bid,
+                yes_ask: quoted.yes_ask,
+                no_bid: quoted.no_bid,
+                no_ask: quoted.no_ask,
               },
               minLockUsd: cfg.risk?.pair_lock_min_lock_usd,
               flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
@@ -3789,10 +3874,10 @@ export async function runPairLockWatchTick(): Promise<{
                   phase: lean.phase === 'live' ? 'live' : 'ended',
                   minutes_left: lean.minutes_left,
                   minutes_remaining: lean.minutes_remaining,
-                  yes_bid: lean.yes_bid,
-                  yes_ask: lean.yes_ask,
-                  no_bid: lean.no_bid,
-                  no_ask: lean.no_ask,
+                  yes_bid: quoted.yes_bid,
+                  yes_ask: quoted.yes_ask,
+                  no_bid: quoted.no_bid,
+                  no_ask: quoted.no_ask,
                 },
                 trades: userTrades,
                 flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
@@ -3862,10 +3947,10 @@ export async function runPairLockWatchTick(): Promise<{
           minutes_elapsed: lean.minutes_elapsed || 0,
           minutes_remaining: lean.minutes_remaining,
           phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
-          yes_ask: lean.yes_ask ?? undefined,
-          no_ask: lean.no_ask ?? undefined,
-          yes_bid: lean.yes_bid ?? undefined,
-          no_bid: lean.no_bid ?? undefined,
+          yes_ask: quoted.yes_ask ?? undefined,
+          no_ask: quoted.no_ask ?? undefined,
+          yes_bid: quoted.yes_bid ?? undefined,
+          no_bid: quoted.no_bid ?? undefined,
           timeseries: lean.timeseries,
           close_utc: lean.close_utc,
         };
@@ -4013,15 +4098,17 @@ export async function runPairLockWatchTick(): Promise<{
 }
 
 /** Quote + exit only for users that already hold a Cash out lot. No new buys. */
-export async function runCashOutBidWatchTick(): Promise<{
+export async function runCashOutBidWatchTick(
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
   timestamp: string;
   watched: number;
   paused?: boolean;
 }> {
+  const now = snapshot?.now ?? new Date();
   if (cashOutWatchUsers.size === 0 && goldFadeWatchUsers.size === 0) {
-    return { timestamp: new Date().toISOString(), watched: 0 };
+    return { timestamp: now.toISOString(), watched: 0 };
   }
-  const now = new Date();
   const sysConfig = await getSystemConfig();
   setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
   if (isCloudKalshiPaused()) {
@@ -4031,17 +4118,7 @@ export async function runCashOutBidWatchTick(): Promise<{
   const watchAssets = [
     ...new Set([...cashOutWatchUsers.values(), ...goldFadeWatchUsers.values()].flat()),
   ] as AssetKey[];
-  const sharedLeans: Partial<Record<AssetKey, any>> = {};
-  await Promise.all(
-    watchAssets.map(async (asset) => {
-      try {
-        if (!isMarketOpen(asset, now).open) return;
-        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
-      } catch (err: any) {
-        noteTransientKalshiFailure(err);
-      }
-    })
-  );
+  const sharedLeans = await sharedLeansForWatch(watchAssets, now, snapshot);
 
   const activeUsers = await getEnrolledActiveUsers();
   const byId = new Map(activeUsers.map((u) => [u.userId, u]));
@@ -4067,8 +4144,9 @@ export async function runCashOutBidWatchTick(): Promise<{
       if (!secret?.privateKeyPem || !secret.keyId) continue;
       const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
       for (const asset of assets) {
-        const lean = sharedLeans[asset];
-        if (!lean?.market_ticker) continue;
+        const rawLean = sharedLeans[asset];
+        if (!rawLean?.market_ticker) continue;
+        const lean = await overlayWatchLean(rawLean, snapshot);
         const marketTicker = lean.market_ticker;
         if (pendingCashOutTradesForMarket(userTrades, marketTicker).length === 0) continue;
         watched += 1;
@@ -4163,8 +4241,9 @@ export async function runCashOutBidWatchTick(): Promise<{
       const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
       const fadeSkipThin = resolveSkipThinBid(cfg.risk, 'gold_fade');
       for (const asset of assets) {
-        const lean = sharedLeans[asset];
-        if (!lean?.market_ticker) continue;
+        const rawLean = sharedLeans[asset];
+        if (!rawLean?.market_ticker) continue;
+        const lean = await overlayWatchLean(rawLean, snapshot);
         const marketTicker = lean.market_ticker;
         const heldFade = pendingGoldFadeTradesForMarket(userTrades, marketTicker)[0];
         if (!heldFade) continue;
@@ -4240,6 +4319,125 @@ export async function runCashOutBidWatchTick(): Promise<{
   return { timestamp: now.toISOString(), watched };
 }
 
+export async function runProtectWatchTick(
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
+  timestamp: string;
+  watched: number;
+  paused?: boolean;
+}> {
+  const now = snapshot?.now ?? new Date();
+  if (protectWatchUsers.size === 0) {
+    return { timestamp: now.toISOString(), watched: 0 };
+  }
+  const sysConfig = await getSystemConfig();
+  setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
+  if (isCloudKalshiPaused()) {
+    return { timestamp: now.toISOString(), watched: 0, paused: true };
+  }
+
+  const watchAssets = [...new Set([...protectWatchUsers.values()].flat())] as AssetKey[];
+  const sharedLeans = await sharedLeansForWatch(watchAssets, now, snapshot);
+
+  const activeUsers = await getEnrolledActiveUsers();
+  const byId = new Map(activeUsers.map((u) => [u.userId, u]));
+  let watched = 0;
+
+  for (const [userId, assets] of [...protectWatchUsers.entries()]) {
+    const user = byId.get(userId);
+    if (!user) {
+      protectWatchUsers.delete(userId);
+      continue;
+    }
+    try {
+      const cfg = user.config || defaultAppConfig();
+      if (!Boolean(cfg.risk?.protect_sell_enabled) || user.state === 'KILL_SWITCH') {
+        protectWatchUsers.delete(userId);
+        continue;
+      }
+      const rawTrades = await getTradeRecords(userId);
+      const quoteCache = createQuoteCache();
+      const userTrades = await settlePendingCloudTrades(userId, rawTrades, now, quoteCache);
+      const stillOpen = openProtectWatchAssets(userTrades, now);
+      if (stillOpen.length === 0) {
+        protectWatchUsers.delete(userId);
+        continue;
+      }
+      if (cachedSecretMissing(user)) continue;
+      const secret = await getUserSecret(userId);
+      if (!secret?.privateKeyPem || !secret.keyId) continue;
+      const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+      const userTokens = [...(user.pushTokens || []), ...(user.fcmTokens || [])].filter(
+        (t, i, arr) => t && arr.indexOf(t) === i
+      );
+      for (const asset of assets) {
+        const rawLean = sharedLeans[asset];
+        if (!rawLean?.market_ticker) continue;
+        const lean = await overlayWatchLean(rawLean, snapshot);
+        const marketTicker = lean.market_ticker;
+        if (pendingProtectTradesForMarket(userTrades, marketTicker, now).length === 0) continue;
+        watched += 1;
+        const absGap = Number.isFinite(Number(lean.abs_gap))
+          ? Number(lean.abs_gap)
+          : Math.abs((lean.live || 0) - (lean.strike || 0));
+        const protectRes = await runCloudProtectSells({
+          userId,
+          asset,
+          ticker: marketTicker,
+          lean: {
+            decision: lean.decision,
+            abs_gap: absGap,
+            phase: lean.phase,
+            yes_bid: lean.yes_bid,
+            yes_ask: lean.yes_ask,
+          },
+          trades: userTrades,
+          cushion: cfg.cushions?.[asset] ?? 25,
+          gapRatio: Number(cfg.risk?.protect_sell_gap_ratio ?? 1),
+          graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
+          slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+          enabled: true,
+          dryRun: false,
+          now,
+          place: (input) =>
+            client.placeOrder({
+              ticker: input.ticker,
+              side: input.side,
+              count: input.count,
+              price: input.price,
+              time_in_force: input.time_in_force,
+              dry_run: input.dry_run,
+              client_order_id: input.client_order_id,
+            }),
+        });
+        for (const alert of protectRes.alerts) {
+          await emitCloudAlert({
+            userId,
+            alertId: protectAlertId(alert.tradeId),
+            kind: 'protect_sell',
+            title: alert.title,
+            body: alert.body,
+            cfg,
+            tokens: userTokens,
+            collapseId: protectCollapseId(userId, alert.tradeId),
+            asset,
+            ticker: marketTicker,
+            tradeId: alert.tradeId,
+            at: now.toISOString(),
+          });
+        }
+      }
+      const still = openProtectWatchAssets(userTrades, now);
+      if (still.length) protectWatchUsers.set(userId, still);
+      else protectWatchUsers.delete(userId);
+    } catch (err: any) {
+      noteTransientKalshiFailure(err);
+    }
+  }
+
+  return { timestamp: now.toISOString(), watched };
+}
+
 function cachedHasNoCashOut(trades: TradeRecordDoc[]): boolean {
   return openCashOutAssets(trades).length === 0;
 }
@@ -4256,8 +4454,6 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
   }
   const sysConfig = await getSystemConfig();
   const intervalSec = sysConfig?.tick_interval_seconds || 20;
-  const flags = normalizeFeatureFlags(sysConfig?.featureFlags);
-  const bidCheckSec = Math.min(flags.cashOutBidCheckSeconds, flags.goldFadeBidCheckSeconds);
   const tickCount = isTest ? 1 : Math.max(1, Math.floor(60 / intervalSec));
   const delayMs = intervalSec * 1000;
   const minuteEndAt = Date.now() + (isTest ? 0 : 58_000);
@@ -4270,48 +4466,46 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
     const lastSubTick = i >= tickCount - 1;
     const endAt = lastSubTick ? minuteEndAt : Date.now() + delayMs;
     if (Date.now() > endAt - 80) continue;
-    let nextWatch = Date.now() + bidCheckSec * 1000;
-    let nextTwap = Date.now() + 1000;
+    let nextPulse = Date.now() + 1000;
     while (Date.now() <= endAt - 80) {
-      const nextAt = Math.min(nextWatch, nextTwap, endAt);
+      const watching = oneSecondPathWatching() || oneSecondDumpWatching();
+      const nextAt = watching ? Math.min(nextPulse, endAt) : endAt;
       await sleepMs(Math.max(0, nextAt - Date.now()));
       if (Date.now() > endAt - 80) break;
-      const lastMinuteWatching =
-        twapLockWatchUsers.size > 0 ||
-        lastMinuteWatchUsers.size > 0 ||
-        stepBuyWatchUsers.size > 0 ||
-        spikeFadeWatchUsers.size > 0 ||
-        pairLockWatchUsers.size > 0;
-      if (lastMinuteWatching && Date.now() + 20 >= nextTwap) {
-        if (twapLockWatchUsers.size > 0) {
-          const twap = await runTwapLockWatchTick();
-          if (twap.paused) break;
-        }
-        if (lastMinuteWatchUsers.size > 0) {
-          const lm = await runLastMinuteWatchTick();
-          if (lm.paused) break;
-        }
-        if (stepBuyWatchUsers.size > 0) {
-          const sb = await runStepBuyWatchTick();
-          if (sb.paused) break;
-        }
-        if (spikeFadeWatchUsers.size > 0) {
-          const sf = await runSpikeFadeWatchTick();
-          if (sf.paused) break;
-        }
-        if (pairLockWatchUsers.size > 0) {
-          const pl = await runPairLockWatchTick();
-          if (pl.paused) break;
-        }
-        nextTwap += 1000;
-      } else if (!lastMinuteWatching) {
-        nextTwap = Date.now() + 1000;
+      if (!watching) break;
+      if (isCloudKalshiPaused()) break;
+      const watchAssets = oneSecondWatchAssets();
+      const snap = watchAssets.length
+        ? await buildOneSecondMarketSnapshot(watchAssets, new Date())
+        : null;
+      if (isCloudKalshiPaused()) break;
+      if (twapLockWatchUsers.size > 0) {
+        const twap = await runTwapLockWatchTick(snap);
+        if (twap.paused) break;
       }
-      if (Date.now() + 20 >= nextWatch && Date.now() <= endAt - 80) {
-        const watch = await runCashOutBidWatchTick();
-        if (watch.paused) break;
-        nextWatch += bidCheckSec * 1000;
+      if (lastMinuteWatchUsers.size > 0) {
+        const lm = await runLastMinuteWatchTick(snap);
+        if (lm.paused) break;
       }
+      if (stepBuyWatchUsers.size > 0) {
+        const sb = await runStepBuyWatchTick(snap);
+        if (sb.paused) break;
+      }
+      if (spikeFadeWatchUsers.size > 0) {
+        const sf = await runSpikeFadeWatchTick(snap);
+        if (sf.paused) break;
+      }
+      if (pairLockWatchUsers.size > 0) {
+        const pl = await runPairLockWatchTick(snap);
+        if (pl.paused) break;
+      }
+      if (oneSecondDumpWatching()) {
+        const dump = await runCashOutBidWatchTick(snap);
+        if (dump.paused) break;
+        const prot = await runProtectWatchTick(snap);
+        if (prot.paused) break;
+      }
+      nextPulse += 1000;
     }
     if (!lastSubTick) await sleepMs(Math.max(0, endAt - Date.now()));
   }

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Predict — compact Paths + Home pins</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B0E14;
+      --phone: #0F1419;
+      --surface: #1A222C;
+      --border: #2E3A48;
+      --text: #F2F5F7;
+      --muted: #8B98A5;
+      --accent: #3DB8A0;
+      --gold: #C6A75E;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 18px 48px;
+    }
+    h1 { font-size: 22px; letter-spacing: -0.03em; }
+    .lede { color: var(--muted); margin: 8px 0 22px; max-width: 820px; font-size: 15px; }
+    .stage { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; }
+    .col h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
+    .phone {
+      width: 390px;
+      height: 760px;
+      background: var(--phone);
+      border: 1px solid var(--border);
+      border-radius: 36px;
+      padding: 12px 12px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .notch {
+      height: 20px; display: flex; justify-content: space-between;
+      color: var(--muted); font-size: 11px; font-weight: 700; padding: 0 10px;
+    }
+    .titlebar { text-align: center; font-weight: 800; font-size: 17px; padding: 6px 0 12px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 12px; margin-bottom: 10px;
+    }
+    .eyebrow { font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+    .card h3 { font-size: 17px; margin: 2px 0 2px; }
+    .card p, .hint { font-size: 12px; color: var(--muted); }
+    .row-sw { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .sw { width: 44px; height: 26px; border-radius: 999px; background: var(--gold); position: relative; flex: 0 0 auto; }
+    .sw.off { background: #2E3A48; }
+    .sw i { position: absolute; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #F2F5F7; }
+    .sw.on i { right: 3px; }
+    .sw.off i { left: 3px; }
+    .ok { color: var(--accent); font-size: 12px; font-weight: 600; margin: 0 0 10px 4px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tile {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 12px; min-height: 88px; text-align: left; color: var(--text); font: inherit; cursor: pointer;
+    }
+    .tile b { display: block; font-size: 15px; margin-bottom: 4px; }
+    .tile span { display: block; font-size: 11px; color: var(--muted); line-height: 1.3; }
+    .tabbar {
+      position: absolute; left: 12px; right: 12px; bottom: 12px;
+      display: flex; justify-content: space-around;
+      border-top: 1px solid var(--border); padding-top: 8px;
+      color: var(--muted); font-size: 10px; font-weight: 700;
+    }
+    .tabbar .on { color: var(--accent); }
+    .scrim { display: none; position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+    .scrim.on { display: block; }
+    .sheet {
+      display: none; position: absolute; left: 0; right: 0; bottom: 0;
+      background: #151c25; border-top: 1px solid var(--border);
+      border-radius: 20px 20px 0 0; padding: 8px 12px 16px;
+    }
+    .sheet.on { display: block; }
+    .grab { width: 36px; height: 4px; border-radius: 99px; background: #3a4654; margin: 2px auto 8px; }
+    .sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .sheet-head h3 { font-size: 16px; }
+    .x { border: 0; background: none; color: var(--accent); font-weight: 800; font-size: 14px; cursor: pointer; }
+    .blurb { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .pgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .ptile {
+      position: relative;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 8px 28px 8px 10px; min-height: 46px; text-align: left;
+      color: var(--text); font: inherit; cursor: pointer;
+    }
+    .ptile b { display: block; font-size: 13px; line-height: 1.15; }
+    .ptile span { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .pin {
+      position: absolute; top: 6px; right: 6px;
+      width: 22px; height: 22px; border-radius: 8px; border: 0;
+      background: transparent; color: #5A6875; font-size: 13px; cursor: pointer;
+    }
+    .pin.on { color: var(--gold); }
+    .row {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 10px 12px; margin-bottom: 6px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .row small { display: block; color: var(--muted); font-size: 11px; }
+    .pins {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+    }
+    .chip {
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--text); border-radius: 999px; padding: 6px 10px;
+      font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    .chip .dot { color: var(--muted); font-weight: 600; }
+    .empty { font-size: 12px; color: var(--muted); }
+    .signals { font-size: 12px; color: var(--muted); line-height: 1.7; }
+    .note {
+      max-width: 360px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 16px;
+    }
+    .note h3 { font-size: 15px; margin-bottom: 8px; }
+    .note li { color: var(--muted); font-size: 13px; margin: 0 0 8px 16px; }
+  </style>
+</head>
+<body>
+  <h1>Smaller path tiles + pin on Home</h1>
+  <p class="lede">Tap <b>Paths</b> on Settings. All ten paths fit with no scroll. Tap the star to pin (max 3). Those pins show on Home. Tap a Home pin to open that path’s knobs only.</p>
+
+  <div class="stage">
+    <div class="col">
+      <h2>1 · Settings</h2>
+      <div class="phone">
+        <div class="notch"><span>9:41</span><span>Predict</span></div>
+        <div class="titlebar">Settings</div>
+        <div class="card">
+          <div class="eyebrow">Current mode</div>
+          <h3>Auto-trade on</h3>
+          <p>Cloud places orders when a path and shared limits pass.</p>
+        </div>
+        <div class="card row-sw">
+          <div>
+            <h3 style="font-size:15px">Auto-trade</h3>
+            <p>Face ID to turn on.</p>
+          </div>
+          <div class="sw on"><i></i></div>
+        </div>
+        <div class="ok">Kalshi keys saved</div>
+        <div class="grid">
+          <button class="tile" onclick="openSheet('paths')"><b>Paths</b><span>Pick one path. Pin up to 3 for Home.</span></button>
+          <button class="tile" type="button"><b>Alerts</b><span>Pings and history</span></button>
+          <button class="tile" type="button"><b>Kalshi keys</b><span>Unlock, test, wipe</span></button>
+          <button class="tile" type="button"><b>Account</b><span>Subscription, FAQ</span></button>
+        </div>
+        <div class="tabbar"><span>Home</span><span>Cushions</span><span class="on">Settings</span></div>
+        <div class="scrim" id="scrim" onclick="closeSheets()"></div>
+
+        <div class="sheet" id="paths">
+          <div class="grab"></div>
+          <div class="sheet-head"><h3>Paths</h3><button class="x" onclick="closeSheets()">Close</button></div>
+          <p class="blurb">Tap a name to edit. Tap ★ to pin on Home. Three pins max.</p>
+          <div class="pgrid" id="pgrid"></div>
+        </div>
+
+        <div class="sheet" id="detail">
+          <div class="grab"></div>
+          <div class="sheet-head">
+            <h3 id="detail-title">Path</h3>
+            <button class="x" onclick="openSheet('paths')">Back</button>
+          </div>
+          <p class="blurb" id="detail-blurb"></p>
+          <div class="row row-sw">
+            <div>On for this path</div>
+            <div class="sw off"><i></i></div>
+          </div>
+          <div class="row"><div>Main knobs<small>Only this path. Not the old Risk wall.</small></div><b>…</b></div>
+          <div class="row"><div>Assets<small>Empty chips = no buys</small></div><b>Gold · ETH</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2>2 · Home</h2>
+      <div class="phone">
+        <div class="notch"><span>9:41</span><span>Predict</span></div>
+        <div class="titlebar">Home</div>
+        <div class="card">
+          <div class="eyebrow">Predict trades today</div>
+          <h3>Closed P&L $12.40</h3>
+          <p>3W / 1L · pending 2</p>
+        </div>
+        <div class="card">
+          <div class="eyebrow">Pinned paths</div>
+          <div class="pins" id="home-pins"></div>
+          <p class="hint" id="home-pin-hint" style="margin-top:8px"></p>
+        </div>
+        <div class="card">
+          <div class="eyebrow">Last signals</div>
+          <div class="signals">
+            ETH · YES · Last-minute watching · 88s left<br>
+            DOGE · NO · Spike fade watching · 9 min<br>
+            Gold · YES · Pair lock watching · 600s left
+          </div>
+        </div>
+        <div class="tabbar"><span class="on">Home</span><span>Cushions</span><span>Settings</span></div>
+        <div class="scrim" id="home-scrim" onclick="closeHomeSheet()"></div>
+        <div class="sheet" id="home-detail">
+          <div class="grab"></div>
+          <div class="sheet-head">
+            <h3 id="home-detail-title">Path</h3>
+            <button class="x" onclick="closeHomeSheet()">Close</button>
+          </div>
+          <p class="blurb">Opened from Home. Same knobs as Settings → Paths → this tile. No extra navigation.</p>
+          <div class="row row-sw"><div>On for this path</div><div class="sw off"><i></i></div></div>
+          <div class="row"><div>Start / Until / size</div><b>This path only</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      <h3>How this stays simple</h3>
+      <ul>
+        <li>Path tiles are short: name + four words. The sheet does not scroll.</li>
+        <li>Star pins. You cannot pin more than 3, so Home stays a row of chips, not a second Settings.</li>
+        <li>Home chips open the same one-path sheet. Change Last-minute without walking Settings → Paths → scroll.</li>
+        <li>No pin = Home shows a one-line hint, then nothing extra. Last signals stays the main list.</li>
+        <li>Shared limits can be pinned too, or left only in the Paths sheet.</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const PATHS = [
+      { id: 'shared', name: 'Shared limits', sub: 'Day cap, window, open' },
+      { id: 'home', name: 'Home Buy', sub: 'Your tap size' },
+      { id: 'auto', name: 'Auto-trade', sub: 'Cushion lean' },
+      { id: 'cash', name: 'Cash out', sub: 'Partial cushion' },
+      { id: 'gold', name: 'Gold fade', sub: 'Gold, always dump' },
+      { id: 'twap', name: 'TWAP lock', sub: 'BTC / ETH to $1' },
+      { id: 'last', name: 'Last-minute', sub: 'Last 90 seconds' },
+      { id: 'step', name: 'Step buy', sub: 'Add if lean holds' },
+      { id: 'spike', name: 'Spike fade', sub: 'Buy cheap side' },
+      { id: 'pair', name: 'Pair lock', sub: 'Both sides under $1' },
+    ];
+    const BLURB = {
+      shared: 'These four apply to every path.',
+      home: 'Only the Home tap. Does not change Auto.',
+      auto: 'Cushion path. Smart buy and Protect live here.',
+      cash: 'Partial cushion, then try to sell.',
+      gold: 'Gold only. Always dumps.',
+      twap: 'BTC / ETH Yes lock. Hold to $1.',
+      last: 'If earlier paths missed, buy in the last 90s.',
+      step: 'Add lots only if the lean still holds.',
+      spike: 'Buy the cheap side of a spike, then dump.',
+      pair: 'Runner plus opposite hedge. Hold both to $1.',
+    };
+    let pins = ['last', 'spike', 'pair'];
+
+    function renderGrid() {
+      document.getElementById('pgrid').innerHTML = PATHS.map((p) => `
+        <button class="ptile" onclick="openDetail('${p.id}')">
+          <b>${p.name}</b><span>${p.sub}</span>
+          <span class="pin ${pins.includes(p.id) ? 'on' : ''}" onclick="event.stopPropagation(); togglePin('${p.id}')">${pins.includes(p.id) ? '★' : '☆'}</span>
+        </button>
+      `).join('');
+      renderHomePins();
+    }
+    function renderHomePins() {
+      const box = document.getElementById('home-pins');
+      const hint = document.getElementById('home-pin-hint');
+      if (!pins.length) {
+        box.innerHTML = '<span class="empty">No pins yet</span>';
+        hint.textContent = 'Pin a path in Settings → Paths.';
+        return;
+      }
+      box.innerHTML = pins.map((id) => {
+        const p = PATHS.find((x) => x.id === id);
+        return `<button class="chip" onclick="openHomePath('${id}')">${p.name} <span class="dot">· edit</span></button>`;
+      }).join('');
+      hint.textContent = 'Tap a chip to change that path. Star again in Paths to unpin.';
+    }
+    function togglePin(id) {
+      if (pins.includes(id)) pins = pins.filter((x) => x !== id);
+      else if (pins.length >= 3) return alert('Three pins max — unpin one first.');
+      else pins.push(id);
+      renderGrid();
+    }
+    function openSheet(id) {
+      document.querySelectorAll('.phone .sheet').forEach((el) => el.classList.remove('on'));
+      document.getElementById('scrim').classList.add('on');
+      document.getElementById(id).classList.add('on');
+    }
+    function openDetail(id) {
+      const p = PATHS.find((x) => x.id === id);
+      document.getElementById('detail-title').textContent = p.name;
+      document.getElementById('detail-blurb').textContent = BLURB[id];
+      openSheet('detail');
+    }
+    function closeSheets() {
+      document.querySelectorAll('#scrim, #paths, #detail').forEach((el) => el.classList.remove('on'));
+    }
+    function openHomePath(id) {
+      const p = PATHS.find((x) => x.id === id);
+      document.getElementById('home-detail-title').textContent = p.name;
+      document.getElementById('home-scrim').classList.add('on');
+      document.getElementById('home-detail').classList.add('on');
+    }
+    function closeHomeSheet() {
+      document.getElementById('home-scrim').classList.remove('on');
+      document.getElementById('home-detail').classList.remove('on');
+    }
+    renderGrid();
+  </script>
+</body>
+</html>

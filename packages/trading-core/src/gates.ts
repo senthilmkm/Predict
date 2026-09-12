@@ -70,6 +70,24 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'max trades/day';
     case 'max_trades_asset_window':
       return 'max trades/asset/15m window';
+    case 'window_used_by_home':
+      return 'Home already filled this window';
+    case 'window_used_by_auto':
+      return 'Auto already filled this window';
+    case 'window_used_by_cash_out':
+      return 'Cash out already filled this window';
+    case 'window_used_by_gold_fade':
+      return 'Gold fade already filled this window';
+    case 'window_used_by_twap_lock':
+      return 'TWAP lock already filled this window';
+    case 'window_used_by_last_minute':
+      return 'Last-minute already filled this window';
+    case 'window_used_by_step_buy':
+      return 'Step buy already filled this window';
+    case 'window_used_by_spike_fade':
+      return 'Spike fade already filled this window';
+    case 'window_used_by_pair_lock':
+      return 'Pair lock already filled this window';
     case 'ask_too_rich':
       return 'ask too rich';
     case 'smart_buy_no_path':
@@ -346,6 +364,74 @@ export function countWindowBuysForTicker(
     if (rowTicker === ticker && isCountableWindowBuy(row)) n += 1;
   }
   return n;
+}
+
+const WINDOW_USED_PATHS = [
+  'home',
+  'auto',
+  'cash_out',
+  'gold_fade',
+  'twap_lock',
+  'last_minute',
+  'step_buy',
+  'spike_fade',
+  'pair_lock',
+] as const;
+
+export function firstWindowBuyEntryPath(
+  trades: Array<
+    {
+      ticker?: string;
+      market_ticker?: string;
+      entryPath?: unknown;
+      entry_path?: unknown;
+    } & Parameters<typeof isCountableWindowBuy>[0]
+  >,
+  marketTicker: string
+): (typeof WINDOW_USED_PATHS)[number] | undefined {
+  const ticker = String(marketTicker || '').trim();
+  if (!ticker) return undefined;
+  for (const row of trades || []) {
+    const rowTicker = String(row?.ticker || row?.market_ticker || '').trim();
+    if (rowTicker !== ticker || !isCountableWindowBuy(row)) continue;
+    const raw = String(row.entryPath ?? row.entry_path ?? '')
+      .toLowerCase()
+      .trim()
+      .replace(/-/g, '_');
+    const alias =
+      raw === 'manual_buy' || raw === 'manual'
+        ? 'home'
+        : raw === 'auto_trade' || raw === 'worker'
+          ? 'auto'
+          : raw === 'cashout'
+            ? 'cash_out'
+            : raw === 'goldfade' || raw === 'fade'
+              ? 'gold_fade'
+              : raw === 'twaplock' || raw === 'twap'
+                ? 'twap_lock'
+                : raw === 'lastminute'
+                  ? 'last_minute'
+                  : raw === 'stepbuy'
+                    ? 'step_buy'
+                    : raw === 'spikefade'
+                      ? 'spike_fade'
+                      : raw === 'pairlock'
+                        ? 'pair_lock'
+                        : raw;
+    if ((WINDOW_USED_PATHS as readonly string[]).includes(alias)) {
+      return alias as (typeof WINDOW_USED_PATHS)[number];
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+export function skipReasonForWindowCap(
+  trades: Parameters<typeof firstWindowBuyEntryPath>[0],
+  marketTicker: string
+): string {
+  const path = firstWindowBuyEntryPath(trades, marketTicker);
+  return path ? `window_used_by_${path}` : 'max_trades_asset_window';
 }
 
 export function evaluateStaticGate(

@@ -9,7 +9,11 @@ import {
   formatDayPayFooter,
   formatSignedUsd,
 } from '../storage/assetPnlToday';
-import { formatDashboardPathBuys, summarizeTodayPathBuys } from '../storage/todayPathBuys';
+import {
+  formatDashboardPathBuys,
+  formatHomePathBuyLines,
+  summarizeTodayPathBuys,
+} from '../storage/todayPathBuys';
 
 export function DashboardScreen({ navigation }: { navigation?: any }) {
   const stats = useRuntimeStore((s) => s.stats);
@@ -25,7 +29,9 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
   const [refreshing, setRefreshing] = useState(false);
   const assetFooter = formatDayPayFooter(assetPnlToday);
-  const tradesPathLine = formatDashboardPathBuys(summarizeTodayPathBuys(trades));
+  const todayPathBuys = summarizeTodayPathBuys(trades);
+  const tradesPathLine = formatDashboardPathBuys(todayPathBuys);
+  const todayPathBuyLines = formatHomePathBuyLines(todayPathBuys);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -79,6 +85,26 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
           detailTestID="dashboard-trades-paths"
         />
       </Pressable>
+      {todayPathBuyLines.length > 0 ? (
+        <View style={styles.card} testID="dashboard-today-path-buys">
+          <Text style={styles.label}>Fills today by path</Text>
+          {todayPathBuyLines.map((line) => (
+            <Text
+              key={line}
+              style={styles.pathBuyLine}
+              testID={
+                line.startsWith('Home')
+                  ? 'dashboard-today-path-buys-home'
+                  : line.startsWith('Auto')
+                    ? 'dashboard-today-path-buys-auto'
+                    : undefined
+              }
+            >
+              {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
       {assetPnlToday.rows.length > 0 ? (
         <View style={styles.card} testID="dashboard-asset-pnl">
           <Text style={styles.label}>Closed P&L by asset</Text>
@@ -178,6 +204,7 @@ const styles = StyleSheet.create({
   label: { color: colors.textSecondary },
   value: { color: colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 3 },
   detail: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', marginTop: 4 },
+  pathBuyLine: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', lineHeight: 16, marginTop: 4 },
   assetRow: { marginTop: spacing.sm },
   assetTop: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   assetName: { color: colors.textPrimary, fontWeight: '700', flex: 1 },

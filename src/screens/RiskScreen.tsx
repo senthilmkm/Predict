@@ -31,14 +31,22 @@ import { normalizeSpikeFadeAssets } from '../../packages/trading-core/src/spikeF
 import { normalizePairLockAssets } from '../../packages/trading-core/src/pairLock';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PATH_INFO } from '../content/pathInfo';
+import { PathFocusId } from '../content/pathCatalog';
 
 type TabId = 'home' | 'auto';
+
+export type RiskScreenProps = {
+  focus?: PathFocusId;
+  route?: { params?: { focus?: PathFocusId } };
+};
 
 function metaFor(keys: (keyof RiskConfig)[]) {
   return RISK_FIELD_META.filter((m) => keys.includes(m.key));
 }
 
-export function RiskScreen() {
+export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
+  const resolvedFocus = focus ?? route?.params?.focus;
+  const showAll = !resolvedFocus;
   const config = useConfigStore((s) => s.config);
   const setRiskField = useConfigStore((s) => s.setRiskField);
   const setManualRiskField = useConfigStore((s) => s.setManualRiskField);
@@ -52,8 +60,14 @@ export function RiskScreen() {
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
-  const [tab, setTab] = useState<TabId>('home');
+  const [tab, setTab] = useState<TabId>(resolvedFocus === 'auto' ? 'auto' : 'home');
   const [busy, setBusy] = useState(false);
+  const showShared = showAll || resolvedFocus === 'shared';
+  const showHome = resolvedFocus === 'home' || (showAll && tab === 'home');
+  const showAutoCore = resolvedFocus === 'auto' || (showAll && tab === 'auto');
+  const extra = (id: PathFocusId, flag: boolean) =>
+    flag && (resolvedFocus === id || (showAll && tab === 'auto'));
+  const showRestoreTab = showAll || resolvedFocus === 'home' || resolvedFocus === 'auto';
 
   async function restoreShared() {
     if (busy) return;
@@ -71,7 +85,8 @@ export function RiskScreen() {
     if (busy) return;
     setBusy(true);
     try {
-      if (tab === 'home') await restoreHomeBuyRiskTab();
+      const home = resolvedFocus === 'home' || (!resolvedFocus && tab === 'home');
+      if (home) await restoreHomeBuyRiskTab();
       else await restoreAutoRiskTab();
     } catch (e: any) {
       Alert.alert('Could not restore', String(e?.message || e || 'Restore failed.'));
@@ -82,10 +97,14 @@ export function RiskScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} testID="screen-risk">
-      <Text style={styles.lead}>
-        Shared limits apply to Home Buy and Auto-trade. Each tab has its own size and timing.
-      </Text>
+      {showAll ? (
+        <Text style={styles.lead}>
+          Shared limits apply to Home Buy and Auto-trade. Each tab has its own size and timing.
+        </Text>
+      ) : null}
 
+      {showShared ? (
+        <>
       <View style={styles.titleRow}>
         <Text style={[styles.groupTitle, { marginBottom: 0 }]}>Shared limits</Text>
         <PathInfoIcon title={PATH_INFO.shared.title} body={PATH_INFO.shared.body} testID="path-info-shared" />
@@ -108,7 +127,10 @@ export function RiskScreen() {
       >
         <Text style={styles.restoreText}>Restore shared limits</Text>
       </Pressable>
+        </>
+      ) : null}
 
+      {showAll ? (
       <View style={styles.tabRow} testID="risk-tabs">
         <Pressable
           testID="risk-tab-home"
@@ -125,8 +147,9 @@ export function RiskScreen() {
           <Text style={[styles.tabText, tab === 'auto' && styles.tabTextOn]}>Auto-trade</Text>
         </Pressable>
       </View>
+      ) : null}
 
-      {tab === 'home' ? (
+      {showHome ? (
         <>
           <View style={styles.titleRow}>
             <Text style={[styles.groupTitle, { marginBottom: 0 }]}>Home Buy</Text>
@@ -142,7 +165,9 @@ export function RiskScreen() {
             onChange={(key, value) => setManualRiskField(key, value)}
           />
         </>
-      ) : (
+      ) : null}
+
+      {showAutoCore ? (
         <>
           <View style={styles.titleRow}>
             <Text style={[styles.groupTitle, { marginBottom: 0 }]}>Auto-trade</Text>
@@ -235,16 +260,18 @@ export function RiskScreen() {
               />
             );
           })}
-          {cashOutFeatureOn ? <CashOutFields /> : null}
-          {goldFadeFeatureOn ? <GoldFadeFields /> : null}
-          {twapLockFeatureOn ? <TwapLockFields /> : null}
-          {lastMinuteFeatureOn ? <LastMinuteFields /> : null}
-          {stepBuyFeatureOn ? <StepBuyFields /> : null}
-          {spikeFadeFeatureOn ? <SpikeFadeFields /> : null}
-          {pairLockFeatureOn ? <PairLockFields /> : null}
         </>
-      )}
+      ) : null}
 
+      {extra('cashOut', cashOutFeatureOn) ? <CashOutFields /> : null}
+      {extra('goldFade', goldFadeFeatureOn) ? <GoldFadeFields /> : null}
+      {extra('twapLock', twapLockFeatureOn) ? <TwapLockFields /> : null}
+      {extra('lastMinute', lastMinuteFeatureOn) ? <LastMinuteFields /> : null}
+      {extra('stepBuy', stepBuyFeatureOn) ? <StepBuyFields /> : null}
+      {extra('spikeFade', spikeFadeFeatureOn) ? <SpikeFadeFields /> : null}
+      {extra('pairLock', pairLockFeatureOn) ? <PairLockFields /> : null}
+
+      {showRestoreTab ? (
       <Pressable
         testID="btn-restore-risk-tab"
         style={[styles.restoreBtn, busy && styles.restoreOff]}
@@ -252,9 +279,12 @@ export function RiskScreen() {
         disabled={busy}
       >
         <Text style={styles.restoreText}>
-          {tab === 'home' ? 'Restore Home Buy defaults' : 'Restore Auto-trade defaults'}
+          {resolvedFocus === 'home' || (!resolvedFocus && tab === 'home')
+            ? 'Restore Home Buy defaults'
+            : 'Restore Auto-trade defaults'}
         </Text>
       </Pressable>
+      ) : null}
     </ScrollView>
   );
 }

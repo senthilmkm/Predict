@@ -297,6 +297,7 @@ describe('History / Dashboard / AlertsHub', () => {
     expect(s.getByText(/Latest trade: BTC pending/i)).toBeTruthy();
     expect(s.queryByTestId('dashboard-asset-pnl')).toBeNull();
     expect(s.queryByTestId('dashboard-trades-paths')).toBeNull();
+    expect(s.queryByTestId('dashboard-today-path-buys')).toBeNull();
   });
 
   test('Dashboard Trades card adds Home / Auto fill counts', async () => {
@@ -413,6 +414,10 @@ describe('History / Dashboard / AlertsHub', () => {
     const s = await render(<DashboardScreen />);
     expect(s.getByText('8W / 3L')).toBeTruthy();
     expect(s.getByTestId('dashboard-trades-paths').props.children).toBe('Home 3 · Auto 5');
+    expect(s.getByTestId('dashboard-today-path-buys-home').props.children).toBe(
+      'Home  BTC 2 · Gold 1'
+    );
+    expect(s.getByTestId('dashboard-today-path-buys-auto').props.children).toMatch(/^Auto  /);
   });
 
   test('Dashboard by-asset card uses pay price and matches Closed P&L', async () => {

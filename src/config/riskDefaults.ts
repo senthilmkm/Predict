@@ -363,7 +363,7 @@ export const RISK_FIELD_META: {
   },
   {
     key: 'last_minute_clip_count',
-    label: 'Clip contracts',
+    label: 'Clip contracts/asset',
     group: 'timing',
     kind: 'int',
     step: 1,
@@ -372,7 +372,7 @@ export const RISK_FIELD_META: {
   },
   {
     key: 'last_minute_max_clips',
-    label: 'Max clips',
+    label: 'Max clips/asset',
     group: 'timing',
     kind: 'int',
     step: 1,
