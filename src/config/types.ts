@@ -202,6 +202,17 @@ export interface RiskConfig {
   last_minute_skip_thin_bid?: boolean;
   /** Assets on the Last-minute path. Missing → all catalog assets. Empty = no buys. */
   last_minute_assets?: string[];
+  step_buy_enabled?: boolean;
+  step_buy_start_minutes?: number;
+  step_buy_cushion_pct?: number;
+  step_buy_lot_count?: number;
+  step_buy_add_wait_minutes?: number;
+  step_buy_add_band_usd?: number;
+  step_buy_max_lots?: number;
+  step_buy_stop_usd?: number;
+  step_buy_max_ask_usd?: number;
+  step_buy_skip_thin_bid?: boolean;
+  step_buy_assets?: string[];
 }
 
 export interface AlertPref {
@@ -338,6 +349,17 @@ export function defaultAppConfig(): AppConfig {
       last_minute_flip_sell_usd: 0,
       last_minute_skip_thin_bid: false,
       last_minute_assets: AssetRegistry.keys,
+      step_buy_enabled: false,
+      step_buy_start_minutes: 5,
+      step_buy_cushion_pct: 50,
+      step_buy_lot_count: 1,
+      step_buy_add_wait_minutes: 1,
+      step_buy_add_band_usd: 0.02,
+      step_buy_max_lots: 3,
+      step_buy_stop_usd: 0.03,
+      step_buy_max_ask_usd: 0.8,
+      step_buy_skip_thin_bid: false,
+      step_buy_assets: AssetRegistry.keys,
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

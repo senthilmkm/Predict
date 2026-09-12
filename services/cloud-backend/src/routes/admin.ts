@@ -25,6 +25,7 @@ import {
 import { mergeFeatureFlags, type FeatureFlags } from '../services/featureFlags';
 import { formatTwapLockWatcherChip, getTwapLockWatcherSnapshot } from '../services/twapLockWatcher';
 import { formatLastMinuteWatcherChip, getLastMinuteWatcherSnapshot } from '../services/lastMinuteWatcher';
+import { formatStepBuyWatcherChip, getStepBuyWatcherSnapshot } from '../services/stepBuyWatcher';
 import { mergeBroadcastConfig, type BroadcastConfig } from '../services/broadcast';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 import {
@@ -67,12 +68,13 @@ adminRouter.use(adminAuthMiddleware);
 // 2. System Overview & Key Metrics
 adminRouter.get('/overview', async (req: Request, res: Response) => {
   try {
-    const [users, trades, systemConfig, twapLockWatcher, lastMinuteWatcher] = await Promise.all([
+    const [users, trades, systemConfig, twapLockWatcher, lastMinuteWatcher, stepBuyWatcher] = await Promise.all([
       getAllUsers(),
       getAllTradesForAdmin(),
       getSystemConfig(),
       getTwapLockWatcherSnapshot(),
       getLastMinuteWatcherSnapshot(),
+      getStepBuyWatcherSnapshot(),
     ]);
 
     const tradeMetrics = computeOverviewTradeMetrics(trades);
@@ -120,6 +122,10 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
       lastMinuteWatcher: {
         ...lastMinuteWatcher,
         label: formatLastMinuteWatcherChip(lastMinuteWatcher),
+      },
+      stepBuyWatcher: {
+        ...stepBuyWatcher,
+        label: formatStepBuyWatcherChip(stepBuyWatcher),
       },
     });
   } catch (err: any) {
@@ -192,6 +198,9 @@ function parseAdminFeatureFlagsPatch(raw: unknown): Partial<FeatureFlags> | unde
   }
   if (body.lastMinute !== undefined) {
     patch.lastMinute = body.lastMinute === true;
+  }
+  if (body.stepBuy !== undefined) {
+    patch.stepBuy = body.stepBuy === true;
   }
   return Object.keys(patch).length ? patch : undefined;
 }

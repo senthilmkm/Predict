@@ -6,6 +6,7 @@ import {
   CASH_OUT_RISK_FIELD_KEYS,
   GOLD_FADE_RISK_FIELD_KEYS,
   LAST_MINUTE_RISK_FIELD_KEYS,
+  STEP_BUY_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
   TWAP_LOCK_RISK_FIELD_KEYS,
   PROTECT_RISK_FIELD_KEYS,
@@ -23,6 +24,7 @@ import {
   normalizeLastMinuteAssets,
   normalizeLastMinuteSide,
 } from '../../packages/trading-core/src/lastMinute';
+import { normalizeStepBuyAssets } from '../../packages/trading-core/src/stepBuy';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PATH_INFO } from '../content/pathInfo';
 
@@ -43,6 +45,7 @@ export function RiskScreen() {
   const goldFadeFeatureOn = useRuntimeStore((s) => s.goldFadeFeatureOn);
   const twapLockFeatureOn = useRuntimeStore((s) => s.twapLockFeatureOn);
   const lastMinuteFeatureOn = useRuntimeStore((s) => s.lastMinuteFeatureOn);
+  const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const [tab, setTab] = useState<TabId>('home');
   const [busy, setBusy] = useState(false);
 
@@ -230,6 +233,7 @@ export function RiskScreen() {
           {goldFadeFeatureOn ? <GoldFadeFields /> : null}
           {twapLockFeatureOn ? <TwapLockFields /> : null}
           {lastMinuteFeatureOn ? <LastMinuteFields /> : null}
+          {stepBuyFeatureOn ? <StepBuyFields /> : null}
         </>
       )}
 
@@ -619,6 +623,100 @@ function LastMinuteFields() {
             this coin; ladder clips after that first Last-minute fill are extra. Sell if flip is Off
             unless you set it — then a real opposite-side flip of that many cents sells only those
             lots and frees the clip slots.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+function StepBuyFields() {
+  const config = useConfigStore((s) => s.config);
+  const setRiskField = useConfigStore((s) => s.setRiskField);
+  const on = Boolean(config.risk.step_buy_enabled);
+  return (
+    <>
+      <View style={styles.field} testID="risk-field-auto-step_buy_enabled">
+        <View style={styles.toggleRow}>
+          <View style={styles.labelWithInfo}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Step buy</Text>
+            <PathInfoIcon title={PATH_INFO.stepBuy.title} body={PATH_INFO.stepBuy.body} testID="path-info-stepBuy" />
+          </View>
+          <Switch
+            testID="risk-toggle-step_buy_enabled"
+            value={on}
+            onValueChange={(v) => setRiskField('step_buy_enabled', v)}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        {on ? (
+          <Text style={styles.hint}>Scale in after Start after if Cushion % still holds. Per-lot ask stop.</Text>
+        ) : null}
+      </View>
+      {on ? (
+        <View style={styles.pathInner}>
+          <SkipThinBidRow
+            testID="risk-toggle-step_buy_skip_thin_bid"
+            value={Boolean(config.risk.step_buy_skip_thin_bid)}
+            onChange={(v) => setRiskField('step_buy_skip_thin_bid', v)}
+          />
+          {metaFor(STEP_BUY_RISK_FIELD_KEYS)
+            .filter((meta) => meta.key !== 'step_buy_enabled')
+            .map((meta) => {
+              const pct = meta.key === 'step_buy_cushion_pct';
+              const wait = meta.key === 'step_buy_add_wait_minutes';
+              const band = meta.key === 'step_buy_add_band_usd';
+              const stop = meta.key === 'step_buy_stop_usd';
+              return (
+                <RiskStepper
+                  key={meta.key}
+                  meta={meta}
+                  value={config.risk[meta.key]}
+                  testPrefix="auto"
+                  displayOverride={
+                    pct
+                      ? `${Math.round(Number(config.risk.step_buy_cushion_pct) || 0)}%`
+                      : wait
+                        ? `${Math.round(Number(config.risk.step_buy_add_wait_minutes) || 0)} min`
+                        : band
+                          ? `${Math.round(Number(config.risk.step_buy_add_band_usd) * 100)}¢`
+                          : stop
+                            ? `${Math.round(Number(config.risk.step_buy_stop_usd) * 100)}¢`
+                            : undefined
+                  }
+                  onChange={(next) => setRiskField(meta.key, next as never)}
+                />
+              );
+            })}
+          <View style={styles.field} testID="risk-field-auto-step_buy_assets">
+            <Text style={styles.label}>Step buy assets</Text>
+            <Text style={styles.hint}>Also must be On in Cushions. Empty means no Step buy buys.</Text>
+            <View style={styles.tifRow}>
+              {AssetRegistry.keys.map((key) => {
+                const selected = normalizeStepBuyAssets(config.risk.step_buy_assets).includes(key);
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`step-buy-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn]}
+                    onPress={() => {
+                      const cur = normalizeStepBuyAssets(config.risk.step_buy_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('step_buy_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>
+                      {selected ? '☑' : '☐'} {key}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={styles.hint} testID="step-buy-hint">
+            Lot 1 after Start after + Cushion % + lean. Later lots need Add wait, thesis still on,
+            and ask in last fill … last fill + Add band. Stop adding with 30s left. Stop sells a lot
+            when ask is Stop ¢ under that lot’s fill; lot 1 stop sells all remaining Step buy lots.
           </Text>
         </View>
       ) : null}

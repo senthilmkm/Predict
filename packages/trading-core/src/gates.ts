@@ -188,6 +188,47 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'no Last-minute flip';
     case 'last_minute_flip_off':
       return 'Last-minute flip off';
+    case 'step_buy_admin_off':
+    case 'step_buy_off':
+      return 'step buy off';
+    case 'step_buy_asset_off':
+      return 'step buy asset off';
+    case 'step_buy_twap_owns':
+      return 'twap lock owns this coin';
+    case 'step_buy_no_close':
+      return 'no close time';
+    case 'step_buy_too_early':
+      return 'Step buy start after';
+    case 'step_buy_stop_add':
+      return 'Step buy — no new lots in last 30s';
+    case 'step_buy_max_lots':
+      return 'Step buy max lots';
+    case 'step_buy_add_wait':
+      return 'Step buy add wait';
+    case 'step_buy_no_thesis':
+      return 'Step buy cushion % not reached';
+    case 'step_buy_lean_flipped':
+      return 'Step buy lean not with you';
+    case 'step_buy_add_band':
+      return 'Step buy ask left the add band';
+    case 'step_buy_ask_rich':
+      return 'Kalshi ask is above your Step buy max';
+    case 'step_buy_no_ask':
+      return 'no ask';
+    case 'step_buy_holding_other_path':
+      return 'already holding';
+    case 'step_buy_window_cap':
+      return 'window cap';
+    case 'step_buy_thin_bid':
+      return 'bid too thin';
+    case 'step_buy_holding':
+      return 'step buy is holding this ticket';
+    case 'step_buy_last_minute_owns':
+      return 'last-minute owns new buys';
+    case 'step_buy_stop':
+      return 'Step buy stop';
+    case 'step_buy_lot1_flatten':
+      return 'Step buy lot 1 stop — sell all';
     case 'no_open_fill':
       return 'no open fill to sell';
     case 'market_closed':

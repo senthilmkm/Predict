@@ -52,6 +52,7 @@ export function pendingProtectTradesForMarket(
       t.entryPath !== 'gold_fade' &&
       t.entryPath !== 'twap_lock' &&
       t.entryPath !== 'last_minute' &&
+      t.entryPath !== 'step_buy' &&
       isOpenProtectCandidate(t, now)
   );
 }

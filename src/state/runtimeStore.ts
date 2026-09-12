@@ -47,6 +47,7 @@ interface RuntimeState {
   goldFadeFeatureOn: boolean;
   twapLockFeatureOn: boolean;
   lastMinuteFeatureOn: boolean;
+  stepBuyFeatureOn: boolean;
   activeBroadcast: ActiveBroadcast | null;
   cloudKillSwitch: boolean;
   ensure: () => AppRuntime;
@@ -87,6 +88,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   goldFadeFeatureOn: false,
   twapLockFeatureOn: false,
   lastMinuteFeatureOn: false,
+  stepBuyFeatureOn: false,
   activeBroadcast: null,
   cloudKillSwitch: false,
   ensure: () => {
@@ -126,6 +128,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         goldFadeFeatureOn: get().goldFadeFeatureOn,
         twapLockFeatureOn: get().twapLockFeatureOn,
         lastMinuteFeatureOn: get().lastMinuteFeatureOn,
+        stepBuyFeatureOn: get().stepBuyFeatureOn,
         activeBroadcast: get().activeBroadcast,
         cloudKillSwitch: get().cloudKillSwitch,
       });
@@ -266,6 +269,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
             goldFadeFeatureOn: statusRes.systemConfig?.featureFlags?.goldFade === true,
             twapLockFeatureOn: statusRes.systemConfig?.featureFlags?.twapLock === true,
             lastMinuteFeatureOn: statusRes.systemConfig?.featureFlags?.lastMinute === true,
+            stepBuyFeatureOn: statusRes.systemConfig?.featureFlags?.stepBuy === true,
             activeBroadcast: statusRes.activeBroadcast ?? null,
             cloudKillSwitch: statusRes.userDoc?.state === 'KILL_SWITCH',
           });
@@ -315,6 +319,7 @@ export function resetRuntimeStoreForTests() {
     goldFadeFeatureOn: false,
     twapLockFeatureOn: false,
     lastMinuteFeatureOn: false,
+  stepBuyFeatureOn: false,
     activeBroadcast: null,
     cloudKillSwitch: false,
   });

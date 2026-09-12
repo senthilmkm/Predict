@@ -211,7 +211,7 @@ describe('Settings toggles', () => {
     expect(a).not.toMatch(/AVAX/);
   });
 
-  test('FAQ Skip thin bid table lists all four Cloud paths', async () => {
+  test('FAQ Skip thin bid table lists all five Cloud paths', async () => {
     const s = await render(<SettingsHost />);
     await fireEvent.press(s.getByTestId('btn-open-settings-more'));
     await waitFor(() => expect(s.getByTestId('faq-accordion')).toBeTruthy());
@@ -219,7 +219,7 @@ describe('Settings toggles', () => {
     await fireEvent.press(s.getByTestId('faq-q-skip-thin-bid-paths'));
     await waitFor(() => expect(s.getByTestId('faq-table-skip-thin-bid-paths')).toBeTruthy());
     expect(s.getByText('If book size unknown')).toBeTruthy();
-    expect(s.getAllByText('Fail closed — no buy').length).toBe(2);
+    expect(s.getAllByText('Fail closed — no buy').length).toBe(3);
     expect(s.getByText('Does not skip or dump')).toBeTruthy();
   });
 
@@ -279,6 +279,7 @@ describe('Settings credentials', () => {
     expect(s.getByText('Skip thin bid')).toBeTruthy();
     expect(s.getByText('Gold fade')).toBeTruthy();
     expect(s.getByText('TWAP lock')).toBeTruthy();
+    expect(s.getByText('Step buy')).toBeTruthy();
     expect(s.getAllByText(/Smart buy/).length).toBeGreaterThan(0);
     expect(s.getAllByText(/Min extra chance/).length).toBeGreaterThan(0);
     expect(s.getByText('Shared vs each tab')).toBeTruthy();
@@ -388,6 +389,30 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('last-minute-side-both')).toBeTruthy();
     expect(s.getByTestId('risk-toggle-last_minute_skip_thin_bid').props.accessibilityState.checked).toBe(false);
     expect(s.getByTestId('path-info-lastMinute')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-step_buy_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ stepBuyFeatureOn: true });
+    });
+    await waitFor(() => expect(s.getByTestId('risk-toggle-step_buy_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-step_buy_enabled').props.value).toBe(false);
+    expect(useConfigStore.getState().config.risk.step_buy_enabled).toBe(false);
+    expect(s.queryByTestId('risk-value-auto-step_buy_max_ask_usd')).toBeNull();
+    expect(s.queryByTestId('step-buy-asset-Gold')).toBeNull();
+    await fireEvent(s.getByTestId('risk-toggle-step_buy_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.step_buy_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-step_buy_start_minutes').props.children).toBe('5');
+    expect(s.getByTestId('risk-value-auto-step_buy_cushion_pct').props.children).toBe('50%');
+    expect(s.getByTestId('risk-value-auto-step_buy_lot_count').props.children).toBe('1');
+    expect(s.getByTestId('risk-value-auto-step_buy_add_wait_minutes').props.children).toBe('1 min');
+    expect(s.getByTestId('risk-value-auto-step_buy_add_band_usd').props.children).toBe('2¢');
+    expect(s.getByTestId('risk-value-auto-step_buy_max_lots').props.children).toBe('3');
+    expect(s.getByTestId('risk-value-auto-step_buy_stop_usd').props.children).toBe('3¢');
+    expect(s.getByTestId('risk-value-auto-step_buy_max_ask_usd').props.children).toMatch(/\$0\.80/);
+    expect(s.getByTestId('step-buy-asset-Gold')).toBeTruthy();
+    expect(s.getByTestId('step-buy-asset-BTC')).toBeTruthy();
+    expect(String(s.getByTestId('step-buy-hint').props.children)).toMatch(/30s left/);
+    expect(s.getByTestId('risk-toggle-step_buy_skip_thin_bid').props.accessibilityState.checked).toBe(false);
+    expect(s.getByTestId('path-info-stepBuy')).toBeTruthy();
     expect(s.getByTestId('path-info-auto')).toBeTruthy();
     expect(s.getByTestId('path-info-smartBuy')).toBeTruthy();
     expect(s.getByTestId('path-info-protect')).toBeTruthy();

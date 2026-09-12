@@ -56,6 +56,17 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   last_minute_flip_sell_usd: 0,
   last_minute_skip_thin_bid: false,
   last_minute_assets: AssetRegistry.keys,
+  step_buy_enabled: false,
+  step_buy_start_minutes: 5,
+  step_buy_cushion_pct: 50,
+  step_buy_lot_count: 1,
+  step_buy_add_wait_minutes: 1,
+  step_buy_add_band_usd: 0.02,
+  step_buy_max_lots: 3,
+  step_buy_stop_usd: 0.03,
+  step_buy_max_ask_usd: 0.8,
+  step_buy_skip_thin_bid: false,
+  step_buy_assets: AssetRegistry.keys,
 };
 
 export type RiskFieldGroup = 'size' | 'caps' | 'timing';
@@ -373,6 +384,79 @@ export const RISK_FIELD_META: {
     min: 0,
     max: 0.2,
   },
+  { key: 'step_buy_enabled', label: 'Step buy', group: 'timing', kind: 'toggle', step: 1, min: 0, max: 1 },
+  {
+    key: 'step_buy_start_minutes',
+    label: 'Start after',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 2,
+    max: 10,
+  },
+  {
+    key: 'step_buy_cushion_pct',
+    label: 'Cushion %',
+    group: 'timing',
+    kind: 'int',
+    step: 5,
+    min: 25,
+    max: 100,
+  },
+  {
+    key: 'step_buy_lot_count',
+    label: 'Lot contracts',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 1,
+    max: 5,
+  },
+  {
+    key: 'step_buy_add_wait_minutes',
+    label: 'Add wait',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 1,
+    max: 3,
+  },
+  {
+    key: 'step_buy_add_band_usd',
+    label: 'Add band',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0,
+    max: 0.05,
+  },
+  {
+    key: 'step_buy_max_lots',
+    label: 'Max lots',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 1,
+    max: 8,
+  },
+  {
+    key: 'step_buy_stop_usd',
+    label: 'Stop',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.01,
+    max: 0.1,
+  },
+  {
+    key: 'step_buy_max_ask_usd',
+    label: 'Entry ask',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.5,
+    max: 0.9,
+  },
 ];
 
 export const TIME_IN_FORCE_OPTIONS: { value: TimeInForce; label: string }[] = [
@@ -447,6 +531,18 @@ export const LAST_MINUTE_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'last_minute_flip_sell_usd',
 ];
 
+export const STEP_BUY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'step_buy_enabled',
+  'step_buy_start_minutes',
+  'step_buy_cushion_pct',
+  'step_buy_lot_count',
+  'step_buy_add_wait_minutes',
+  'step_buy_add_band_usd',
+  'step_buy_max_lots',
+  'step_buy_stop_usd',
+  'step_buy_max_ask_usd',
+];
+
 export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   ...SMART_BUY_RISK_FIELD_KEYS,
   ...PROTECT_RISK_FIELD_KEYS,
@@ -454,6 +550,7 @@ export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   ...GOLD_FADE_RISK_FIELD_KEYS,
   ...TWAP_LOCK_RISK_FIELD_KEYS,
   ...LAST_MINUTE_RISK_FIELD_KEYS,
+  ...STEP_BUY_RISK_FIELD_KEYS,
 ];
 
 export function cloneDefaultRisk(): RiskConfig {

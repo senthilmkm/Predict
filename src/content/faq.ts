@@ -377,7 +377,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Settings → Risk → Show opens Shared limits plus Home Buy and Auto-trade tabs.\n\n' +
             'Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.\n\n' +
-            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, Cash out, Gold fade, TWAP lock, and Last-minute on Auto-trade). Cushions and keys are not wiped.',
+            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, Cash out, Gold fade, TWAP lock, Last-minute, and Step buy on Auto-trade). Cushions and keys are not wiped.',
         },
         {
           id: 'smart-buy',
@@ -499,6 +499,27 @@ export function getFaqCategories(): FaqCategory[] {
       ],
     },
     {
+      id: 'step-buy',
+      title: 'Step buy',
+      items: [
+        {
+          id: 'what-is-step-buy',
+          q: 'What is Step buy?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Step buy. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Step buy buys.\n\n' +
+            'After Start after minutes, if the live gap is at least Cushion % of that coin’s Cushions $ and the lean is YES or NO, Cloud buys Lot contracts at the live ask (lot 1). Every Add wait, it may add another lot only if Cushion % and the lean are still with you and the ask is the last fill or up to Add band richer. Stop adding with 30s left. Max lots is the cap. Size is Lot contracts × ask — not Auto $5.\n\n' +
+            'From the first fill, a 1s watcher checks the ask. After Max lots it only watches for stops. A lot sells when ask ≤ that lot’s fill − Stop ¢ (bid IOC). If lot 1 stops, every remaining Step buy lot on that ticker sells. 5s grace after each fill. Protect skips these rows.\n\n' +
+            'Window cap 1 blocks lot 1 if Auto / Home / Cash out already filled this coin. Later Step buy lots are extra. Open Step buy sits Auto / Home / Cash out / Last-minute out of that ticker. TWAP still owns BTC/ETH if that path is On. Last-minute owns new buys if it is in its buy window and Step buy has no lots yet.',
+        },
+        {
+          id: 'step-buy-risk-hidden',
+          q: 'Why don’t I see Step buy on Risk?',
+          a:
+            'The Admin portal Feature configs switch “Step buy” is Off (default). When an admin turns it On, the block appears on Auto-trade. Your Step buy switch stays Off until you turn it on.',
+        },
+      ],
+    },
+    {
       id: 'skipthin',
       title: 'Skip thin bid',
       items: [
@@ -507,7 +528,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What does Skip thin bid do on each path?',
           a:
             'Each Cloud path has its own Skip thin bid checkbox (default Off), shown only when that path is On. Home Buy does not use it.\n\n' +
-            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The four paths do not share one switch — Cash out and Gold fade can sell when the book thins; TWAP lock and Last-minute only skip the buy and still hold.',
+            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The paths do not share one switch — Cash out and Gold fade can sell when the book thins; TWAP lock, Last-minute, and Step buy only skip the buy (Step buy still runs its ask stop).',
           table: {
             headers: ['Path', 'If thin', 'If book size unknown'],
             rows: [
@@ -529,6 +550,11 @@ export function getFaqCategories(): FaqCategory[] {
               [
                 'Last-minute',
                 'Skip the buy only. Still hold to settlement.',
+                'Fail closed — no buy',
+              ],
+              [
+                'Step buy',
+                'Skip the buy only. Stops still run.',
                 'Fail closed — no buy',
               ],
             ],

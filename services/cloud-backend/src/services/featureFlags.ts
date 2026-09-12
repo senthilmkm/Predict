@@ -15,6 +15,8 @@ export interface FeatureFlags {
   twapLock: boolean;
   /** Last-minute Auto path. Default Off — Admin must enable. */
   lastMinute: boolean;
+  /** Step buy Auto path. Default Off — Admin must enable. */
+  stepBuy: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -25,6 +27,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   goldFadeBidCheckSeconds: 3,
   twapLock: false,
   lastMinute: false,
+  stepBuy: false,
 };
 
 export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): FeatureFlags {
@@ -36,6 +39,7 @@ export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): Featu
     goldFadeBidCheckSeconds: normalizeCashOutBidCheckSeconds(raw?.goldFadeBidCheckSeconds),
     twapLock: raw?.twapLock === true,
     lastMinute: raw?.lastMinute === true,
+    stepBuy: raw?.stepBuy === true,
   };
 }
 

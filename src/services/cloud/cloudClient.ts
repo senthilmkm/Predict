@@ -27,6 +27,7 @@ export interface SystemConfig {
     goldFadeBidCheckSeconds?: number;
     twapLock?: boolean;
     lastMinute?: boolean;
+    stepBuy?: boolean;
   };
   broadcast?: {
     templates?: Array<{

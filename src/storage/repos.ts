@@ -2,7 +2,7 @@ import { etDateKey } from '../util/time';
 
 export type TradeSide = 'YES' | 'NO';
 export type TradeOutcome = 'win' | 'loss' | 'pending' | 'miss' | 'dry_run' | 'exited';
-export type TradeEntryPath = 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute';
+export type TradeEntryPath = 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy';
 
 /** Home tap vs Auto-trade vs Cash out. Missing on legacy fills — do not guess. */
 export function parseEntryPath(raw: unknown): TradeEntryPath | undefined {
@@ -15,6 +15,7 @@ export function parseEntryPath(raw: unknown): TradeEntryPath | undefined {
   if (v === 'gold_fade' || v === 'goldfade' || v === 'fade') return 'gold_fade';
   if (v === 'twap_lock' || v === 'twaplock' || v === 'twap') return 'twap_lock';
   if (v === 'last_minute' || v === 'lastminute' || v === 'last-minute') return 'last_minute';
+  if (v === 'step_buy' || v === 'stepbuy' || v === 'step-buy') return 'step_buy';
   return undefined;
 }
 

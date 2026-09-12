@@ -274,6 +274,7 @@ describe('Last-minute path', () => {
     expect(PATH_INFO.twapLock.body).toMatch(/Cushions \$ gap/);
     expect(PATH_INFO.protect.body).toMatch(/Auto and Home fills only/);
     expect(PATH_INFO.shared.body).toMatch(/Last-minute first clip/);
+    expect(PATH_INFO.shared.body).toMatch(/Step buy lot 1/);
     expect(PATH_INFO.lastMinute.body).toMatch(/Sell if flip/);
   });
 

@@ -41,6 +41,8 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/Gold fade/);
     expect(blob).toMatch(/TWAP lock/);
     expect(blob).toMatch(/Last-minute/);
+    expect(blob).toMatch(/Step buy/);
+    expect(blob).toMatch(/Stop adding with 30s left/);
     expect(blob).toMatch(/does not pull coins off those paths/);
     expect(blob).toMatch(/clip ladder/);
     expect(blob).toMatch(/Watch start/);

@@ -1068,8 +1068,9 @@ function RiskHelpModal({
             <HelpItem title="Skip thin bid">
               Each Cloud path has its own checkbox (default Off), shown only when that path is On.
               Home Buy does not use it. Cash out and Gold fade skip the buy and can sell if you
-              already hold; a book timeout does not skip or dump. TWAP lock and Last-minute only
-              skip the buy and still hold; an unknown book size fails closed (no buy). See FAQ.
+              already hold; a book timeout does not skip or dump. TWAP lock, Last-minute, and Step
+              buy only skip the buy (Step buy still runs its ask stop); an unknown book size fails
+              closed (no buy). See FAQ.
             </HelpItem>
             <HelpItem title="Gold fade">
               Gold only. When the gap is at most Max gap, Cloud buys the cheaper ticket and sells
@@ -1093,11 +1094,22 @@ function RiskHelpModal({
               clip slots. TWAP lock keeps BTC/ETH if that path is On. Hold to settlement when flip
               is Off. Default Off. Admin must enable the block first.
             </HelpItem>
+            <HelpItem title="Step buy">
+              Checked Step buy assets that are also On in Cushions. Empty means no Step buy buys.
+              After Start after minutes, buy Lot contracts if Cushion % of that coin’s Cushions $
+              still holds and the lean is with you. Add another lot every Add wait only if the
+              thesis is still on and the ask is the last fill or up to Add band richer. Stop adding
+              with 30s left. A 1s watcher checks the ask from the first fill; after Max lots it only
+              stops. Sell a lot when ask is Stop ¢ under that lot’s fill; lot 1 stop sells all
+              remaining Step buy lots on that ticker. Window cap 1 blocks lot 1 only. Protect skips
+              these rows. Default Off. Admin must enable the block first.
+            </HelpItem>
 
             <HelpItem title="Restore defaults">
               Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.
               Restore Home Buy / Restore Auto-trade resets only that tab (Smart buy, Protect money,
-              Cash out, Gold fade, TWAP lock, and Last-minute are on Auto-trade). Cushions and keys stay.
+              Cash out, Gold fade, TWAP lock, Last-minute, and Step buy are on Auto-trade). Cushions
+              and keys stay.
             </HelpItem>
 
             <Text style={styles.modalSection}>Kalshi credentials</Text>

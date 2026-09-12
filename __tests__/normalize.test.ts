@@ -208,6 +208,43 @@ describe('normalize / cushions', () => {
     expect(d.gold_fade_skip_thin_bid).toBe(false);
     expect(d.twap_lock_skip_thin_bid).toBe(false);
     expect(d.last_minute_skip_thin_bid).toBe(false);
+    expect(d.step_buy_enabled).toBe(false);
+    expect(d.step_buy_start_minutes).toBe(5);
+    expect(d.step_buy_cushion_pct).toBe(50);
+    expect(d.step_buy_lot_count).toBe(1);
+    expect(d.step_buy_add_wait_minutes).toBe(1);
+    expect(d.step_buy_add_band_usd).toBe(0.02);
+    expect(d.step_buy_max_lots).toBe(3);
+    expect(d.step_buy_stop_usd).toBe(0.03);
+    expect(d.step_buy_max_ask_usd).toBe(0.8);
+    expect(d.step_buy_skip_thin_bid).toBe(false);
+    expect(d.step_buy_assets).toEqual(expect.arrayContaining(['Gold', 'BTC', 'ETH']));
+    expect(normalizeAppConfig({ risk: { step_buy_assets: [] } } as any).risk.step_buy_assets).toEqual([]);
+    expect(
+      normalizeAppConfig({ risk: { step_buy_assets: ['Gold', 'NOPE'] } } as any).risk.step_buy_assets
+    ).toEqual(['Gold']);
+    const stepOn = normalizeAppConfig({
+      risk: {
+        step_buy_enabled: true,
+        step_buy_start_minutes: 1,
+        step_buy_cushion_pct: 10,
+        step_buy_lot_count: 0,
+        step_buy_add_wait_minutes: 9,
+        step_buy_add_band_usd: 0.09,
+        step_buy_max_lots: 99,
+        step_buy_stop_usd: 0,
+        step_buy_max_ask_usd: 0.99,
+      },
+    } as any).risk;
+    expect(stepOn.step_buy_enabled).toBe(true);
+    expect(stepOn.step_buy_start_minutes).toBe(2);
+    expect(stepOn.step_buy_cushion_pct).toBe(25);
+    expect(stepOn.step_buy_lot_count).toBe(1);
+    expect(stepOn.step_buy_add_wait_minutes).toBe(3);
+    expect(stepOn.step_buy_add_band_usd).toBe(0.05);
+    expect(stepOn.step_buy_max_lots).toBe(8);
+    expect(stepOn.step_buy_stop_usd).toBe(0.01);
+    expect(stepOn.step_buy_max_ask_usd).toBe(0.9);
     const on = normalizeAppConfig({
       risk: { cash_out_skip_thin_bid: true },
     } as any).risk;
@@ -215,6 +252,7 @@ describe('normalize / cushions', () => {
     expect(on.gold_fade_skip_thin_bid).toBe(true);
     expect(on.twap_lock_skip_thin_bid).toBe(true);
     expect(on.last_minute_skip_thin_bid).toBe(true);
+    expect(on.step_buy_skip_thin_bid).toBe(true);
     const split = normalizeAppConfig({
       risk: { cash_out_skip_thin_bid: true, gold_fade_skip_thin_bid: false },
     } as any).risk;

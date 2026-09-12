@@ -70,6 +70,10 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(orderPlacedAlertTitle({ live: true, asset: 'ETH', decision: 'YES' })).toBe('Order Placed · ETH YES');
     expect(iocMissAlertTitle('last_minute')).toBe('IOC miss · Last-minute');
     expect(
+      orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'YES', entryPath: 'step_buy' })
+    ).toBe('Order Placed · Step buy · Gold YES');
+    expect(iocMissAlertTitle('step_buy')).toBe('IOC miss · Step buy');
+    expect(
       iocMissAlertBody({
         asset: 'BTC',
         decision: 'YES',

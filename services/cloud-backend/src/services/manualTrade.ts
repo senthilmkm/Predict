@@ -41,6 +41,7 @@ import { isCashOutEntryPath } from '../../../../packages/trading-core/src/cashOu
 import { isGoldFadeEntryPath } from '../../../../packages/trading-core/src/goldFade';
 import { isTwapLockEntryPath } from '../../../../packages/trading-core/src/twapLock';
 import { isLastMinuteEntryPath } from '../../../../packages/trading-core/src/lastMinute';
+import { isStepBuyEntryPath } from '../../../../packages/trading-core/src/stepBuy';
 import {
   emitCloudAlert,
   fillAlertId,
@@ -276,6 +277,9 @@ async function executeManualBuy(opts: {
     }
     if (isLastMinuteEntryPath(held.entryPath)) {
       return fail(userId, 409, 'last_minute_holding', 'last_minute_holding', { asset, action: 'buy', ticker });
+    }
+    if (isStepBuyEntryPath(held.entryPath)) {
+      return fail(userId, 409, 'step_buy_holding', 'step_buy_holding', { asset, action: 'buy', ticker });
     }
     return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
   }
@@ -555,6 +559,9 @@ async function executeManualSell(opts: {
   }
   if (isLastMinuteEntryPath(held.entryPath)) {
     return fail(userId, 409, 'last_minute_holding', 'last_minute_holding', { asset, action: 'sell', ticker });
+  }
+  if (isStepBuyEntryPath(held.entryPath)) {
+    return fail(userId, 409, 'step_buy_holding', 'step_buy_holding', { asset, action: 'sell', ticker });
   }
 
   const order = buildProtectSellOrder({

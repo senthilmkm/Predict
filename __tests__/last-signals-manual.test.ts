@@ -2,6 +2,7 @@ import { defaultAppConfig } from '../src/config/types';
 import {
   formatGapDisplay,
   formatLastMinuteWatchLine,
+  formatStepBuyWatchLine,
   formatTwapWatchLine,
   heldOpenFillForTicker,
   homeBuySkipReason,
@@ -235,6 +236,38 @@ describe('last signal extra line', () => {
         lastMinuteWatchText: 'Last-minute watching · 38s left',
       })
     ).toEqual({ testID: 'skip-reason', text: 'Last-minute watching · 38s left' });
+    expect(
+      formatStepBuyWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 6,
+        startMinutes: 5,
+        secondsLeft: 400,
+      })
+    ).toBe('Step buy watching · 400s left');
+    expect(
+      formatStepBuyWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 2,
+        startMinutes: 5,
+        secondsLeft: 400,
+      })
+    ).toBeNull();
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        stepBuyHolding: true,
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'step buy is holding this ticket' });
   });
 
   test('Gold fade holding hides Home buttons and says so', () => {

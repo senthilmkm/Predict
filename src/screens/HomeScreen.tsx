@@ -34,6 +34,7 @@ import {
   heldOpenFillForTicker,
   homeBuySkipReason,
   formatLastMinuteWatchLine,
+  formatStepBuyWatchLine,
   formatTwapWatchLine,
   lastSignalExtraLine,
   lastSignalManualKind,
@@ -105,6 +106,7 @@ export function HomeScreen() {
   const cloudKillSwitch = useRuntimeStore((s) => s.cloudKillSwitch);
   const twapLockFeatureOn = useRuntimeStore((s) => s.twapLockFeatureOn);
   const lastMinuteFeatureOn = useRuntimeStore((s) => s.lastMinuteFeatureOn);
+  const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
@@ -134,14 +136,17 @@ export function HomeScreen() {
   useEffect(() => {
     const twapWatch = twapLockFeatureOn && config.risk.twap_lock_enabled;
     const lastMinuteWatch = lastMinuteFeatureOn && config.risk.last_minute_enabled;
-    if (!twapWatch && !lastMinuteWatch) return;
+    const stepBuyWatch = stepBuyFeatureOn && config.risk.step_buy_enabled;
+    if (!twapWatch && !lastMinuteWatch && !stepBuyWatch) return;
     const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, [
     config.risk.twap_lock_enabled,
     config.risk.last_minute_enabled,
+    config.risk.step_buy_enabled,
     twapLockFeatureOn,
     lastMinuteFeatureOn,
+    stepBuyFeatureOn,
   ]);
 
   // 1. On Mount: Fetch Cloud Snapshot & Balances
@@ -283,7 +288,8 @@ export function HomeScreen() {
     const goldFadeHeld = held?.entry_path === 'gold_fade';
     const twapLockHeld = held?.entry_path === 'twap_lock';
     const lastMinuteHeld = held?.entry_path === 'last_minute';
-    const pathHeld = cashOutHeld || goldFadeHeld || twapLockHeld || lastMinuteHeld;
+    const stepBuyHeld = held?.entry_path === 'step_buy';
+    const pathHeld = cashOutHeld || goldFadeHeld || twapLockHeld || lastMinuteHeld || stepBuyHeld;
     const manualKind = pathHeld
       ? 'none'
       : lastSignalManualKind({
@@ -311,6 +317,7 @@ export function HomeScreen() {
       goldFadeHolding: goldFadeHeld,
       twapLockHolding: twapLockHeld,
       lastMinuteHolding: lastMinuteHeld,
+      stepBuyHolding: stepBuyHeld,
       twapWatchText: formatTwapWatchLine({
         adminEnabled: twapLockFeatureOn,
         userEnabled: Boolean(config.risk.twap_lock_enabled),
@@ -334,6 +341,22 @@ export function HomeScreen() {
           (leans[row.asset] as { close_utc?: string } | undefined)?.close_utc,
           nowMs
         ),
+        autoDetail: row.trade?.detail,
+        autoStatus: row.trade?.status,
+      }),
+      stepBuyWatchText: formatStepBuyWatchLine({
+        adminEnabled: stepBuyFeatureOn,
+        userEnabled: Boolean(config.risk.step_buy_enabled),
+        assetEnabled: config.assets_enabled?.[row.asset] !== false,
+        asset: row.asset,
+        assets: config.risk.step_buy_assets,
+        secondsLeft: twapWatchSecondsLeft(
+          (leans[row.asset] as { close_utc?: string } | undefined)?.close_utc,
+          nowMs
+        ),
+        minutesElapsed: (leans[row.asset] as { minutes_elapsed?: number } | undefined)?.minutes_elapsed,
+        startMinutes: config.risk.step_buy_start_minutes,
+        holding: stepBuyHeld,
         autoDetail: row.trade?.detail,
         autoStatus: row.trade?.status,
       }),

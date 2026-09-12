@@ -119,6 +119,19 @@ import {
   tickerHasOpenLastMinute,
   tickerHasOpenOtherThanLastMinute,
 } from '../../../../packages/trading-core/src/lastMinute';
+import {
+  evaluateStepBuyEnter,
+  isStepBuyEnterPath,
+  isStepBuyStartWindow,
+  nextStepBuyLotIndex,
+  normalizeStepBuyMaxLots,
+  resolveStepBuyCloseUtc,
+  stepBuySecondsLeft,
+  stepBuyLotsForTicker,
+  stepBuyTwapOwns,
+  tickerHasOpenOtherThanStepBuy,
+  tickerHasOpenStepBuy,
+} from '../../../../packages/trading-core/src/stepBuy';
 import { resolveSkipThinBid } from '../../../../packages/trading-core/src/skipThinBid';
 import { cfbRtiBuffer, fetchCfbRtiPrints, ingestRecentCfbPrints } from '../services/cfbRti';
 import {
@@ -131,6 +144,12 @@ import {
   persistLastMinuteWatcherSnapshot,
   resetLastMinuteWatcherMemoryForTests,
 } from '../services/lastMinuteWatcher';
+import {
+  buildStepBuyWatcherSnapshot,
+  persistStepBuyWatcherSnapshot,
+  resetStepBuyWatcherMemoryForTests,
+} from '../services/stepBuyWatcher';
+import { runCloudStepBuyStops } from '../services/cloudStepBuy';
 
 export const workerRouter = Router();
 
@@ -143,6 +162,7 @@ const goldFadeWatchUsers = new Map<string, string[]>();
 const twapLockWatchUsers = new Map<string, string[]>();
 /** Armed Last-minute users with an enabled asset in the watch window — 1s quotes + clip ladder. */
 const lastMinuteWatchUsers = new Map<string, string[]>();
+const stepBuyWatchUsers = new Map<string, string[]>();
 
 async function cashOutBestBidSize(
   ticker: string,
@@ -207,14 +227,40 @@ async function flushLastMinuteWatcher(
   );
 }
 
+function stepBuyWatcherCloseByAsset(
+  now: Date,
+  leans: Partial<Record<string, { close_utc?: string | Date | null }>>
+): Record<string, Date | null | undefined> {
+  const out: Record<string, Date | null | undefined> = {};
+  for (const asset of new Set([...stepBuyWatchUsers.values()].flat())) {
+    out[asset] = resolveStepBuyCloseUtc(leans[asset] || {}, now);
+  }
+  return out;
+}
+
+async function flushStepBuyWatcher(
+  now: Date,
+  leans: Partial<Record<string, { close_utc?: string | Date | null }>>
+): Promise<void> {
+  await persistStepBuyWatcherSnapshot(
+    buildStepBuyWatcherSnapshot({
+      now,
+      watchUsers: stepBuyWatchUsers,
+      closeByAsset: stepBuyWatcherCloseByAsset(now, leans),
+    })
+  );
+}
+
 export function resetLeanAlertMemoryForTests(): void {
   leanAlertMemory.clear();
   cashOutWatchUsers.clear();
   goldFadeWatchUsers.clear();
   twapLockWatchUsers.clear();
   lastMinuteWatchUsers.clear();
+  stepBuyWatchUsers.clear();
   resetTwapLockWatcherMemoryForTests();
   resetLastMinuteWatcherMemoryForTests();
+  resetStepBuyWatcherMemoryForTests();
 }
 
 function loadLeanAlertsSent(userId: string, fromDoc: any): LeanAlertsSent {
@@ -367,8 +413,10 @@ async function runOneTick() {
   if (activeUsers.length === 0) {
     twapLockWatchUsers.clear();
     lastMinuteWatchUsers.clear();
+    stepBuyWatchUsers.clear();
     await flushTwapLockWatcher(now, {});
     await flushLastMinuteWatcher(now, {});
+    await flushStepBuyWatcher(now, {});
     return { timestamp: now.toISOString(), activeUserCount: 0, results: [] };
   }
 
@@ -571,7 +619,97 @@ async function runOneTick() {
                 (lastMinuteClips.count > 0 ||
                   isLastMinuteWindow(now, twapClose, lastMinuteTimes.enterSec, lastMinuteTimes.stopSec))
             );
-            const cashOutEnter = cashOutWanted && !goldFadeEnter && !twapLockWanted && !lastMinuteTick;
+            const stepBuyWanted =
+              isStepBuyEnterPath({
+                adminEnabled: featureFlags.stepBuy,
+                userEnabled: Boolean(cfg.risk?.step_buy_enabled),
+                assetEnabled: cfg.assets_enabled?.[asset] !== false,
+                asset,
+                assets: cfg.risk?.step_buy_assets,
+              }) &&
+              !stepBuyTwapOwns({
+                twapAdminEnabled: featureFlags.twapLock,
+                twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+                twapAssets: cfg.risk?.twap_lock_assets,
+                asset,
+              });
+            let stepBuyLots = stepBuyLotsForTicker(userTrades, marketTicker);
+            if (
+              stepBuyWanted &&
+              stepBuyLots.count > 0 &&
+              loadTradeBook &&
+              user.kalshiConfigured
+            ) {
+              if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
+              if (cachedSecret?.privateKeyPem && cachedSecret.keyId) {
+                const stopClient = new KalshiClient(
+                  cachedSecret.keyId,
+                  cachedSecret.privateKeyPem,
+                  'production'
+                );
+                const stopRes = await runCloudStepBuyStops({
+                  userId,
+                  asset,
+                  ticker: marketTicker,
+                  lean: {
+                    phase: lean.phase === 'live' ? 'live' : 'ended',
+                    yes_bid: lean.yes_bid,
+                    yes_ask: lean.yes_ask,
+                    no_bid: lean.no_bid,
+                    no_ask: lean.no_ask,
+                  },
+                  trades: userTrades,
+                  stopUsd: cfg.risk?.step_buy_stop_usd,
+                  slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+                  dryRun: false,
+                  now,
+                  place: (input) => stopClient.placeOrder(input),
+                });
+                for (const alert of stopRes.alerts) {
+                  await emitCloudAlert({
+                    userId,
+                    alertId: protectAlertId(alert.tradeId),
+                    kind: 'protect_sell',
+                    title: alert.title,
+                    body: alert.body,
+                    cfg: cfg as never,
+                    tokens: userTokens,
+                    collapseId: protectCollapseId(userId, alert.tradeId),
+                    asset,
+                    ticker: marketTicker,
+                    tradeId: alert.tradeId,
+                    at: now.toISOString(),
+                  });
+                }
+                if (stopRes.exited > 0) {
+                  lastTradeAction[asset] = {
+                    status: 'placed',
+                    detail: `Step buy stop · sold ${stopRes.exited}`,
+                    at: tickIso,
+                  };
+                  stepBuyLots = stepBuyLotsForTicker(userTrades, marketTicker);
+                }
+              }
+            }
+            const lastMinuteOwnsNewBuys =
+              lastMinuteWanted &&
+              Boolean(twapClose) &&
+              stepBuyLots.count <= 0 &&
+              isLastMinuteWindow(now, twapClose!, lastMinuteTimes.enterSec, lastMinuteTimes.stopSec);
+            const stepBuyTick = Boolean(
+              stepBuyWanted &&
+                twapClose &&
+                (stepBuyLots.count > 0 ||
+                  (isStepBuyStartWindow({
+                    now,
+                    minutesElapsed: lean.minutes_elapsed,
+                    startMinutes: cfg.risk?.step_buy_start_minutes,
+                    closeUtc: twapClose,
+                  }) &&
+                    !lastMinuteOwnsNewBuys))
+            );
+            const cashOutEnter =
+              cashOutWanted && !goldFadeEnter && !twapLockWanted && !lastMinuteTick && !stepBuyTick;
 
             if (
               protectEnabled &&
@@ -830,13 +968,24 @@ async function runOneTick() {
             if (!cfg.assets_enabled?.[asset]) {
               continue;
             }
-            if (!cashOutEnter && !goldFadeEnter && !twapLockWanted && !lastMinuteTick && absGap < userCushion) {
+            if (
+              !cashOutEnter &&
+              !goldFadeEnter &&
+              !twapLockWanted &&
+              !lastMinuteTick &&
+              !stepBuyTick &&
+              absGap < userCushion
+            ) {
               delete lastTradeAction[asset];
               continue;
             }
             const windowCap = windowBuyCap(cfg.risk);
             const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
-            if (!(lastMinuteTick && lastMinuteClips.count > 0) && existingBuys >= windowCap) {
+            if (
+              !(lastMinuteTick && lastMinuteClips.count > 0) &&
+              !(stepBuyTick && stepBuyLots.count > 0) &&
+              existingBuys >= windowCap
+            ) {
               lastTradeAction[asset] = skippedTradeAction('max_trades_asset_window', tickIso);
               continue;
             }
@@ -850,6 +999,10 @@ async function runOneTick() {
             }
             if (!lastMinuteTick && tickerHasOpenLastMinute(userTrades, marketTicker)) {
               lastTradeAction[asset] = skippedTradeAction('last_minute_holding', tickIso);
+              continue;
+            }
+            if (!stepBuyTick && tickerHasOpenStepBuy(userTrades, marketTicker)) {
+              lastTradeAction[asset] = skippedTradeAction('step_buy_holding', tickIso);
               continue;
             }
 
@@ -875,6 +1028,7 @@ async function runOneTick() {
             const fadeThin = resolveSkipThinBid(cfg.risk, 'gold_fade');
             const twapThin = resolveSkipThinBid(cfg.risk, 'twap_lock');
             const lastThin = resolveSkipThinBid(cfg.risk, 'last_minute');
+            const stepThin = resolveSkipThinBid(cfg.risk, 'step_buy');
             const fadeSide = goldFadeCheapSide(leanForGate);
             if (twapLockWanted && twapClose && isTwapLockWatchWindow(now, twapClose)) {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
@@ -900,7 +1054,7 @@ async function runOneTick() {
                   skipThinBid: twapThin,
                   bidSize: await cashOutBestBidSize(marketTicker, 'YES', twapThin),
                 })
-              : lastMinuteTick
+              : lastMinuteTick && !(stepBuyTick && stepBuyLots.count > 0)
               ? evaluateLastMinuteEnter({
                   lean: leanForGate,
                   cfg,
@@ -919,6 +1073,30 @@ async function runOneTick() {
                     marketTicker,
                     lastMinutePickedSide(leanForGate, cfg),
                     lastThin
+                  ),
+                })
+              : stepBuyTick
+              ? evaluateStepBuyEnter({
+                  lean: leanForGate,
+                  cfg,
+                  adminEnabled: featureFlags.stepBuy,
+                  twapAdminEnabled: featureFlags.twapLock,
+                  now,
+                  openPositions,
+                  tradesToday,
+                  assetTradesInWindow: existingBuys,
+                  stepBuyLots: stepBuyLots.count,
+                  lastLotAt: stepBuyLots.lastAt,
+                  lastFill: stepBuyLots.lastFill,
+                  heldSide: stepBuyLots.heldSide,
+                  dailyPnlUsd,
+                  hasOpenOnTicker: tickerHasOpenOtherThanStepBuy(userTrades, marketTicker),
+                  lastMinuteOwnsNewBuys,
+                  skipThinBid: stepThin,
+                  bidSize: await cashOutBestBidSize(
+                    marketTicker,
+                    stepBuyLots.heldSide || lean.decision,
+                    stepThin
                   ),
                 })
               : goldFadeEnter
@@ -955,8 +1133,10 @@ async function runOneTick() {
                   });
             const entryPath = twapLockWanted
               ? 'twap_lock'
-              : lastMinuteTick
+              : lastMinuteTick && !(stepBuyTick && stepBuyLots.count > 0)
                 ? 'last_minute'
+                : stepBuyTick
+                  ? 'step_buy'
                 : goldFadeEnter
                   ? 'gold_fade'
                   : cashOutEnter
@@ -965,7 +1145,7 @@ async function runOneTick() {
             const placeDecision =
               entryPath === 'twap_lock'
                 ? 'YES'
-                : entryPath === 'last_minute'
+                : entryPath === 'last_minute' || entryPath === 'step_buy'
                   ? gate.decision || lean.decision
                   : lean.decision;
 
@@ -980,7 +1160,13 @@ async function runOneTick() {
               }
               if (
                 gate.skip_reason === 'last_minute_not_last_minute' ||
-                gate.skip_reason === 'last_minute_ladder_wait'
+                gate.skip_reason === 'last_minute_ladder_wait' ||
+                gate.skip_reason === 'step_buy_too_early' ||
+                gate.skip_reason === 'step_buy_add_wait' ||
+                gate.skip_reason === 'step_buy_stop_add' ||
+                gate.skip_reason === 'step_buy_add_band' ||
+                gate.skip_reason === 'step_buy_no_thesis' ||
+                gate.skip_reason === 'step_buy_lean_flipped'
               ) {
                 continue;
               }
@@ -1004,14 +1190,19 @@ async function runOneTick() {
             const claimed = await tryAcquirePlaceLock({
               userId,
               ticker: marketTicker,
-              cap: entryPath === 'last_minute' && lastMinuteClips.count > 0
-                ? lastMinuteTimes.maxClips
-                : windowCap,
+              cap:
+                entryPath === 'last_minute' && lastMinuteClips.count > 0
+                  ? lastMinuteTimes.maxClips
+                  : entryPath === 'step_buy' && stepBuyLots.count > 0
+                    ? normalizeStepBuyMaxLots(cfg.risk?.step_buy_max_lots)
+                    : windowCap,
               requestId: placeRequestId,
               existingBuys:
                 entryPath === 'last_minute' && lastMinuteClips.count > 0
                   ? lastMinuteClips.count
-                  : existingBuys,
+                  : entryPath === 'step_buy' && stepBuyLots.count > 0
+                    ? stepBuyLots.count
+                    : existingBuys,
             });
             if (!claimed.ok) {
               lastTradeAction[asset] = skippedTradeAction(claimed.reason, tickIso);
@@ -1020,6 +1211,44 @@ async function runOneTick() {
 
             const client = new KalshiClient(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo');
             try {
+              if (entryPath === 'step_buy') {
+                const freshTrades = await getTradeRecords(userId);
+                userTrades.splice(0, userTrades.length, ...freshTrades);
+                stepBuyLots = stepBuyLotsForTicker(userTrades, marketTicker);
+                const freshExisting = countWindowBuysForTicker(userTrades, marketTicker);
+                const recheck = evaluateStepBuyEnter({
+                  lean: leanForGate,
+                  cfg,
+                  adminEnabled: featureFlags.stepBuy,
+                  twapAdminEnabled: featureFlags.twapLock,
+                  now,
+                  openPositions: userTrades.filter(
+                    (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+                  ).length,
+                  tradesToday,
+                  assetTradesInWindow: freshExisting,
+                  stepBuyLots: stepBuyLots.count,
+                  lastLotAt: stepBuyLots.lastAt,
+                  lastFill: stepBuyLots.lastFill,
+                  heldSide: stepBuyLots.heldSide,
+                  dailyPnlUsd,
+                  hasOpenOnTicker: tickerHasOpenOtherThanStepBuy(userTrades, marketTicker),
+                  lastMinuteOwnsNewBuys,
+                  skipThinBid: stepThin,
+                  bidSize: await cashOutBestBidSize(
+                    marketTicker,
+                    stepBuyLots.heldSide || lean.decision,
+                    stepThin
+                  ),
+                });
+                if (!recheck.ok || !recheck.price || !recheck.count) {
+                  lastTradeAction[asset] = skippedTradeAction(
+                    recheck.skip_reason || 'window_locked',
+                    tickIso
+                  );
+                  continue;
+                }
+              }
               const placeRes = await client.placeOrder({
                 ticker: marketTicker,
                 side: gate.side || 'bid',
@@ -1065,6 +1294,10 @@ async function runOneTick() {
                 outcome: filled || accepted ? 'pending' : 'miss',
                 pnlUsd: null,
                 entryPath,
+                stepLotIndex:
+                  entryPath === 'step_buy' && filled
+                    ? nextStepBuyLotIndex(userTrades, marketTicker)
+                    : undefined,
               };
 
               await saveTradeRecord(userId, tradeDoc);
@@ -1217,6 +1450,52 @@ async function runOneTick() {
           } else {
             lastMinuteWatchUsers.delete(userId);
           }
+          if (
+            featureFlags.stepBuy &&
+            cfg.auto_trade_enabled &&
+            user.state === 'ARMED' &&
+            Boolean(cfg.risk?.step_buy_enabled)
+          ) {
+            const watchAssets = assets.filter((a) => {
+              if (cfg.assets_enabled?.[a] === false) return false;
+              if (
+                !isStepBuyEnterPath({
+                  adminEnabled: true,
+                  userEnabled: true,
+                  assetEnabled: true,
+                  asset: a,
+                  assets: cfg.risk?.step_buy_assets,
+                })
+              ) {
+                return false;
+              }
+              if (
+                stepBuyTwapOwns({
+                  twapAdminEnabled: featureFlags.twapLock,
+                  twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+                  twapAssets: cfg.risk?.twap_lock_assets,
+                  asset: a,
+                })
+              ) {
+                return false;
+              }
+              const row = sharedLeans[a];
+              const close = row ? resolveStepBuyCloseUtc(row, now) : null;
+              if (!close || stepBuySecondsLeft(now, close) <= 0) return false;
+              const ticker = String(row?.market_ticker || '').trim();
+              if (ticker && stepBuyLotsForTicker(userTrades, ticker).count > 0) return true;
+              return isStepBuyStartWindow({
+                now,
+                minutesElapsed: row?.minutes_elapsed,
+                startMinutes: cfg.risk?.step_buy_start_minutes,
+                closeUtc: close,
+              });
+            });
+            if (watchAssets.length) stepBuyWatchUsers.set(userId, watchAssets);
+            else stepBuyWatchUsers.delete(userId);
+          } else {
+            stepBuyWatchUsers.delete(userId);
+          }
           await upsertUserDoc(userId, {
             lastTickAt: now.toISOString(),
             lastError: null,
@@ -1240,6 +1519,7 @@ async function runOneTick() {
 
   await flushTwapLockWatcher(now, sharedLeans);
   await flushLastMinuteWatcher(now, sharedLeans);
+  await flushStepBuyWatcher(now, sharedLeans);
   return { timestamp: now.toISOString(), activeUserCount: activeUsers.length, results };
 }
 
@@ -1865,6 +2145,362 @@ export async function runLastMinuteWatchTick(): Promise<{
   return { timestamp: now.toISOString(), watched };
 }
 
+export async function runStepBuyWatchTick(): Promise<{
+  timestamp: string;
+  watched: number;
+  paused?: boolean;
+}> {
+  if (stepBuyWatchUsers.size === 0) {
+    const now = new Date();
+    await flushStepBuyWatcher(now, {});
+    return { timestamp: now.toISOString(), watched: 0 };
+  }
+  const now = new Date();
+  const sysConfig = await getSystemConfig();
+  const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
+  setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
+  if (isCloudKalshiPaused()) {
+    return { timestamp: now.toISOString(), watched: 0, paused: true };
+  }
+  if (!featureFlags.stepBuy) {
+    stepBuyWatchUsers.clear();
+    await flushStepBuyWatcher(now, {});
+    return { timestamp: now.toISOString(), watched: 0 };
+  }
+  const watchAssets = [...new Set([...stepBuyWatchUsers.values()].flat())] as AssetKey[];
+  const sharedLeans: Partial<Record<AssetKey, any>> = {};
+  await Promise.all(
+    watchAssets.map(async (asset) => {
+      try {
+        if (!isMarketOpen(asset, now).open) return;
+        sharedLeans[asset] = await computeLean(asset, 0.0, fetch, now);
+      } catch (err: any) {
+        noteTransientKalshiFailure(err);
+      }
+    })
+  );
+  const activeUsers = await getEnrolledActiveUsers();
+  const byId = new Map(activeUsers.map((u) => [u.userId, u]));
+  let watched = 0;
+  for (const [userId, userAssets] of [...stepBuyWatchUsers.entries()]) {
+    const user = byId.get(userId);
+    if (!user) {
+      stepBuyWatchUsers.delete(userId);
+      continue;
+    }
+    try {
+      const cfg = user.config || defaultAppConfig();
+      if (!cfg.auto_trade_enabled || user.state !== 'ARMED' || !cfg.risk?.step_buy_enabled) {
+        stepBuyWatchUsers.delete(userId);
+        continue;
+      }
+      const userTrades = await getTradeRecords(userId);
+      const tradesTodayList = liveCloudTradesToday(userTrades, now);
+      let tradesToday = tradesTodayList.length;
+      const dailyPnlUsd = cloudDailyRealizedPnl(tradesTodayList);
+      let openPositions = userTrades.filter(
+        (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+      ).length;
+      const lastTradeAction = copyLastTradeActions(user);
+      const userTokens = [...(user.pushTokens || []), ...(user.fcmTokens || [])].filter(
+        (t, i, arr) => t && arr.indexOf(t) === i
+      );
+      const tickIso = now.toISOString();
+      const still: string[] = [];
+      for (const asset of userAssets) {
+        const lean = sharedLeans[asset];
+        if (!lean?.market_ticker) continue;
+        const closeUtc = resolveStepBuyCloseUtc(lean, now);
+        if (!closeUtc || stepBuySecondsLeft(now, closeUtc) <= 0) continue;
+        if (
+          stepBuyTwapOwns({
+            twapAdminEnabled: featureFlags.twapLock,
+            twapUserEnabled: Boolean(cfg.risk?.twap_lock_enabled),
+            twapAssets: cfg.risk?.twap_lock_assets,
+            asset,
+          })
+        ) {
+          continue;
+        }
+        still.push(asset);
+        watched += 1;
+        const marketTicker = lean.market_ticker;
+        let yesAsk = lean.yes_ask;
+        let noAsk = lean.no_ask;
+        try {
+          const quote = await getMarketQuote(marketTicker, fetch, { skipCache: true });
+          if (quote?.yes_ask_dollars != null) yesAsk = Number(quote.yes_ask_dollars);
+          if (quote?.no_ask_dollars != null) noAsk = Number(quote.no_ask_dollars);
+          if (quote?.yes_bid_dollars != null) lean.yes_bid = Number(quote.yes_bid_dollars);
+          if (quote?.no_bid_dollars != null) lean.no_bid = Number(quote.no_bid_dollars);
+        } catch {
+          /* keep lean */
+        }
+        let stepBuyLots = stepBuyLotsForTicker(userTrades, marketTicker);
+        if (stepBuyLots.count > 0) {
+          const secret = await getUserSecret(userId);
+          if (secret?.privateKeyPem && secret.keyId) {
+            const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+            const stopRes = await runCloudStepBuyStops({
+              userId,
+              asset,
+              ticker: marketTicker,
+              lean: {
+                phase: lean.phase === 'live' ? 'live' : 'ended',
+                yes_bid: lean.yes_bid,
+                yes_ask: yesAsk,
+                no_bid: lean.no_bid,
+                no_ask: noAsk,
+              },
+              trades: userTrades,
+              stopUsd: cfg.risk?.step_buy_stop_usd,
+              slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+              dryRun: false,
+              now,
+              place: (input) => client.placeOrder(input),
+            });
+            for (const alert of stopRes.alerts) {
+              await emitCloudAlert({
+                userId,
+                alertId: protectAlertId(alert.tradeId),
+                kind: 'protect_sell',
+                title: alert.title,
+                body: alert.body,
+                cfg: cfg as never,
+                tokens: userTokens,
+                collapseId: protectCollapseId(userId, alert.tradeId),
+                asset,
+                ticker: marketTicker,
+                tradeId: alert.tradeId,
+                at: now.toISOString(),
+              });
+            }
+            if (stopRes.exited > 0) {
+              lastTradeAction[asset] = {
+                status: 'placed',
+                detail: `Step buy stop · sold ${stopRes.exited}`,
+                at: tickIso,
+              };
+              stepBuyLots = stepBuyLotsForTicker(userTrades, marketTicker);
+            }
+          }
+        }
+        const lastMinuteTimes = lastMinuteTimingFromRisk(cfg.risk);
+        const lastMinuteOwnsNewBuys =
+          isLastMinuteEnterPath({
+            adminEnabled: featureFlags.lastMinute,
+            userEnabled: Boolean(cfg.risk?.last_minute_enabled),
+            assetEnabled: cfg.assets_enabled?.[asset] !== false,
+            asset,
+            assets: cfg.risk?.last_minute_assets,
+          }) &&
+          stepBuyLots.count <= 0 &&
+          isLastMinuteWindow(now, closeUtc, lastMinuteTimes.enterSec, lastMinuteTimes.stopSec);
+        const windowCap = windowBuyCap(cfg.risk);
+        const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
+        const skipThinBid = resolveSkipThinBid(cfg.risk, 'step_buy');
+        const absGap = Number.isFinite(Number(lean.abs_gap))
+          ? Number(lean.abs_gap)
+          : Math.abs((lean.live || 0) - (lean.strike || 0));
+        const leanForGate = {
+          asset: lean.asset,
+          market_ticker: marketTicker,
+          decision: lean.decision,
+          live: lean.live || 0,
+          strike: lean.strike || 0,
+          abs_gap: absGap,
+          minutes_left: lean.minutes_left || 0,
+          minutes_elapsed: lean.minutes_elapsed || 0,
+          minutes_remaining: lean.minutes_remaining,
+          phase: (lean.phase === 'live' ? 'live' : 'ended') as 'live' | 'ended',
+          yes_ask: yesAsk ?? undefined,
+          no_ask: noAsk ?? undefined,
+          yes_bid: lean.yes_bid ?? undefined,
+          no_bid: lean.no_bid ?? undefined,
+          timeseries: lean.timeseries,
+          close_utc: lean.close_utc,
+        };
+        const gate = evaluateStepBuyEnter({
+          lean: leanForGate,
+          cfg,
+          adminEnabled: featureFlags.stepBuy,
+          twapAdminEnabled: featureFlags.twapLock,
+          now,
+          openPositions,
+          tradesToday,
+          assetTradesInWindow: existingBuys,
+          stepBuyLots: stepBuyLots.count,
+          lastLotAt: stepBuyLots.lastAt,
+          lastFill: stepBuyLots.lastFill,
+          heldSide: stepBuyLots.heldSide,
+          dailyPnlUsd,
+          hasOpenOnTicker: tickerHasOpenOtherThanStepBuy(userTrades, marketTicker),
+          lastMinuteOwnsNewBuys,
+          skipThinBid,
+          bidSize: await cashOutBestBidSize(marketTicker, stepBuyLots.heldSide || lean.decision, skipThinBid),
+        });
+        if (!gate.ok || !gate.price || !gate.count) continue;
+        const secret = await getUserSecret(userId);
+        if (!secret?.privateKeyPem || !secret.keyId) continue;
+        const placeRequestId = `sb_${userId}_${marketTicker}_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}`.slice(0, 64);
+        const claimed = await tryAcquirePlaceLock({
+          userId,
+          ticker: marketTicker,
+          cap: stepBuyLots.count > 0 ? normalizeStepBuyMaxLots(cfg.risk?.step_buy_max_lots) : windowCap,
+          requestId: placeRequestId,
+          existingBuys: stepBuyLots.count > 0 ? stepBuyLots.count : existingBuys,
+        });
+        if (!claimed.ok) continue;
+        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const placeDecision = gate.decision || lean.decision;
+        try {
+          const freshTrades = await getTradeRecords(userId);
+          userTrades.splice(0, userTrades.length, ...freshTrades);
+          stepBuyLots = stepBuyLotsForTicker(userTrades, marketTicker);
+          const freshExisting = countWindowBuysForTicker(userTrades, marketTicker);
+          const recheck = evaluateStepBuyEnter({
+            lean: leanForGate,
+            cfg,
+            adminEnabled: featureFlags.stepBuy,
+            twapAdminEnabled: featureFlags.twapLock,
+            now,
+            openPositions: userTrades.filter(
+              (t) => !t.dryRun && (t.status === 'SUBMITTED' || t.status === 'FILLED')
+            ).length,
+            tradesToday,
+            assetTradesInWindow: freshExisting,
+            stepBuyLots: stepBuyLots.count,
+            lastLotAt: stepBuyLots.lastAt,
+            lastFill: stepBuyLots.lastFill,
+            heldSide: stepBuyLots.heldSide,
+            dailyPnlUsd,
+            hasOpenOnTicker: tickerHasOpenOtherThanStepBuy(userTrades, marketTicker),
+            lastMinuteOwnsNewBuys:
+              lastMinuteOwnsNewBuys && stepBuyLots.count <= 0,
+            skipThinBid,
+            bidSize: await cashOutBestBidSize(
+              marketTicker,
+              stepBuyLots.heldSide || lean.decision,
+              skipThinBid
+            ),
+          });
+          if (!recheck.ok || !recheck.price || !recheck.count) continue;
+          const placeRes = await client.placeOrder({
+            ticker: marketTicker,
+            side: gate.side || 'bid',
+            count: gate.count,
+            price: gate.price,
+            time_in_force: 'immediate_or_cancel',
+            dry_run: false,
+          });
+          if (!placeRes.ok) continue;
+          const { fillCount, filled } = resolvedPlaceFillCount({
+            dryRun: Boolean(placeRes.dry_run),
+            fillCount: placeRes.fill_count,
+            intendedCount: gate.count,
+          });
+          const payPrice = Number(gate.pay_price ?? 0) || null;
+          const accepted = filled || false;
+          const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const tradeDoc: TradeRecordDoc = {
+            tradeId,
+            userId,
+            ticker: marketTicker,
+            asset: lean.asset,
+            decision: placeDecision === 'NO' ? 'NO' : 'YES',
+            count: filled ? String(fillCount) : String(gate.count || 0),
+            price: String(gate.price),
+            notionalUsd:
+              filled && payPrice ? Math.round(fillCount * payPrice * 100) / 100 : gate.notional_usd || 0,
+            dryRun: false,
+            status: filled ? 'FILLED' : 'CANCELLED',
+            leanDiff: absGap,
+            liveSpot: lean.live,
+            strike: lean.strike,
+            executedAt: now.toISOString(),
+            orderId: placeRes.order_id ?? null,
+            payPrice,
+            fillCount: filled ? fillCount : 0,
+            outcome: filled ? 'pending' : 'miss',
+            pnlUsd: null,
+            entryPath: 'step_buy',
+            stepLotIndex: filled ? nextStepBuyLotIndex(userTrades, marketTicker) : undefined,
+          };
+          await saveTradeRecord(userId, tradeDoc);
+          userTrades.unshift(tradeDoc);
+          if (filled) {
+            openPositions += 1;
+            tradesToday += 1;
+            tradesTodayList.push(tradeDoc);
+          }
+          const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
+          lastTradeAction[asset] = filled
+            ? {
+                status: 'placed',
+                detail: `placed ${placeDecision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
+                at: tickIso,
+              }
+            : { status: 'failed', detail: 'IOC no fill', at: tickIso };
+          if (filled) {
+            await emitCloudAlert({
+              userId,
+              alertId: fillAlertId(tradeId),
+              kind: 'order_filled',
+              title: orderPlacedAlertTitle({
+                live: true,
+                asset,
+                decision: String(placeDecision || ''),
+                entryPath: 'step_buy',
+              }),
+              body: `${gate.count} ctr @ $${priceVal.toFixed(2)} · Cost $${(gate.notional_usd || 0).toFixed(2)}`,
+              cfg,
+              tokens: userTokens,
+              collapseId: fillCollapseId(userId, tradeId),
+              asset: lean.asset,
+              ticker: marketTicker,
+              tradeId,
+              decision: placeDecision,
+              at: now.toISOString(),
+            });
+          } else if (!accepted) {
+            await emitCloudAlert({
+              userId,
+              alertId: missAlertId(tradeId),
+              kind: 'ioc_miss',
+              title: iocMissAlertTitle('step_buy'),
+              body: iocMissAlertBody({
+                asset,
+                decision: String(placeDecision || ''),
+                entryPath: 'step_buy',
+                price: priceVal,
+                count: gate.count,
+              }),
+              cfg,
+              tokens: userTokens,
+              asset: lean.asset,
+              ticker: marketTicker,
+              tradeId,
+              decision: placeDecision,
+              at: now.toISOString(),
+            });
+          }
+        } finally {
+          await releasePlaceLock({ userId, ticker: marketTicker, requestId: placeRequestId });
+        }
+      }
+      if (still.length) stepBuyWatchUsers.set(userId, still);
+      else stepBuyWatchUsers.delete(userId);
+      await upsertUserDoc(userId, { lastTradeAction, lastTickAt: now.toISOString() } as any);
+    } catch (err: any) {
+      noteTransientKalshiFailure(err);
+    }
+  }
+  await flushStepBuyWatcher(now, sharedLeans);
+  return { timestamp: now.toISOString(), watched };
+}
+
 /** Quote + exit only for users that already hold a Cash out lot. No new buys. */
 export async function runCashOutBidWatchTick(): Promise<{
   timestamp: string;
@@ -2129,7 +2765,8 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
       const nextAt = Math.min(nextWatch, nextTwap, endAt);
       await sleepMs(Math.max(0, nextAt - Date.now()));
       if (Date.now() > endAt - 80) break;
-      const lastMinuteWatching = twapLockWatchUsers.size > 0 || lastMinuteWatchUsers.size > 0;
+      const lastMinuteWatching =
+        twapLockWatchUsers.size > 0 || lastMinuteWatchUsers.size > 0 || stepBuyWatchUsers.size > 0;
       if (lastMinuteWatching && Date.now() + 20 >= nextTwap) {
         if (twapLockWatchUsers.size > 0) {
           const twap = await runTwapLockWatchTick();
@@ -2138,6 +2775,10 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
         if (lastMinuteWatchUsers.size > 0) {
           const lm = await runLastMinuteWatchTick();
           if (lm.paused) break;
+        }
+        if (stepBuyWatchUsers.size > 0) {
+          const sb = await runStepBuyWatchTick();
+          if (sb.paused) break;
         }
         nextTwap += 1000;
       } else if (!lastMinuteWatching) {

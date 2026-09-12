@@ -9,14 +9,15 @@ export const PATH_INFO = {
       '• Max trades / day\n' +
       '• Max trades / asset / 15m window (window cap 1)\n' +
       '• Daily loss stop\n\n' +
-      'Applies to Home Buy and every Auto path (Auto-trade, Cash out, Gold fade, TWAP lock, Last-minute first clip).\n\n' +
+      'Applies to Home Buy and every Auto path (Auto-trade, Cash out, Gold fade, TWAP lock, Last-minute first clip, Step buy lot 1).\n\n' +
       'Does not use\n' +
       '• Cushions $ gap (Cushions tab)\n' +
       '• Asset on/off (Cushions tab)\n' +
       '• Path-only fields (ask, minutes, Protect, Smart buy, Last-minute clips)\n\n' +
       'Isolation\n' +
-      '• Window cap 1 is one fill per coin per 15m window for Home / Auto / Cash out / fade / TWAP / Last-minute first clip\n' +
-      '• Last-minute ladder clips after that first Last-minute fill are extra (up to Max clips)',
+      '• Window cap 1 is one fill per coin per 15m window for Home / Auto / Cash out / fade / TWAP / Last-minute first clip / Step buy lot 1\n' +
+      '• Last-minute ladder clips after that first Last-minute fill are extra (up to Max clips)\n' +
+      '• Step buy lots after lot 1 are extra (up to Max lots)',
   },
   home: {
     title: 'Home Buy',
@@ -33,7 +34,7 @@ export const PATH_INFO = {
       '• Cash out / Gold fade / TWAP lock / Last-minute fields\n\n' +
       'Isolation\n' +
       '• A tap still spends real money even if Auto-trade is Off\n' +
-      '• Will not buy a ticker Cash out, Gold fade, TWAP lock, or Last-minute already holds\n' +
+      '• Will not buy a ticker Cash out, Gold fade, TWAP lock, Last-minute, or Step buy already holds\n' +
       '• A Home fill counts toward window cap 1 (Last-minute first clip then sits out)\n' +
       '• Protect money can later sell a Home fill (if Protect is On)\n' +
       '• Home Sell is IOC; slippage is Home Buy chase',
@@ -48,7 +49,7 @@ export const PATH_INFO = {
       '• Cushions $ gap, Smart buy (if On), shared limits, asset on/off\n\n' +
       'Does not use\n' +
       '• Home Buy size/timing\n' +
-      '• Cash out / Gold fade / TWAP / Last-minute ask, side, or clips\n\n' +
+      '• Cash out / Gold fade / TWAP / Last-minute / Step buy ask, side, or lots\n\n' +
       'Isolation\n' +
       '• Default minutes left = 2, so Auto sits out the last minute\n' +
       '• If cushion already hit, this is the path — you do not need Last-minute on that coin\n' +
@@ -76,6 +77,7 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Gap ≥ cushion × ratio, after the wait\n' +
       '• Can exit Auto and Home fills only\n' +
+      '• Skips Step buy rows — that path stops itself\n' +
       '• IOC sell; slippage from Auto chase\n\n' +
       'Does not use\n' +
       '• Minutes left / elapsed (after the wait, any time left)\n' +
@@ -100,7 +102,7 @@ export const PATH_INFO = {
       '• Last-minute watch / clips / Both gate\n\n' +
       'Isolation\n' +
       '• Checked coins use Cash out instead of normal Auto\n' +
-      '• Never shares an open ticker with Home, fade, TWAP, or Last-minute\n' +
+      '• Never shares an open ticker with Home, fade, TWAP, Last-minute, or Step buy\n' +
       '• BTC/ETH leave Cash out while TWAP lock is On for those chips\n' +
       '• Does not last-minute chase — Last-minute can still use the same coin if this window is empty',
   },
@@ -117,7 +119,7 @@ export const PATH_INFO = {
       '• Auto max ask, Smart buy, Protect, Cash out bid/stop\n' +
       '• TWAP lock / Last-minute fields\n\n' +
       'Isolation\n' +
-      '• Never shares an open ticker with Home, Auto, Cash out, TWAP, or Last-minute\n' +
+      '• Never shares an open ticker with Home, Auto, Cash out, TWAP, Last-minute, or Step buy\n' +
       '• Flatten default 3 minutes left — not a last-minute chase\n' +
       '• Full cushion flip dumps the lot on the way out\n' +
       '• Always dumps (take / stop / flatten / window end)',
@@ -165,8 +167,44 @@ export const PATH_INFO = {
       '• After that first Last-minute fill, ladder adds are extra (up to Max clips of open lots)\n' +
       '• A flip sell frees that clip slot so the path can buy the new favorite\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
+      '• Open Step buy lots sit this ticker out\n' +
       '• Both = expensive side only (not a 50/50). Never Yes and No in the same window\n' +
       '• Hold to settlement unless Sell if flip is On — not Protect / Cash out / fade / Home Sell\n' +
       '• Not a lock. Last seconds can flip. You can lose the full entry ask',
+  },
+  stepBuy: {
+    title: 'Step buy',
+    body:
+      'Uses\n' +
+      '• Step buy asset chips, and that asset On (Cushions tab on/off). Empty chips = no Step buy buys\n' +
+      '• Start after (minutes into the 15m window before lot 1)\n' +
+      '• Cushion % of that coin’s Cushions $ — lot 1 and every add. Lean must stay on the same side\n' +
+      '• Lot contracts (size of each lot), Add wait, Add band (lots 2+ only), Max lots, Stop, Entry ask\n' +
+      '• Shared: max open, trades/day, daily loss stop\n' +
+      '• Window cap 1 for lot 1 only\n' +
+      '• IOC. 1-second ask watch from the first fill (stops). After Max lots the watcher is stop-only\n\n' +
+      'Does not use\n' +
+      '• Auto $ per trade (size is Lot contracts × live ask)\n' +
+      '• Auto max ask, Smart buy, chase, minutes left, Auto TIF\n' +
+      '• Full cushion — only Cushion % of the $ gap\n' +
+      '• Protect, Cash out, Gold fade, TWAP $0 lock, Last-minute clips, Home Sell\n' +
+      '• Skip thin bid unless you turn that checkbox On (default Off)\n\n' +
+      'Isolation\n' +
+      '• Own path. Default Off. Admin must enable the block first\n' +
+      '• Follows the Auto lean (YES or NO). Never both sides on one ticker\n' +
+      '• Lot 1 only after Start after + Cushion % + lean + Entry ask\n' +
+      '• Later lots need Add wait, Cushion % + lean still with you, and ask between last fill and last fill + Add band\n' +
+      '• Add band 0 = next ask must match the last fill. Band does not apply to lot 1\n' +
+      '• Stop adding with 30s left (code, not a knob). Stops still run in those last 30s\n' +
+      '• 5s grace after each fill so your own print does not stop you out\n' +
+      '• Sell a lot when live ask ≤ that lot’s fill − Stop ¢. Sell is bid IOC\n' +
+      '• Lot 1 stop sells every remaining Step buy lot on that ticker\n' +
+      '• Sold lots free Max lots slots (open lots only)\n' +
+      '• Window cap 1: Auto / Home / Cash out fill this window blocks lot 1. Later Step buy lots are extra\n' +
+      '• Open Step buy: Auto / Home / Cash out / Last-minute sit out that ticker\n' +
+      '• If Last-minute is in its buy window and Step buy has no lots yet, Last-minute owns new buys\n' +
+      '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
+      '• Protect skips Step buy rows\n' +
+      '• Hold to settlement unless a stop already fired',
   },
 } as const;

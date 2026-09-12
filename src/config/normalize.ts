@@ -50,6 +50,17 @@ import {
   normalizeLastMinuteFlipSellUsd,
 } from '../../packages/trading-core/src/lastMinute';
 import {
+  normalizeStepBuyAddBandUsd,
+  normalizeStepBuyAddWaitMinutes,
+  normalizeStepBuyAssets,
+  normalizeStepBuyCushionPct,
+  normalizeStepBuyLotCount,
+  normalizeStepBuyMaxAskUsd,
+  normalizeStepBuyMaxLots,
+  normalizeStepBuyStartMinutes,
+  normalizeStepBuyStopUsd,
+} from '../../packages/trading-core/src/stepBuy';
+import {
   configForHomeBuy as mergeHomeBuyRisk,
   normalizeManualPathRisk,
 } from '../../packages/trading-core/src/pathRisk';
@@ -208,6 +219,21 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     last_minute_assets: normalizeLastMinuteAssets(
       r.last_minute_assets !== undefined ? r.last_minute_assets : d.last_minute_assets
     ),
+    step_buy_enabled: r.step_buy_enabled === true,
+    step_buy_start_minutes: normalizeStepBuyStartMinutes(
+      r.step_buy_start_minutes ?? d.step_buy_start_minutes
+    ),
+    step_buy_cushion_pct: normalizeStepBuyCushionPct(r.step_buy_cushion_pct ?? d.step_buy_cushion_pct),
+    step_buy_lot_count: normalizeStepBuyLotCount(r.step_buy_lot_count ?? d.step_buy_lot_count),
+    step_buy_add_wait_minutes: normalizeStepBuyAddWaitMinutes(
+      r.step_buy_add_wait_minutes ?? d.step_buy_add_wait_minutes
+    ),
+    step_buy_add_band_usd: normalizeStepBuyAddBandUsd(r.step_buy_add_band_usd ?? d.step_buy_add_band_usd),
+    step_buy_max_lots: normalizeStepBuyMaxLots(r.step_buy_max_lots ?? d.step_buy_max_lots),
+    step_buy_stop_usd: normalizeStepBuyStopUsd(r.step_buy_stop_usd ?? d.step_buy_stop_usd),
+    step_buy_max_ask_usd: normalizeStepBuyMaxAskUsd(r.step_buy_max_ask_usd ?? d.step_buy_max_ask_usd),
+    step_buy_skip_thin_bid: inheritSkipThinBid(r.step_buy_skip_thin_bid, r.cash_out_skip_thin_bid === true),
+    step_buy_assets: normalizeStepBuyAssets(r.step_buy_assets !== undefined ? r.step_buy_assets : d.step_buy_assets),
   };
   const targets = reconcileCashOutTargets(
     Number(risk.cash_out_max_ask_usd),
