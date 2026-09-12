@@ -69,11 +69,20 @@ describe('cloud alerts persist + mute + settlement', () => {
     ).toBe('Order Placed · Last-minute · Gold NO');
     expect(orderPlacedAlertTitle({ live: true, asset: 'ETH', decision: 'YES' })).toBe('Order Placed · ETH YES');
     expect(iocMissAlertTitle('last_minute')).toBe('IOC miss · Last-minute');
-    expect(iocMissAlertBody({ asset: 'BTC', decision: 'YES', entryPath: 'last_minute' })).toBe(
-      'Last-minute · BTC YES · IOC no fill'
-    );
+    expect(
+      iocMissAlertBody({
+        asset: 'BTC',
+        decision: 'YES',
+        entryPath: 'last_minute',
+        price: 0.96,
+        count: 1,
+      })
+    ).toBe('Last-minute · BTC YES · 1 ctr @ $0.96 · IOC no fill');
     expect(iocMissAlertTitle()).toBe('IOC miss');
     expect(iocMissAlertBody({ asset: 'BTC', decision: 'YES' })).toBe('BTC YES · IOC no fill');
+    expect(iocMissAlertBody({ asset: 'ETH', decision: 'NO', entryPath: 'auto', price: 0.88 })).toBe(
+      'Auto · ETH NO · $0.88 · IOC no fill'
+    );
   });
 
   test('SKIP leans never persist and below-cushion does not write both sides', async () => {

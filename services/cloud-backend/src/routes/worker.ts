@@ -1129,6 +1129,8 @@ async function runOneTick() {
                     asset,
                     decision: String(placeDecision || ''),
                     entryPath,
+                    price: priceVal,
+                    count: gate.count,
                   }),
                   cfg,
                   tokens: userTokens,
@@ -1496,6 +1498,27 @@ export async function runTwapLockWatchTick(): Promise<{
               decision: 'YES',
               at: now.toISOString(),
             });
+          } else if (!accepted) {
+            await emitCloudAlert({
+              userId,
+              alertId: missAlertId(tradeId),
+              kind: 'ioc_miss',
+              title: iocMissAlertTitle('twap_lock'),
+              body: iocMissAlertBody({
+                asset,
+                decision: 'YES',
+                entryPath: 'twap_lock',
+                price: priceVal,
+                count: gate.count,
+              }),
+              cfg,
+              tokens: userTokens,
+              asset: lean.asset,
+              ticker: marketTicker,
+              tradeId,
+              decision: 'YES',
+              at: now.toISOString(),
+            });
           }
         } finally {
           await releasePlaceLock({ userId, ticker: marketTicker, requestId: placeRequestId });
@@ -1813,6 +1836,8 @@ export async function runLastMinuteWatchTick(): Promise<{
                 asset,
                 decision: String(placeDecision || ''),
                 entryPath: 'last_minute',
+                price: priceVal,
+                count: gate.count,
               }),
               cfg,
               tokens: userTokens,

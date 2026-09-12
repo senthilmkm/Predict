@@ -218,6 +218,11 @@ describe('manual buy/sell place-now', () => {
     expect(res.ok).toBe(false);
     expect(res.error).toBe('ioc_miss');
     expect(res.message).toMatch(/IOC no fill/i);
+    expect(res.message).toMatch(/\$0\.\d{2}/);
+    const alerts = await getAlertRecords(uid);
+    const miss = alerts.find((a) => a.kind === 'ioc_miss');
+    expect(miss?.title).toBe('IOC miss · Home');
+    expect(miss?.body).toMatch(/Home · BTC YES · \d+ ctr @ \$0\.\d{2} · IOC no fill/);
   });
 
   test('GTC with no immediate fill is resting, not IOC miss', async () => {

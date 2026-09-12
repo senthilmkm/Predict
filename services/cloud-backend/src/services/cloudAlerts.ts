@@ -46,9 +46,25 @@ export function iocMissAlertTitle(entryPath?: unknown): string {
   return pathTaggedAlertTitle('IOC miss', entryPath);
 }
 
-export function iocMissAlertBody(opts: { asset: string; decision: string; entryPath?: unknown }): string {
+export function formatIocMissTicket(opts: { price?: unknown; count?: unknown }): string | null {
+  const price = Number(opts.price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  const ticket = `$${price.toFixed(2)}`;
+  const count = Math.max(0, Math.floor(Number(opts.count) || 0));
+  return count > 0 ? `${count} ctr @ ${ticket}` : ticket;
+}
+
+export function iocMissAlertBody(opts: {
+  asset: string;
+  decision: string;
+  entryPath?: unknown;
+  price?: unknown;
+  count?: unknown;
+}): string {
   const tag = orderPlacedPathTag(opts.entryPath);
-  const rest = `${opts.asset} ${opts.decision} · IOC no fill`.trim();
+  const ticket = formatIocMissTicket(opts);
+  const side = `${opts.asset} ${opts.decision}`.trim();
+  const rest = [side, ticket, 'IOC no fill'].filter(Boolean).join(' · ');
   return tag ? `${tag} · ${rest}` : rest;
 }
 

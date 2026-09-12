@@ -41,7 +41,14 @@ import { isCashOutEntryPath } from '../../../../packages/trading-core/src/cashOu
 import { isGoldFadeEntryPath } from '../../../../packages/trading-core/src/goldFade';
 import { isTwapLockEntryPath } from '../../../../packages/trading-core/src/twapLock';
 import { isLastMinuteEntryPath } from '../../../../packages/trading-core/src/lastMinute';
-import { emitCloudAlert, fillAlertId, orderPlacedAlertTitle } from './cloudAlerts';
+import {
+  emitCloudAlert,
+  fillAlertId,
+  iocMissAlertBody,
+  iocMissAlertTitle,
+  missAlertId,
+  orderPlacedAlertTitle,
+} from './cloudAlerts';
 import { fillCollapseId } from './leanAlerts';
 
 export type ManualTradeAction = 'buy' | 'sell';
@@ -453,18 +460,44 @@ async function executeManualBuy(opts: {
     }
 
     if (!filled && !accepted) {
+      const userTokens = [
+        ...((user as { pushTokens?: string[] })?.pushTokens || []),
+        ...((user as { fcmTokens?: string[] })?.fcmTokens || []),
+      ].filter((t, i, arr) => t && arr.indexOf(t) === i);
+      const missBody = iocMissAlertBody({
+        asset,
+        decision: String(lean.decision || ''),
+        entryPath: 'home',
+        price: priceVal,
+        count: gate.count,
+      });
+      await emitCloudAlert({
+        userId,
+        alertId: missAlertId(tradeId),
+        kind: 'ioc_miss',
+        title: iocMissAlertTitle('home'),
+        body: missBody,
+        cfg,
+        tokens: userTokens,
+        asset,
+        ticker,
+        tradeId,
+        decision: lean.decision,
+        at: now.toISOString(),
+      });
+      const ticket = Number.isFinite(priceVal) && priceVal > 0 ? ` at $${priceVal.toFixed(2)}` : '';
       await auditError(userId, {
         source: 'manual_buy',
         error: 'ioc_miss',
         ticker,
         asset,
-        message: 'IOC no fill',
+        message: `IOC no fill${ticket}`,
       });
       return {
         ok: false,
         httpStatus: 409,
         error: 'ioc_miss',
-        message: 'IOC no fill — the order did not take. Try again if the quote is still good.',
+        message: `IOC no fill — the order did not take${ticket}. Try again if the quote is still good.`,
         tradeId,
         filled: false,
         ticker,
