@@ -247,10 +247,10 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Pair lock asset chips, and that asset On (Cushions tab on/off). Empty chips = no Pair lock buys\n' +
       '• Start after / Until minute (default minutes 2–10 of the 15m window)\n' +
-      '• Runner max ask, Min lock, Flatten unmatched, Runner stop, Lot contracts\n' +
+      '• Runner max ask, Min lock, Flatten unmatched, Runner stop, Lot contracts, Add new pair\n' +
       '• Auto lean for the runner only. Hedge is always the other side\n' +
       '• Shared: max open, trades/day, daily loss stop, window cap 1 on the runner\n' +
-      '• IOC. 1-second watcher from the runner fill for hedge / runner stop / flatten unmatched\n\n' +
+      '• IOC. 1-second watcher from the runner fill for hedge / runner stop / flatten unmatched. After both legs lock, that watcher stays on if Add new pair > 0 and can fire YES+NO on the hedge-fill pulse and every 1s\n\n' +
       'Does not use\n' +
       '• Auto $ per trade (size is Lot contracts × live ask)\n' +
       '• Auto max ask, Smart buy, chase, Auto TIF, Cushions $ gap\n' +
@@ -259,10 +259,13 @@ export const PATH_INFO = {
       '• Skip thin bid unless you turn that checkbox On (default Off). On = fail closed on buys; unmatched flatten can dump if the bid pile is thinner than you hold\n\n' +
       'Isolation\n' +
       '• Own path. Default Off. Admin must enable the block first\n' +
-      '• Example: buy YES at 52¢, later buy NO at 18¢. Spent 70¢. Settlement pays $1. Locked +30¢\n' +
-      '• Hedge only when runner fill + opposite ask ≤ $1 − Min lock (default 5¢). 50¢ + 50¢ sits out\n' +
-      '• Hedge count matches the runner. Window cap 1 blocks the runner only\n' +
-      '• 5s grace after the runner fill so your own print does not dump you\n' +
+      '• Example: YES 52¢ and NO 18¢ already lock → buy YES, then NO. Spent 70¢. Settlement pays $1. Locked +30¢\n' +
+      '• First buy only if opposite ask already locks at least Min lock (default 5¢). 52¢ + 48¢ sits out. 50¢ + 50¢ sits out\n' +
+      '• Add new pair 0–3 (default 0 = first pair only). 3 = 3 more pairs after the first (4 total)\n' +
+      '• After both first-pair legs fill, if Add new pair > 0 and both live asks still lock Min lock, Cloud fires YES and NO together on that pulse and every 1s\n' +
+      '• If only one stacked side fills, compare finish vs dump and take the smaller loss. Do not sit unmatched\n' +
+      '• Hedge when runner fill + opposite ask ≤ $1 − Min lock. Hedge count matches the runner. Window cap 1 blocks the runner only\n' +
+      '• Hedge right after the runner fill. 5s grace is for flatten / runner stop so your own print does not dump you\n' +
       '• Pair complete → hold both to $1. Flatten unmatched: minutes left ≤ Flatten unmatched, or window end, and only if the second leg is missing\n' +
       '• Runner stop (default 10¢, $0 = off): unmatched only, after 5s grace, and only if the hedge still cannot lock. Sells when live runner ask ≤ fill − Runner stop. Sell is bid IOC — the book can gap past 10¢. After that sell we do not buy the other leg on this ticket\n' +
       '• After Until minute, no new runner. An open runner may still hedge until flatten\n' +

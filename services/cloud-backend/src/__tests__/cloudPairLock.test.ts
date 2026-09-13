@@ -107,6 +107,7 @@ describe('Pair lock cloud wiring', () => {
             pair_lock_flatten_minutes: 4,
             pair_lock_runner_stop_usd: 0.08,
             pair_lock_lot_count: 2,
+            pair_lock_add_pairs: 2,
             pair_lock_assets: ['Gold', 'WTI'],
             pair_lock_skip_thin_bid: true,
             last_minute_enabled: true,
@@ -122,6 +123,7 @@ describe('Pair lock cloud wiring', () => {
     expect(on.body.userDoc.config.risk.pair_lock_flatten_minutes).toBe(4);
     expect(on.body.userDoc.config.risk.pair_lock_runner_stop_usd).toBe(0.08);
     expect(on.body.userDoc.config.risk.pair_lock_lot_count).toBe(2);
+    expect(on.body.userDoc.config.risk.pair_lock_add_pairs).toBe(2);
     expect(on.body.userDoc.config.risk.pair_lock_assets).toEqual(['Gold', 'WTI']);
     expect(on.body.userDoc.config.risk.pair_lock_skip_thin_bid).toBe(true);
     expect(on.body.userDoc.config.risk.last_minute_enabled).toBe(true);

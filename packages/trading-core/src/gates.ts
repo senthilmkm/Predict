@@ -315,6 +315,16 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Pair lock runner stop';
     case 'pair_lock_hedge':
       return 'Pair lock hedge';
+    case 'pair_lock_add_off':
+      return 'Pair lock add pair off';
+    case 'pair_lock_stack_max':
+      return 'Pair lock add pair max';
+    case 'pair_lock_stack':
+      return 'Pair lock add pair';
+    case 'pair_lock_stack_finish':
+      return 'Pair lock add pair finish';
+    case 'pair_lock_stack_dump':
+      return 'Pair lock add pair dump';
     case 'no_open_fill':
       return 'no open fill to sell';
     case 'market_closed':

@@ -228,6 +228,8 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('tradeFilterFromLabel');
     expect(res.text).toContain('tradeFilterToLabel');
     expect(res.text).toContain('setTradeDatePreset');
+    expect(res.text).toContain('applyDefaultTradeStreamFilters');
+    expect(res.text).toMatch(/option value="SETTLED" selected/);
     expect(res.text).toContain('tradeDatePresetToday');
     expect(res.text).toContain('tradeDatePreset7d');
     expect(res.text).toContain('syncTradeDatePresetButtons');

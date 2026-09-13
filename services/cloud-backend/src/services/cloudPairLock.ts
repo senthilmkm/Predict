@@ -2,6 +2,7 @@ import {
   buildPairLockSellOrder,
   evaluatePairLockFlatten,
   isPairLockEntryPath,
+  pairLockExtraCount,
   pairLockLotsForTicker,
 } from '../../../../packages/trading-core/src/pairLock';
 import { isOpenLiveFill } from '../../../../packages/trading-core/src/cashOut';
@@ -24,16 +25,32 @@ export function pendingPairLockRunnerTradesForMarket(
   marketTicker: string
 ): TradeRecordDoc[] {
   const lots = pairLockLotsForTicker(trades, marketTicker);
-  if (!lots.unmatched || !lots.runnerSide) return [];
+  const extra = pairLockExtraCount(lots);
+  const extraSide = lots.extraSide || lots.runnerSide;
+  if (extra <= 0 || !extraSide) return [];
   const tkr = String(marketTicker || '').trim();
-  return (trades || []).filter(
+  const rows = (trades || []).filter(
     (t) =>
       String(t.ticker || '').trim() === tkr &&
       isPairLockEntryPath(t.entryPath) &&
       isOpenLiveFill(t) &&
       !t.protectExitOrderId &&
-      String(t.decision || '').toUpperCase() === lots.runnerSide
+      String(t.decision || '').toUpperCase() === extraSide
   );
+  rows.sort((a, b) => {
+    const am = Date.parse(String(a.executedAt || '')) || 0;
+    const bm = Date.parse(String(b.executedAt || '')) || 0;
+    return bm - am;
+  });
+  const out: TradeRecordDoc[] = [];
+  let need = extra;
+  for (const t of rows) {
+    if (need <= 0) break;
+    out.push(t);
+    const n = Number(t.fillCount);
+    need -= Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
+  }
+  return out;
 }
 
 async function revertPairLockClaim(userId: string, trade: TradeRecordDoc): Promise<void> {
@@ -67,6 +84,7 @@ export async function runCloudPairLockFlatten(opts: {
   slippageUsd: number;
   dryRun: boolean;
   now?: Date;
+  forceExtra?: boolean;
   place: PairLockPlaceFn;
 }): Promise<{
   exited: number;
@@ -80,7 +98,9 @@ export async function runCloudPairLockFlatten(opts: {
   let exited = 0;
   let placed = 0;
   const lots = pairLockLotsForTicker(opts.trades, opts.ticker);
-  const evalRes = evaluatePairLockFlatten({
+  const evalRes = opts.forceExtra
+    ? { sell: true, kind: 'pair_lock_flatten' as const, reason: 'pair_lock_stack_dump' }
+    : evaluatePairLockFlatten({
     lots,
     quotes: {
       yes_bid: opts.lean.yes_bid,

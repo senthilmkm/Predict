@@ -2,10 +2,13 @@ import {
   canPairLockHedge,
   evaluatePairLockEnter,
   evaluatePairLockFlatten,
+  evaluatePairLockStackAdd,
+  evaluatePairLockStackRecover,
   evaluatePairLockWatch,
   isPairLockEnterPath,
   isPairLockEntryPath,
   isPairLockEnterWindow,
+  normalizePairLockAddPairs,
   normalizePairLockAssets,
   normalizePairLockFlattenMinutes,
   normalizePairLockLotCount,
@@ -18,6 +21,8 @@ import {
   pairLockHedgeAskLimitUsd,
   pairLockLockedUsd,
   pairLockLotsForTicker,
+  shouldWatchPairLockLots,
+  shouldWatchPairLockTicker,
   reconcilePairLockWindow,
   tickerHasOpenOtherThanPairLock,
   tickerHasOpenPairLock,
@@ -85,6 +90,10 @@ describe('Pair lock path', () => {
     expect(pairLockRunnerStopAskUsd(0.51, 0.1)).toBe(0.41);
     expect(normalizePairLockLotCount(0)).toBe(1);
     expect(normalizePairLockLotCount(9)).toBe(5);
+    expect(normalizePairLockAddPairs(0)).toBe(0);
+    expect(normalizePairLockAddPairs(3)).toBe(3);
+    expect(normalizePairLockAddPairs(9)).toBe(3);
+    expect(normalizePairLockAddPairs(-1)).toBe(0);
     const win = reconcilePairLockWindow({ startMinutes: 8, untilMinutes: 6 });
     expect(win.untilMinutes).toBeGreaterThanOrEqual(win.startMinutes);
     expect(normalizePairLockAssets(undefined).includes('Gold')).toBe(true);
@@ -109,14 +118,28 @@ describe('Pair lock path', () => {
     expect(pairLockLockedUsd(0.52, 0.18)).toBe(0.3);
   });
 
-  test('enter buys Auto lean YES when ask is under runner max', () => {
+  test('enter buys Auto lean YES only when opposite ask already locks min lock', () => {
+    expect(
+      evaluatePairLockEnter({
+        lean: lean(),
+        cfg: cfg(),
+        adminEnabled: true,
+      }).skip_reason
+    ).toBe('pair_lock_min_lock');
     const enter = evaluatePairLockEnter({
-      lean: lean(),
+      lean: lean({ no_ask: 0.18 }),
       cfg: cfg(),
       adminEnabled: true,
     });
     expect(enter.ok).toBe(true);
     expect(enter.decision).toBe('YES');
+    const noLean = evaluatePairLockEnter({
+      lean: lean({ decision: 'NO', no_ask: 0.52, yes_ask: 0.18 }),
+      cfg: cfg(),
+      adminEnabled: true,
+    });
+    expect(noLean.ok).toBe(true);
+    expect(noLean.decision).toBe('NO');
   });
 
   test('sits out outside window, rich ask, empty chips, TWAP, Last-minute, other path', () => {
@@ -199,6 +222,16 @@ describe('Pair lock path', () => {
     });
     expect(hedge.kind).toBe('hedge');
     expect(hedge.hedge?.decision).toBe('NO');
+    const hedgeNow = evaluatePairLockWatch({
+      lots,
+      quotes: { yes_bid: 0.8, yes_ask: 0.82, no_bid: 0.16, no_ask: 0.18 },
+      minLockUsd: 0.05,
+      flattenMinutes: 3,
+      lean: { phase: 'live', minutes_left: 7 },
+      filledAt: '2026-09-12T15:00:00.000Z',
+      now: new Date('2026-09-12T15:00:02.000Z'),
+    });
+    expect(hedgeNow.kind).toBe('hedge');
     const flatten = evaluatePairLockFlatten({
       lots,
       quotes: { yes_bid: 0.4, yes_ask: 0.48, no_bid: 0.5, no_ask: 0.52 },
@@ -269,6 +302,9 @@ describe('Pair lock path', () => {
       runnerSide: 'YES',
       unmatched: true,
       locked: false,
+      matchedCount: 0,
+      extraCount: 1,
+      extraSide: 'YES',
     });
   });
 
@@ -305,6 +341,8 @@ describe('Pair lock path', () => {
       hedgeSide: 'NO',
       locked: true,
       unmatched: false,
+      matchedCount: 1,
+      extraCount: 0,
     });
     expect(pairLockLockedUsd(lots.runnerFillUsd, lots.hedgeFillUsd)).toBe(0.05);
     expect(tickerHasOpenOtherThanPairLock(trades, 'KXGOLD15M-T')).toBe(false);
@@ -412,6 +450,181 @@ describe('Pair lock path', () => {
     ).toBe('hold_locked');
   });
 
+  test('Add new pair stacks both sides then finish vs dump the extra', () => {
+    const lockedLots = {
+      runnerSide: 'YES' as const,
+      runnerFillUsd: 0.52,
+      runnerCount: 1,
+      runnerFilledAt: '2026-09-12T15:00:00.000Z',
+      hedgeSide: 'NO' as const,
+      hedgeFillUsd: 0.18,
+      hedgeCount: 1,
+      locked: true,
+      unmatched: false,
+      matchedCount: 1,
+      extraSide: null,
+      extraCount: 0,
+      extraFillUsd: null,
+      extraFilledAt: null,
+    };
+    expect(
+      evaluatePairLockWatch({
+        lots: lockedLots,
+        quotes: { yes_bid: 0.52, yes_ask: 0.54, no_bid: 0.18, no_ask: 0.2 },
+        minLockUsd: 0.05,
+        flattenMinutes: 3,
+        addPairs: 0,
+        lotCount: 1,
+        lean: { phase: 'live', minutes_left: 8 },
+        now: new Date('2026-09-12T15:00:20.000Z'),
+      }).kind
+    ).toBe('hold_locked');
+    const stack = evaluatePairLockStackAdd({
+      lots: lockedLots,
+      quotes: { yes_bid: 0.52, yes_ask: 0.54, no_bid: 0.18, no_ask: 0.2 },
+      addPairs: 1,
+      lotCount: 1,
+      minLockUsd: 0.05,
+      flattenMinutes: 3,
+      lean: { phase: 'live', minutes_left: 8 },
+    });
+    expect(stack.ok).toBe(true);
+    expect(stack.yes.decision).toBe('YES');
+    expect(stack.no.decision).toBe('NO');
+    expect(
+      evaluatePairLockWatch({
+        lots: lockedLots,
+        quotes: { yes_bid: 0.52, yes_ask: 0.54, no_bid: 0.18, no_ask: 0.2 },
+        minLockUsd: 0.05,
+        flattenMinutes: 3,
+        addPairs: 1,
+        lotCount: 1,
+        lean: { phase: 'live', minutes_left: 8 },
+        now: new Date('2026-09-12T15:00:20.000Z'),
+      }).kind
+    ).toBe('stack');
+
+    const extraLots = {
+      ...lockedLots,
+      runnerCount: 2,
+      unmatched: true,
+      extraSide: 'YES' as const,
+      extraCount: 1,
+      extraFillUsd: 0.54,
+      extraFilledAt: '2026-09-12T15:00:21.000Z',
+    };
+    const trades = [
+      {
+        ticker: 'KXGOLD15M-T',
+        entryPath: 'pair_lock',
+        decision: 'YES',
+        dryRun: false,
+        status: 'FILLED',
+        fillCount: 1,
+        outcome: 'pending',
+        payPrice: 0.52,
+        executedAt: '2026-09-12T15:00:00.000Z',
+      },
+      {
+        ticker: 'KXGOLD15M-T',
+        entryPath: 'pair_lock_hedge',
+        decision: 'NO',
+        dryRun: false,
+        status: 'FILLED',
+        fillCount: 1,
+        outcome: 'pending',
+        payPrice: 0.18,
+        executedAt: '2026-09-12T15:00:08.000Z',
+      },
+      {
+        ticker: 'KXGOLD15M-T',
+        entryPath: 'pair_lock',
+        decision: 'YES',
+        dryRun: false,
+        status: 'FILLED',
+        fillCount: 1,
+        outcome: 'pending',
+        payPrice: 0.54,
+        executedAt: '2026-09-12T15:00:21.000Z',
+      },
+    ];
+    expect(pairLockLotsForTicker(trades, 'KXGOLD15M-T')).toMatchObject({
+      matchedCount: 1,
+      extraCount: 1,
+      extraSide: 'YES',
+      extraFillUsd: 0.54,
+      locked: true,
+      unmatched: true,
+    });
+    const finish = evaluatePairLockStackRecover({
+      lots: extraLots,
+      quotes: { yes_bid: 0.4, yes_ask: 0.54, no_bid: 0.22, no_ask: 0.24 },
+    });
+    expect(finish.kind).toBe('stack_finish');
+    expect(finish.hedge?.decision).toBe('NO');
+    const smallLoss = evaluatePairLockStackRecover({
+      lots: extraLots,
+      quotes: { yes_bid: 0.4, yes_ask: 0.54, no_bid: 0.46, no_ask: 0.48 },
+    });
+    expect(smallLoss.kind).toBe('stack_finish');
+    const dump = evaluatePairLockStackRecover({
+      lots: extraLots,
+      quotes: { yes_bid: 0.5, yes_ask: 0.54, no_bid: 0.56, no_ask: 0.58 },
+    });
+    expect(dump.kind).toBe('stack_dump');
+    expect(
+      shouldWatchPairLockLots({ lots: lockedLots, addPairs: 0, lotCount: 1 })
+    ).toBe(false);
+    expect(
+      shouldWatchPairLockLots({ lots: lockedLots, addPairs: 1, lotCount: 1 })
+    ).toBe(true);
+    expect(
+      shouldWatchPairLockLots({
+        lots: { ...lockedLots, matchedCount: 2, runnerCount: 2, hedgeCount: 2 },
+        addPairs: 1,
+        lotCount: 1,
+      })
+    ).toBe(false);
+    expect(
+      shouldWatchPairLockLots({ lots: extraLots, addPairs: 1, lotCount: 1 })
+    ).toBe(true);
+    expect(
+      shouldWatchPairLockTicker({
+        lots: lockedLots,
+        addPairs: 0,
+        lotCount: 1,
+        minutesElapsed: 4,
+        startMinutes: 2,
+        untilMinutes: 10,
+      })
+    ).toBe(false);
+    expect(
+      shouldWatchPairLockTicker({
+        lots: {
+          runnerSide: null,
+          runnerFillUsd: null,
+          runnerCount: 0,
+          runnerFilledAt: null,
+          hedgeSide: null,
+          hedgeFillUsd: null,
+          hedgeCount: 0,
+          locked: false,
+          unmatched: false,
+          matchedCount: 0,
+          extraSide: null,
+          extraCount: 0,
+          extraFillUsd: null,
+          extraFilledAt: null,
+        },
+        addPairs: 1,
+        lotCount: 1,
+        minutesElapsed: 4,
+        startMinutes: 2,
+        untilMinutes: 10,
+      })
+    ).toBe(true);
+  });
+
   test('i-icon copy locks isolation and flatten unmatched', () => {
     expect(PATH_INFO.pairLock.title).toBe('Pair lock');
     expect(PATH_INFO.pairLock.body).toMatch(/Pair lock asset chips/);
@@ -420,6 +633,8 @@ describe('Pair lock path', () => {
     expect(PATH_INFO.pairLock.body).toMatch(/Min lock/);
     expect(PATH_INFO.pairLock.body).toMatch(/Flatten unmatched/);
     expect(PATH_INFO.pairLock.body).toMatch(/Runner stop/);
+    expect(PATH_INFO.pairLock.body).toMatch(/Add new pair/);
+    expect(PATH_INFO.pairLock.body).toMatch(/hedge-fill pulse and every 1s/);
     expect(PATH_INFO.pairLock.body).toMatch(/do not buy the other leg/);
     expect(PATH_INFO.pairLock.body).toMatch(/hold both to \$1/);
     expect(PATH_INFO.pairLock.body).toMatch(/5s grace/);

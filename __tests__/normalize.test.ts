@@ -328,6 +328,7 @@ describe('normalize / cushions', () => {
     expect(d.pair_lock_flatten_minutes).toBe(3);
     expect(d.pair_lock_runner_stop_usd).toBe(0.1);
     expect(d.pair_lock_lot_count).toBe(1);
+    expect(d.pair_lock_add_pairs).toBe(0);
     expect(d.pair_lock_skip_thin_bid).toBe(false);
     expect(normalizeAppConfig({ risk: { pair_lock_assets: [] } } as any).risk.pair_lock_assets).toEqual([]);
     const pairOn = normalizeAppConfig({
@@ -340,6 +341,7 @@ describe('normalize / cushions', () => {
         pair_lock_flatten_minutes: 9,
         pair_lock_runner_stop_usd: 0.4,
         pair_lock_lot_count: 0,
+        pair_lock_add_pairs: 9,
       },
     } as any).risk;
     expect(pairOn.pair_lock_enabled).toBe(true);
@@ -351,6 +353,7 @@ describe('normalize / cushions', () => {
     expect(pairOn.pair_lock_flatten_minutes).toBe(5);
     expect(pairOn.pair_lock_runner_stop_usd).toBe(0.2);
     expect(pairOn.pair_lock_lot_count).toBe(1);
+    expect(pairOn.pair_lock_add_pairs).toBe(3);
     expect(on.pair_lock_skip_thin_bid).toBe(true);
     const split = normalizeAppConfig({
       risk: { cash_out_skip_thin_bid: true, gold_fade_skip_thin_bid: false },

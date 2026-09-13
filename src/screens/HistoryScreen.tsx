@@ -6,7 +6,7 @@ import { useRuntimeStore } from '../state/runtimeStore';
 import { AssetKey } from '../config/types';
 import { LeanResult } from '../services/lean/lean';
 import { TradeRecord } from '../storage/repos';
-import { entryPathChipLabel, formatHistoryTradeSubline } from '../history/tradeDisplay';
+import { entryPathChipLabel, formatHistoryTradeSubline, pairLockHistoryPairNumbers } from '../history/tradeDisplay';
 import { useMarkAlertsSeenOnLeave } from '../hooks/useMarkAlertsSeenOnLeave';
 import {
   ALERT_FILTERS,
@@ -111,6 +111,7 @@ export function HistoryScreen() {
   }, [refreshCloudSnapshot]);
 
   const filteredTrades = useMemo(() => filterTrades(trades, tradeFilters), [trades, tradeFilters]);
+  const pairLockPairNo = useMemo(() => pairLockHistoryPairNumbers(trades), [trades]);
   const filteredAlerts = useMemo(() => filterAlerts(alerts, alertFilter), [alerts, alertFilter]);
   const assetOptions = useMemo(() => tradeAssetFilterOptions(trades), [trades]);
 
@@ -236,7 +237,7 @@ export function HistoryScreen() {
                   const lean = leans[item.asset as AssetKey];
                   const cushion = cushions[item.asset as AssetKey];
                   const statusInfo = computeTradeStatusDot(item, lean, cushion);
-                  const pathLabel = entryPathChipLabel(item.entry_path);
+                  const pathLabel = entryPathChipLabel(item.entry_path, pairLockPairNo.get(item.id));
                   return (
                     <View style={styles.row} testID={`trade-row-${item.id}`}>
                       <View style={styles.tradeTitleGroup}>

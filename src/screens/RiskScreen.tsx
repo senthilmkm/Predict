@@ -884,7 +884,8 @@ function PairLockFields() {
         </View>
         {on ? (
           <Text style={styles.hint}>
-            Buy the lean side, then the opposite when the pair spends less than $1 − Min lock. Flatten
+            Buy the lean side only if the opposite ask already locks at least Min lock. Then hedge
+            that other side. Add new pair 0 = first pair only; 3 = 3 more after the first. Flatten
             unmatched only. A locked pair holds to settlement.
           </Text>
         ) : null}
@@ -945,9 +946,11 @@ function PairLockFields() {
             </View>
           </View>
           <Text style={styles.hint} testID="pair-lock-hint">
-            After Start after and before Until minute. Auto lean and Runner max ask → buy that side.
-            Hedge the other side when runner fill + opposite ask ≤ $1 − Min lock. Flatten unmatched
-            with Flatten unmatched. A completed pair holds to $1.
+            After Start after and before Until minute. Auto lean and Runner max ask, and only if the
+            opposite ask already locks at least Min lock → buy that side. Hedge the other side when
+            runner fill + opposite ask ≤ $1 − Min lock. After both first-pair legs fill, Add new pair
+            can fire on that pulse and every 1s. Add new pair 0–3 extra pairs after the first
+            lock (0 = none). Flatten unmatched with Flatten unmatched. A completed pair holds to $1.
           </Text>
         </View>
       ) : null}

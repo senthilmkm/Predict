@@ -78,6 +78,7 @@ import {
   normalizePairLockAssets,
   normalizePairLockFlattenMinutes,
   normalizePairLockLotCount,
+  normalizePairLockAddPairs,
   normalizePairLockMinLockUsd,
   normalizePairLockRunnerMaxAskUsd,
   normalizePairLockRunnerStopUsd,
@@ -312,6 +313,7 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
       r.pair_lock_runner_stop_usd ?? d.pair_lock_runner_stop_usd
     ),
     pair_lock_lot_count: normalizePairLockLotCount(r.pair_lock_lot_count ?? d.pair_lock_lot_count),
+    pair_lock_add_pairs: normalizePairLockAddPairs(r.pair_lock_add_pairs ?? d.pair_lock_add_pairs),
     pair_lock_skip_thin_bid: inheritSkipThinBid(r.pair_lock_skip_thin_bid, r.cash_out_skip_thin_bid === true),
     pair_lock_assets: normalizePairLockAssets(
       r.pair_lock_assets !== undefined ? r.pair_lock_assets : d.pair_lock_assets

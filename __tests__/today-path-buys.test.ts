@@ -4,7 +4,7 @@ import {
   formatHomePathBuyLines,
   summarizeTodayPathBuys,
 } from '../src/storage/todayPathBuys';
-import { entryPathChipLabel, formatHistoryTradeSubline } from '../src/history/tradeDisplay';
+import { entryPathChipLabel, formatHistoryTradeSubline, pairLockHistoryPairNumbers } from '../src/history/tradeDisplay';
 
 const NOW = new Date('2026-09-10T18:00:00.000Z');
 const TODAY = '2026-09-10T16:00:00.000Z';
@@ -117,11 +117,59 @@ describe('history trade display', () => {
     expect(entryPathChipLabel('step_buy')).toBe('Step buy');
     expect(entryPathChipLabel('spike_fade')).toBe('Spike fade');
     expect(entryPathChipLabel('pair_lock')).toBe('Pair lock');
+    expect(entryPathChipLabel('pair_lock', 1)).toBe('Pair lock 1');
+    expect(entryPathChipLabel('pair_lock', 2)).toBe('Pair lock 2');
     expect(entryPathChipLabel('pair_lock_hedge')).toBe('PL hedge');
-    expect(entryPathChipLabel('pair-lock-hedge')).toBe('PL hedge');
+    expect(entryPathChipLabel('pair_lock_hedge', 1)).toBe('PL hedge 1');
+    expect(entryPathChipLabel('pair-lock-hedge', 2)).toBe('PL hedge 2');
     expect(entryPathChipLabel('manual_buy')).toBe('Home');
     expect(entryPathChipLabel(null)).toBeNull();
     expect(entryPathChipLabel(undefined)).toBeNull();
+  });
+
+  test('numbers Pair lock / PL hedge by ticker in time order', () => {
+    const nos = pairLockHistoryPairNumbers([
+      rec({
+        id: 'r1',
+        at: '2026-09-10T16:00:00.000Z',
+        market_ticker: 'KXGOLD15M-A',
+        entry_path: 'pair_lock',
+        fill_count: 1,
+      }),
+      rec({
+        id: 'h1',
+        at: '2026-09-10T16:00:02.000Z',
+        market_ticker: 'KXGOLD15M-A',
+        entry_path: 'pair_lock_hedge',
+        fill_count: 1,
+      }),
+      rec({
+        id: 'r2',
+        at: '2026-09-10T16:00:10.000Z',
+        market_ticker: 'KXGOLD15M-A',
+        entry_path: 'pair_lock',
+        fill_count: 1,
+      }),
+      rec({
+        id: 'h2',
+        at: '2026-09-10T16:00:10.100Z',
+        market_ticker: 'KXGOLD15M-A',
+        entry_path: 'pair_lock_hedge',
+        fill_count: 1,
+      }),
+      rec({
+        id: 'other',
+        at: '2026-09-10T16:00:11.000Z',
+        market_ticker: 'KXBTC15M-B',
+        entry_path: 'pair_lock',
+        fill_count: 1,
+      }),
+    ]);
+    expect(nos.get('r1')).toBe(1);
+    expect(nos.get('h1')).toBe(1);
+    expect(nos.get('r2')).toBe(2);
+    expect(nos.get('h2')).toBe(2);
+    expect(nos.get('other')).toBe(1);
   });
 
   test('subline shows contracts at fill price then cost', () => {

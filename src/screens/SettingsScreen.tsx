@@ -1268,11 +1268,14 @@ function RiskHelpModal({
             <HelpItem title="Pair lock">
               Checked Pair lock assets that are also On in Cushions. Empty means no Pair lock buys.
               After Start after and before Until minute, buy the Auto lean side if the ask is at or
-              under Runner max ask (Lot contracts × live ask). Then a 1s watcher buys the opposite
-              side when runner fill + opposite ask ≤ $1 − Min lock. A completed pair holds both to
-              $1. If the second leg is missing, Flatten unmatched dumps the runner. Window cap 1
-              blocks the runner only. Protect skips these rows. Default Off. Admin must enable the
-              block first.
+              under Runner max ask and the opposite ask already locks at least Min lock (Lot
+              contracts × live ask). Then a 1s watcher buys the opposite side when runner fill +
+              opposite ask ≤ $1 − Min lock. After both first-pair legs fill, Add new pair can fire
+              on that pulse and every 1s. Add new pair 0 = first pair only; 3 = 3 more after the
+              first. If a stacked side misses, finish vs dump takes the smaller loss. A completed
+              pair holds both to $1. If the second leg is missing, Flatten unmatched dumps the
+              runner. Window cap 1 blocks the runner only. Protect skips these rows. Default Off.
+              Admin must enable the block first.
             </HelpItem>
 
             <HelpItem title="Restore defaults">

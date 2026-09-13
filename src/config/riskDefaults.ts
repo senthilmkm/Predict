@@ -88,6 +88,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   pair_lock_flatten_minutes: 3,
   pair_lock_runner_stop_usd: 0.1,
   pair_lock_lot_count: 1,
+  pair_lock_add_pairs: 0,
   pair_lock_skip_thin_bid: false,
   pair_lock_assets: AssetRegistry.getDefaultPathAssets(),
 };
@@ -635,6 +636,15 @@ export const RISK_FIELD_META: {
     min: 1,
     max: 5,
   },
+  {
+    key: 'pair_lock_add_pairs',
+    label: 'Add new pair',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 0,
+    max: 3,
+  },
 ];
 
 export const TIME_IN_FORCE_OPTIONS: { value: TimeInForce; label: string }[] = [
@@ -744,6 +754,7 @@ export const PAIR_LOCK_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'pair_lock_flatten_minutes',
   'pair_lock_runner_stop_usd',
   'pair_lock_lot_count',
+  'pair_lock_add_pairs',
 ];
 
 export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [

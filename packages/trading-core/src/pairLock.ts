@@ -6,6 +6,7 @@ import {
   isOpenLiveFill,
   openFillsForTicker,
   sideAskOf,
+  sideBidOf,
   ticketUsd,
 } from './cashOut';
 import { buildProtectSellOrder, inProtectSellGrace } from './protectSell';
@@ -33,11 +34,23 @@ export const PAIR_LOCK_RUNNER_STOP_MIN = 0;
 export const PAIR_LOCK_RUNNER_STOP_MAX = 0.2;
 export const PAIR_LOCK_LOT_COUNT_DEFAULT = 1;
 export const PAIR_LOCK_LOT_COUNT_MAX = 5;
+/** Extra pairs after the first. 0 = first pair only. 3 = 3 more (4 pairs total). */
+export const PAIR_LOCK_ADD_PAIRS_DEFAULT = 0;
+export const PAIR_LOCK_ADD_PAIRS_MAX = 3;
 export const PAIR_LOCK_GRACE_SEC = 5;
 
 export type PairLockSide = 'YES' | 'NO';
 export type PairLockExitKind = 'none' | 'pair_lock_flatten' | 'pair_lock_thin_bid' | 'pair_lock_runner_stop';
-export type PairLockWatchKind = 'none' | 'hedge' | 'flatten' | 'thin_bid' | 'runner_stop' | 'hold_locked';
+export type PairLockWatchKind =
+  | 'none'
+  | 'hedge'
+  | 'flatten'
+  | 'thin_bid'
+  | 'runner_stop'
+  | 'hold_locked'
+  | 'stack'
+  | 'stack_finish'
+  | 'stack_dump';
 
 export type PairLockTrade = {
   ticker?: string;
@@ -67,6 +80,11 @@ export type PairLockLotState = {
   hedgeCount: number;
   locked: boolean;
   unmatched: boolean;
+  matchedCount?: number;
+  extraSide?: PairLockSide | null;
+  extraCount?: number;
+  extraFillUsd?: number | null;
+  extraFilledAt?: string | Date | number | null;
 };
 
 function clamp(n: number, min: number, max: number): number {
@@ -158,6 +176,11 @@ export function normalizePairLockRunnerStopUsd(raw: unknown): number {
 
 export function normalizePairLockLotCount(raw: unknown): number {
   return Math.round(clamp(Number(raw ?? PAIR_LOCK_LOT_COUNT_DEFAULT), 1, PAIR_LOCK_LOT_COUNT_MAX));
+}
+
+/** 0 = first pair only. 3 = 3 extra pairs on top of the first. */
+export function normalizePairLockAddPairs(raw: unknown): number {
+  return Math.round(clamp(Number(raw ?? PAIR_LOCK_ADD_PAIRS_DEFAULT), 0, PAIR_LOCK_ADD_PAIRS_MAX));
 }
 
 export function pairLockDefaultAssets(): string[] {
@@ -303,6 +326,11 @@ export function pairLockLotsForTicker(trades: PairLockTrade[], marketTicker: str
     hedgeCount: 0,
     locked: false,
     unmatched: false,
+    matchedCount: 0,
+    extraSide: null,
+    extraCount: 0,
+    extraFillUsd: null,
+    extraFilledAt: null,
   };
   const yes: PairLockTrade[] = [];
   const no: PairLockTrade[] = [];
@@ -330,8 +358,35 @@ export function pairLockLotsForTicker(trades: PairLockTrade[], marketTicker: str
     }
     return c > 0 ? snap(w / c, 0.01) : null;
   };
+  const newestSlice = (rows: PairLockTrade[], take: number) => {
+    const sorted = rows.slice().sort((a, b) => executedAtMs(b.executedAt) - executedAtMs(a.executedAt));
+    let left = Math.max(0, take);
+    let w = 0;
+    let c = 0;
+    let filledAt: string | Date | number | null = sorted[0]?.executedAt ?? null;
+    for (const t of sorted) {
+      if (left <= 0) break;
+      const n = Math.max(1, fillCountOf(t));
+      const use = Math.min(n, left);
+      const px = fillUsdOf(t);
+      if (px != null) {
+        w += px * use;
+        c += use;
+      }
+      filledAt = t.executedAt ?? filledAt;
+      left -= use;
+    }
+    return { fillUsd: c > 0 ? snap(w / c, 0.01) : null, filledAt, count: take - left };
+  };
 
   if (yes.length === 0 && no.length === 0) return empty;
+  const yesCount = sumCount(yes);
+  const noCount = sumCount(no);
+  const matchedCount = Math.min(yesCount, noCount);
+  const extraCount = Math.abs(yesCount - noCount);
+  const extraSide: PairLockSide | null = extraCount <= 0 ? null : yesCount > noCount ? 'YES' : 'NO';
+  const extraSlice = extraSide === 'YES' ? newestSlice(yes, extraCount) : extraSide === 'NO' ? newestSlice(no, extraCount) : null;
+
   if (yes.length > 0 && no.length > 0) {
     const yesFirst = firstOf(yes);
     const noFirst = firstOf(no);
@@ -341,13 +396,18 @@ export function pairLockLotsForTicker(trades: PairLockTrade[], marketTicker: str
     return {
       runnerSide: runnerIsYes ? 'YES' : 'NO',
       runnerFillUsd: runnerIsYes ? avgFill(yes) : avgFill(no),
-      runnerCount: runnerIsYes ? sumCount(yes) : sumCount(no),
+      runnerCount: runnerIsYes ? yesCount : noCount,
       runnerFilledAt: runnerIsYes ? yesFirst?.executedAt ?? null : noFirst?.executedAt ?? null,
       hedgeSide: runnerIsYes ? 'NO' : 'YES',
       hedgeFillUsd: runnerIsYes ? avgFill(no) : avgFill(yes),
-      hedgeCount: runnerIsYes ? sumCount(no) : sumCount(yes),
-      locked: true,
-      unmatched: false,
+      hedgeCount: runnerIsYes ? noCount : yesCount,
+      locked: matchedCount > 0,
+      unmatched: extraCount > 0,
+      matchedCount,
+      extraSide,
+      extraCount,
+      extraFillUsd: extraSlice?.fillUsd ?? null,
+      extraFilledAt: extraSlice?.filledAt ?? null,
     };
   }
   const rows = yes.length > 0 ? yes : no;
@@ -363,12 +423,50 @@ export function pairLockLotsForTicker(trades: PairLockTrade[], marketTicker: str
     hedgeCount: 0,
     locked: false,
     unmatched: true,
+    matchedCount: 0,
+    extraSide: side,
+    extraCount: sumCount(rows),
+    extraFillUsd: avgFill(rows),
+    extraFilledAt: first?.executedAt ?? null,
   };
 }
 
 export function tickerHasOpenPairLock(trades: PairLockTrade[], marketTicker: string): boolean {
   const lots = pairLockLotsForTicker(trades, marketTicker);
   return lots.runnerCount > 0 || lots.hedgeCount > 0 || lots.locked;
+}
+
+/** Unmatched runner / extra, or a completed pair that still has Add new pair room. */
+export function shouldWatchPairLockLots(opts: {
+  lots: PairLockLotState;
+  addPairs?: unknown;
+  lotCount?: unknown;
+}): boolean {
+  if (opts.lots.unmatched || pairLockExtraCount(opts.lots) > 0) return true;
+  const addPairs = normalizePairLockAddPairs(opts.addPairs);
+  if (addPairs <= 0) return false;
+  const matched = pairLockMatchedCount(opts.lots);
+  if (matched <= 0) return false;
+  const lotCount = normalizePairLockLotCount(opts.lotCount);
+  return matched < (1 + addPairs) * lotCount;
+}
+
+/** 1s watcher: hunt first runner in the enter window, or stay after fills for hedge / add. */
+export function shouldWatchPairLockTicker(opts: {
+  lots: PairLockLotState;
+  addPairs?: unknown;
+  lotCount?: unknown;
+  minutesElapsed?: number;
+  startMinutes?: unknown;
+  untilMinutes?: unknown;
+}): boolean {
+  if (shouldWatchPairLockLots(opts)) return true;
+  if (pairLockMatchedCount(opts.lots) > 0) return false;
+  return isPairLockEnterWindow({
+    minutesElapsed: opts.minutesElapsed,
+    startMinutes: opts.startMinutes,
+    untilMinutes: opts.untilMinutes,
+  });
 }
 
 export function tickerHasOpenOtherThanPairLock(
@@ -414,6 +512,7 @@ function pairLockRisk(cfg: AppConfig) {
     pair_lock_flatten_minutes?: number;
     pair_lock_runner_stop_usd?: number;
     pair_lock_lot_count?: number;
+    pair_lock_add_pairs?: number;
     pair_lock_assets?: string[];
     pair_lock_skip_thin_bid?: boolean;
     twap_lock_enabled?: boolean;
@@ -474,6 +573,18 @@ export function evaluatePairLockEnter(opts: {
   if (runnerAsk == null) return { ok: false, skip_reason: 'pair_lock_no_ask' };
   const runnerMax = normalizePairLockRunnerMaxAskUsd(risk.pair_lock_runner_max_ask_usd);
   if (runnerAsk + 1e-9 > runnerMax) return { ok: false, skip_reason: 'pair_lock_ask_rich' };
+  // Live opposite ask must already lock Min lock. Do not buy a runner and hope.
+  const hedgeAsk = decision === 'NO' ? ticketUsd(opts.lean.yes_ask) : ticketUsd(opts.lean.no_ask);
+  if (hedgeAsk == null) return { ok: false, skip_reason: 'pair_lock_no_ask' };
+  if (
+    !canPairLockHedge({
+      runnerFillUsd: runnerAsk,
+      hedgeAskUsd: hedgeAsk,
+      minLockUsd: risk.pair_lock_min_lock_usd,
+    })
+  ) {
+    return { ok: false, skip_reason: 'pair_lock_min_lock' };
+  }
   const lotCount = normalizePairLockLotCount(risk.pair_lock_lot_count);
   const leanForGate: LeanSignal = {
     ...opts.lean,
@@ -502,6 +613,159 @@ export function evaluatePairLockEnter(opts: {
   return { ...gate, decision: decision === 'NO' ? 'NO' : 'YES' };
 }
 
+export function pairLockMatchedCount(lots: Pick<PairLockLotState, 'matchedCount' | 'locked' | 'runnerCount' | 'hedgeCount'>): number {
+  if (lots.matchedCount != null && Number.isFinite(Number(lots.matchedCount))) {
+    return Math.max(0, Math.floor(Number(lots.matchedCount)));
+  }
+  if (lots.locked) return Math.min(Math.max(0, lots.runnerCount || 0), Math.max(0, lots.hedgeCount || 0));
+  return 0;
+}
+
+export function pairLockExtraCount(
+  lots: Pick<PairLockLotState, 'extraCount' | 'locked' | 'unmatched' | 'runnerCount' | 'hedgeCount'>
+): number {
+  if (lots.extraCount != null && Number.isFinite(Number(lots.extraCount))) {
+    return Math.max(0, Math.floor(Number(lots.extraCount)));
+  }
+  if (lots.locked && lots.unmatched) return Math.abs((lots.runnerCount || 0) - (lots.hedgeCount || 0));
+  if (!lots.locked && lots.unmatched) return Math.max(0, lots.runnerCount || 0);
+  return 0;
+}
+
+function pairLockBuyGate(side: PairLockSide, ask: number, count: number): GateResult {
+  const need = Math.max(1, count);
+  const price = ask.toFixed(2);
+  return {
+    ok: true,
+    decision: side,
+    count: String(need),
+    side: side === 'YES' ? 'bid' : 'ask',
+    price,
+    pay_price: ask,
+    notional_usd: Math.round(need * ask * 100) / 100,
+  };
+}
+
+export type PairLockStackAddResult = {
+  ok: boolean;
+  skip_reason?: string;
+  count: string;
+  yesAsk: number;
+  noAsk: number;
+  yes: GateResult;
+  no: GateResult;
+};
+
+/** After a completed pair, fire YES and NO together if the new pair still locks Min lock. */
+export function evaluatePairLockStackAdd(opts: {
+  lots: PairLockLotState;
+  quotes: CashOutQuotes;
+  addPairs?: unknown;
+  lotCount?: unknown;
+  minLockUsd?: unknown;
+  flattenMinutes?: unknown;
+  lean: { phase?: string; minutes_left?: number; minutes_remaining?: number };
+  skipThinBid?: boolean;
+  yesBidSize?: number | null;
+  noBidSize?: number | null;
+}): PairLockStackAddResult {
+  const addPairs = normalizePairLockAddPairs(opts.addPairs);
+  const lotCount = normalizePairLockLotCount(opts.lotCount);
+  const matched = pairLockMatchedCount(opts.lots);
+  const extra = pairLockExtraCount(opts.lots);
+  const fail = (skip_reason: string): PairLockStackAddResult => ({
+    ok: false,
+    skip_reason,
+    count: String(lotCount),
+    yesAsk: 0,
+    noAsk: 0,
+    yes: { ok: false, skip_reason },
+    no: { ok: false, skip_reason },
+  });
+  if (addPairs <= 0) return fail('pair_lock_add_off');
+  if (extra > 0) return fail('pair_lock_unmatched_extra');
+  if (matched <= 0) return fail('pair_lock_no_runner');
+  if (matched >= (1 + addPairs) * lotCount) return fail('pair_lock_stack_max');
+  if (opts.lean.phase === 'ended') return fail('window_ended');
+  const flatten = normalizePairLockFlattenMinutes(opts.flattenMinutes);
+  if (goldFadeMinutesLeft(opts.lean) <= flatten + 1e-9) return fail('pair_lock_too_late');
+  const yesAsk = sideAskOf('YES', opts.quotes);
+  const noAsk = sideAskOf('NO', opts.quotes);
+  if (yesAsk == null || noAsk == null) return fail('pair_lock_no_ask');
+  if (!canPairLockHedge({ runnerFillUsd: yesAsk, hedgeAskUsd: noAsk, minLockUsd: opts.minLockUsd })) {
+    return fail('pair_lock_min_lock');
+  }
+  if (opts.skipThinBid) {
+    if (opts.yesBidSize == null || !Number.isFinite(Number(opts.yesBidSize)) || Number(opts.yesBidSize) < lotCount) {
+      return fail('pair_lock_thin_bid');
+    }
+    if (opts.noBidSize == null || !Number.isFinite(Number(opts.noBidSize)) || Number(opts.noBidSize) < lotCount) {
+      return fail('pair_lock_thin_bid');
+    }
+  }
+  return {
+    ok: true,
+    count: String(lotCount),
+    yesAsk,
+    noAsk,
+    yes: pairLockBuyGate('YES', yesAsk, lotCount),
+    no: pairLockBuyGate('NO', noAsk, lotCount),
+  };
+}
+
+/** After one stacked leg fills, pick finish vs dump — smaller loss (or still a profit). */
+export function evaluatePairLockStackRecover(opts: {
+  lots: PairLockLotState;
+  quotes: CashOutQuotes;
+  skipThinBid?: boolean;
+  bidSize?: number | null;
+}): {
+  kind: 'stack_finish' | 'stack_dump' | 'none';
+  reason: string;
+  finishLossUsd: number | null;
+  dumpLossUsd: number | null;
+  hedge?: GateResult;
+} {
+  const extra = pairLockExtraCount(opts.lots);
+  const extraSide = opts.lots.extraSide || (opts.lots.unmatched ? opts.lots.runnerSide : null);
+  const extraFill = opts.lots.extraFillUsd ?? opts.lots.runnerFillUsd;
+  if (pairLockMatchedCount(opts.lots) <= 0 || extra <= 0 || !extraSide || extraFill == null) {
+    return { kind: 'none', reason: 'pair_lock_no_runner', finishLossUsd: null, dumpLossUsd: null };
+  }
+  const opp = oppositeSide(extraSide);
+  const oppAsk = sideAskOf(opp, opts.quotes);
+  const extraBid = sideBidOf(extraSide, opts.quotes);
+  const finishLossUsd = oppAsk == null ? null : snap(extraFill + oppAsk - 1, 0.01);
+  const dumpLossUsd = extraBid == null ? null : snap(extraFill - extraBid, 0.01);
+  const canFinish =
+    oppAsk != null &&
+    oppAsk < 0.995 &&
+    finishLossUsd != null &&
+    (dumpLossUsd == null || finishLossUsd <= dumpLossUsd + 1e-9);
+  if (canFinish) {
+    if (opts.skipThinBid) {
+      if (opts.bidSize == null || !Number.isFinite(Number(opts.bidSize)) || Number(opts.bidSize) < extra) {
+        if (dumpLossUsd != null) {
+          return { kind: 'stack_dump', reason: 'thin_bid', finishLossUsd, dumpLossUsd };
+        }
+        return { kind: 'none', reason: 'pair_lock_thin_bid', finishLossUsd, dumpLossUsd };
+      }
+    }
+    return {
+      kind: 'stack_finish',
+      reason: 'pair_lock_stack_finish',
+      finishLossUsd,
+      dumpLossUsd,
+      hedge: pairLockBuyGate(opp, Number(oppAsk), extra),
+    };
+  }
+  if (dumpLossUsd != null) {
+    return { kind: 'stack_dump', reason: 'pair_lock_stack_dump', finishLossUsd, dumpLossUsd };
+  }
+  return { kind: 'none', reason: 'pair_lock_min_lock', finishLossUsd, dumpLossUsd };
+}
+
+/** Hedge as soon as the lock prints. Flatten / runner stop still use 5s grace. */
 export function evaluatePairLockHedge(opts: {
   lots: PairLockLotState;
   quotes: CashOutQuotes;
@@ -511,18 +775,9 @@ export function evaluatePairLockHedge(opts: {
   filledAt?: string | Date | number | null;
   now?: Date;
 }): GateResult {
-  if (opts.lots.locked) return { ok: false, skip_reason: 'pair_lock_already_locked' };
+  if (pairLockMatchedCount(opts.lots) > 0) return { ok: false, skip_reason: 'pair_lock_already_locked' };
   if (!opts.lots.unmatched || !opts.lots.runnerSide || opts.lots.runnerFillUsd == null) {
     return { ok: false, skip_reason: 'pair_lock_no_runner' };
-  }
-  if (
-    inProtectSellGrace({
-      filledAt: opts.filledAt ?? opts.lots.runnerFilledAt,
-      graceSeconds: PAIR_LOCK_GRACE_SEC,
-      now: opts.now,
-    })
-  ) {
-    return { ok: false, skip_reason: 'grace_after_fill' };
   }
   const hedgeSide = oppositeSide(opts.lots.runnerSide);
   const hedgeAsk = sideAskOf(hedgeSide, opts.quotes);
@@ -563,7 +818,7 @@ export function evaluatePairLockFlatten(opts: {
   skipThinBid?: boolean;
   bidSize?: number | null;
 }): { sell: boolean; kind: PairLockExitKind; reason: string } {
-  if (opts.lots.locked) return { sell: false, kind: 'none', reason: 'pair_lock_hold_locked' };
+  if (pairLockMatchedCount(opts.lots) > 0) return { sell: false, kind: 'none', reason: 'pair_lock_hold_locked' };
   if (!opts.lots.unmatched || !opts.lots.runnerSide) {
     return { sell: false, kind: 'none', reason: 'pair_lock_no_runner' };
   }
@@ -606,19 +861,63 @@ export function evaluatePairLockWatch(opts: {
   minLockUsd?: unknown;
   flattenMinutes?: unknown;
   runnerStopUsd?: unknown;
+  addPairs?: unknown;
+  lotCount?: unknown;
   lean: { phase?: string; minutes_left?: number; minutes_remaining?: number };
   filledAt?: string | Date | number | null;
   now?: Date;
   skipThinBid?: boolean;
   hedgeBidSize?: number | null;
   flattenBidSize?: number | null;
+  yesBidSize?: number | null;
+  noBidSize?: number | null;
 }): {
   kind: PairLockWatchKind;
   reason: string;
   hedge?: GateResult;
   flatten?: { sell: boolean; kind: PairLockExitKind; reason: string };
+  stack?: PairLockStackAddResult;
 } {
-  if (opts.lots.locked) return { kind: 'hold_locked', reason: 'pair_lock_hold_locked' };
+  const matched = pairLockMatchedCount(opts.lots);
+  const extra = pairLockExtraCount(opts.lots);
+  if (matched > 0 && extra > 0) {
+    const recover = evaluatePairLockStackRecover({
+      lots: opts.lots,
+      quotes: opts.quotes,
+      skipThinBid: opts.skipThinBid,
+      bidSize: opts.hedgeBidSize,
+    });
+    if (recover.kind === 'stack_finish') {
+      return { kind: 'stack_finish', reason: recover.reason, hedge: recover.hedge };
+    }
+    if (recover.kind === 'stack_dump') {
+      return {
+        kind: 'stack_dump',
+        reason: recover.reason,
+        flatten: { sell: true, kind: 'pair_lock_flatten', reason: recover.reason },
+      };
+    }
+    return { kind: 'none', reason: recover.reason };
+  }
+  if (matched > 0) {
+    const stack = evaluatePairLockStackAdd({
+      lots: opts.lots,
+      quotes: opts.quotes,
+      addPairs: opts.addPairs,
+      lotCount: opts.lotCount,
+      minLockUsd: opts.minLockUsd,
+      flattenMinutes: opts.flattenMinutes,
+      lean: opts.lean,
+      skipThinBid: opts.skipThinBid,
+      yesBidSize: opts.yesBidSize,
+      noBidSize: opts.noBidSize,
+    });
+    if (stack.ok) return { kind: 'stack', reason: 'pair_lock_stack', stack };
+    if (stack.skip_reason === 'pair_lock_add_off' || stack.skip_reason === 'pair_lock_stack_max') {
+      return { kind: 'hold_locked', reason: 'pair_lock_hold_locked' };
+    }
+    return { kind: 'hold_locked', reason: stack.skip_reason || 'pair_lock_hold_locked' };
+  }
   const hedge = evaluatePairLockHedge({
     lots: opts.lots,
     quotes: opts.quotes,

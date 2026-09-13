@@ -240,6 +240,7 @@ export interface RiskConfig {
   pair_lock_flatten_minutes?: number;
   pair_lock_runner_stop_usd?: number;
   pair_lock_lot_count?: number;
+  pair_lock_add_pairs?: number;
   pair_lock_skip_thin_bid?: boolean;
   pair_lock_assets?: string[];
 }
@@ -410,6 +411,7 @@ export function defaultAppConfig(): AppConfig {
       pair_lock_flatten_minutes: 3,
       pair_lock_runner_stop_usd: 0.1,
       pair_lock_lot_count: 1,
+      pair_lock_add_pairs: 0,
       pair_lock_skip_thin_bid: false,
       pair_lock_assets: AssetRegistry.getDefaultPathAssets(),
     },

@@ -244,14 +244,42 @@ describe('History / Dashboard / AlertsHub', () => {
           dry_run: false,
           entry_path: 'pair_lock_hedge',
         },
+        {
+          id: 'pair-runner-2',
+          at: '2026-09-10T14:03:10.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-PAIR',
+          side: 'NO',
+          notional_usd: 0.51,
+          fill_count: 1,
+          fill_price: 0.51,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'pair_lock',
+        },
+        {
+          id: 'pair-hedge-2',
+          at: '2026-09-10T14:03:10.100Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-PAIR',
+          side: 'YES',
+          notional_usd: 0.44,
+          fill_count: 1,
+          fill_price: 0.44,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'pair_lock_hedge',
+        },
       ] as any,
     });
     const s = await render(<HistoryScreen />);
     expect(s.getByTestId('trade-path-home-fill').props.children).toBe('Home');
     expect(s.getByTestId('trade-path-auto-fill').props.children).toBe('Auto');
     expect(s.queryByTestId('trade-path-legacy-fill')).toBeNull();
-    expect(s.getByTestId('trade-path-pair-runner').props.children).toBe('Pair lock');
-    expect(s.getByTestId('trade-path-pair-hedge').props.children).toBe('PL hedge');
+    expect(s.getByTestId('trade-path-pair-runner').props.children).toBe('Pair lock 1');
+    expect(s.getByTestId('trade-path-pair-hedge').props.children).toBe('PL hedge 1');
+    expect(s.getByTestId('trade-path-pair-runner-2').props.children).toBe('Pair lock 2');
+    expect(s.getByTestId('trade-path-pair-hedge-2').props.children).toBe('PL hedge 2');
     expect(s.getByText('KXBTC15M-TEST · 5 ctr @ $0.55 · cost $4.60 · P&L $0.40')).toBeTruthy();
     expect(s.queryByText(/Manual/)).toBeNull();
   });

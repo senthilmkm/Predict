@@ -439,7 +439,7 @@
             <select id="tradeFilterStatus" onchange="applyTradeFilters()" class="mt-1 w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500">
               <option value="">All statuses</option>
               <option value="FILLED">FILLED</option>
-              <option value="SETTLED">SETTLED</option>
+              <option value="SETTLED" selected>SETTLED</option>
               <option value="CANCELLED">CANCELLED</option>
               <option value="SUBMITTED">SUBMITTED</option>
             </select>
@@ -1076,6 +1076,17 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
     function onTradeDateFilterChange() {
       syncTradeDateLabels();
       applyTradeFilters();
+    }
+
+    function applyDefaultTradeStreamFilters() {
+      const statusEl = document.getElementById('tradeFilterStatus');
+      if (statusEl) statusEl.value = 'SETTLED';
+      const fromEl = document.getElementById('tradeFilterFromDate');
+      const toEl = document.getElementById('tradeFilterToDate');
+      const today = localYmd(new Date());
+      if (fromEl) fromEl.value = today;
+      if (toEl) toEl.value = today;
+      syncTradeDateLabels();
     }
 
     function setTradeDatePreset(kind) {
@@ -2230,7 +2241,7 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
 
     // Initialize Page
     populateTradeAssetFilter(ASSETS_CATALOG_FALLBACK);
-    syncTradeDateLabels();
+    applyDefaultTradeStreamFilters();
     renderCushionsGrid();
     refreshData();
     setInterval(refreshData, 10000); // Auto refresh every 10 seconds
