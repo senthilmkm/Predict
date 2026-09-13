@@ -78,6 +78,55 @@ export function formatGapDisplay(opts: {
   return { text: `${amt} (gap)`, tone: 'neutral' };
 }
 
+export const LIVE_ASK_STALE_MS = 8_000;
+
+export type LiveAskQuote = {
+  yes_ask?: number | null;
+  no_ask?: number | null;
+};
+
+function finiteAsk(v: unknown): number | undefined {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Prefer the Cloud 1s watcher book; fall back to the phone lean ask. */
+export function pickLiveAsk(opts: {
+  nowMs: number;
+  cloudAt?: string | null;
+  cloud?: LiveAskQuote | null;
+  leanYes?: number | null;
+  leanNo?: number | null;
+}): { yes_ask?: number; no_ask?: number; source: 'watcher' | 'lean' } | null {
+  const cloudAt = opts.cloudAt ? Date.parse(opts.cloudAt) : NaN;
+  const cloudFresh =
+    Number.isFinite(cloudAt) && opts.nowMs - cloudAt <= LIVE_ASK_STALE_MS;
+  const cloudYes = finiteAsk(opts.cloud?.yes_ask);
+  const cloudNo = finiteAsk(opts.cloud?.no_ask);
+  if (cloudFresh && (cloudYes != null || cloudNo != null)) {
+    return { yes_ask: cloudYes, no_ask: cloudNo, source: 'watcher' };
+  }
+  const leanYes = finiteAsk(opts.leanYes);
+  const leanNo = finiteAsk(opts.leanNo);
+  if (leanYes != null || leanNo != null) {
+    return { yes_ask: leanYes, no_ask: leanNo, source: 'lean' };
+  }
+  return null;
+}
+
+export function formatLiveAskLine(
+  quote: { yes_ask?: number | null; no_ask?: number | null } | null | undefined
+): string {
+  if (!quote) return '';
+  const yes = finiteAsk(quote.yes_ask);
+  const no = finiteAsk(quote.no_ask);
+  const fmt = (v: number) => `$${v.toFixed(2)}`;
+  if (yes != null && no != null) return `YES ${fmt(yes)} · NO ${fmt(no)}`;
+  if (yes != null) return `YES ${fmt(yes)}`;
+  if (no != null) return `NO ${fmt(no)}`;
+  return '';
+}
+
 export interface LastSignalRowInput {
   asset: string;
   decision: string;

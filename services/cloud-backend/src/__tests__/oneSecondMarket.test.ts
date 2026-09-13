@@ -2,6 +2,7 @@ import {
   collectWatchAssets,
   fetchAskQuotesOnce,
   leanWithSnapshotQuote,
+  liveAsksByAsset,
   uniqueTickersFromLeans,
 } from '../services/oneSecondMarket';
 
@@ -64,5 +65,26 @@ describe('one-second market snapshot', () => {
         Gold: {},
       })
     ).toEqual(['KXBTC15M']);
+  });
+
+  test('liveAsksByAsset maps ticker quotes onto assets and skips empties', () => {
+    const quotes = new Map([
+      ['KXBTC15M', { yes_ask: 0.41, no_ask: 0.6 }],
+      ['KXETH15M', { yes_ask: 0.55 }],
+    ]);
+    expect(
+      liveAsksByAsset(
+        {
+          BTC: { market_ticker: 'KXBTC15M' },
+          ETH: { market_ticker: 'KXETH15M' },
+          SOL: { market_ticker: 'KXSOL15M' },
+          Gold: {},
+        },
+        quotes
+      )
+    ).toEqual({
+      BTC: { yes_ask: 0.41, no_ask: 0.6, ticker: 'KXBTC15M' },
+      ETH: { yes_ask: 0.55, ticker: 'KXETH15M' },
+    });
   });
 });

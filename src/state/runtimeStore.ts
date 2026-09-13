@@ -3,7 +3,12 @@ import { AppRuntime, getAppRuntime, resetAppRuntimeForTests, LastTradeAction } f
 import { useConfigStore } from './configStore';
 import { DashboardStats, TradeRecord, AlertRecord } from '../storage/repos';
 import { AssetPnlToday, EMPTY_ASSET_PNL_TODAY, summarizeAssetPnlToday } from '../storage/assetPnlToday';
-import { PredictCloudClient, cloudClient, ActiveBroadcast } from '../services/cloud/cloudClient';
+import {
+  PredictCloudClient,
+  cloudClient,
+  ActiveBroadcast,
+  LiveAskQuote,
+} from '../services/cloud/cloudClient';
 import { getUserDisplayName } from '../services/userId';
 import { LeanResult } from '../services/lean/lean';
 import { updateAppBadgeCount } from '../services/notifications';
@@ -13,6 +18,7 @@ import { AssetKey } from '../config/types';
 let cloudSnapshotGen = 0;
 let cloudSnapshotInFlight: Promise<void> | null = null;
 let cloudSnapshotQueued = false;
+let liveAsksInFlight: Promise<void> | null = null;
 
 const EMPTY_STATS: DashboardStats = {
   wins: 0,
@@ -52,6 +58,8 @@ interface RuntimeState {
   pairLockFeatureOn: boolean;
   activeBroadcast: ActiveBroadcast | null;
   cloudKillSwitch: boolean;
+  liveAsksAt: string | null;
+  liveAsks: Partial<Record<AssetKey, LiveAskQuote>>;
   ensure: () => AppRuntime;
   syncFromRuntime: () => void;
   start: () => void;
@@ -65,6 +73,7 @@ interface RuntimeState {
   pruneAlerts: () => number;
   deleteAlertsByIds: (ids: string[]) => Promise<number>;
   refreshCloudSnapshot: () => Promise<void>;
+  refreshLiveAsks: () => Promise<void>;
 }
 
 export const useRuntimeStore = create<RuntimeState>((set, get) => ({
@@ -95,6 +104,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   pairLockFeatureOn: false,
   activeBroadcast: null,
   cloudKillSwitch: false,
+  liveAsksAt: null,
+  liveAsks: {},
   ensure: () => {
     let rt = get().runtime;
     if (!rt) {
@@ -280,6 +291,12 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
             pairLockFeatureOn: statusRes.systemConfig?.featureFlags?.pairLock === true,
             activeBroadcast: statusRes.activeBroadcast ?? null,
             cloudKillSwitch: statusRes.userDoc?.state === 'KILL_SWITCH',
+            ...(statusRes.liveAsks
+              ? {
+                  liveAsksAt: statusRes.liveAsks.at,
+                  liveAsks: statusRes.liveAsks.byAsset,
+                }
+              : {}),
           });
         }
         if (gen !== cloudSnapshotGen) return;
@@ -297,12 +314,31 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     });
     return cloudSnapshotInFlight;
   },
+  refreshLiveAsks: async () => {
+    if (liveAsksInFlight) return liveAsksInFlight;
+    liveAsksInFlight = (async () => {
+      try {
+        const res = await cloudClient.getLiveAsks();
+        if (!res.ok || !res.liveAsks) return;
+        set({
+          liveAsksAt: res.liveAsks.at,
+          liveAsks: res.liveAsks.byAsset,
+        });
+      } catch {
+        /* keep last asks */
+      }
+    })().finally(() => {
+      liveAsksInFlight = null;
+    });
+    return liveAsksInFlight;
+  },
 }));
 
 export function resetRuntimeStoreForTests() {
   cloudSnapshotGen += 1;
   cloudSnapshotInFlight = null;
   cloudSnapshotQueued = false;
+  liveAsksInFlight = null;
   resetAppRuntimeForTests();
   useRuntimeStore.setState({
     runtime: null,
@@ -332,5 +368,7 @@ export function resetRuntimeStoreForTests() {
   pairLockFeatureOn: false,
     activeBroadcast: null,
     cloudKillSwitch: false,
+    liveAsksAt: null,
+    liveAsks: {},
   });
 }

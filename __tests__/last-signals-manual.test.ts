@@ -1,6 +1,8 @@
 import { defaultAppConfig } from '../src/config/types';
 import {
   formatGapDisplay,
+  formatLiveAskLine,
+  pickLiveAsk,
   formatLastMinuteWatchLine,
   formatStepBuyWatchLine,
   formatSpikeFadeWatchLine,
@@ -21,6 +23,30 @@ describe('last signals manual kind', () => {
     noMarket: false,
     marketTicker: 'KXBTC15M-X',
   };
+
+  test('live ask prefers fresh Cloud 1s watcher then lean fallback', () => {
+    expect(formatLiveAskLine({ yes_ask: 0.42, no_ask: 0.59 })).toBe('YES $0.42 · NO $0.59');
+    expect(formatLiveAskLine({ yes_ask: 0.41 })).toBe('YES $0.41');
+    expect(formatLiveAskLine(null)).toBe('');
+    expect(
+      pickLiveAsk({
+        nowMs: Date.parse('2026-09-13T15:00:02.000Z'),
+        cloudAt: '2026-09-13T15:00:01.000Z',
+        cloud: { yes_ask: 0.33, no_ask: 0.68 },
+        leanYes: 0.55,
+        leanNo: 0.46,
+      })
+    ).toEqual({ yes_ask: 0.33, no_ask: 0.68, source: 'watcher' });
+    expect(
+      pickLiveAsk({
+        nowMs: Date.parse('2026-09-13T15:00:20.000Z'),
+        cloudAt: '2026-09-13T15:00:01.000Z',
+        cloud: { yes_ask: 0.33, no_ask: 0.68 },
+        leanYes: 0.55,
+        leanNo: 0.46,
+      })
+    ).toEqual({ yes_ask: 0.55, no_ask: 0.46, source: 'lean' });
+  });
 
   test('Home gap is ▲/▼, or with you / against you when holding', () => {
     expect(
@@ -304,6 +330,34 @@ describe('last signal extra line', () => {
         secondsLeft: 600,
       })
     ).toBe('Pair lock watching · 600s left');
+    expect(
+      formatPairLockWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 4,
+        startMinutes: 2,
+        untilMinutes: 10,
+        secondsLeft: 600,
+        autoStatus: 'skipped',
+        autoDetail: 'skipped · Pair lock min lock not reached',
+      })
+    ).toBe('Pair lock watching · Pair lock min lock not reached');
+    expect(
+      formatPairLockWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 4,
+        startMinutes: 2,
+        untilMinutes: 10,
+        secondsLeft: 600,
+        autoStatus: 'skipped',
+        autoDetail: 'skipped · Kalshi ask is above your Pair lock runner max',
+      })
+    ).toBe('Pair lock watching · Kalshi ask is above your Pair lock runner max');
     expect(
       lastSignalExtraLine({
         manualKind: 'none',

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { computeLean, defaultAppConfig } from 'trading-core';
 import { app } from '../index';
-import { upsertUserDoc } from '../services/firestore';
+import { resetSystemConfigCacheForTests, setSystemConfig, upsertUserDoc } from '../services/firestore';
 
 jest.mock('trading-core', () => {
   const actual = jest.requireActual('trading-core');
@@ -102,5 +102,72 @@ describe('Cloud lastTradeAction skip reasons', () => {
 
     const status = await request(app).get('/me/status').set('Authorization', `Bearer ${uid}`);
     expect(status.body.userDoc.lastTradeAction?.BNB).toBeUndefined();
+  });
+
+  test('Pair lock min lock and ask-rich write a Home skip line', async () => {
+    await setSystemConfig({ featureFlags: { pairLock: true } });
+    const uid = 'user_last_trade_action_pair_lock';
+    const cfg = defaultAppConfig();
+    cfg.auto_trade_enabled = true;
+    cfg.execution_mode = 'live';
+    cfg.live_armed = true;
+    for (const key of Object.keys(cfg.assets_enabled)) {
+      cfg.assets_enabled[key] = key === 'BNB';
+    }
+    cfg.cushions.BNB = 2.5;
+    cfg.risk.pair_lock_enabled = true;
+    cfg.risk.pair_lock_assets = ['BNB'];
+    cfg.risk.last_minute_enabled = false;
+    cfg.risk.step_buy_enabled = false;
+    cfg.risk.spike_fade_enabled = false;
+    cfg.risk.twap_lock_enabled = false;
+
+    await upsertUserDoc(uid, {
+      cloudTradingEnabled: true,
+      kalshiConfigured: true,
+      state: 'ARMED',
+      config: cfg,
+    });
+
+    leanMock.mockImplementation(async (asset: string) => {
+      if (asset !== 'BNB') return { ok: false, asset, message: 'no_market' } as any;
+      return {
+        ...richBnbLean(),
+        minutes_elapsed: 4,
+        minutes_remaining: 10,
+        yes_ask: 0.52,
+        no_ask: 0.48,
+      } as any;
+    });
+
+    await request(app).post('/tick');
+    const minLock = await request(app).get('/me/status').set('Authorization', `Bearer ${uid}`);
+    expect(minLock.body.userDoc.lastTradeAction.BNB).toEqual(
+      expect.objectContaining({
+        status: 'skipped',
+        detail: 'skipped · Pair lock min lock not reached',
+      })
+    );
+
+    leanMock.mockImplementation(async (asset: string) => {
+      if (asset !== 'BNB') return { ok: false, asset, message: 'no_market' } as any;
+      return {
+        ...richBnbLean(),
+        minutes_elapsed: 4,
+        minutes_remaining: 10,
+        yes_ask: 0.72,
+        no_ask: 0.18,
+      } as any;
+    });
+    await request(app).post('/tick');
+    const askRich = await request(app).get('/me/status').set('Authorization', `Bearer ${uid}`);
+    expect(askRich.body.userDoc.lastTradeAction.BNB).toEqual(
+      expect.objectContaining({
+        status: 'skipped',
+        detail: 'skipped · Kalshi ask is above your Pair lock runner max',
+      })
+    );
+
+    resetSystemConfigCacheForTests();
   });
 });

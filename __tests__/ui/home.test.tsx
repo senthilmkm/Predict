@@ -171,6 +171,33 @@ describe('HomeScreen', () => {
     expect(s.queryByTestId('signal-time-BTC')).toBeNull();
   });
 
+  test('Last signals shows Cloud 1s YES/NO ask', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        assets_enabled: { BTC: true } as any,
+      },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      refreshLiveAsks: async () => {},
+      liveAsksAt: new Date().toISOString(),
+      liveAsks: { BTC: { yes_ask: 0.42, no_ask: 0.59 } },
+      leans: {
+        BTC: {
+          ...homeBuyReadyLean,
+          yes_ask: 0.55,
+          no_ask: 0.46,
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('signal-ask-BTC').props.children).toBe('YES $0.42 · NO $0.59');
+  });
+
   test('SKIP with a large gap on an upcoming window is not below cushion', async () => {
     useConfigStore.setState({
       config: {

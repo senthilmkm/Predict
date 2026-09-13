@@ -40,6 +40,25 @@ export function uniqueTickersFromLeans(
   return [...out];
 }
 
+export type LiveAskByAsset = OneSecondAskQuote & { ticker?: string };
+
+/** Map the shared 1s quote book onto asset keys for Home. */
+export function liveAsksByAsset(
+  leans: Partial<Record<string, { market_ticker?: string }>>,
+  quotes: Map<string, OneSecondAskQuote>
+): Record<string, LiveAskByAsset> {
+  const out: Record<string, LiveAskByAsset> = {};
+  for (const [asset, lean] of Object.entries(leans)) {
+    const key = String(asset || '').trim();
+    const ticker = String(lean?.market_ticker || '').trim();
+    if (!key || !ticker) continue;
+    const q = quotes.get(ticker);
+    if (!q || (q.yes_ask == null && q.no_ask == null)) continue;
+    out[key] = { ...q, ticker };
+  }
+  return out;
+}
+
 export function quoteFromMarket(raw: any): OneSecondAskQuote {
   const n = (v: unknown) => {
     const x = Number(v);

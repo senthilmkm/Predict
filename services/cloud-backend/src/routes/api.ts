@@ -17,6 +17,7 @@ import {
 } from '../services/firestore';
 import { resolveActiveBroadcast } from '../services/broadcast';
 import { executeManualOrder } from '../services/manualTrade';
+import { getLiveAsksSnapshot, liveAsksForClient } from '../services/liveAsks';
 
 export const apiRouter = Router();
 
@@ -148,12 +149,18 @@ apiRouter.post('/me/disclaimer', async (req: Request, res: Response) => {
 });
 
 // Get User Status & Config
+apiRouter.get('/me/quotes', async (_req: Request, res: Response) => {
+  const liveAsks = liveAsksForClient(await getLiveAsksSnapshot());
+  res.json({ ok: true, at: liveAsks.at, asks: liveAsks.byAsset });
+});
+
 apiRouter.get('/me/status', async (req: Request, res: Response) => {
   const userId = extractUserId(req);
-  const [userDoc, systemConfig, assetsCatalog] = await Promise.all([
+  const [userDoc, systemConfig, assetsCatalog, liveAsksSnap] = await Promise.all([
     getUserDoc(userId),
     getSystemConfig(),
     syncAssetCatalogToFirestore(),
+    getLiveAsksSnapshot(),
   ]);
   const baseDoc = userDoc || {
     userId,
@@ -178,6 +185,7 @@ apiRouter.get('/me/status', async (req: Request, res: Response) => {
     systemConfig,
     assetsCatalog,
     activeBroadcast: resolveActiveBroadcast(systemConfig.broadcast),
+    liveAsks: liveAsksForClient(liveAsksSnap),
   });
 });
 

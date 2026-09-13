@@ -33,6 +33,8 @@ import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/mon
 import { cloudClient } from '../services/cloud/cloudClient';
 import {
   formatGapDisplay,
+  formatLiveAskLine,
+  pickLiveAsk,
   heldOpenFillForTicker,
   homeBuySkipReason,
   formatLastMinuteWatchLine,
@@ -109,6 +111,9 @@ export function HomeScreen({
   const change24hWindowMs = useRuntimeStore((s) => s.change24hWindowMs);
   const refreshPredictionsBalance = useRuntimeStore((s) => s.refreshPredictionsBalance);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
+  const refreshLiveAsks = useRuntimeStore((s) => s.refreshLiveAsks);
+  const liveAsks = useRuntimeStore((s) => s.liveAsks);
+  const liveAsksAt = useRuntimeStore((s) => s.liveAsksAt);
   const alerts = useRuntimeStore((s) => s.alerts);
   const trades = useRuntimeStore((s) => s.trades);
   const lastSignalsManualTrade = useRuntimeStore((s) => s.lastSignalsManualTrade);
@@ -156,6 +161,14 @@ export function HomeScreen({
   }, [refreshCloudSnapshot]);
 
   useEffect(() => {
+    void refreshLiveAsks();
+    const id = setInterval(() => {
+      if (AppState.currentState === 'active') void refreshLiveAsks();
+    }, 1000);
+    return () => clearInterval(id);
+  }, [refreshLiveAsks]);
+
+  useEffect(() => {
     const twapWatch = twapLockFeatureOn && config.risk.twap_lock_enabled;
     const lastMinuteWatch = lastMinuteFeatureOn && config.risk.last_minute_enabled;
     const stepBuyWatch = stepBuyFeatureOn && config.risk.step_buy_enabled;
@@ -189,12 +202,13 @@ export function HomeScreen({
       if (nextState === 'active') {
         void refreshCloudSnapshot();
         void refreshPredictionsBalance();
+        void refreshLiveAsks();
       }
     });
     return () => {
       sub?.remove?.();
     };
-  }, [refreshCloudSnapshot, refreshPredictionsBalance]);
+  }, [refreshCloudSnapshot, refreshPredictionsBalance, refreshLiveAsks]);
 
   // 3. On `trade_result` Alert Received
   const latestAlertId = alerts[0]?.id;
@@ -209,11 +223,11 @@ export function HomeScreen({
   const onPullToRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refreshPredictionsBalance(), refreshCloudSnapshot()]);
+      await Promise.all([refreshPredictionsBalance(), refreshCloudSnapshot(), refreshLiveAsks()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refreshPredictionsBalance, refreshCloudSnapshot]);
+  }, [refreshPredictionsBalance, refreshCloudSnapshot, refreshLiveAsks]);
 
   const placeManual = useCallback(
     async (
@@ -291,6 +305,17 @@ export function HomeScreen({
       isOpen: open,
       noMarket,
       marketTicker: lean?.market_ticker || null,
+      askLine: open
+        ? formatLiveAskLine(
+            pickLiveAsk({
+              nowMs,
+              cloudAt: liveAsksAt,
+              cloud: liveAsks[asset],
+              leanYes: lean?.yes_ask,
+              leanNo: lean?.no_ask,
+            })
+          )
+        : '',
     };
   });
 
@@ -898,6 +923,7 @@ function LastSignalRow({
       placed?: boolean;
       failed?: boolean;
     } | null;
+    askLine?: string;
   };
   onPlace: (action: 'buy' | 'sell', origin?: { x: number; y: number }) => void;
 }) {
@@ -982,6 +1008,11 @@ function LastSignalRow({
         {row.err ? (
           <Text style={styles.signalErr} testID={`signal-err-${row.asset}`}>
             {row.err}
+          </Text>
+        ) : null}
+        {!row.err && row.askLine ? (
+          <Text style={styles.signalAsk} testID={`signal-ask-${row.asset}`}>
+            {row.askLine}
           </Text>
         ) : null}
         {row.extraLine ? (
@@ -1234,6 +1265,7 @@ const styles = StyleSheet.create({
   signalDecision: { color: colors.accent, fontWeight: '800', minWidth: 36 },
   signalMeta: { color: colors.mute, fontSize: 12, flexShrink: 1 },
   signalErr: { color: colors.loss, fontSize: 11, marginTop: 2, marginLeft: 52 },
+  signalAsk: { color: colors.textSecondary, fontSize: 11, marginTop: 2, fontVariant: ['tabular-nums'] },
   tradeAction: {
     color: colors.textSecondary,
     fontSize: 11,

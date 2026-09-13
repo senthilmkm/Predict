@@ -48,12 +48,57 @@ export interface ActiveBroadcast {
   message: string;
 }
 
+export type LiveAskQuote = {
+  yes_ask?: number;
+  no_ask?: number;
+  yes_bid?: number;
+  no_bid?: number;
+  ticker?: string;
+};
+
+export type LiveAsksPayload = {
+  at: string | null;
+  byAsset: Record<string, LiveAskQuote>;
+};
+
 export interface CloudStatusResult {
   ok: boolean;
   userDoc?: UserStatusDoc & { config?: any };
   systemConfig?: SystemConfig;
   activeBroadcast?: ActiveBroadcast | null;
+  liveAsks?: LiveAsksPayload;
   error?: string;
+}
+
+export function parseLiveAsksPayload(raw: any): LiveAsksPayload {
+  const at = typeof raw?.at === 'string' && raw.at ? raw.at : null;
+  const src =
+    raw?.byAsset && typeof raw.byAsset === 'object'
+      ? raw.byAsset
+      : raw?.asks && typeof raw.asks === 'object'
+        ? raw.asks
+        : {};
+  const byAsset: Record<string, LiveAskQuote> = {};
+  for (const [asset, quote] of Object.entries(src)) {
+    const key = String(asset || '').trim();
+    if (!key || !quote || typeof quote !== 'object') continue;
+    const n = (v: unknown) => {
+      const x = Number(v);
+      return Number.isFinite(x) ? x : undefined;
+    };
+    const row = quote as LiveAskQuote;
+    const yes_ask = n(row.yes_ask);
+    const no_ask = n(row.no_ask);
+    if (yes_ask == null && no_ask == null) continue;
+    byAsset[key] = {
+      yes_ask,
+      no_ask,
+      yes_bid: n(row.yes_bid),
+      no_bid: n(row.no_bid),
+      ticker: typeof row.ticker === 'string' && row.ticker.trim() ? row.ticker.trim() : undefined,
+    };
+  }
+  return { at, byAsset };
 }
 
 export class PredictCloudClient {
@@ -125,7 +170,19 @@ export class PredictCloudClient {
         userDoc: data.userDoc,
         systemConfig: data.systemConfig,
         activeBroadcast: data.activeBroadcast ?? null,
+        liveAsks: data.liveAsks ? parseLiveAsksPayload(data.liveAsks) : undefined,
       };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'network_error' };
+    }
+  }
+
+  async getLiveAsks(): Promise<{ ok: boolean; liveAsks?: LiveAsksPayload; error?: string }> {
+    try {
+      const res = await this.fetchWithAuth('/me/quotes', { method: 'GET' });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.error || 'quotes_failed' };
+      return { ok: true, liveAsks: parseLiveAsksPayload(data) };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
     }

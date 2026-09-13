@@ -67,9 +67,16 @@ import {
   collectWatchAssets,
   fetchAskQuotesOnce,
   leanWithSnapshotQuote,
+  liveAsksByAsset,
   uniqueTickersFromLeans,
   type OneSecondMarketSnapshot,
 } from '../services/oneSecondMarket';
+import {
+  idleLiveAsksSnapshot,
+  mergeLiveAsks,
+  peekLiveAsksByAsset,
+  persistLiveAsksSnapshot,
+} from '../services/liveAsks';
 import { tryAcquirePlaceLock, releasePlaceLock } from '../services/placeLock';
 import { normalizeFeatureFlags } from '../services/featureFlags';
 import {
@@ -2019,11 +2026,7 @@ async function runOneTick() {
                 gate.skip_reason === 'step_buy_lean_flipped' ||
                 gate.skip_reason === 'spike_fade_outside_window' ||
                 gate.skip_reason === 'spike_fade_no_spike' ||
-                gate.skip_reason === 'spike_fade_cheap_off_band' ||
-                gate.skip_reason === 'pair_lock_outside_window' ||
-                gate.skip_reason === 'pair_lock_min_lock' ||
-                gate.skip_reason === 'pair_lock_no_lean' ||
-                gate.skip_reason === 'pair_lock_ask_rich'
+                gate.skip_reason === 'spike_fade_cheap_off_band'
               ) {
                 continue;
               }
@@ -4460,7 +4463,10 @@ export async function runPairLockWatchTick(
           skipThinBid: pairSkipThin,
           bidSize: await cashOutBestBidSize(marketTicker, lean.decision, pairSkipThin),
         });
-        if (!gate.ok || !gate.price || !gate.count) continue;
+        if (!gate.ok || !gate.price || !gate.count) {
+          lastTradeAction[asset] = skippedTradeAction(gate.skip_reason || 'notional_too_small', tickIso);
+          continue;
+        }
         const secret = await getUserSecret(userId);
         if (!secret?.privateKeyPem || !secret.keyId) continue;
         const placeRequestId = `pl_${userId}_${marketTicker}_${Date.now()}_${Math.random()
@@ -4981,6 +4987,7 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
       await refreshDumpWatchFromTradeBooks(new Date());
       const watching = oneSecondPathWatching() || oneSecondDumpWatching();
       if (!watching) {
+        await persistLiveAsksSnapshot(idleLiveAsksSnapshot(new Date()));
         nextPulse += 1000;
         continue;
       }
@@ -4988,6 +4995,18 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
       const snap = watchAssets.length
         ? await buildOneSecondMarketSnapshot(watchAssets, new Date())
         : null;
+      await persistLiveAsksSnapshot(
+        snap
+          ? {
+              at: snap.now.toISOString(),
+              byAsset: mergeLiveAsks(
+                peekLiveAsksByAsset(),
+                liveAsksByAsset(snap.leans, snap.quotes),
+                watchAssets
+              ),
+            }
+          : idleLiveAsksSnapshot(new Date())
+      );
       if (isCloudKalshiPaused()) break;
       if (twapLockWatchUsers.size > 0) {
         const twap = await runTwapLockWatchTick(snap);
