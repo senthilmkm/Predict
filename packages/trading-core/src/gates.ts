@@ -581,3 +581,18 @@ export function evaluateStaticGate(
     config_snapshot: cfg,
   };
 }
+
+/** Lot / clip paths: never buy more contracts than Lot contracts. */
+export function capGateLotCount(gate: GateResult, lotCount: number): GateResult {
+  if (!gate.ok) return gate;
+  const cap = Math.max(1, Math.floor(Number(lotCount) || 1));
+  const count = Math.floor(Number(gate.count) || 0);
+  if (count <= cap) return gate;
+  const pay = Number(gate.pay_price);
+  if (!Number.isFinite(pay) || pay <= 0) return { ...gate, count: String(cap) };
+  return {
+    ...gate,
+    count: String(cap),
+    notional_usd: Math.round(cap * pay * 100) / 100,
+  };
+}

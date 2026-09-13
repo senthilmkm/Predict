@@ -287,7 +287,8 @@
           <tr><td>Max ask / bid</td><td>Default $0.82 / $0.88. Bid must stay above max ask.</td></tr>
           <tr><td>Stop</td><td>Default 5¢ under fill. Range 3–10¢.</td></tr>
           <tr><td>Skip thin bid</td><td>Default Off. On = skip the buy, and sell if you already hold and the bid pile is thin.</td></tr>
-          <tr><td>Assets</td><td>Must also be On in Cushions. Uses Auto $ per trade.</td></tr>
+          <tr><td>$ / min / max</td><td>This path’s size. Default $5 / $1 / $5. Missing seeds from Cushion lean $.</td></tr>
+          <tr><td>Assets</td><td>Must also be On in Cushions. Empty chips = no Cash out buys.</td></tr>
         </table>
         <div class="grid-3">
           <div class="box iso"><h4>Isolation</h4><ul><li>Checked coins use Cash out instead of normal Auto</li><li>Never shares an open ticker with Home, fade, TWAP, Last-minute, or Step buy</li><li>BTC/ETH leave Cash out while TWAP is On</li><li>Does not last-minute chase. Last-minute may still use an empty window</li></ul></div>
@@ -307,11 +308,12 @@
           <tr><td>Max gap</td><td>Default $3. Enter only when the dollar gap is this small or smaller.</td></tr>
           <tr><td>Max cheap ask</td><td>Default 50¢. The cheap ticket cannot be rich.</td></tr>
           <tr><td>Take / stop / flatten</td><td>Default +6¢ / −5¢ / 3 minutes left.</td></tr>
+          <tr><td>$ / min / max</td><td>This path’s size. Default $5 / $1 / $5. Missing seeds from Cushion lean $.</td></tr>
           <tr><td>Skip thin bid</td><td>Default Off. On can skip or dump if the book is thin.</td></tr>
         </table>
         <div class="grid-3">
           <div class="box iso"><h4>Isolation</h4><ul><li>Gold only</li><li>Does not share an open ticker with Home, Auto, Cash out, TWAP, Last-minute, or Step buy</li><li>Always dumps — no hold to $1</li></ul></div>
-          <div class="box limit"><h4>Limits</h4><ul><li>Ignores Cushions $ to enter</li><li>Uses Auto $ per trade</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Ignores Cushions $ to enter</li><li>Uses Gold fade $ per trade</li></ul></div>
           <div class="box risk"><h4>Risk</h4><ul><li>A quiet Gold can still run</li><li>Flatten and window-end sells can lock a loss</li></ul></div>
         </div>
       </div>
@@ -325,12 +327,13 @@
         <div class="example"><strong>Example.</strong> ETH has 40 seconds left. Banked price already covers the strike for a $0 leftover. Yes ask is 96¢ or less. Cloud buys Yes and holds to settlement. No stop. No dump.</div>
         <table class="knobs">
           <tr><td>Assets</td><td>BTC / ETH chips. Those assets must be On.</td></tr>
+          <tr><td>$ / min / max</td><td>This path’s size. Default $5 / $1 / $5. Missing seeds from Cushion lean $.</td></tr>
           <tr><td>Max ask</td><td>Default $0.96. Range 90–97¢.</td></tr>
           <tr><td>Skip thin bid</td><td>Default Off. On = fail closed (no buy) if book size is unknown or thin.</td></tr>
         </table>
         <div class="grid-3">
           <div class="box iso"><h4>Isolation</h4><ul><li>Checked coins leave Cash out and Auto for the whole 15 minutes</li><li>Last-minute, Step buy, Spike fade, and Pair lock do not fight TWAP on those coins</li><li>Hold to $1</li></ul></div>
-          <div class="box limit"><h4>Limits</h4><ul><li>Yes only</li><li>$0 leftover lock only</li><li>Uses Auto $ per trade</li></ul></div>
+          <div class="box limit"><h4>Limits</h4><ul><li>Yes only</li><li>$0 leftover lock only</li><li>Uses TWAP lock $ per trade</li></ul></div>
           <div class="box risk"><h4>Risk</h4><ul><li>If the lock was wrong, you can lose almost the full ask</li><li>No early exit</li></ul></div>
         </div>
       </div>
@@ -496,7 +499,7 @@
               <td>Cash out</td>
               <td>Lean, cheaper entry</td>
               <td>Partial cushion, minutes left ≥ 3</td>
-              <td>Auto $</td>
+              <td>Cash out $</td>
               <td>Target bid, stop, thin bid</td>
               <td class="no">Tries to sell</td>
               <td class="yes">Enter %</td>
@@ -508,7 +511,7 @@
               <td>Gold fade</td>
               <td>Cheap Gold side</td>
               <td>Gap small</td>
-              <td>Auto $</td>
+              <td>Gold fade $</td>
               <td>Take, stop, flatten, window end</td>
               <td class="no">Always dumps</td>
               <td class="no">No (On/Off only)</td>
@@ -520,7 +523,7 @@
               <td>TWAP lock</td>
               <td>BTC/ETH Yes only</td>
               <td>Last ~60s, $0 leftover lock</td>
-              <td>Auto $</td>
+              <td>TWAP $</td>
               <td>None — hold</td>
               <td class="yes">Yes</td>
               <td class="no">On/Off only</td>

@@ -16,6 +16,7 @@ import {
 } from './types';
 import { DEFAULT_RISK_CONFIG } from './riskDefaults';
 import {
+  cashOutTradeDollars,
   normalizeCashOutAssets,
   normalizeCashOutBid,
   normalizeCashOutEnterPct,
@@ -29,11 +30,13 @@ import {
   normalizeGoldFadeMaxAskUsd,
   normalizeGoldFadeMaxGapUsd,
   normalizeGoldFadeStopUsd,
+  goldFadeTradeDollars,
   normalizeGoldFadeTakeUsd,
 } from '../../packages/trading-core/src/goldFade';
 import {
   normalizeTwapLockAssets,
   normalizeTwapLockMaxAskUsd,
+  twapLockTradeDollars,
 } from '../../packages/trading-core/src/twapLock';
 import {
   normalizeLastMinuteAssets,
@@ -187,6 +190,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
       0.01
     ),
     cash_out_enabled: Boolean(r.cash_out_enabled ?? d.cash_out_enabled),
+    cash_out_fixed_dollars_per_trade: r.cash_out_fixed_dollars_per_trade,
+    cash_out_max_dollars_per_trade: r.cash_out_max_dollars_per_trade,
+    cash_out_min_dollars_per_trade: r.cash_out_min_dollars_per_trade,
     cash_out_enter_pct: normalizeCashOutEnterPct(r.cash_out_enter_pct ?? d.cash_out_enter_pct),
     cash_out_max_ask_usd: normalizeCashOutMaxAsk(r.cash_out_max_ask_usd ?? d.cash_out_max_ask_usd),
     cash_out_bid_usd: normalizeCashOutBid(r.cash_out_bid_usd ?? d.cash_out_bid_usd),
@@ -196,6 +202,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
       r.cash_out_assets !== undefined ? r.cash_out_assets : d.cash_out_assets
     ),
     gold_fade_enabled: r.gold_fade_enabled === true,
+    gold_fade_fixed_dollars_per_trade: r.gold_fade_fixed_dollars_per_trade,
+    gold_fade_max_dollars_per_trade: r.gold_fade_max_dollars_per_trade,
+    gold_fade_min_dollars_per_trade: r.gold_fade_min_dollars_per_trade,
     gold_fade_max_gap_usd: normalizeGoldFadeMaxGapUsd(r.gold_fade_max_gap_usd ?? d.gold_fade_max_gap_usd),
     gold_fade_max_ask_usd: normalizeGoldFadeMaxAskUsd(r.gold_fade_max_ask_usd ?? d.gold_fade_max_ask_usd),
     gold_fade_take_usd: normalizeGoldFadeTakeUsd(r.gold_fade_take_usd ?? d.gold_fade_take_usd),
@@ -205,6 +214,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     ),
     gold_fade_skip_thin_bid: inheritSkipThinBid(r.gold_fade_skip_thin_bid, r.cash_out_skip_thin_bid === true),
     twap_lock_enabled: r.twap_lock_enabled === true,
+    twap_lock_fixed_dollars_per_trade: r.twap_lock_fixed_dollars_per_trade,
+    twap_lock_max_dollars_per_trade: r.twap_lock_max_dollars_per_trade,
+    twap_lock_min_dollars_per_trade: r.twap_lock_min_dollars_per_trade,
     twap_lock_assets: normalizeTwapLockAssets(
       r.twap_lock_assets !== undefined ? r.twap_lock_assets : d.twap_lock_assets
     ),
@@ -351,6 +363,18 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
   if (risk.min_dollars_per_trade > risk.max_dollars_per_trade) {
     risk.min_dollars_per_trade = risk.max_dollars_per_trade;
   }
+  const cashDollars = cashOutTradeDollars(risk);
+  risk.cash_out_fixed_dollars_per_trade = cashDollars.fixed;
+  risk.cash_out_max_dollars_per_trade = cashDollars.max;
+  risk.cash_out_min_dollars_per_trade = cashDollars.min;
+  const fadeDollars = goldFadeTradeDollars(risk);
+  risk.gold_fade_fixed_dollars_per_trade = fadeDollars.fixed;
+  risk.gold_fade_max_dollars_per_trade = fadeDollars.max;
+  risk.gold_fade_min_dollars_per_trade = fadeDollars.min;
+  const twapDollars = twapLockTradeDollars(risk);
+  risk.twap_lock_fixed_dollars_per_trade = twapDollars.fixed;
+  risk.twap_lock_max_dollars_per_trade = twapDollars.max;
+  risk.twap_lock_min_dollars_per_trade = twapDollars.min;
   return risk;
 }
 

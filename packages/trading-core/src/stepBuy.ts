@@ -1,5 +1,5 @@
 import { AppConfig, ASSETS_CATALOG, AssetKey } from './types';
-import { evaluateStaticGate, GateResult, LeanSignal } from './gates';
+import { capGateLotCount, evaluateStaticGate, GateResult, LeanSignal } from './gates';
 import { CashOutQuotes, isOpenLiveFill, openFillsForTicker, ticketUsd } from './cashOut';
 import { resolveSkipThinBid } from './skipThinBid';
 import { inProtectSellGrace } from './protectSell';
@@ -537,13 +537,15 @@ export function evaluateStepBuyEnter(opts: {
     openPositions: opts.openPositions,
     dailyPnlUsd: opts.dailyPnlUsd,
     tradesToday: opts.tradesToday,
-    assetTradesInWindow: lots,
+    assetTradesInWindow: 0,
   });
   if (!gate.ok) return gate;
+  const capped = capGateLotCount(gate, lotCount);
+  if (!capped.ok) return capped;
 
   const thinOn = resolveSkipThinBid(risk, 'step_buy', opts.skipThinBid);
   if (thinOn) {
-    const need = Math.floor(Number(gate.count) || 0);
+    const need = Math.floor(Number(capped.count) || 0);
     if (opts.bidSize == null || !Number.isFinite(Number(opts.bidSize))) {
       return { ok: false, skip_reason: 'step_buy_thin_bid' };
     }
@@ -551,5 +553,5 @@ export function evaluateStepBuyEnter(opts: {
       return { ok: false, skip_reason: 'step_buy_thin_bid' };
     }
   }
-  return { ...gate, decision };
+  return { ...capped, decision };
 }

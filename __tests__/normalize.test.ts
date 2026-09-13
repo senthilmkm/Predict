@@ -112,6 +112,46 @@ describe('normalize / cushions', () => {
     ).toBe(false);
   });
 
+  test('Cash out $ seeds from Auto $ when missing, then keeps its own', () => {
+    expect(normalizeAppConfig({} as any).risk.cash_out_fixed_dollars_per_trade).toBe(5);
+    expect(
+      normalizeAppConfig({
+        risk: { fixed_dollars_per_trade: 8, max_dollars_per_trade: 8, min_dollars_per_trade: 1 },
+      } as any).risk.cash_out_fixed_dollars_per_trade
+    ).toBe(8);
+    expect(
+      normalizeAppConfig({
+        risk: {
+          fixed_dollars_per_trade: 8,
+          max_dollars_per_trade: 8,
+          cash_out_fixed_dollars_per_trade: 3,
+          cash_out_max_dollars_per_trade: 3,
+          cash_out_min_dollars_per_trade: 1,
+        },
+      } as any).risk.cash_out_fixed_dollars_per_trade
+    ).toBe(3);
+  });
+
+  test('Gold fade and TWAP $ seed from Auto $ when missing, then keep their own', () => {
+    const seeded = normalizeAppConfig({
+      risk: { fixed_dollars_per_trade: 8, max_dollars_per_trade: 8, min_dollars_per_trade: 1 },
+    } as any);
+    expect(seeded.risk.gold_fade_fixed_dollars_per_trade).toBe(8);
+    expect(seeded.risk.twap_lock_fixed_dollars_per_trade).toBe(8);
+    const own = normalizeAppConfig({
+      risk: {
+        fixed_dollars_per_trade: 8,
+        max_dollars_per_trade: 8,
+        gold_fade_fixed_dollars_per_trade: 3,
+        gold_fade_max_dollars_per_trade: 3,
+        twap_lock_fixed_dollars_per_trade: 4,
+        twap_lock_max_dollars_per_trade: 4,
+      },
+    } as any);
+    expect(own.risk.gold_fade_fixed_dollars_per_trade).toBe(3);
+    expect(own.risk.twap_lock_fixed_dollars_per_trade).toBe(4);
+  });
+
   test('old max_trades_per_asset_per_day is ignored; window cap defaults to 1 and clamps 1–5', () => {
     expect(
       normalizeAppConfig({

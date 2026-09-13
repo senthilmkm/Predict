@@ -432,7 +432,8 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Cash out?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Cash out.\n\n' +
-            'Checked assets use Cash out instead of normal Auto. It buys when the gap is your Enter cushion % of the Cushions dollar (default 60%), the ask is at or under Max ask (default $0.82), and the book is tight. It then sells when the bid is up by Cash out bid minus max ask from what you paid (paid $0.82 → $0.88; paid $0.78 → $0.84). If the bid falls by Cash out stop below the fill (default 5¢), it sells to cut a full $0 loss. If the lean fully flips by a full cushion, it sells to get out. If none of those happen, the ticket settles $1 or $0 — no last-second dump.\n\n' +
+            'Settings → Paths → Cash out. Checked assets use Cash out instead of Cushion lean. Size is this path’s $ per trade / min / max (default $5 / $1 / $5). Missing $ on an old phone seeds from Cushion lean $ so your live size does not jump. After that, Cushion lean $ no longer changes Cash out.\n\n' +
+            'It buys when the gap is your Enter cushion % of the Cushions dollar (default 60%), the ask is at or under Max ask (default $0.82), and the book is tight. It then sells when the bid is up by Cash out bid minus max ask from what you paid (paid $0.82 → $0.88; paid $0.78 → $0.84). If the bid falls by Cash out stop below the fill (default 5¢), it sells to cut a full $0 loss. If the lean fully flips by a full cushion, it sells to get out. If none of those happen, the ticket settles $1 or $0 — no last-second dump.\n\n' +
             'Each path has its own Skip thin bid checkbox (default Off). See Skip thin bid in FAQ for what happens if the book is thin or unknown.\n\n' +
             'Home Buy and Cash out never share a ticker. Protect money does not sell Cash out lots.',
         },
@@ -452,7 +453,8 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'goldfade-how',
           q: 'What is Gold fade?',
           a:
-            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Gold fade. Default Off. Gold only.\n\n' +
+            'A separate Auto path (Admin must turn it On first). Settings → Paths → Gold fade. Default Off. Gold only.\n\n' +
+            'Size is this path’s $ per trade / min / max (default $5 / $1 / $5). Missing $ on an old phone seeds from Cushion lean $ so your live size does not jump. After that, Cushion lean $ no longer changes Gold fade.\n\n' +
             'When the gap (live vs strike) is at most Max gap (default $3), Cloud buys the cheaper ticket if that ask is at or under Max cheap ask (default $0.50) and the book is tight. It then sells all contracts if the bid is up Take profit from what you paid (default 6¢), hits Gold fade stop (default 5¢), the bid pile is thinner than you hold (when this path’s Skip thin bid is On), minutes left hit Flatten (default 3), the window ends, or the gap blows a full Gold cushion against you.\n\n' +
             'This is not Cash out. Cash out buys the favorite on a large gap and does not dump at the bell. Fade buys the cheap side on a small gap and always flattens. Home, Auto, and Cash out never share a ticker with a Gold fade lot. Protect money does not sell fade lots.',
         },
@@ -472,7 +474,8 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'twaplock-how',
           q: 'What is TWAP lock?',
           a:
-            'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → TWAP lock. Default Off. BTC and ETH only.\n\n' +
+            'A separate Auto path (Admin must turn it On first). Settings → Paths → TWAP lock. Default Off. BTC and ETH only.\n\n' +
+            'Size is this path’s $ per trade / min / max (default $5 / $1 / $5). Missing $ on an old phone seeds from Cushion lean $ so your live size does not jump. After that, Cushion lean $ no longer changes TWAP lock.\n\n' +
             'Kalshi crypto 15m settles on a 60-second average of official CF Benchmarks prints in the last minute. TWAP lock buys Yes only when the running sum already wins even if every leftover second is $0 (banked ≥ strike × 60). Max ask default $0.96 (range $0.90–$0.97). Then it holds to $1 — no stop, fade, or dump.\n\n' +
             'Most windows do nothing. A true lock usually appears in the last 1–3 seconds, and only if the running average is already well above the strike. If Yes is 98–99¢, we skip. Missing a second or a bad book (when this path’s Skip thin bid is On) fails closed — no buy.\n\n' +
             'This is not Cash out and not Gold fade. While TWAP lock is On for BTC or ETH, Cloud will not Cash out or Auto-lean that coin — those paths would spend the window before a lock can appear. Home Buy is still a tap. Gold and other Cash out assets are unchanged. Protect money does not sell TWAP lock lots.',

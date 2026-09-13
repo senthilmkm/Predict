@@ -1,6 +1,13 @@
 import { AppConfig, AssetKey } from './types';
 import { evaluateStaticGate, GateResult, LeanSignal } from './gates';
-import { CashOutQuotes, isOpenLiveFill, openFillsForTicker, sideAskOf, ticketUsd } from './cashOut';
+import {
+  CashOutQuotes,
+  isOpenLiveFill,
+  openFillsForTicker,
+  seededPathTradeDollars,
+  sideAskOf,
+  ticketUsd,
+} from './cashOut';
 import { resolveSkipThinBid } from './skipThinBid';
 
 export const TWAP_LOCK_ASSETS: AssetKey[] = ['BTC', 'ETH'];
@@ -225,8 +232,32 @@ export function evaluateTwapLockSeries(opts: {
   };
 }
 
+export function twapLockTradeDollars(risk: {
+  twap_lock_fixed_dollars_per_trade?: number;
+  twap_lock_max_dollars_per_trade?: number;
+  twap_lock_min_dollars_per_trade?: number;
+  fixed_dollars_per_trade?: number;
+  max_dollars_per_trade?: number;
+  min_dollars_per_trade?: number;
+} | null | undefined): { fixed: number; min: number; max: number } {
+  const r = risk || {};
+  return seededPathTradeDollars(
+    {
+      fixed: r.twap_lock_fixed_dollars_per_trade,
+      max: r.twap_lock_max_dollars_per_trade,
+      min: r.twap_lock_min_dollars_per_trade,
+    },
+    {
+      fixed: r.fixed_dollars_per_trade,
+      max: r.max_dollars_per_trade,
+      min: r.min_dollars_per_trade,
+    }
+  );
+}
+
 export function twapLockGateConfig(cfg: AppConfig, maxAskUsd: number): AppConfig {
   const cushions = { ...cfg.cushions };
+  const dollars = twapLockTradeDollars(cfg.risk);
   for (const asset of TWAP_LOCK_ASSETS) {
     cushions[asset] = 0;
   }
@@ -234,6 +265,9 @@ export function twapLockGateConfig(cfg: AppConfig, maxAskUsd: number): AppConfig
     ...cfg,
     risk: {
       ...cfg.risk,
+      fixed_dollars_per_trade: dollars.fixed,
+      max_dollars_per_trade: dollars.max,
+      min_dollars_per_trade: dollars.min,
       max_entry_ask_usd: maxAskUsd,
       min_minutes_left: 0,
       min_minutes_elapsed: 0,

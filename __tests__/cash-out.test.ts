@@ -166,6 +166,44 @@ describe('Cash out enter', () => {
     expect(Number(gate.count)).toBeGreaterThanOrEqual(1);
   });
 
+  test('missing Cash out $ seeds from Auto $; saved Cash out $ ignores Auto $', () => {
+    const oldDoc = cfg({ risk: { fixed_dollars_per_trade: 10, max_dollars_per_trade: 10 } });
+    delete oldDoc.risk.cash_out_fixed_dollars_per_trade;
+    delete oldDoc.risk.cash_out_max_dollars_per_trade;
+    delete oldDoc.risk.cash_out_min_dollars_per_trade;
+    const inherit = evaluateCashOutEnter({ lean: goldLean(), cfg: oldDoc, adminEnabled: true });
+    const own = evaluateCashOutEnter({
+      lean: goldLean(),
+      cfg: cfg({
+        risk: {
+          fixed_dollars_per_trade: 10,
+          max_dollars_per_trade: 10,
+          cash_out_fixed_dollars_per_trade: 2,
+          cash_out_max_dollars_per_trade: 2,
+          cash_out_min_dollars_per_trade: 1,
+        },
+      }),
+      adminEnabled: true,
+    });
+    expect(inherit.ok).toBe(true);
+    expect(own.ok).toBe(true);
+    expect(Number(inherit.count)).toBeGreaterThan(Number(own.count));
+    expect(cashOutGateConfig(oldDoc, 'Gold').risk.fixed_dollars_per_trade).toBe(10);
+    expect(
+      cashOutGateConfig(
+        cfg({
+          risk: {
+            fixed_dollars_per_trade: 10,
+            max_dollars_per_trade: 10,
+            cash_out_fixed_dollars_per_trade: 2,
+            cash_out_max_dollars_per_trade: 2,
+          },
+        }),
+        'Gold'
+      ).risk.fixed_dollars_per_trade
+    ).toBe(2);
+  });
+
   test('105.00 gap on $175 / 60% is the exact enter line', () => {
     const at = evaluateCashOutEnter({ lean: goldLean({ abs_gap: 105 }), cfg: cfg(), adminEnabled: true });
     const under = evaluateCashOutEnter({ lean: goldLean({ abs_gap: 104.999 }), cfg: cfg(), adminEnabled: true });

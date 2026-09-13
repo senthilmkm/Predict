@@ -189,6 +189,55 @@ export function normalizeCashOutBid(raw: unknown): number {
   return snap(clamp(Number(raw ?? CASH_OUT_BID_DEFAULT), CASH_OUT_TICKET_MIN, CASH_OUT_TICKET_MAX), 0.01);
 }
 
+export const CASH_OUT_DOLLARS_DEFAULT = 5;
+export const CASH_OUT_DOLLARS_MIN = 1;
+export const CASH_OUT_DOLLARS_MAX = 500;
+
+export function normalizeCashOutTradeDollars(
+  raw: unknown,
+  fallback: unknown = CASH_OUT_DOLLARS_DEFAULT
+): number {
+  const n = Number(raw);
+  const seed = Number.isFinite(n) ? n : Number(fallback);
+  return Math.round(clamp(Number.isFinite(seed) ? seed : CASH_OUT_DOLLARS_DEFAULT, CASH_OUT_DOLLARS_MIN, CASH_OUT_DOLLARS_MAX));
+}
+
+/** Path $ size. Missing own fields seed from Cushion lean / Auto $ so live size does not jump. */
+export function seededPathTradeDollars(
+  own: { fixed?: unknown; max?: unknown; min?: unknown },
+  fallback: { fixed?: unknown; max?: unknown; min?: unknown }
+): { fixed: number; min: number; max: number } {
+  let fixed = normalizeCashOutTradeDollars(own.fixed, fallback.fixed);
+  let max = normalizeCashOutTradeDollars(own.max, fallback.max);
+  let min = normalizeCashOutTradeDollars(own.min, fallback.min);
+  if (fixed > max) fixed = max;
+  if (min > max) min = max;
+  return { fixed, min, max };
+}
+
+export function cashOutTradeDollars(risk: {
+  cash_out_fixed_dollars_per_trade?: number;
+  cash_out_max_dollars_per_trade?: number;
+  cash_out_min_dollars_per_trade?: number;
+  fixed_dollars_per_trade?: number;
+  max_dollars_per_trade?: number;
+  min_dollars_per_trade?: number;
+} | null | undefined): { fixed: number; min: number; max: number } {
+  const r = risk || {};
+  return seededPathTradeDollars(
+    {
+      fixed: r.cash_out_fixed_dollars_per_trade,
+      max: r.cash_out_max_dollars_per_trade,
+      min: r.cash_out_min_dollars_per_trade,
+    },
+    {
+      fixed: r.fixed_dollars_per_trade,
+      max: r.max_dollars_per_trade,
+      min: r.min_dollars_per_trade,
+    }
+  );
+}
+
 export function normalizeCashOutStopUsd(raw: unknown): number {
   return snap(
     clamp(Number(raw ?? CASH_OUT_STOP_DEFAULT_USD), CASH_OUT_STOP_MIN_USD, CASH_OUT_STOP_MAX_USD),
@@ -398,12 +447,16 @@ export function openCashOutAssets(
 export function cashOutGateConfig(cfg: AppConfig, asset: AssetKey): AppConfig {
   const enterPct = normalizeCashOutEnterPct((cfg.risk as { cash_out_enter_pct?: number }).cash_out_enter_pct);
   const maxAsk = normalizeCashOutMaxAsk((cfg.risk as { cash_out_max_ask_usd?: number }).cash_out_max_ask_usd);
+  const dollars = cashOutTradeDollars(cfg.risk);
   const fullCushion = Number(cfg.cushions[asset]) || 0;
   const enterCushion = cashOutEnterMinGapUsd(fullCushion, enterPct);
   return {
     ...cfg,
     risk: {
       ...cfg.risk,
+      fixed_dollars_per_trade: dollars.fixed,
+      max_dollars_per_trade: dollars.max,
+      min_dollars_per_trade: dollars.min,
       max_entry_ask_usd: maxAsk,
       min_minutes_left: cashOutMinMinutesLeft(cfg.risk.min_minutes_left),
       smart_buy_enabled: false,

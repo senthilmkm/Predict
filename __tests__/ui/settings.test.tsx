@@ -356,6 +356,7 @@ describe('Settings credentials', () => {
     expect(useConfigStore.getState().config.risk.cash_out_skip_thin_bid).toBe(false);
     await fireEvent(s.getByTestId('risk-toggle-cash_out_enabled'), 'valueChange', true);
     await waitFor(() => expect(useConfigStore.getState().config.risk.cash_out_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-cash_out_fixed_dollars_per_trade').props.children).toMatch(/\$5/);
     expect(s.getByTestId('risk-value-auto-cash_out_enter_pct').props.children).toBe('60%');
     expect(s.getByTestId('risk-value-auto-cash_out_stop_usd').props.children).toBe('5¢');
     expect(s.getByTestId('risk-toggle-cash_out_skip_thin_bid').props.accessibilityState.checked).toBe(false);
@@ -377,6 +378,7 @@ describe('Settings credentials', () => {
     expect(s.queryByTestId('risk-value-auto-gold_fade_take_usd')).toBeNull();
     await fireEvent(s.getByTestId('risk-toggle-gold_fade_enabled'), 'valueChange', true);
     await waitFor(() => expect(useConfigStore.getState().config.risk.gold_fade_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-gold_fade_fixed_dollars_per_trade').props.children).toMatch(/\$5/);
     expect(s.getByTestId('risk-value-auto-gold_fade_take_usd').props.children).toBe('6¢');
     expect(s.getByTestId('risk-value-auto-gold_fade_stop_usd').props.children).toBe('5¢');
     expect(s.getByTestId('risk-toggle-gold_fade_skip_thin_bid').props.accessibilityState.checked).toBe(false);
@@ -398,6 +400,7 @@ describe('Settings credentials', () => {
     expect(s.queryByTestId('twap-lock-asset-BTC')).toBeNull();
     await fireEvent(s.getByTestId('risk-toggle-twap_lock_enabled'), 'valueChange', true);
     await waitFor(() => expect(useConfigStore.getState().config.risk.twap_lock_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-twap_lock_fixed_dollars_per_trade').props.children).toMatch(/\$5/);
     expect(s.getByTestId('risk-value-auto-twap_lock_max_ask_usd').props.children).toMatch(/\$0\.96/);
     expect(s.getByTestId('twap-lock-asset-BTC')).toBeTruthy();
     expect(s.getByTestId('twap-lock-asset-ETH')).toBeTruthy();

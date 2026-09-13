@@ -9,6 +9,7 @@ import {
   sideAskOf,
   sideBidOf,
   sideSpreadOf,
+  seededPathTradeDollars,
   ticketUsd,
 } from './cashOut';
 import { buildProtectSellOrder, inProtectSellGrace, shouldProtectSell } from './protectSell';
@@ -154,11 +155,38 @@ export function openGoldFadeAssets(
   return out;
 }
 
+export function goldFadeTradeDollars(risk: {
+  gold_fade_fixed_dollars_per_trade?: number;
+  gold_fade_max_dollars_per_trade?: number;
+  gold_fade_min_dollars_per_trade?: number;
+  fixed_dollars_per_trade?: number;
+  max_dollars_per_trade?: number;
+  min_dollars_per_trade?: number;
+} | null | undefined): { fixed: number; min: number; max: number } {
+  const r = risk || {};
+  return seededPathTradeDollars(
+    {
+      fixed: r.gold_fade_fixed_dollars_per_trade,
+      max: r.gold_fade_max_dollars_per_trade,
+      min: r.gold_fade_min_dollars_per_trade,
+    },
+    {
+      fixed: r.fixed_dollars_per_trade,
+      max: r.max_dollars_per_trade,
+      min: r.min_dollars_per_trade,
+    }
+  );
+}
+
 export function goldFadeGateConfig(cfg: AppConfig, maxAskUsd: number, flattenMinutes: number): AppConfig {
+  const dollars = goldFadeTradeDollars(cfg.risk);
   return {
     ...cfg,
     risk: {
       ...cfg.risk,
+      fixed_dollars_per_trade: dollars.fixed,
+      max_dollars_per_trade: dollars.max,
+      min_dollars_per_trade: dollars.min,
       max_entry_ask_usd: maxAskUsd,
       min_minutes_left: flattenMinutes,
       smart_buy_enabled: false,

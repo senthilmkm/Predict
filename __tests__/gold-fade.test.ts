@@ -1,6 +1,7 @@
 import {
   evaluateGoldFadeEnter,
   evaluateGoldFadeExit,
+  goldFadeGateConfig,
   goldFadeCheapSide,
   goldFadeStopFloorUsd,
   goldFadeTakeTargetUsd,
@@ -96,6 +97,28 @@ describe('Gold fade math', () => {
 });
 
 describe('Gold fade enter', () => {
+  test('missing Gold fade $ seeds from Auto $; saved Gold fade $ ignores Auto $', () => {
+    const oldDoc = cfg({ risk: { fixed_dollars_per_trade: 10, max_dollars_per_trade: 10 } });
+    delete oldDoc.risk.gold_fade_fixed_dollars_per_trade;
+    delete oldDoc.risk.gold_fade_max_dollars_per_trade;
+    delete oldDoc.risk.gold_fade_min_dollars_per_trade;
+    expect(goldFadeGateConfig(oldDoc, 0.5, 3).risk.fixed_dollars_per_trade).toBe(10);
+    expect(
+      goldFadeGateConfig(
+        cfg({
+          risk: {
+            fixed_dollars_per_trade: 10,
+            max_dollars_per_trade: 10,
+            gold_fade_fixed_dollars_per_trade: 2,
+            gold_fade_max_dollars_per_trade: 2,
+          },
+        }),
+        0.5,
+        3
+      ).risk.fixed_dollars_per_trade
+    ).toBe(2);
+  });
+
   test('gap $2 cheap YES $0.46 buys; admin/user/BTC/gap/ask/spread/late/open skip', () => {
     const ok = evaluateGoldFadeEnter({ lean: goldLean(), cfg: cfg(), adminEnabled: true });
     expect(ok.ok).toBe(true);

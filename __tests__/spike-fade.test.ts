@@ -133,6 +133,21 @@ describe('Spike fade path', () => {
     expect(enter.decision).toBe('NO');
   });
 
+  test('Lot contracts 1 stays 1 even when cheap ask is under cheap max', () => {
+    const cheap = evaluateSpikeFadeEnter({
+      lean: lean({ yes_ask: 0.78, no_ask: 0.16 }),
+      cfg: cfg({
+        risk: {
+          spike_fade_cheap_min_usd: 0.15,
+          spike_fade_cheap_max_usd: 0.35,
+        },
+      }),
+      adminEnabled: true,
+    });
+    expect(cheap.ok).toBe(true);
+    expect(Number(cheap.count)).toBe(1);
+  });
+
   test('sits out outside window, off-band, empty chips, TWAP, Last-minute, other path', () => {
     expect(
       evaluateSpikeFadeEnter({

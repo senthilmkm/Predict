@@ -176,6 +176,10 @@ export interface RiskConfig {
   /** Dollars of extra chance (our guess − ask). Default $0.08. Range $0.04–$0.15. */
   smart_buy_min_edge_usd?: number;
   cash_out_enabled?: boolean;
+  /** Cash out size. Missing seeds from Cushion lean / Auto $. */
+  cash_out_fixed_dollars_per_trade?: number;
+  cash_out_max_dollars_per_trade?: number;
+  cash_out_min_dollars_per_trade?: number;
   cash_out_enter_pct?: number;
   cash_out_max_ask_usd?: number;
   cash_out_bid_usd?: number;
@@ -185,6 +189,10 @@ export interface RiskConfig {
   cash_out_skip_thin_bid?: boolean;
   cash_out_assets?: string[];
   gold_fade_enabled?: boolean;
+  /** Gold fade size. Missing seeds from Cushion lean / Auto $. */
+  gold_fade_fixed_dollars_per_trade?: number;
+  gold_fade_max_dollars_per_trade?: number;
+  gold_fade_min_dollars_per_trade?: number;
   gold_fade_max_gap_usd?: number;
   gold_fade_max_ask_usd?: number;
   gold_fade_take_usd?: number;
@@ -193,6 +201,10 @@ export interface RiskConfig {
   /** Gold fade Skip thin bid. Missing → inherit cash_out_skip_thin_bid. */
   gold_fade_skip_thin_bid?: boolean;
   twap_lock_enabled?: boolean;
+  /** TWAP lock size. Missing seeds from Cushion lean / Auto $. */
+  twap_lock_fixed_dollars_per_trade?: number;
+  twap_lock_max_dollars_per_trade?: number;
+  twap_lock_min_dollars_per_trade?: number;
   twap_lock_assets?: string[];
   twap_lock_max_ask_usd?: number;
   /** TWAP lock Skip thin bid. Missing → inherit cash_out_skip_thin_bid. */
@@ -354,6 +366,9 @@ export function defaultAppConfig(): AppConfig {
       smart_buy_enabled: true,
       smart_buy_min_edge_usd: 0.08,
       cash_out_enabled: false,
+      cash_out_fixed_dollars_per_trade: 5,
+      cash_out_max_dollars_per_trade: 5,
+      cash_out_min_dollars_per_trade: 1,
       cash_out_enter_pct: 60,
       cash_out_max_ask_usd: 0.82,
       cash_out_bid_usd: 0.88,
@@ -361,6 +376,9 @@ export function defaultAppConfig(): AppConfig {
       cash_out_skip_thin_bid: false,
       cash_out_assets: ['Gold'],
       gold_fade_enabled: false,
+      gold_fade_fixed_dollars_per_trade: 5,
+      gold_fade_max_dollars_per_trade: 5,
+      gold_fade_min_dollars_per_trade: 1,
       gold_fade_max_gap_usd: 3,
       gold_fade_max_ask_usd: 0.5,
       gold_fade_take_usd: 0.06,
@@ -368,6 +386,9 @@ export function defaultAppConfig(): AppConfig {
       gold_fade_flatten_minutes: 3,
       gold_fade_skip_thin_bid: false,
       twap_lock_enabled: false,
+      twap_lock_fixed_dollars_per_trade: 5,
+      twap_lock_max_dollars_per_trade: 5,
+      twap_lock_min_dollars_per_trade: 1,
       twap_lock_assets: ['BTC', 'ETH'],
       twap_lock_max_ask_usd: 0.96,
       twap_lock_skip_thin_bid: false,

@@ -99,9 +99,11 @@ export const PATH_INFO = {
       '• Cushions $ × Enter cushion % (default 60% of the dollar gap — not the full cushion)\n' +
       '• Cash out max ask / bid / stop\n' +
       '• This path’s Skip thin bid (sells into the bid — thin book matters here)\n' +
-      '• Auto $ per trade and shared caps\n' +
+      '• This path’s $ per trade / min / max (missing seeds from Cushion lean $)\n' +
+      '• Shared caps\n' +
       '• Minutes left floor of 3 (never last-minute)\n\n' +
       'Does not use\n' +
+      '• Cushion lean $ after this path has its own $ saved\n' +
       '• Auto max ask, Smart buy, chase, Protect\n' +
       '• Gold fade / TWAP / Last-minute fields\n' +
       '• Last-minute watch / clips / Both gate\n\n' +
@@ -117,10 +119,12 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Gold only (asset must be On)\n' +
       '• Max gap, max cheap ask, take, stop, flatten minutes\n' +
-      '• Auto $ per trade, shared caps\n' +
+      '• This path’s $ per trade / min / max (missing seeds from Cushion lean $)\n' +
+      '• Shared caps\n' +
       '• This path’s Skip thin bid (sells the lot — thin book matters here)\n\n' +
       'Does not use\n' +
       '• Cushions $ to enter (gap must be small)\n' +
+      '• Cushion lean $ after this path has its own $ saved\n' +
       '• Auto max ask, Smart buy, Protect, Cash out bid/stop\n' +
       '• TWAP lock / Last-minute fields\n\n' +
       'Isolation\n' +
@@ -135,12 +139,14 @@ export const PATH_INFO = {
       'Uses\n' +
       '• BTC / ETH chips (those assets must be On)\n' +
       '• This path’s max ask\n' +
-      '• Auto $ per trade, window cap 1, shared caps\n' +
+      '• This path’s $ per trade / min / max (missing seeds from Cushion lean $)\n' +
+      '• Window cap 1, shared caps\n' +
       '• This path’s Skip thin bid checkbox (default Off)\n' +
       '• IOC, 1-second CF Benchmarks watch in the last 60s\n' +
       '• $0 leftover lock only (banked ≥ strike × 60), Yes only\n\n' +
       'Does not use\n' +
       '• Cushions $ gap\n' +
+      '• Cushion lean $ after this path has its own $ saved\n' +
       '• Auto max ask, Smart buy, chase, minutes left/elapsed\n' +
       '• Protect, Cash out, Gold fade, Last-minute, Home Sell\n\n' +
       'Isolation\n' +

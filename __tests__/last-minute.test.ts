@@ -255,6 +255,17 @@ describe('Last-minute path', () => {
     expect(maxed.skip_reason).toBe('last_minute_max_clips');
   });
 
+  test('Lot contracts 1 stays 1 even when live ask is cheaper than max ask', () => {
+    const cheap = evaluateLastMinuteEnter({
+      lean: lean({ yes_ask: 0.48, no_ask: 0.52 }),
+      cfg: cfg(),
+      adminEnabled: true,
+      now: nowLast,
+    });
+    expect(cheap.ok).toBe(true);
+    expect(Number(cheap.count)).toBe(1);
+  });
+
   test('i-icon copy names uses, unused settings, and true isolation', () => {
     expect(PATH_INFO.lastMinute.body).toMatch(/Does not pull coins off Cash out or Auto/);
     expect(PATH_INFO.lastMinute.body).toMatch(/Window cap 1/);

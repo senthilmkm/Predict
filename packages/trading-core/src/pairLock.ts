@@ -1,5 +1,5 @@
 import { AppConfig, ASSETS_CATALOG, AssetKey } from './types';
-import { evaluateStaticGate, GateResult, LeanSignal } from './gates';
+import { capGateLotCount, evaluateStaticGate, GateResult, LeanSignal } from './gates';
 import {
   CashOutQuotes,
   isCashOutThinBid,
@@ -600,9 +600,11 @@ export function evaluatePairLockEnter(opts: {
     assetTradesInWindow: opts.assetTradesInWindow,
   });
   if (!gate.ok) return gate;
+  const capped = capGateLotCount(gate, lotCount);
+  if (!capped.ok) return capped;
   const thinOn = resolveSkipThinBid(risk, 'pair_lock', opts.skipThinBid);
   if (thinOn) {
-    const need = Math.floor(Number(gate.count) || 0);
+    const need = Math.floor(Number(capped.count) || 0);
     if (opts.bidSize == null || !Number.isFinite(Number(opts.bidSize))) {
       return { ok: false, skip_reason: 'pair_lock_thin_bid' };
     }
@@ -610,7 +612,7 @@ export function evaluatePairLockEnter(opts: {
       return { ok: false, skip_reason: 'pair_lock_thin_bid' };
     }
   }
-  return { ...gate, decision: decision === 'NO' ? 'NO' : 'YES' };
+  return { ...capped, decision: decision === 'NO' ? 'NO' : 'YES' };
 }
 
 export function pairLockMatchedCount(lots: Pick<PairLockLotState, 'matchedCount' | 'locked' | 'runnerCount' | 'hedgeCount'>): number {

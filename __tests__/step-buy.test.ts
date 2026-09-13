@@ -153,6 +153,17 @@ describe('Step buy path', () => {
     expect(Number(gate.count)).toBe(1);
   });
 
+  test('Lot contracts 1 stays 1 even when live ask is cheaper than Entry ask', () => {
+    const cheap = evaluateStepBuyEnter({
+      lean: lean({ yes_ask: 0.36 }),
+      cfg: cfg(),
+      adminEnabled: true,
+      now: nowLive,
+    });
+    expect(cheap.ok).toBe(true);
+    expect(Number(cheap.count)).toBe(1);
+  });
+
   test('every add still needs Cushion % and the same lean side', () => {
     const lastLotAt = new Date(nowLive.getTime() - 70_000);
     const flipped = evaluateStepBuyEnter({

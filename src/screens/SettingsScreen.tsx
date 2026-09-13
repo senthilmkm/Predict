@@ -1194,7 +1194,9 @@ function RiskHelpModal({
 
             <Text style={styles.modalSection}>Risk — Cash out (Auto-trade only)</Text>
             <HelpItem title="Cash out">
-              Admin must enable this first. Then Settings → Risk → Auto-trade.{'\n\n'}
+              Admin must enable this first. Then Settings → Paths → Cash out.{'\n\n'}
+              Size is this path’s $ per trade / min / max. Missing $ on an old phone seeds from
+              Cushion lean. After that, Cushion lean $ no longer changes Cash out.{'\n\n'}
               Separate path for the assets you check (default Gold). Buys a cheaper ticket (enter % of
               cushion + max ask), then sells when the bid is up by Cash out bid minus max ask from
               what you paid (paid $0.82 → $0.88; paid $0.78 → $0.84), or if the bid falls by Cash out
@@ -1226,12 +1228,16 @@ function RiskHelpModal({
               FAQ.
             </HelpItem>
             <HelpItem title="Gold fade">
-              Gold only. When the gap is at most Max gap, Cloud buys the cheaper ticket and sells
+              Gold only. Size is this path’s $ per trade / min / max. Missing $ seeds from Cushion
+              lean. After that, Cushion lean $ no longer changes Gold fade.{'\n\n'}
+              When the gap is at most Max gap, Cloud buys the cheaper ticket and sells
               the whole lot on take profit, stop, thin bid, flatten minutes, window end, or a full
               cushion flip. Default Off. Admin must enable the block first. Not Cash out.
             </HelpItem>
             <HelpItem title="TWAP lock">
-              BTC and ETH only. While On, those coins leave Cash out and normal Auto. Cloud buys
+              BTC and ETH only. Size is this path’s $ per trade / min / max. Missing $ seeds from
+              Cushion lean. After that, Cushion lean $ no longer changes TWAP lock.{'\n\n'}
+              While On, those coins leave Cash out and normal Auto. Cloud buys
               Yes only when leftover seconds can be $0 and Yes still wins, if the ask is at or
               under Max ask (default $0.96). Then hold to $1. Most windows: no trade. Default Off.
               Admin must enable the block first.

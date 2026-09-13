@@ -364,6 +364,10 @@ function CashOutFields() {
                 />
               );
             })}
+          <Text style={styles.hint} testID="cash-out-size-hint">
+            This path’s size. Missing $ on an old phone seeds from Cushion lean. After that,
+            Cushion lean $ no longer changes Cash out.
+          </Text>
           <Text style={styles.hint} testID="cash-out-fill-edge-hint">
             Sell when the bid is up by Cash out bid minus max ask from what you paid. Paid $0.78 with
             $0.82 / $0.88 → sell at $0.84. Stop sells if the bid falls that many cents below what you
@@ -463,6 +467,10 @@ function GoldFadeFields() {
                 />
               );
             })}
+          <Text style={styles.hint} testID="gold-fade-size-hint">
+            This path’s size. Missing $ on an old phone seeds from Cushion lean. After that,
+            Cushion lean $ no longer changes Gold fade.
+          </Text>
           <Text style={styles.hint} testID="gold-fade-hint">
             Gold only. Buy the cheaper ticket when the gap is at most Max gap. Sell all if the bid is
             up Take profit from what you paid, hits the stop, the book is thin, minutes left hit
@@ -523,6 +531,10 @@ function TwapLockFields() {
                 onChange={(next) => setRiskField(meta.key, next as never)}
               />
             ))}
+          <Text style={styles.hint} testID="twap-lock-size-hint">
+            This path’s size. Missing $ on an old phone seeds from Cushion lean. After that,
+            Cushion lean $ no longer changes TWAP lock.
+          </Text>
           <View style={styles.field} testID="risk-field-auto-twap_lock_assets">
             <Text style={styles.label}>TWAP assets</Text>
             <Text style={styles.hint}>BTC and ETH only. Empty means no TWAP lock buys.</Text>

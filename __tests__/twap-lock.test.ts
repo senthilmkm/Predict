@@ -1,6 +1,7 @@
 import {
   evaluateTwapLockEnter,
   evaluateTwapLockSeries,
+  twapLockGateConfig,
   isTwapLockEnterPath,
   isTwapLockEntryPath,
   twapLockBlocksOtherAutoPaths,
@@ -172,6 +173,27 @@ describe('TWAP lock math', () => {
 });
 
 describe('TWAP lock enter', () => {
+  test('missing TWAP $ seeds from Auto $; saved TWAP $ ignores Auto $', () => {
+    const oldDoc = cfg({ risk: { fixed_dollars_per_trade: 10, max_dollars_per_trade: 10 } });
+    delete oldDoc.risk.twap_lock_fixed_dollars_per_trade;
+    delete oldDoc.risk.twap_lock_max_dollars_per_trade;
+    delete oldDoc.risk.twap_lock_min_dollars_per_trade;
+    expect(twapLockGateConfig(oldDoc, 0.96).risk.fixed_dollars_per_trade).toBe(10);
+    expect(
+      twapLockGateConfig(
+        cfg({
+          risk: {
+            fixed_dollars_per_trade: 10,
+            max_dollars_per_trade: 10,
+            twap_lock_fixed_dollars_per_trade: 2,
+            twap_lock_max_dollars_per_trade: 2,
+          },
+        }),
+        0.96
+      ).risk.fixed_dollars_per_trade
+    ).toBe(2);
+  });
+
   const startSec = Math.floor((close.getTime() - 60_000) / 1000);
   const now = new Date(close.getTime() - 2000);
   const lockedPrints = printsForSeconds(startSec, 58, 90000);

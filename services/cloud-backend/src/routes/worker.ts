@@ -2698,12 +2698,33 @@ export async function runTwapLockWatchTick(
         }
         const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
         try {
+          const recheck = evaluateTwapLockEnter({
+            lean: leanForGate,
+            cfg,
+            adminEnabled: featureFlags.twapLock,
+            prints: cfbRtiBuffer.prints(asset),
+            now: new Date(),
+            openPositions,
+            tradesToday,
+            assetTradesInWindow: existingBuys,
+            dailyPnlUsd,
+            hasOpenOnTicker: tickerHasOpenFill(userTrades, marketTicker),
+            skipThinBid,
+            bidSize: await cashOutBestBidSize(marketTicker, 'YES', skipThinBid),
+          });
+          if (!recheck.ok || !recheck.price || !recheck.count) {
+            lastTradeAction[asset] = skippedTradeAction(recheck.skip_reason || 'twap_lock_feed', tickIso);
+            continue;
+          }
+          const liveGate = recheck;
+          const liveCount = String(liveGate.count);
+          const livePrice = String(liveGate.price);
           const placeRes = await client.placeOrder({
             ticker: marketTicker,
-            side: gate.side || 'bid',
-            count: gate.count,
-            price: gate.price,
-            time_in_force: gate.time_in_force,
+            side: liveGate.side || 'bid',
+            count: liveCount,
+            price: livePrice,
+            time_in_force: liveGate.time_in_force,
             dry_run: false,
           });
           if (!placeRes.ok) {
@@ -2718,20 +2739,20 @@ export async function runTwapLockWatchTick(
           const { fillCount, filled } = resolvedPlaceFillCount({
             dryRun: Boolean(placeRes.dry_run),
             fillCount: placeRes.fill_count,
-            intendedCount: gate.count,
+            intendedCount: liveCount,
           });
-          const payPrice = Number(gate.pay_price ?? 0) || null;
-          const accepted = filled || Boolean(placeRes.order_id && isGoodTillCanceled(gate.time_in_force));
+          const payPrice = Number(liveGate.pay_price ?? 0) || null;
+          const accepted = filled || Boolean(placeRes.order_id && isGoodTillCanceled(liveGate.time_in_force));
           const tradeDoc: TradeRecordDoc = {
             tradeId,
             userId,
             ticker: marketTicker,
             asset: lean.asset,
             decision: 'YES',
-            count: filled ? String(fillCount) : String(gate.count || 0),
-            price: gate.price,
+            count: filled ? String(fillCount) : liveCount,
+            price: livePrice,
             notionalUsd:
-              filled && payPrice ? Math.round(fillCount * payPrice * 100) / 100 : gate.notional_usd || 0,
+              filled && payPrice ? Math.round(fillCount * payPrice * 100) / 100 : liveGate.notional_usd || 0,
             dryRun: false,
             status: filled ? 'FILLED' : accepted ? 'SUBMITTED' : 'CANCELLED',
             leanDiff: absGap,
@@ -2753,7 +2774,7 @@ export async function runTwapLockWatchTick(
             tradesTodayList.push(tradeDoc);
           }
           const priceVal =
-            typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
+            typeof liveGate.price === 'number' ? liveGate.price : parseFloat(String(liveGate.price || 0));
           lastTradeAction[asset] = filled
             ? { status: 'placed', detail: `placed YES · ${fillCount} @ $${priceVal.toFixed(2)}`, at: tickIso }
             : accepted
@@ -2770,7 +2791,7 @@ export async function runTwapLockWatchTick(
                 decision: 'YES',
                 entryPath: 'twap_lock',
               }),
-              body: `${gate.count} ctr @ $${priceVal.toFixed(2)} · Cost $${(gate.notional_usd || 0).toFixed(2)}`,
+              body: `${liveCount} ctr @ $${priceVal.toFixed(2)} · Cost $${(liveGate.notional_usd || 0).toFixed(2)}`,
               cfg,
               tokens: userTokens,
               collapseId: fillCollapseId(userId, tradeId),
@@ -2791,7 +2812,7 @@ export async function runTwapLockWatchTick(
                 decision: 'YES',
                 entryPath: 'twap_lock',
                 price: priceVal,
-                count: gate.count,
+                count: liveCount,
               }),
               cfg,
               tokens: userTokens,
@@ -3831,12 +3852,13 @@ async function placePairLockStackAdd(opts: {
   requestPrefix: string;
 }): Promise<{ filledLegs: number }> {
   const stackReq = `${opts.requestPrefix}${opts.userId}_${opts.marketTicker}_${Date.now()}`.slice(0, 64);
+  const existingStackBuys = Math.max(1, countWindowBuysForTicker(opts.userTrades, opts.marketTicker));
   const stackLock = await tryAcquirePlaceLock({
     userId: opts.userId,
     ticker: opts.marketTicker,
-    cap: Math.max(8, windowBuyCap(opts.cfg.risk) + 4),
+    cap: existingStackBuys + 1,
     requestId: stackReq,
-    existingBuys: 1,
+    existingBuys: existingStackBuys,
   });
   if (!stackLock.ok) return { filledLegs: 0 };
   try {

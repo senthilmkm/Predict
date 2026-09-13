@@ -133,6 +133,14 @@ describe('Pair lock path', () => {
     });
     expect(enter.ok).toBe(true);
     expect(enter.decision).toBe('YES');
+    expect(Number(enter.count)).toBe(1);
+    const cheapRunner = evaluatePairLockEnter({
+      lean: lean({ yes_ask: 0.29, no_ask: 0.18 }),
+      cfg: cfg(),
+      adminEnabled: true,
+    });
+    expect(cheapRunner.ok).toBe(true);
+    expect(Number(cheapRunner.count)).toBe(1);
     const noLean = evaluatePairLockEnter({
       lean: lean({ decision: 'NO', no_ask: 0.52, yes_ask: 0.18 }),
       cfg: cfg(),
