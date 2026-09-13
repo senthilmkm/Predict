@@ -143,7 +143,9 @@ export function spikeFadeDefaultAssets(): string[] {
 export function normalizeSpikeFadeAssets(raw: unknown): string[] {
   const allowed = spikeFadeDefaultAssets();
   const allowedSet = new Set(allowed);
-  if (raw == null || !Array.isArray(raw)) return allowed;
+  if (raw == null || !Array.isArray(raw)) {
+    return allowed.filter((k) => ASSETS_CATALOG.find((a) => a.key === k)?.defaultOn !== false);
+  }
   const out: string[] = [];
   for (const item of raw) {
     const k = String(item || '').trim();

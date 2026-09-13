@@ -15,7 +15,13 @@ import { isSpikeFadeEnterPath, isSpikeFadeEnterWindow } from '../../packages/tra
 import { isPairLockEnterPath, isPairLockEnterWindow } from '../../packages/trading-core/src/pairLock';
 import { isTwapLockEnterPath } from '../../packages/trading-core/src/twapLock';
 
-export type OverlapPathId = TradeEntryPath;
+export type OverlapPathId = Exclude<TradeEntryPath, 'pair_lock_hedge'>;
+
+function overlapPathOf(raw: unknown): OverlapPathId | undefined {
+  const parsed = parseEntryPath(raw);
+  if (parsed === 'pair_lock_hedge') return 'pair_lock';
+  return parsed;
+}
 
 const SITTER_ORDER: OverlapPathId[] = [
   'home',
@@ -68,7 +74,7 @@ export function firstWindowBuyPath(
   for (const row of trades || []) {
     if (String(row.market_ticker || '').trim() !== tkr) continue;
     if (!isCountableWindowBuy(row)) continue;
-    return parseEntryPath(row.entry_path);
+    return overlapPathOf(row.entry_path);
   }
   return undefined;
 }
@@ -91,7 +97,7 @@ function heldPath(
   const tkr = String(ticker || '').trim();
   if (!tkr) return undefined;
   const held = (trades || []).find((t) => isOpenHeldFill(t, tkr));
-  return held ? parseEntryPath(held.entry_path) : undefined;
+  return held ? overlapPathOf(held.entry_path) : undefined;
 }
 
 function withSitters(lead: string, sitters: OverlapPathId[]): string {

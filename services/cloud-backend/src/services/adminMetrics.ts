@@ -12,10 +12,16 @@ export type TradeStreamEntryLabel =
   | 'Step buy'
   | 'Spike fade'
   | 'Pair lock'
+  | 'Pair lock hedge'
   | '—';
 
 /** Admin stream label. Legacy rows with no path stay blank — do not guess. */
 export function tradeStreamEntryLabel(raw: unknown): TradeStreamEntryLabel {
+  const alias = String(raw ?? '')
+    .toLowerCase()
+    .trim()
+    .replace(/-/g, '_');
+  if (alias === 'pair_lock_hedge' || alias === 'pairlockhedge') return 'Pair lock hedge';
   const parsed = parseTradeEntryPath(raw);
   if (parsed === 'home') return 'Home';
   if (parsed === 'auto') return 'Auto';

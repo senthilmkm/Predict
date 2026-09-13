@@ -26,6 +26,32 @@ describe('normalize / cushions', () => {
     expect(clampCushion('BTC', 10)).toBe(25);
   });
 
+  test('HYPE NEAR ZEC are listed, default Off, and keep user On', () => {
+    const fresh = normalizeAppConfig({} as any);
+    expect(fresh.cushions.HYPE).toBe(0.4);
+    expect(fresh.cushions.NEAR).toBe(0.02);
+    expect(fresh.cushions.ZEC).toBe(8);
+    expect(fresh.assets_enabled.HYPE).toBe(false);
+    expect(fresh.assets_enabled.NEAR).toBe(false);
+    expect(fresh.assets_enabled.ZEC).toBe(false);
+    expect(fresh.assets_enabled.BTC).toBe(true);
+    for (const a of ['HYPE', 'NEAR', 'ZEC'] as const) {
+      expect(fresh.risk.last_minute_assets).not.toContain(a);
+      expect(fresh.risk.step_buy_assets).not.toContain(a);
+      expect(fresh.risk.spike_fade_assets).not.toContain(a);
+      expect(fresh.risk.pair_lock_assets).not.toContain(a);
+    }
+    expect(
+      normalizeAppConfig({ risk: { last_minute_assets: ['HYPE'] } } as any).risk.last_minute_assets
+    ).toEqual(['HYPE']);
+    const on = normalizeAppConfig({ assets_enabled: { HYPE: true, BTC: true } } as any);
+    expect(on.assets_enabled.HYPE).toBe(true);
+    expect(on.assets_enabled.NEAR).toBe(false);
+    expect(clampCushion('HYPE', 0.42)).toBe(0.4);
+    expect(clampCushion('NEAR', 0.017)).toBe(0.015);
+    expect(clampCushion('ZEC', 8.2)).toBe(8);
+  });
+
   test('clampPollIntervalSeconds enforces min 10 default 20', () => {
     expect(clampPollIntervalSeconds(5)).toBe(POLL_INTERVAL_MIN_SEC);
     expect(clampPollIntervalSeconds(NaN)).toBe(POLL_INTERVAL_DEFAULT_SEC);
@@ -300,6 +326,7 @@ describe('normalize / cushions', () => {
     expect(d.pair_lock_runner_max_ask_usd).toBe(0.6);
     expect(d.pair_lock_min_lock_usd).toBe(0.05);
     expect(d.pair_lock_flatten_minutes).toBe(3);
+    expect(d.pair_lock_runner_stop_usd).toBe(0.1);
     expect(d.pair_lock_lot_count).toBe(1);
     expect(d.pair_lock_skip_thin_bid).toBe(false);
     expect(normalizeAppConfig({ risk: { pair_lock_assets: [] } } as any).risk.pair_lock_assets).toEqual([]);
@@ -311,6 +338,7 @@ describe('normalize / cushions', () => {
         pair_lock_runner_max_ask_usd: 0.2,
         pair_lock_min_lock_usd: 0.01,
         pair_lock_flatten_minutes: 9,
+        pair_lock_runner_stop_usd: 0.4,
         pair_lock_lot_count: 0,
       },
     } as any).risk;
@@ -321,6 +349,7 @@ describe('normalize / cushions', () => {
     expect(pairOn.pair_lock_runner_max_ask_usd).toBe(0.4);
     expect(pairOn.pair_lock_min_lock_usd).toBe(0.02);
     expect(pairOn.pair_lock_flatten_minutes).toBe(5);
+    expect(pairOn.pair_lock_runner_stop_usd).toBe(0.2);
     expect(pairOn.pair_lock_lot_count).toBe(1);
     expect(on.pair_lock_skip_thin_bid).toBe(true);
     const split = normalizeAppConfig({

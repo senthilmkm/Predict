@@ -10,7 +10,7 @@ describe('Market Hours Schedule', () => {
   it('allows all 24/7 crypto assets at all times', () => {
     // Saturday afternoon
     const sat = new Date('2026-09-05T16:00:00Z');
-    const cryptoAssets = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'SUI', 'LINK'];
+    const cryptoAssets = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'HYPE', 'NEAR', 'ZEC', 'AVAX', 'SUI', 'LINK'];
     for (const a of cryptoAssets) {
       expect(isMarketOpen(a, sat).open).toBe(true);
     }
@@ -54,6 +54,9 @@ describe('Market Hours Schedule', () => {
     expect(SERIES_BY_ASSET.Silver).toBe('KXSILVER15M');
     expect(SERIES_BY_ASSET.COPPER).toBe('KXCOPPER15M');
     expect(SERIES_BY_ASSET.NG).toBe('KXNATGAS15M');
+    expect(SERIES_BY_ASSET.HYPE).toBe('KXHYPE15M');
+    expect(SERIES_BY_ASSET.NEAR).toBe('KXNEAR15M');
+    expect(SERIES_BY_ASSET.ZEC).toBe('KXZEC15M');
   });
 
   it('generates schedule notice banner for full-day closures', () => {

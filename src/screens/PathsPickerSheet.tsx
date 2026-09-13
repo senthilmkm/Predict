@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PathFocusId, PATH_TILES, PathTileDef } from '../content/pathCatalog';
@@ -21,11 +21,13 @@ export function PathsPickerSheet({
   onClose,
   onOpenPath,
   onOpenGuide,
+  lift = 0,
 }: {
   visible: boolean;
   onClose: () => void;
   onOpenPath: (id: PathFocusId) => void;
   onOpenGuide?: () => void;
+  lift?: number;
 }) {
   const pinned = usePinnedPathsStore((s) => s.ids);
   const hydrate = usePinnedPathsStore((s) => s.hydrate);
@@ -92,83 +94,81 @@ export function PathsPickerSheet({
     }
   }
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
+    <View
       testID="modal-paths-picker"
+      style={[styles.overlay, { paddingBottom: lift }]}
+      pointerEvents="auto"
     >
-      <View style={styles.overlay}>
-        <Pressable style={styles.scrim} onPress={onClose} testID="paths-picker-scrim" />
-        <View style={styles.sheet}>
-          <View style={styles.grab} />
-          <View style={styles.head}>
-            <View style={styles.headLeft}>
-              <Text style={styles.title}>Paths</Text>
-              <PathInfoIcon title="Paths" body={PATHS_HELP} testID="path-info-paths-picker" />
-            </View>
-            <Pressable onPress={onClose} hitSlop={10} testID="btn-close-paths-picker">
-              <Text style={styles.close}>Close</Text>
-            </Pressable>
+      <Pressable style={styles.scrim} onPress={onClose} testID="paths-picker-scrim" />
+      <View style={styles.sheet}>
+        <View style={styles.grab} />
+        <View style={styles.head}>
+          <View style={styles.headLeft}>
+            <Text style={styles.title}>Paths</Text>
+            <PathInfoIcon title="Paths" body={PATHS_HELP} testID="path-info-paths-picker" />
           </View>
-          <Text style={styles.blurb}>Tap a name to edit. ★ pins on Home.</Text>
-          {overlapNote ? (
-            <Text style={styles.overlap} testID="paths-overlap-note">
-              {overlapNote}
-            </Text>
-          ) : null}
-          <View style={styles.grid}>
-            {tiles.map((tile) => {
-              const starred = pinned.includes(tile.id);
-              return (
-                <View key={tile.id} style={styles.tileWrap}>
-                  <Pressable
-                    testID={`path-tile-${tile.id}`}
-                    style={styles.tile}
-                    onPress={() => onOpenPath(tile.id)}
-                    accessibilityLabel={`${tile.title}. ${tile.sub}`}
-                  >
-                    <Text style={styles.tileTitle} numberOfLines={1}>
-                      {tile.title}
-                    </Text>
-                    <Text style={styles.tileSub} numberOfLines={1}>
-                      {tile.sub}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    testID={`pin-path-${tile.id}`}
-                    style={styles.pin}
-                    onPress={() => void onStar(tile)}
-                    hitSlop={6}
-                    accessibilityLabel={starred ? `Unpin ${tile.title}` : `Pin ${tile.title}`}
-                  >
-                    <Text style={[styles.pinText, starred && styles.pinOn]}>
-                      {starred ? '★' : '☆'}
-                    </Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-          {onOpenGuide ? (
-            <Pressable
-              testID="btn-paths-guide"
-              style={styles.guideBtn}
-              onPress={onOpenGuide}
-            >
-              <Text style={styles.guideText}>How paths work</Text>
-            </Pressable>
-          ) : null}
+          <Pressable onPress={onClose} hitSlop={10} testID="btn-close-paths-picker">
+            <Text style={styles.close}>Close</Text>
+          </Pressable>
         </View>
+        <Text style={styles.blurb}>Tap a name to edit. ★ pins on Home.</Text>
+        {overlapNote ? (
+          <Text style={styles.overlap} testID="paths-overlap-note">
+            {overlapNote}
+          </Text>
+        ) : null}
+        <View style={styles.grid}>
+          {tiles.map((tile) => {
+            const starred = pinned.includes(tile.id);
+            return (
+              <View key={tile.id} style={styles.tileWrap}>
+                <Pressable
+                  testID={`path-tile-${tile.id}`}
+                  style={styles.tile}
+                  onPress={() => onOpenPath(tile.id)}
+                  accessibilityLabel={`${tile.title}. ${tile.sub}`}
+                >
+                  <Text style={styles.tileTitle} numberOfLines={1}>
+                    {tile.title}
+                  </Text>
+                  <Text style={styles.tileSub} numberOfLines={1}>
+                    {tile.sub}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  testID={`pin-path-${tile.id}`}
+                  style={styles.pin}
+                  onPress={() => void onStar(tile)}
+                  hitSlop={6}
+                  accessibilityLabel={starred ? `Unpin ${tile.title}` : `Pin ${tile.title}`}
+                >
+                  <Text style={[styles.pinText, starred && styles.pinOn]}>
+                    {starred ? '★' : '☆'}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+        {onOpenGuide ? (
+          <Pressable testID="btn-paths-guide" style={styles.guideBtn} onPress={onOpenGuide}>
+            <Text style={styles.guideText}>How paths work</Text>
+          </Pressable>
+        ) : null}
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: {
     backgroundColor: '#151c25',
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 12,
-    paddingBottom: 20,
+    paddingBottom: 12,
     paddingTop: 8,
   },
   grab: {

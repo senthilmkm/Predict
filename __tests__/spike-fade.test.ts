@@ -92,6 +92,9 @@ describe('Spike fade path', () => {
     });
     expect(bands.expensiveMax).toBeGreaterThanOrEqual(bands.expensiveMin);
     expect(bands.cheapMax).toBeGreaterThanOrEqual(bands.cheapMin);
+    expect(normalizeSpikeFadeAssets(undefined).includes('Gold')).toBe(true);
+    expect(normalizeSpikeFadeAssets(undefined).includes('HYPE')).toBe(false);
+    expect(normalizeSpikeFadeAssets(['HYPE'])).toEqual(['HYPE']);
     expect(normalizeSpikeFadeAssets([])).toEqual([]);
     expect(normalizeSpikeFadeAssets(['Gold', 'NOPE'])).toEqual(['Gold']);
   });

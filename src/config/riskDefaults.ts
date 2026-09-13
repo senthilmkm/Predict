@@ -55,7 +55,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   last_minute_both_gap: 0.1,
   last_minute_flip_sell_usd: 0,
   last_minute_skip_thin_bid: false,
-  last_minute_assets: AssetRegistry.keys,
+  last_minute_assets: AssetRegistry.getDefaultPathAssets(),
   step_buy_enabled: false,
   step_buy_start_minutes: 5,
   step_buy_cushion_pct: 50,
@@ -66,7 +66,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   step_buy_stop_usd: 0.03,
   step_buy_max_ask_usd: 0.8,
   step_buy_skip_thin_bid: false,
-  step_buy_assets: AssetRegistry.keys,
+  step_buy_assets: AssetRegistry.getDefaultPathAssets(),
   spike_fade_enabled: false,
   spike_fade_start_minutes: 2,
   spike_fade_until_minutes: 6,
@@ -79,16 +79,17 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   spike_fade_flatten_minutes: 3,
   spike_fade_lot_count: 1,
   spike_fade_skip_thin_bid: false,
-  spike_fade_assets: AssetRegistry.keys,
+  spike_fade_assets: AssetRegistry.getDefaultPathAssets(),
   pair_lock_enabled: false,
   pair_lock_start_minutes: 2,
   pair_lock_until_minutes: 10,
   pair_lock_runner_max_ask_usd: 0.6,
   pair_lock_min_lock_usd: 0.05,
   pair_lock_flatten_minutes: 3,
+  pair_lock_runner_stop_usd: 0.1,
   pair_lock_lot_count: 1,
   pair_lock_skip_thin_bid: false,
-  pair_lock_assets: AssetRegistry.keys,
+  pair_lock_assets: AssetRegistry.getDefaultPathAssets(),
 };
 
 export type RiskFieldGroup = 'size' | 'caps' | 'timing';
@@ -617,6 +618,15 @@ export const RISK_FIELD_META: {
     max: 5,
   },
   {
+    key: 'pair_lock_runner_stop_usd',
+    label: 'Runner stop',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0,
+    max: 0.2,
+  },
+  {
     key: 'pair_lock_lot_count',
     label: 'Lot contracts',
     group: 'timing',
@@ -732,6 +742,7 @@ export const PAIR_LOCK_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'pair_lock_runner_max_ask_usd',
   'pair_lock_min_lock_usd',
   'pair_lock_flatten_minutes',
+  'pair_lock_runner_stop_usd',
   'pair_lock_lot_count',
 ];
 

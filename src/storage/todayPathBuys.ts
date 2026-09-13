@@ -49,7 +49,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   for (const t of trades || []) {
     if (!isEtToday(t.at, now)) continue;
     if (!isCountableWindowBuy(t)) continue;
-    const path = parseEntryPath(t.entry_path);
+    const parsed = parseEntryPath(t.entry_path);
+    const path = parsed === 'pair_lock_hedge' ? 'pair_lock' : parsed;
     if (!path) continue;
     const asset = String(t.asset || '').trim() || 'Unknown';
     if (path === 'home') home[asset] = (home[asset] || 0) + 1;

@@ -82,6 +82,8 @@ describe('Step buy path', () => {
     expect(normalizeStepBuyMaxAskUsd(0.4)).toBe(0.5);
     expect(normalizeStepBuyMaxAskUsd(0.99)).toBe(0.9);
     expect(normalizeStepBuyAssets(undefined).includes('Gold')).toBe(true);
+    expect(normalizeStepBuyAssets(undefined).includes('HYPE')).toBe(false);
+    expect(normalizeStepBuyAssets(['HYPE'])).toEqual(['HYPE']);
     expect(normalizeStepBuyAssets([])).toEqual([]);
     expect(normalizeStepBuyAssets(['Gold', 'Gold', 'NOPE'])).toEqual(['Gold']);
     expect(stepBuyNeedGapUsd(4, 50)).toBe(2);

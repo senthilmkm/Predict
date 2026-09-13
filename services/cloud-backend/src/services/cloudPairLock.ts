@@ -60,6 +60,8 @@ export async function runCloudPairLockFlatten(opts: {
   };
   trades: TradeRecordDoc[];
   flattenMinutes?: unknown;
+  runnerStopUsd?: unknown;
+  minLockUsd?: unknown;
   skipThinBid?: boolean;
   bidSize?: number | null;
   slippageUsd: number;
@@ -87,6 +89,8 @@ export async function runCloudPairLockFlatten(opts: {
       no_ask: opts.lean.no_ask,
     },
     flattenMinutes: opts.flattenMinutes,
+    runnerStopUsd: opts.runnerStopUsd,
+    minLockUsd: opts.minLockUsd,
     skipThinBid: Boolean(opts.skipThinBid),
     bidSize: opts.bidSize,
     lean: {
@@ -179,7 +183,12 @@ export async function runCloudPairLockFlatten(opts: {
       exitPayPrice,
     });
     exited += 1;
-    const title = evalRes.kind === 'pair_lock_thin_bid' ? 'Pair lock thin bid' : 'Pair lock flatten';
+    const title =
+      evalRes.kind === 'pair_lock_thin_bid'
+        ? 'Pair lock thin bid'
+        : evalRes.kind === 'pair_lock_runner_stop'
+          ? 'Pair lock runner stop'
+          : 'Pair lock flatten';
     alerts.push({
       tradeId: trade.tradeId,
       title,

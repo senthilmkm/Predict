@@ -247,10 +247,10 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Pair lock asset chips, and that asset On (Cushions tab on/off). Empty chips = no Pair lock buys\n' +
       '• Start after / Until minute (default minutes 2–10 of the 15m window)\n' +
-      '• Runner max ask, Min lock, Flatten unmatched, Lot contracts\n' +
+      '• Runner max ask, Min lock, Flatten unmatched, Runner stop, Lot contracts\n' +
       '• Auto lean for the runner only. Hedge is always the other side\n' +
       '• Shared: max open, trades/day, daily loss stop, window cap 1 on the runner\n' +
-      '• IOC. 1-second watcher from the runner fill for hedge / flatten unmatched\n\n' +
+      '• IOC. 1-second watcher from the runner fill for hedge / runner stop / flatten unmatched\n\n' +
       'Does not use\n' +
       '• Auto $ per trade (size is Lot contracts × live ask)\n' +
       '• Auto max ask, Smart buy, chase, Auto TIF, Cushions $ gap\n' +
@@ -264,6 +264,7 @@ export const PATH_INFO = {
       '• Hedge count matches the runner. Window cap 1 blocks the runner only\n' +
       '• 5s grace after the runner fill so your own print does not dump you\n' +
       '• Pair complete → hold both to $1. Flatten unmatched: minutes left ≤ Flatten unmatched, or window end, and only if the second leg is missing\n' +
+      '• Runner stop (default 10¢, $0 = off): unmatched only, after 5s grace, and only if the hedge still cannot lock. Sells when live runner ask ≤ fill − Runner stop. Sell is bid IOC — the book can gap past 10¢. After that sell we do not buy the other leg on this ticket\n' +
       '• After Until minute, no new runner. An open runner may still hedge until flatten\n' +
       '• While On for that chip and inside Start after…Until minute, Auto / Cash out / Gold fade do not enter that ticker\n' +
       '• After Until minute with no runner, those paths may use the coin again (window cap 1 still applies)\n' +

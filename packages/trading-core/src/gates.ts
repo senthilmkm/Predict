@@ -311,6 +311,8 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Pair lock min lock not reached';
     case 'pair_lock_flatten':
       return 'Pair lock flatten';
+    case 'pair_lock_runner_stop':
+      return 'Pair lock runner stop';
     case 'pair_lock_hedge':
       return 'Pair lock hedge';
     case 'no_open_fill':
@@ -415,7 +417,7 @@ export function firstWindowBuyEntryPath(
                     ? 'step_buy'
                     : raw === 'spikefade'
                       ? 'spike_fade'
-                      : raw === 'pairlock'
+                      : raw === 'pairlock' || raw === 'pair_lock_hedge' || raw === 'pairlockhedge'
                         ? 'pair_lock'
                         : raw;
     if ((WINDOW_USED_PATHS as readonly string[]).includes(alias)) {

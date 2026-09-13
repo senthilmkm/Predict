@@ -4,12 +4,15 @@ import {
   evaluatePairLockFlatten,
   evaluatePairLockWatch,
   isPairLockEnterPath,
+  isPairLockEntryPath,
   isPairLockEnterWindow,
   normalizePairLockAssets,
   normalizePairLockFlattenMinutes,
   normalizePairLockLotCount,
   normalizePairLockMinLockUsd,
   normalizePairLockRunnerMaxAskUsd,
+  normalizePairLockRunnerStopUsd,
+  pairLockRunnerStopAskUsd,
   normalizePairLockStartMinutes,
   normalizePairLockUntilMinutes,
   pairLockHedgeAskLimitUsd,
@@ -19,7 +22,7 @@ import {
   tickerHasOpenOtherThanPairLock,
   tickerHasOpenPairLock,
 } from '../packages/trading-core/src/pairLock';
-import { formatSkipReason } from '../packages/trading-core/src/gates';
+import { firstWindowBuyEntryPath, formatSkipReason, skipReasonForWindowCap } from '../packages/trading-core/src/gates';
 import { defaultAppConfig } from '../packages/trading-core/src/types';
 import { PATH_INFO } from '../src/content/pathInfo';
 
@@ -75,10 +78,18 @@ describe('Pair lock path', () => {
     expect(normalizePairLockMinLockUsd(0.4)).toBe(0.15);
     expect(normalizePairLockFlattenMinutes(3)).toBe(3);
     expect(normalizePairLockFlattenMinutes(1)).toBe(2);
+    expect(normalizePairLockRunnerStopUsd(0.1)).toBe(0.1);
+    expect(normalizePairLockRunnerStopUsd(0)).toBe(0);
+    expect(normalizePairLockRunnerStopUsd(undefined)).toBe(0.1);
+    expect(normalizePairLockRunnerStopUsd(0.4)).toBe(0.2);
+    expect(pairLockRunnerStopAskUsd(0.51, 0.1)).toBe(0.41);
     expect(normalizePairLockLotCount(0)).toBe(1);
     expect(normalizePairLockLotCount(9)).toBe(5);
     const win = reconcilePairLockWindow({ startMinutes: 8, untilMinutes: 6 });
     expect(win.untilMinutes).toBeGreaterThanOrEqual(win.startMinutes);
+    expect(normalizePairLockAssets(undefined).includes('Gold')).toBe(true);
+    expect(normalizePairLockAssets(undefined).includes('HYPE')).toBe(false);
+    expect(normalizePairLockAssets(['HYPE'])).toEqual(['HYPE']);
     expect(normalizePairLockAssets([])).toEqual([]);
     expect(normalizePairLockAssets(['Gold', 'NOPE'])).toEqual(['Gold']);
   });
@@ -162,6 +173,7 @@ describe('Pair lock path', () => {
     ).toBe('pair_lock_holding_other_path');
     expect(formatSkipReason('pair_lock_holding')).toMatch(/holding/i);
     expect(formatSkipReason('pair_lock_min_lock')).toMatch(/min lock/i);
+    expect(formatSkipReason('pair_lock_runner_stop')).toMatch(/runner stop/i);
   });
 
   test('watcher hedges when opposite ask clears min lock; flatten only if unmatched', () => {
@@ -189,8 +201,9 @@ describe('Pair lock path', () => {
     expect(hedge.hedge?.decision).toBe('NO');
     const flatten = evaluatePairLockFlatten({
       lots,
-      quotes: { yes_bid: 0.4, yes_ask: 0.42, no_bid: 0.56, no_ask: 0.58 },
+      quotes: { yes_bid: 0.4, yes_ask: 0.48, no_bid: 0.5, no_ask: 0.52 },
       flattenMinutes: 3,
+      runnerStopUsd: 0,
       lean: { phase: 'live', minutes_left: 3 },
       filledAt: '2026-09-12T15:00:00.000Z',
       now: new Date('2026-09-12T15:00:08.000Z'),
@@ -259,6 +272,146 @@ describe('Pair lock path', () => {
     });
   });
 
+  test('hedge entry path still locks the pair and flatten holds both sides', () => {
+    expect(isPairLockEntryPath('pair_lock_hedge')).toBe(true);
+    expect(isPairLockEntryPath('pair-lock-hedge')).toBe(true);
+    const trades = [
+      {
+        ticker: 'KXGOLD15M-T',
+        entryPath: 'pair_lock',
+        decision: 'YES',
+        dryRun: false,
+        status: 'FILLED',
+        fillCount: 1,
+        outcome: 'pending',
+        payPrice: 0.59,
+        executedAt: '2026-09-12T15:02:00.000Z',
+      },
+      {
+        ticker: 'KXGOLD15M-T',
+        entryPath: 'pair_lock_hedge',
+        decision: 'NO',
+        dryRun: false,
+        status: 'FILLED',
+        fillCount: 1,
+        outcome: 'pending',
+        payPrice: 0.36,
+        executedAt: '2026-09-12T15:02:08.000Z',
+      },
+    ];
+    const lots = pairLockLotsForTicker(trades, 'KXGOLD15M-T');
+    expect(lots).toMatchObject({
+      runnerSide: 'YES',
+      hedgeSide: 'NO',
+      locked: true,
+      unmatched: false,
+    });
+    expect(pairLockLockedUsd(lots.runnerFillUsd, lots.hedgeFillUsd)).toBe(0.05);
+    expect(tickerHasOpenOtherThanPairLock(trades, 'KXGOLD15M-T')).toBe(false);
+    expect(firstWindowBuyEntryPath(trades, 'KXGOLD15M-T')).toBe('pair_lock');
+    expect(
+      firstWindowBuyEntryPath(
+        [{ ...trades[1], entryPath: 'pair_lock_hedge' }],
+        'KXGOLD15M-T'
+      )
+    ).toBe('pair_lock');
+    expect(skipReasonForWindowCap([trades[1]], 'KXGOLD15M-T')).toBe('window_used_by_pair_lock');
+    expect(
+      evaluatePairLockFlatten({
+        lots,
+        quotes: { yes_bid: 0.1, yes_ask: 0.12, no_bid: 0.86, no_ask: 0.88 },
+        flattenMinutes: 3,
+        lean: { phase: 'live', minutes_left: 2 },
+        filledAt: '2026-09-12T15:02:00.000Z',
+        now: new Date('2026-09-12T15:06:00.000Z'),
+      })
+    ).toMatchObject({ sell: false, kind: 'none', reason: 'pair_lock_hold_locked' });
+    expect(
+      evaluatePairLockWatch({
+        lots,
+        quotes: { yes_bid: 0.1, yes_ask: 0.12, no_bid: 0.86, no_ask: 0.88 },
+        flattenMinutes: 3,
+        lean: { phase: 'live', minutes_left: 2 },
+        filledAt: '2026-09-12T15:02:00.000Z',
+        now: new Date('2026-09-12T15:06:00.000Z'),
+      })
+    ).toMatchObject({ kind: 'hold_locked', reason: 'pair_lock_hold_locked' });
+  });
+
+  test('runner stop sells unmatched when ask is fill minus stop and hedge is still rich', () => {
+    const lots = {
+      runnerSide: 'YES' as const,
+      runnerFillUsd: 0.51,
+      runnerCount: 1,
+      runnerFilledAt: '2026-09-12T15:00:00.000Z',
+      hedgeSide: null,
+      hedgeFillUsd: null,
+      hedgeCount: 0,
+      locked: false,
+      unmatched: true,
+    };
+    const now = new Date('2026-09-12T15:00:08.000Z');
+    const stop = evaluatePairLockWatch({
+      lots,
+      quotes: { yes_bid: 0.39, yes_ask: 0.41, no_bid: 0.57, no_ask: 0.59 },
+      minLockUsd: 0.05,
+      flattenMinutes: 3,
+      runnerStopUsd: 0.1,
+      lean: { phase: 'live', minutes_left: 8 },
+      filledAt: '2026-09-12T15:00:00.000Z',
+      now,
+    });
+    expect(stop).toMatchObject({ kind: 'runner_stop', reason: 'runner_stop' });
+    expect(stop.flatten).toMatchObject({ sell: true, kind: 'pair_lock_runner_stop' });
+    const stillHedge = evaluatePairLockWatch({
+      lots,
+      quotes: { yes_bid: 0.39, yes_ask: 0.41, no_bid: 0.16, no_ask: 0.18 },
+      minLockUsd: 0.05,
+      flattenMinutes: 3,
+      runnerStopUsd: 0.1,
+      lean: { phase: 'live', minutes_left: 8 },
+      filledAt: '2026-09-12T15:00:00.000Z',
+      now,
+    });
+    expect(stillHedge.kind).toBe('hedge');
+    expect(
+      evaluatePairLockWatch({
+        lots,
+        quotes: { yes_bid: 0.39, yes_ask: 0.41, no_bid: 0.57, no_ask: 0.59 },
+        minLockUsd: 0.05,
+        flattenMinutes: 3,
+        runnerStopUsd: 0,
+        lean: { phase: 'live', minutes_left: 8 },
+        filledAt: '2026-09-12T15:00:00.000Z',
+        now,
+      }).kind
+    ).toBe('none');
+    expect(
+      evaluatePairLockWatch({
+        lots,
+        quotes: { yes_bid: 0.39, yes_ask: 0.41, no_bid: 0.57, no_ask: 0.59 },
+        minLockUsd: 0.05,
+        flattenMinutes: 3,
+        runnerStopUsd: 0.1,
+        lean: { phase: 'live', minutes_left: 8 },
+        filledAt: '2026-09-12T15:00:00.000Z',
+        now: new Date('2026-09-12T15:00:02.000Z'),
+      }).kind
+    ).toBe('none');
+    expect(
+      evaluatePairLockWatch({
+        lots: { ...lots, locked: true, unmatched: false, hedgeSide: 'NO', hedgeFillUsd: 0.18, hedgeCount: 1 },
+        quotes: { yes_bid: 0.1, yes_ask: 0.12, no_bid: 0.86, no_ask: 0.88 },
+        minLockUsd: 0.05,
+        flattenMinutes: 3,
+        runnerStopUsd: 0.1,
+        lean: { phase: 'live', minutes_left: 2 },
+        filledAt: '2026-09-12T15:00:00.000Z',
+        now,
+      }).kind
+    ).toBe('hold_locked');
+  });
+
   test('i-icon copy locks isolation and flatten unmatched', () => {
     expect(PATH_INFO.pairLock.title).toBe('Pair lock');
     expect(PATH_INFO.pairLock.body).toMatch(/Pair lock asset chips/);
@@ -266,6 +419,8 @@ describe('Pair lock path', () => {
     expect(PATH_INFO.pairLock.body).toMatch(/Start after \/ Until minute/);
     expect(PATH_INFO.pairLock.body).toMatch(/Min lock/);
     expect(PATH_INFO.pairLock.body).toMatch(/Flatten unmatched/);
+    expect(PATH_INFO.pairLock.body).toMatch(/Runner stop/);
+    expect(PATH_INFO.pairLock.body).toMatch(/do not buy the other leg/);
     expect(PATH_INFO.pairLock.body).toMatch(/hold both to \$1/);
     expect(PATH_INFO.pairLock.body).toMatch(/5s grace/);
     expect(PATH_INFO.pairLock.body).toMatch(/window cap 1/i);

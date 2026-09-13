@@ -113,9 +113,9 @@ export function OnboardingScreen({ onFinished }: Props) {
         ETH: false,
       } as Record<AssetKey, boolean>;
       for (const a of picked) assets_enabled[a] = true;
-      // If nothing selected, keep all on
+      // If nothing selected, keep catalog defaults (new coins stay Off).
       if (picked.length === 0) {
-        for (const a of ALL_ASSETS) assets_enabled[a] = true;
+        for (const a of ALL_ASSETS) assets_enabled[a] = AssetRegistry.get(a)?.defaultOn !== false;
       }
       setConfig({
         alerts_enabled: true,

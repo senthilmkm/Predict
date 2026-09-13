@@ -218,12 +218,40 @@ describe('History / Dashboard / AlertsHub', () => {
           outcome: 'pending',
           dry_run: false,
         },
+        {
+          id: 'pair-runner',
+          at: '2026-09-10T14:03:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-PAIR',
+          side: 'NO',
+          notional_usd: 0.52,
+          fill_count: 1,
+          fill_price: 0.52,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'pair_lock',
+        },
+        {
+          id: 'pair-hedge',
+          at: '2026-09-10T14:03:01.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-PAIR',
+          side: 'YES',
+          notional_usd: 0.43,
+          fill_count: 1,
+          fill_price: 0.43,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'pair_lock_hedge',
+        },
       ] as any,
     });
     const s = await render(<HistoryScreen />);
     expect(s.getByTestId('trade-path-home-fill').props.children).toBe('Home');
     expect(s.getByTestId('trade-path-auto-fill').props.children).toBe('Auto');
     expect(s.queryByTestId('trade-path-legacy-fill')).toBeNull();
+    expect(s.getByTestId('trade-path-pair-runner').props.children).toBe('Pair lock');
+    expect(s.getByTestId('trade-path-pair-hedge').props.children).toBe('PL hedge');
     expect(s.getByText('KXBTC15M-TEST · 5 ctr @ $0.55 · cost $4.60 · P&L $0.40')).toBeTruthy();
     expect(s.queryByText(/Manual/)).toBeNull();
   });

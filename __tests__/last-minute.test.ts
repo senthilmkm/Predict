@@ -74,6 +74,8 @@ describe('Last-minute path', () => {
       pickLastMinuteSide({ side: 'both', yesAsk: 0.96, noAsk: 0.04, maxAsk: 0.96 })
     ).toEqual({ ok: true, decision: 'YES', ask: 0.96 });
     expect(normalizeLastMinuteAssets(undefined).includes('Gold')).toBe(true);
+    expect(normalizeLastMinuteAssets(undefined).includes('HYPE')).toBe(false);
+    expect(normalizeLastMinuteAssets(['HYPE'])).toEqual(['HYPE']);
     expect(normalizeLastMinuteAssets([])).toEqual([]);
     expect(normalizeLastMinuteAssets(['Gold', 'Gold', 'NOPE'])).toEqual(['Gold']);
     expect(

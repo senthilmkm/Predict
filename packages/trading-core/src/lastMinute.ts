@@ -120,11 +120,13 @@ export function lastMinuteDefaultAssets(): string[] {
   return ASSETS_CATALOG.map((a) => a.key);
 }
 
-/** Missing → all catalog assets (old “any asset you have On”). Empty = no Last-minute buys. */
+/** Missing → catalog coins that start On. Empty = no Last-minute buys. Off-by-default coins stay selectable. */
 export function normalizeLastMinuteAssets(raw: unknown): string[] {
   const allowed = lastMinuteDefaultAssets();
   const allowedSet = new Set(allowed);
-  if (raw == null || !Array.isArray(raw)) return allowed;
+  if (raw == null || !Array.isArray(raw)) {
+    return allowed.filter((k) => ASSETS_CATALOG.find((a) => a.key === k)?.defaultOn !== false);
+  }
   const out: string[] = [];
   for (const item of raw) {
     const k = String(item || '').trim();

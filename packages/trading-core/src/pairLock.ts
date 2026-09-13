@@ -28,13 +28,16 @@ export const PAIR_LOCK_MIN_LOCK_MAX = 0.15;
 export const PAIR_LOCK_FLATTEN_DEFAULT = 3;
 export const PAIR_LOCK_FLATTEN_MIN = 2;
 export const PAIR_LOCK_FLATTEN_MAX = 5;
+export const PAIR_LOCK_RUNNER_STOP_DEFAULT = 0.1;
+export const PAIR_LOCK_RUNNER_STOP_MIN = 0;
+export const PAIR_LOCK_RUNNER_STOP_MAX = 0.2;
 export const PAIR_LOCK_LOT_COUNT_DEFAULT = 1;
 export const PAIR_LOCK_LOT_COUNT_MAX = 5;
 export const PAIR_LOCK_GRACE_SEC = 5;
 
 export type PairLockSide = 'YES' | 'NO';
-export type PairLockExitKind = 'none' | 'pair_lock_flatten' | 'pair_lock_thin_bid';
-export type PairLockWatchKind = 'none' | 'hedge' | 'flatten' | 'thin_bid' | 'hold_locked';
+export type PairLockExitKind = 'none' | 'pair_lock_flatten' | 'pair_lock_thin_bid' | 'pair_lock_runner_stop';
+export type PairLockWatchKind = 'none' | 'hedge' | 'flatten' | 'thin_bid' | 'runner_stop' | 'hold_locked';
 
 export type PairLockTrade = {
   ticker?: string;
@@ -145,6 +148,14 @@ export function normalizePairLockFlattenMinutes(raw: unknown): number {
   );
 }
 
+/** $0 = off. Missing → 10¢. */
+export function normalizePairLockRunnerStopUsd(raw: unknown): number {
+  return snap(
+    clamp(Number(raw ?? PAIR_LOCK_RUNNER_STOP_DEFAULT), PAIR_LOCK_RUNNER_STOP_MIN, PAIR_LOCK_RUNNER_STOP_MAX),
+    0.01
+  );
+}
+
 export function normalizePairLockLotCount(raw: unknown): number {
   return Math.round(clamp(Number(raw ?? PAIR_LOCK_LOT_COUNT_DEFAULT), 1, PAIR_LOCK_LOT_COUNT_MAX));
 }
@@ -153,11 +164,13 @@ export function pairLockDefaultAssets(): string[] {
   return ASSETS_CATALOG.map((a) => a.key);
 }
 
-/** Missing → all catalog assets. Empty = no Pair lock buys. */
+/** Missing → catalog coins that start On. Empty = no Pair lock buys. Off-by-default coins stay selectable. */
 export function normalizePairLockAssets(raw: unknown): string[] {
   const allowed = pairLockDefaultAssets();
   const allowedSet = new Set(allowed);
-  if (raw == null || !Array.isArray(raw)) return allowed;
+  if (raw == null || !Array.isArray(raw)) {
+    return allowed.filter((k) => ASSETS_CATALOG.find((a) => a.key === k)?.defaultOn !== false);
+  }
   const out: string[] = [];
   for (const item of raw) {
     const k = String(item || '').trim();
@@ -173,8 +186,9 @@ export function isPairLockAssetSelected(assets: unknown, asset: string): boolean
 export function isPairLockEntryPath(raw: unknown): boolean {
   const v = String(raw ?? '')
     .toLowerCase()
-    .trim();
-  return v === 'pair_lock' || v === 'pairlock' || v === 'pair-lock';
+    .trim()
+    .replace(/-/g, '_');
+  return v === 'pair_lock' || v === 'pairlock' || v === 'pair_lock_hedge' || v === 'pairlockhedge';
 }
 
 export function isPairLockEnterPath(opts: {
@@ -232,6 +246,41 @@ export function canPairLockHedge(opts: {
   if (fill == null || ask == null || limit == null) return false;
   if (ask >= 0.995) return false;
   return ask <= limit + 1e-9;
+}
+
+/** Live runner ask at or under this → unmatched stop, if the hedge still cannot lock. */
+export function pairLockRunnerStopAskUsd(runnerFillUsd: unknown, runnerStopUsd?: unknown): number | null {
+  const fill = ticketUsd(runnerFillUsd);
+  const stop = normalizePairLockRunnerStopUsd(runnerStopUsd);
+  if (fill == null || stop <= 0) return null;
+  return snap(fill - stop, 0.01);
+}
+
+export function canPairLockRunnerStop(opts: {
+  lots: Pick<PairLockLotState, 'locked' | 'unmatched' | 'runnerSide' | 'runnerFillUsd'>;
+  quotes: CashOutQuotes;
+  runnerStopUsd?: unknown;
+  minLockUsd?: unknown;
+}): boolean {
+  if (opts.lots.locked || !opts.lots.unmatched || !opts.lots.runnerSide || opts.lots.runnerFillUsd == null) {
+    return false;
+  }
+  const stop = normalizePairLockRunnerStopUsd(opts.runnerStopUsd);
+  if (stop <= 0) return false;
+  const hedgeSide = oppositeSide(opts.lots.runnerSide);
+  if (
+    canPairLockHedge({
+      runnerFillUsd: opts.lots.runnerFillUsd,
+      hedgeAskUsd: sideAskOf(hedgeSide, opts.quotes),
+      minLockUsd: opts.minLockUsd,
+    })
+  ) {
+    return false;
+  }
+  const ask = sideAskOf(opts.lots.runnerSide, opts.quotes);
+  const trigger = pairLockRunnerStopAskUsd(opts.lots.runnerFillUsd, stop);
+  if (ask == null || trigger == null) return false;
+  return ask <= trigger + 1e-9;
 }
 
 /** Locked dollars per matched contract: $1 − (YES fill + NO fill). */
@@ -363,6 +412,7 @@ function pairLockRisk(cfg: AppConfig) {
     pair_lock_runner_max_ask_usd?: number;
     pair_lock_min_lock_usd?: number;
     pair_lock_flatten_minutes?: number;
+    pair_lock_runner_stop_usd?: number;
     pair_lock_lot_count?: number;
     pair_lock_assets?: string[];
     pair_lock_skip_thin_bid?: boolean;
@@ -505,6 +555,8 @@ export function evaluatePairLockFlatten(opts: {
   lots: PairLockLotState;
   quotes: CashOutQuotes;
   flattenMinutes?: unknown;
+  runnerStopUsd?: unknown;
+  minLockUsd?: unknown;
   lean: { phase?: string; minutes_left?: number; minutes_remaining?: number };
   filledAt?: string | Date | number | null;
   now?: Date;
@@ -530,6 +582,16 @@ export function evaluatePairLockFlatten(opts: {
   if (opts.skipThinBid && isCashOutThinBid(opts.bidSize, opts.lots.runnerCount)) {
     return { sell: true, kind: 'pair_lock_thin_bid', reason: 'thin_bid' };
   }
+  if (
+    canPairLockRunnerStop({
+      lots: opts.lots,
+      quotes: opts.quotes,
+      runnerStopUsd: opts.runnerStopUsd,
+      minLockUsd: opts.minLockUsd,
+    })
+  ) {
+    return { sell: true, kind: 'pair_lock_runner_stop', reason: 'runner_stop' };
+  }
   const flatten = normalizePairLockFlattenMinutes(opts.flattenMinutes);
   if (goldFadeMinutesLeft(opts.lean) <= flatten + 1e-9) {
     return { sell: true, kind: 'pair_lock_flatten', reason: 'flatten_minutes' };
@@ -543,6 +605,7 @@ export function evaluatePairLockWatch(opts: {
   quotes: CashOutQuotes;
   minLockUsd?: unknown;
   flattenMinutes?: unknown;
+  runnerStopUsd?: unknown;
   lean: { phase?: string; minutes_left?: number; minutes_remaining?: number };
   filledAt?: string | Date | number | null;
   now?: Date;
@@ -570,6 +633,8 @@ export function evaluatePairLockWatch(opts: {
     lots: opts.lots,
     quotes: opts.quotes,
     flattenMinutes: opts.flattenMinutes,
+    runnerStopUsd: opts.runnerStopUsd,
+    minLockUsd: opts.minLockUsd,
     lean: opts.lean,
     filledAt: opts.filledAt,
     now: opts.now,
@@ -578,7 +643,12 @@ export function evaluatePairLockWatch(opts: {
   });
   if (flatten.sell) {
     return {
-      kind: flatten.kind === 'pair_lock_thin_bid' ? 'thin_bid' : 'flatten',
+      kind:
+        flatten.kind === 'pair_lock_thin_bid'
+          ? 'thin_bid'
+          : flatten.kind === 'pair_lock_runner_stop'
+            ? 'runner_stop'
+            : 'flatten',
       reason: flatten.reason,
       hedge,
       flatten,

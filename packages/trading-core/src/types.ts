@@ -28,6 +28,8 @@ export interface AssetDefinition {
   cushionBounds: { min: number; max: number; step: number };
   scheduleType?: 'CME_COMMODITY' | 'CRYPTO_24_7' | string;
   enabled?: boolean;
+  /** Cushions switch default. Missing → On. false = listed but Off. */
+  defaultOn?: boolean;
 }
 
 const rawAssets = assetsData as AssetDefinition[];
@@ -94,9 +96,13 @@ export class AssetRegistry {
   }
   static getDefaultEnabled(): Record<string, boolean> {
     return ASSETS_CATALOG.reduce((acc, asset) => {
-      acc[asset.key] = true;
+      acc[asset.key] = asset.defaultOn !== false;
       return acc;
     }, {} as Record<string, boolean>);
+  }
+  /** Path chips that start checked. `defaultOn: false` coins stay listed but unchecked. */
+  static getDefaultPathAssets(): string[] {
+    return ASSETS_CATALOG.filter((a) => a.defaultOn !== false).map((a) => a.key);
   }
 }
 
@@ -232,6 +238,7 @@ export interface RiskConfig {
   pair_lock_runner_max_ask_usd?: number;
   pair_lock_min_lock_usd?: number;
   pair_lock_flatten_minutes?: number;
+  pair_lock_runner_stop_usd?: number;
   pair_lock_lot_count?: number;
   pair_lock_skip_thin_bid?: boolean;
   pair_lock_assets?: string[];
@@ -303,10 +310,7 @@ export function defaultAlertPrefs(): Record<AlertKind, AlertPref> {
 }
 
 export function defaultAppConfig(): AppConfig {
-  const assetsEnabled = ASSETS_CATALOG.reduce((acc, asset) => {
-    acc[asset.key] = true;
-    return acc;
-  }, {} as AssetEnabled);
+  const assetsEnabled = AssetRegistry.getDefaultEnabled();
 
   return {
     version: 1,
@@ -368,7 +372,7 @@ export function defaultAppConfig(): AppConfig {
       last_minute_both_gap: 0.1,
       last_minute_flip_sell_usd: 0,
       last_minute_skip_thin_bid: false,
-      last_minute_assets: ASSETS_CATALOG.map((a) => a.key),
+      last_minute_assets: AssetRegistry.getDefaultPathAssets(),
       step_buy_enabled: false,
       step_buy_start_minutes: 5,
       step_buy_cushion_pct: 50,
@@ -379,7 +383,7 @@ export function defaultAppConfig(): AppConfig {
       step_buy_stop_usd: 0.03,
       step_buy_max_ask_usd: 0.8,
       step_buy_skip_thin_bid: false,
-      step_buy_assets: ASSETS_CATALOG.map((a) => a.key),
+      step_buy_assets: AssetRegistry.getDefaultPathAssets(),
       spike_fade_enabled: false,
       spike_fade_start_minutes: 2,
       spike_fade_until_minutes: 6,
@@ -392,16 +396,17 @@ export function defaultAppConfig(): AppConfig {
       spike_fade_flatten_minutes: 3,
       spike_fade_lot_count: 1,
       spike_fade_skip_thin_bid: false,
-      spike_fade_assets: ASSETS_CATALOG.map((a) => a.key),
+      spike_fade_assets: AssetRegistry.getDefaultPathAssets(),
       pair_lock_enabled: false,
       pair_lock_start_minutes: 2,
       pair_lock_until_minutes: 10,
       pair_lock_runner_max_ask_usd: 0.6,
       pair_lock_min_lock_usd: 0.05,
       pair_lock_flatten_minutes: 3,
+      pair_lock_runner_stop_usd: 0.1,
       pair_lock_lot_count: 1,
       pair_lock_skip_thin_bid: false,
-      pair_lock_assets: ASSETS_CATALOG.map((a) => a.key),
+      pair_lock_assets: AssetRegistry.getDefaultPathAssets(),
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

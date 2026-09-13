@@ -638,6 +638,7 @@ export function SettingsScreen({
         </View>
       </View>
 
+      <View style={styles.bodyPane}>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -925,9 +926,11 @@ export function SettingsScreen({
             </View>
           </KeyboardAvoidingView>
         </View>
+      </View>
 
       <PathsPickerSheet
         visible={pathsOpen}
+        lift={sheetLift}
         onClose={() => showHubSheet(null)}
         onOpenPath={(id) => {
           showHubSheet(null);
@@ -1472,10 +1475,10 @@ function Row({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
+  bodyPane: { flex: 1, overflow: 'hidden' },
   hubDock: {
     zIndex: 40,
-    elevation: 40,
     backgroundColor: colors.bg,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
@@ -1539,7 +1542,6 @@ const styles = StyleSheet.create({
   sheetOverlayAbs: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
-    zIndex: 20,
   },
   sheetCollapsed: {
     height: 0,

@@ -29,12 +29,16 @@ describe('CushionsScreen', () => {
     expect(s.getByTestId('screen-cushions')).toBeTruthy();
     expect(s.getByTestId('reset-cushions-top-btn')).toBeTruthy();
     expect(s.getByTestId('reset-cushions-bottom-btn')).toBeTruthy();
-    for (const a of ['WTI', 'Gold', 'Silver', 'BTC', 'ETH', 'DOGE', 'XRP', 'COPPER']) {
+    for (const a of ['WTI', 'Gold', 'Silver', 'BTC', 'ETH', 'DOGE', 'XRP', 'COPPER', 'HYPE', 'NEAR', 'ZEC']) {
       expect(s.getByTestId(`cushion-card-${a}`)).toBeTruthy();
       expect(s.getByTestId(`cushion-inc-${a}`)).toBeTruthy();
       expect(s.getByTestId(`cushion-dec-${a}`)).toBeTruthy();
       expect(s.getByTestId(`cushion-enable-${a}`)).toBeTruthy();
     }
+    expect(s.getByTestId('cushion-enable-HYPE').props.value).toBe(false);
+    expect(s.getByTestId('cushion-enable-NEAR').props.value).toBe(false);
+    expect(s.getByTestId('cushion-enable-ZEC').props.value).toBe(false);
+    expect(s.getByTestId('cushion-enable-BTC').props.value).toBe(true);
     for (const a of ['AVAX', 'SUI', 'LINK', 'EURUSD', 'GBPUSD', 'USDJPY']) {
       expect(s.queryByTestId(`cushion-card-${a}`)).toBeNull();
     }

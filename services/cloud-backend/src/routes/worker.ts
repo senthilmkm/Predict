@@ -27,7 +27,7 @@ import {
   setSystemConfig,
   TradeRecordDoc,
 } from '../services/firestore';
-import { runConfiguredPurgeJobs } from '../services/purgeJobs';
+import { purgeLastRunPatch, runConfiguredPurgeJobs } from '../services/purgeJobs';
 import {
   fillCollapseId,
   pruneLeanAlertsSent,
@@ -760,6 +760,9 @@ async function runOneTick() {
       'DOGE',
       'XRP',
       'BNB',
+      'HYPE',
+      'NEAR',
+      'ZEC',
       'WTI',
       'Gold',
       'Silver',
@@ -1450,6 +1453,7 @@ async function runOneTick() {
                   quotes,
                   minLockUsd: cfg.risk?.pair_lock_min_lock_usd,
                   flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
+                  runnerStopUsd: cfg.risk?.pair_lock_runner_stop_usd,
                   lean: {
                     phase: lean.phase === 'live' ? 'live' : 'ended',
                     minutes_left: lean.minutes_left,
@@ -1519,7 +1523,7 @@ async function runOneTick() {
                         fillCount: filled ? fillCount : 0,
                         outcome: filled ? 'pending' : 'miss',
                         pnlUsd: null,
-                        entryPath: 'pair_lock',
+                        entryPath: 'pair_lock_hedge',
                       };
                       await saveTradeRecord(userId, tradeDoc);
                       userTrades.unshift(tradeDoc);
@@ -1567,11 +1571,11 @@ async function runOneTick() {
                           userId,
                           alertId: missAlertId(tradeId),
                           kind: 'ioc_miss',
-                          title: iocMissAlertTitle('pair_lock'),
+                          title: iocMissAlertTitle('pair_lock_hedge'),
                           body: iocMissAlertBody({
                             asset,
                             decision: hedgeDecision,
-                            entryPath: 'pair_lock',
+                            entryPath: 'pair_lock_hedge',
                             price: priceVal,
                             count: watch.hedge.count,
                           }),
@@ -1588,7 +1592,7 @@ async function runOneTick() {
                       await releasePlaceLock({ userId, ticker: marketTicker, requestId: hedgeReq });
                     }
                   }
-                } else if (watch.kind === 'flatten' || watch.kind === 'thin_bid') {
+                } else if (watch.kind === 'flatten' || watch.kind === 'thin_bid' || watch.kind === 'runner_stop') {
                   const pairRes = await runCloudPairLockFlatten({
                     userId,
                     asset,
@@ -1604,6 +1608,8 @@ async function runOneTick() {
                     },
                     trades: userTrades,
                     flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
+                    runnerStopUsd: cfg.risk?.pair_lock_runner_stop_usd,
+                    minLockUsd: cfg.risk?.pair_lock_min_lock_usd,
                     skipThinBid: pairSkipThin,
                     bidSize: await cashOutBestBidSize(
                       marketTicker,
@@ -1621,7 +1627,10 @@ async function runOneTick() {
                     pairLockLots = pairLockLotsForTicker(userTrades, marketTicker);
                     lastTradeAction[asset] = {
                       status: 'placed',
-                      detail: `Pair lock flatten · sold ${pairRes.exited}`,
+                      detail:
+                        watch.kind === 'runner_stop'
+                          ? `Pair lock runner stop · sold ${pairRes.exited}`
+                          : `Pair lock flatten · sold ${pairRes.exited}`,
                       at: tickIso,
                     };
                   }
@@ -3813,6 +3822,7 @@ export async function runPairLockWatchTick(
               },
               minLockUsd: cfg.risk?.pair_lock_min_lock_usd,
               flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
+              runnerStopUsd: cfg.risk?.pair_lock_runner_stop_usd,
               lean: {
                 phase: lean.phase === 'live' ? 'live' : 'ended',
                 minutes_left: lean.minutes_left,
@@ -3882,7 +3892,7 @@ export async function runPairLockWatchTick(
                     fillCount: filled ? fillCount : 0,
                     outcome: filled ? 'pending' : 'miss',
                     pnlUsd: null,
-                    entryPath: 'pair_lock',
+                    entryPath: 'pair_lock_hedge',
                   };
                   await saveTradeRecord(userId, tradeDoc);
                   userTrades.unshift(tradeDoc);
@@ -3924,12 +3934,33 @@ export async function runPairLockWatchTick(
                       decision: hedgeDecision,
                       at: now.toISOString(),
                     });
+                  } else {
+                    await emitCloudAlert({
+                      userId,
+                      alertId: missAlertId(tradeId),
+                      kind: 'ioc_miss',
+                      title: iocMissAlertTitle('pair_lock_hedge'),
+                      body: iocMissAlertBody({
+                        asset,
+                        decision: hedgeDecision,
+                        entryPath: 'pair_lock_hedge',
+                        price: priceVal,
+                        count: watch.hedge.count,
+                      }),
+                      cfg: cfg as never,
+                      tokens: userTokens,
+                      asset,
+                      ticker: marketTicker,
+                      tradeId,
+                      decision: hedgeDecision,
+                      at: now.toISOString(),
+                    });
                   }
                 } finally {
                   await releasePlaceLock({ userId, ticker: marketTicker, requestId: hedgeReq });
                 }
               }
-            } else if (watch.kind === 'flatten' || watch.kind === 'thin_bid') {
+            } else if (watch.kind === 'flatten' || watch.kind === 'thin_bid' || watch.kind === 'runner_stop') {
               const pairRes = await runCloudPairLockFlatten({
                 userId,
                 asset,
@@ -3945,6 +3976,8 @@ export async function runPairLockWatchTick(
                 },
                 trades: userTrades,
                 flattenMinutes: cfg.risk?.pair_lock_flatten_minutes,
+                runnerStopUsd: cfg.risk?.pair_lock_runner_stop_usd,
+                minLockUsd: cfg.risk?.pair_lock_min_lock_usd,
                 skipThinBid: pairSkipThin,
                 bidSize: await cashOutBestBidSize(
                   marketTicker,
@@ -3975,7 +4008,10 @@ export async function runPairLockWatchTick(
               if (pairRes.exited > 0) {
                 lastTradeAction[asset] = {
                   status: 'placed',
-                  detail: `Pair lock flatten · sold ${pairRes.exited}`,
+                  detail:
+                    watch.kind === 'runner_stop'
+                      ? `Pair lock runner stop · sold ${pairRes.exited}`
+                      : `Pair lock flatten · sold ${pairRes.exited}`,
                   at: tickIso,
                 };
                 openPositions = Math.max(0, openPositions - pairRes.exited);
@@ -4525,6 +4561,9 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
 
   for (let i = 0; i < tickCount; i++) {
     lastResult = await runOneTick();
+    if (lastResult?.timestamp) {
+      await setSystemConfig({ last_worker_tick_at: lastResult.timestamp });
+    }
     if (lastResult?.paused) break;
     if (isTest) break;
     const lastSubTick = i >= tickCount - 1;
@@ -4585,10 +4624,11 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
     ...(purgeResult.skipped || !purgeResult.ran
       ? {}
       : {
-          purge: {
-            lastRunAt: lastResult.timestamp,
-            lastDeleted: purgeResult.deleted,
-          },
+          purge: purgeLastRunPatch(
+            purgeResult.ranJobs,
+            purgeResult.deleted,
+            lastResult.timestamp || new Date().toISOString()
+          ),
         }),
   });
 

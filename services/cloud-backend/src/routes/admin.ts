@@ -14,7 +14,7 @@ import {
   countPurgeCollections,
   type PurgeConfig,
 } from '../services/firestore';
-import { parsePurgeJobName, runConfiguredPurgeJobs } from '../services/purgeJobs';
+import { parsePurgeJobName, purgeLastRunPatch, runConfiguredPurgeJobs } from '../services/purgeJobs';
 import { AssetRegistry, defaultAppConfig } from '../../../../packages/trading-core/src/types';
 import { windowBuyCap } from '../../../../packages/trading-core/src/gates';
 import {
@@ -159,12 +159,15 @@ function parseAdminPurgePatch(raw: unknown): Partial<PurgeConfig> | undefined {
       throw new Error(`purge.${key} must be an object`);
     }
     const job = src[key] as Record<string, unknown>;
-    const next: { enabled?: boolean; retainDays?: number } = {};
+    const next: { enabled?: boolean; retainDays?: number; intervalDays?: number } = {};
     if (job.enabled !== undefined) {
       next.enabled = job.enabled === true || job.enabled === 'true' || job.enabled === 1 || job.enabled === '1';
     }
     if (job.retainDays !== undefined && job.retainDays !== '') {
       next.retainDays = Number(job.retainDays);
+    }
+    if (job.intervalDays !== undefined && job.intervalDays !== '') {
+      next.intervalDays = Number(job.intervalDays);
     }
     patch[key] = next as PurgeConfig['audit'];
   };
@@ -312,10 +315,7 @@ adminRouter.post('/purge/run', async (req: Request, res: Response) => {
     });
     if (!result.skipped && result.ran) {
       await setSystemConfig({
-        purge: {
-          lastRunAt: new Date().toISOString(),
-          lastDeleted: result.deleted,
-        },
+        purge: purgeLastRunPatch(result.ranJobs, result.deleted, new Date().toISOString()),
       });
     }
     await writeAuditLog('system', 'CONFIG_CHANGE', {

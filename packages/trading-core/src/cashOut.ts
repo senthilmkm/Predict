@@ -310,7 +310,16 @@ export function parseTradeEntryPath(raw: unknown): TradeEntryPath | undefined {
   if (v === 'last_minute' || v === 'lastminute' || v === 'last-minute') return 'last_minute';
   if (v === 'step_buy' || v === 'stepbuy' || v === 'step-buy') return 'step_buy';
   if (v === 'spike_fade' || v === 'spikefade' || v === 'spike-fade') return 'spike_fade';
-  if (v === 'pair_lock' || v === 'pairlock' || v === 'pair-lock') return 'pair_lock';
+  if (
+    v === 'pair_lock' ||
+    v === 'pairlock' ||
+    v === 'pair-lock' ||
+    v === 'pair_lock_hedge' ||
+    v === 'pair-lock-hedge' ||
+    v === 'pairlockhedge'
+  ) {
+    return 'pair_lock';
+  }
   return undefined;
 }
 

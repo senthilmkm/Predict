@@ -16,7 +16,12 @@ import {
   writeAuditLog,
   type TradeRecordDoc,
 } from '../services/firestore';
-import { runConfiguredPurgeJobs, setPurgeInFlightForTests } from '../services/purgeJobs';
+import {
+  nextPurgeJobAtMs,
+  purgeJobIsDue,
+  runConfiguredPurgeJobs,
+  setPurgeInFlightForTests,
+} from '../services/purgeJobs';
 
 const ADMIN_SECRET = process.env.ADMIN_SECRET_KEY || 'predict-admin-secret-2026';
 
@@ -40,6 +45,18 @@ function closedTrade(partial: Partial<TradeRecordDoc> & Pick<TradeRecordDoc, 'tr
 }
 
 describe('Admin purge jobs', () => {
+  test('Run once in days is the auto-sweep interval; Keep for stays the age cutoff', () => {
+    const last = '2026-09-13T10:19:01.000Z';
+    const lastMs = Date.parse(last);
+    expect(purgeJobIsDue({ intervalDays: 1 }, lastMs)).toBe(true);
+    expect(purgeJobIsDue({ intervalDays: 1, lastRunAt: last }, lastMs + 60 * 60 * 1000)).toBe(false);
+    expect(purgeJobIsDue({ intervalDays: 1, lastRunAt: last }, lastMs + 25 * 60 * 60 * 1000)).toBe(true);
+    expect(nextPurgeJobAtMs({ enabled: false, intervalDays: 1, lastRunAt: last }, lastMs)).toBeNull();
+    expect(nextPurgeJobAtMs({ enabled: true, intervalDays: 1, lastRunAt: last }, lastMs + 1000)).toBe(
+      lastMs + 24 * 60 * 60 * 1000
+    );
+  });
+
   beforeEach(async () => {
     setPurgeInFlightForTests(false);
     resetSystemConfigCacheForTests();
@@ -79,6 +96,7 @@ describe('Admin purge jobs', () => {
     expect(res.status).toBe(200);
     expect(res.body.systemConfig.purge.audit.enabled).toBe(true);
     expect(res.body.systemConfig.purge.audit.retainDays).toBe(30);
+    expect(res.body.systemConfig.purge.audit.intervalDays).toBe(1);
     expect(res.body.systemConfig.purge.alerts.enabled).toBe(false);
     expect(res.body.systemConfig.purge.alerts.retainDays).toBe(90);
     expect(res.body.systemConfig.purge.trades.enabled).toBe(false);
@@ -142,6 +160,13 @@ describe('Admin purge jobs', () => {
       .send({ purge: { audit: { retainDays: 1 }, trades: { retainDays: 99999 } } });
     expect(clamped.body.systemConfig.purge.audit.retainDays).toBe(7);
     expect(clamped.body.systemConfig.purge.trades.retainDays).toBe(3650);
+
+    const interval = await request(app)
+      .post('/admin/api/config')
+      .set('x-admin-key', ADMIN_SECRET)
+      .send({ purge: { audit: { intervalDays: 0 }, alerts: { intervalDays: 99 } } });
+    expect(interval.body.systemConfig.purge.audit.intervalDays).toBe(1);
+    expect(interval.body.systemConfig.purge.alerts.intervalDays).toBe(30);
 
     const bad = await request(app)
       .post('/admin/api/purge/run')
@@ -285,7 +310,30 @@ describe('Admin purge jobs', () => {
     const cfg = await getSystemConfig();
     expect(cfg.purge?.lastDeleted?.audit).toBeGreaterThanOrEqual(1);
     expect(typeof cfg.purge?.lastRunAt).toBe('string');
+    expect(typeof cfg.purge?.audit.lastRunAt).toBe('string');
     expect(typeof cfg.last_worker_tick_at).toBe('string');
+  });
+
+  test('auto-sweep sits out until Run once in days has passed; Run once now still deletes', async () => {
+    const uid = 'usr_purge_interval_wait';
+    await writeAuditLog(uid, 'ERROR', { intervalStale: true }, '2018-01-01T00:00:00.000Z');
+    const justNow = new Date().toISOString();
+    await setSystemConfig({
+      purge: {
+        audit: { enabled: true, retainDays: 30, intervalDays: 1, lastRunAt: justNow },
+      },
+    });
+    const waiting = await runConfiguredPurgeJobs();
+    expect(waiting.ran).toBe(false);
+    expect(waiting.deleted.audit).toBe(0);
+    expect((await getAuditLogs(uid)).some((l) => l.details?.intervalStale)).toBe(true);
+
+    const runOnce = await request(app)
+      .post('/admin/api/purge/run')
+      .set('x-admin-key', ADMIN_SECRET)
+      .send({ job: 'audit' });
+    expect(runOnce.body.deleted.audit).toBeGreaterThanOrEqual(1);
+    expect((await getAuditLogs(uid)).some((l) => l.details?.intervalStale)).toBe(false);
   });
 
   test('GET /admin/api/purge/counts returns collection document totals', async () => {
@@ -314,5 +362,21 @@ describe('Admin purge jobs', () => {
     expect(res.body.counts.audit).toBeGreaterThanOrEqual(1);
     expect(res.body.counts.alerts).toBeGreaterThanOrEqual(1);
     expect(res.body.counts.trades).toBeGreaterThanOrEqual(1);
+    expect(res.body.counts.added24h.audit).toBeGreaterThanOrEqual(1);
+    expect(res.body.counts.added24h.alerts).toBeGreaterThanOrEqual(1);
+    expect(res.body.counts.added24h.trades).toBeGreaterThanOrEqual(1);
+
+    await writeAuditLog(uid, 'ERROR', { countProbe: true, old: true }, oldIso(2));
+    await saveTradeRecord(
+      uid,
+      closedTrade({ tradeId: 't_count_old', userId: uid, executedAt: oldIso(3) })
+    );
+    invalidatePurgeCollectionCountsCache();
+    const again = await request(app)
+      .get('/admin/api/purge/counts')
+      .query({ fresh: '1' })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(again.body.counts.audit).toBeGreaterThan(again.body.counts.added24h.audit);
+    expect(again.body.counts.trades).toBeGreaterThan(again.body.counts.added24h.trades);
   });
 });

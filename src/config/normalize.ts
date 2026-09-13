@@ -80,6 +80,7 @@ import {
   normalizePairLockLotCount,
   normalizePairLockMinLockUsd,
   normalizePairLockRunnerMaxAskUsd,
+  normalizePairLockRunnerStopUsd,
   normalizePairLockStartMinutes,
   normalizePairLockUntilMinutes,
   reconcilePairLockWindow,
@@ -306,6 +307,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     ),
     pair_lock_flatten_minutes: normalizePairLockFlattenMinutes(
       r.pair_lock_flatten_minutes ?? d.pair_lock_flatten_minutes
+    ),
+    pair_lock_runner_stop_usd: normalizePairLockRunnerStopUsd(
+      r.pair_lock_runner_stop_usd ?? d.pair_lock_runner_stop_usd
     ),
     pair_lock_lot_count: normalizePairLockLotCount(r.pair_lock_lot_count ?? d.pair_lock_lot_count),
     pair_lock_skip_thin_bid: inheritSkipThinBid(r.pair_lock_skip_thin_bid, r.cash_out_skip_thin_bid === true),

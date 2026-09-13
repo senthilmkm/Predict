@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fireEvent, render, waitFor, cleanup } from './test-utils';
 import { within } from '@testing-library/react-native';
 import { cancelScheduledPersist } from '../../src/storage/configPersistence';
@@ -236,7 +236,7 @@ describe('Settings toggles', () => {
     await waitFor(() => expect(s.getByTestId('faq-accordion')).toBeTruthy());
     await fireEvent.press(s.getByTestId('faq-q-what-markets'));
     const a = String(s.getByTestId('faq-a-what-markets').props.children);
-    expect(a).toMatch(/BTC, ETH, SOL, DOGE, XRP, BNB/);
+    expect(a).toMatch(/BTC, ETH, SOL, DOGE, XRP, BNB, HYPE, NEAR, ZEC/);
     expect(a).toMatch(/S&P 500, Nasdaq 100/);
     expect(a).toMatch(/9:30 AM–4:00 PM ET only/);
     expect(a).toMatch(/no 15-minute forex/i);
@@ -491,6 +491,7 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-pair_lock_runner_max_ask_usd').props.children).toMatch(/\$0\.60/);
     expect(s.getByTestId('risk-value-auto-pair_lock_min_lock_usd').props.children).toMatch(/\$0\.05/);
     expect(s.getByTestId('risk-value-auto-pair_lock_flatten_minutes').props.children).toBe('3 min');
+    expect(s.getByTestId('risk-value-auto-pair_lock_runner_stop_usd').props.children).toMatch(/\$0\.10/);
     expect(s.getByTestId('risk-value-auto-pair_lock_lot_count').props.children).toBe('1');
     expect(s.getByTestId('pair-lock-asset-Gold')).toBeTruthy();
     expect(s.getByTestId('path-info-pairLock')).toBeTruthy();
@@ -649,6 +650,37 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(s.getByTestId('modal-paths-picker')).toBeTruthy());
     expect(s.queryByTestId('alerts-sheet-open')).toBeNull();
     expect(s.queryByTestId('keys-sheet-open')).toBeNull();
+    await fireEvent.press(s.getByTestId('tile-alerts'));
+    await waitFor(() => expect(s.getByTestId('alerts-sheet-open')).toBeTruthy());
+    expect(s.queryByTestId('modal-paths-picker')).toBeNull();
+  });
+
+  test('Paths picker stays under the hub and does not stack over the tab bar', async () => {
+    const s = await render(
+      <View testID="settings-with-tabs">
+        <SettingsScreen />
+        <View testID="fake-tab-bar">
+          <Pressable testID="fake-tab-home">
+            <Text>Home</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+    await fireEvent.press(s.getByTestId('tile-paths'));
+    await waitFor(() => expect(s.getByTestId('modal-paths-picker')).toBeTruthy());
+    const overlayStyle = StyleSheet.flatten(s.getByTestId('modal-paths-picker').props.style);
+    expect(overlayStyle.elevation).toBeUndefined();
+    expect(overlayStyle.zIndex).toBeUndefined();
+    expect(overlayStyle.paddingBottom).toBeGreaterThan(0);
+    expect(s.getByTestId('path-tile-shared')).toBeTruthy();
+    expect(s.getByTestId('path-tile-home')).toBeTruthy();
+    expect(s.getByTestId('path-tile-auto')).toBeTruthy();
+    expect(s.getByTestId('settings-hub-dock')).toBeTruthy();
+    expect(s.getByTestId('fake-tab-bar')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('fake-tab-home'));
+    expect(s.getByTestId('modal-paths-picker')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('tile-alerts'));
+    await waitFor(() => expect(s.getByTestId('alerts-sheet-open')).toBeTruthy());
   });
 
   test('Risk Show opens the Risk screen; Back returns to Settings', async () => {

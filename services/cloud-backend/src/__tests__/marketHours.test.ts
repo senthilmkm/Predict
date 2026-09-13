@@ -3,7 +3,7 @@ import { isMarketOpen } from '../services/marketHours';
 describe('GCP Cloud Backend Market Hours', () => {
   it('allows all 24/7 crypto assets', () => {
     const sat = new Date('2026-09-05T16:00:00Z');
-    for (const a of ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'SUI', 'LINK']) {
+    for (const a of ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'HYPE', 'NEAR', 'ZEC', 'AVAX', 'SUI', 'LINK']) {
       expect(isMarketOpen(a, sat).open).toBe(true);
     }
   });

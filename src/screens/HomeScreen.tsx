@@ -46,6 +46,7 @@ import {
   twapWatchSecondsLeft,
 } from './lastSignalsManual';
 import { formatTickerOverlapLine } from './tickerOverlap';
+import { isPairLockEntryPath } from '../../packages/trading-core/src/pairLock';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -143,8 +144,12 @@ export function HomeScreen({
   }, [hydratePins]);
 
   useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     const id = setInterval(() => {
-      setNowMs(Date.now());
       void refreshCloudSnapshot();
     }, 10000);
     return () => clearInterval(id);
@@ -313,7 +318,7 @@ export function HomeScreen({
     const lastMinuteHeld = held?.entry_path === 'last_minute';
     const stepBuyHeld = held?.entry_path === 'step_buy';
     const spikeFadeHeld = held?.entry_path === 'spike_fade';
-    const pairLockHeld = held?.entry_path === 'pair_lock';
+    const pairLockHeld = isPairLockEntryPath(held?.entry_path);
     const pathHeld =
       cashOutHeld ||
       goldFadeHeld ||
@@ -540,6 +545,7 @@ export function HomeScreen({
             nowMs={nowMs}
             open={statusOpen}
             onPress={() => {
+              setNowMs(Date.now());
               setStatusOpen((v) => !v);
               void refreshCloudSnapshot();
             }}

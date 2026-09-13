@@ -50,7 +50,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What markets does Predict trade?',
           a:
             'Only Kalshi 15-minute up/down contracts for the assets on the Cushions tab. Predict does not trade hourly, daily, or other longer Kalshi events. There is no 15-minute forex on Kalshi right now, so those pairs are not listed.\n\n' +
-            'Crypto (24/7): BTC, ETH, SOL, DOGE, XRP, BNB.\n' +
+            'Crypto (24/7): BTC, ETH, SOL, DOGE, XRP, BNB, HYPE, NEAR, ZEC. HYPE, NEAR, and ZEC start Off on Cushions.\n' +
             'Commodities: Gold, Silver, WTI, Natural Gas, Copper. Follow Kalshi 15-minute books, including Friday night after CME futures close. If Kalshi has no open contract, Home shows no market.\n' +
             'US indexes: S&P 500, Nasdaq 100. Weekdays about 9:30 AM–4:00 PM ET only.\n\n' +
             'A new 15-minute window starts every quarter hour (10:00, 10:15, 10:30) only while Kalshi is listing that book. Closed hours show skip on Home — that is not a missing market.',
@@ -551,7 +551,7 @@ export function getFaqCategories(): FaqCategory[] {
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Pair lock. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Pair lock buys.\n\n' +
             'After Start after and before Until minute (default minutes 2–10), Cloud buys the Auto lean side if that ask is at or under Runner max ask (default 60¢). Size is Lot contracts × live ask — not Auto $5. Example: YES 52¢ → buy 1 YES.\n\n' +
             'From that fill, a 1s watcher buys the opposite side when runner fill + opposite ask ≤ $1 − Min lock (default 5¢). 52¢ + 18¢ = 70¢ locks +30¢ at settlement. 50¢ + 50¢ sits out. Hedge count matches the runner. Window cap 1 blocks the runner only.\n\n' +
-            'A completed pair holds both sides to $1. No take, stop, Protect, or Home Sell. If the second leg is still missing and minutes left ≤ Flatten unmatched (default 3), or the window ends, Cloud sells the runner IOC at the bid. 5s grace after the runner fill.\n\n' +
+            'A completed pair holds both sides to $1. No take, stop, Protect, or Home Sell. If the second leg is still missing, Cloud sells the runner IOC at the bid when minutes left ≤ Flatten unmatched (default 3), the window ends, or live runner ask ≤ fill − Runner stop (default 10¢; $0 = off) and the hedge is still too rich to lock. 5s grace after the runner fill. The sell does not cap the loss at exactly the stop if the bid gaps. After that sell we do not buy the other leg on this ticket.\n\n' +
             'While On for that chip and inside the enter window, Auto / Cash out / Gold fade sit that ticker out. After Until minute with no runner, those paths may use the coin again. Open runner or open pair sits Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Spike fade out. TWAP still owns BTC/ETH if that path is On. Last-minute owns new buys if it is in its buy window and Pair lock has no runner and no pair. Spike fade and Step buy take first pick for new buys when they want the ticker. Protect skips these rows.',
         },
         {

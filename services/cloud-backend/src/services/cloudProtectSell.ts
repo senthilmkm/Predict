@@ -9,6 +9,7 @@ import {
   isProtectClaimable,
   updateTradeRecord,
 } from './firestore';
+import { isPairLockEntryPath } from '../../../../packages/trading-core/src/pairLock';
 import { economicPayPrice, fillCountOf } from './settlement';
 
 export { PROTECT_CLAIM_STALE_MS } from './firestore';
@@ -51,7 +52,7 @@ export function openProtectWatchAssets(trades: TradeRecordDoc[], now = new Date(
       t.entryPath === 'last_minute' ||
       t.entryPath === 'step_buy' ||
       t.entryPath === 'spike_fade' ||
-      t.entryPath === 'pair_lock'
+      isPairLockEntryPath(t.entryPath)
     ) {
       continue;
     }
@@ -76,7 +77,7 @@ export function pendingProtectTradesForMarket(
       t.entryPath !== 'last_minute' &&
       t.entryPath !== 'step_buy' &&
       t.entryPath !== 'spike_fade' &&
-      t.entryPath !== 'pair_lock' &&
+      !isPairLockEntryPath(t.entryPath) &&
       isOpenProtectCandidate(t, now)
   );
 }

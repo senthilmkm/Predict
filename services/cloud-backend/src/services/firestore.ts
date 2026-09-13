@@ -50,7 +50,7 @@ export interface TradeRecordDoc {
   /** Admin stream only. Cash out sell price (stored or derived). */
   sellPriceUsd?: number | null;
   /** How the fill was opened. Protect / Home sell / Cash out must not overwrite. */
-  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock';
+  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'pair_lock_hedge';
   stepLotIndex?: number | null;
 }
 
@@ -81,6 +81,9 @@ export interface AuditLogDoc {
 export interface PurgeJobSettings {
   enabled: boolean;
   retainDays: number;
+  /** Auto-sweep at most this often. Keep for is still the age cutoff. */
+  intervalDays?: number;
+  lastRunAt?: string;
 }
 
 export interface PurgeDeletedCounts {
@@ -101,7 +104,7 @@ export interface SystemConfig {
   tick_interval_seconds: number;
   stale_timeout_seconds: number;
   batch_size: number;
-  /** ISO time of the last completed Cloud Scheduler /tick (worker heartbeat). */
+  /** ISO time of the last completed worker sub-tick (main-tick heartbeat). */
   last_worker_tick_at?: string;
   /** Age-out deletes for audit / dismissed alerts / closed trades. Nested-merged on save. */
   purge?: PurgeConfig;
@@ -116,11 +119,15 @@ export interface SystemConfig {
 export const MAX_PURGE_DELETES_PER_TICK = 400;
 export const AUDIT_RETENTION_DAYS = 30;
 
+export const PURGE_INTERVAL_DAYS_DEFAULT = 1;
+export const PURGE_INTERVAL_DAYS_MIN = 1;
+export const PURGE_INTERVAL_DAYS_MAX = 30;
+
 export function cloneDefaultPurgeConfig(): PurgeConfig {
   return {
-    audit: { enabled: true, retainDays: AUDIT_RETENTION_DAYS },
-    alerts: { enabled: false, retainDays: 90 },
-    trades: { enabled: false, retainDays: 365 },
+    audit: { enabled: true, retainDays: AUDIT_RETENTION_DAYS, intervalDays: PURGE_INTERVAL_DAYS_DEFAULT },
+    alerts: { enabled: false, retainDays: 90, intervalDays: PURGE_INTERVAL_DAYS_DEFAULT },
+    trades: { enabled: false, retainDays: 365, intervalDays: PURGE_INTERVAL_DAYS_DEFAULT },
   };
 }
 
@@ -147,22 +154,35 @@ function parseEnabledFlag(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function normalizePurgeJob(
+  raw: Partial<PurgeJobSettings> | undefined,
+  defaults: PurgeJobSettings,
+  retainMin: number,
+  retainMax: number
+): PurgeJobSettings {
+  const out: PurgeJobSettings = {
+    enabled: parseEnabledFlag(raw?.enabled, defaults.enabled),
+    retainDays: clampRetainDays(Number(raw?.retainDays), retainMin, retainMax, defaults.retainDays),
+    intervalDays: clampRetainDays(
+      Number(raw?.intervalDays),
+      PURGE_INTERVAL_DAYS_MIN,
+      PURGE_INTERVAL_DAYS_MAX,
+      defaults.intervalDays ?? PURGE_INTERVAL_DAYS_DEFAULT
+    ),
+  };
+  if (typeof raw?.lastRunAt === 'string' && raw.lastRunAt.trim()) {
+    out.lastRunAt = raw.lastRunAt.trim();
+  }
+  return out;
+}
+
 export function normalizePurgeConfig(raw?: Partial<PurgeConfig> | null): PurgeConfig {
   const defaults = cloneDefaultPurgeConfig();
   const lastDeleted = raw?.lastDeleted;
   const out: PurgeConfig = {
-    audit: {
-      enabled: parseEnabledFlag(raw?.audit?.enabled, defaults.audit.enabled),
-      retainDays: clampRetainDays(Number(raw?.audit?.retainDays), 7, 365, defaults.audit.retainDays),
-    },
-    alerts: {
-      enabled: parseEnabledFlag(raw?.alerts?.enabled, defaults.alerts.enabled),
-      retainDays: clampRetainDays(Number(raw?.alerts?.retainDays), 7, 365, defaults.alerts.retainDays),
-    },
-    trades: {
-      enabled: parseEnabledFlag(raw?.trades?.enabled, defaults.trades.enabled),
-      retainDays: clampRetainDays(Number(raw?.trades?.retainDays), 30, 3650, defaults.trades.retainDays),
-    },
+    audit: normalizePurgeJob(raw?.audit, defaults.audit, 7, 365),
+    alerts: normalizePurgeJob(raw?.alerts, defaults.alerts, 7, 365),
+    trades: normalizePurgeJob(raw?.trades, defaults.trades, 30, 3650),
   };
   if (typeof raw?.lastRunAt === 'string' && raw.lastRunAt.trim()) {
     out.lastRunAt = raw.lastRunAt;
@@ -1145,10 +1165,65 @@ async function countNamedSubcollections(f: Firestore, name: string, userIds: str
   return total;
 }
 
+function countLocalSince(store: Map<string, any[]>, field: string, sinceMs: number): number {
+  let n = 0;
+  for (const rows of store.values()) {
+    for (const row of rows || []) {
+      const t = new Date(row?.[field] || 0).getTime();
+      if (Number.isFinite(t) && t >= sinceMs) n += 1;
+    }
+  }
+  return n;
+}
+
+async function countCollectionGroupSince(
+  f: Firestore,
+  name: string,
+  field: string,
+  sinceIso: string
+): Promise<number | null> {
+  try {
+    const snap = await f.collectionGroup(name).where(field, '>=', sinceIso).count().get();
+    return Number(snap.data().count) || 0;
+  } catch {
+    return null;
+  }
+}
+
+async function countNamedSubcollectionsSince(
+  f: Firestore,
+  name: string,
+  field: string,
+  sinceIso: string,
+  userIds: string[]
+): Promise<number> {
+  let total = 0;
+  for (const userId of userIds) {
+    try {
+      const snap = await f
+        .collection('users')
+        .doc(userId)
+        .collection(name)
+        .where(field, '>=', sinceIso)
+        .count()
+        .get();
+      total += Number(snap.data().count) || 0;
+    } catch {
+      /* skip user */
+    }
+  }
+  return total;
+}
+
 export type PurgeCollectionCounts = {
   audit: number;
   alerts: number;
   trades: number;
+  added24h: {
+    audit: number;
+    alerts: number;
+    trades: number;
+  };
 };
 
 let purgeCountsCache: { at: number; counts: PurgeCollectionCounts } | null = null;
@@ -1167,32 +1242,59 @@ export async function countPurgeCollections(opts?: { fresh?: boolean }): Promise
     return purgeCountsCache.counts;
   }
   const f = getDb();
+  const sinceMs = Date.now() - 24 * 60 * 60 * 1000;
+  const sinceIso = new Date(sinceMs).toISOString();
   if (!f) {
-    const counts = {
+    const counts: PurgeCollectionCounts = {
       audit: sumLocalStore(localAuditStore),
       alerts: sumLocalStore(localAlertStore),
       trades: sumLocalStore(localTradeStore),
+      added24h: {
+        audit: countLocalSince(localAuditStore, 'timestamp', sinceMs),
+        alerts: countLocalSince(localAlertStore, 'at', sinceMs),
+        trades: countLocalSince(localTradeStore, 'executedAt', sinceMs),
+      },
     };
     purgeCountsCache = { at: Date.now(), counts };
     return counts;
   }
 
-  const [auditG, alertsG, tradesG] = await Promise.all([
+  const [auditG, alertsG, tradesG, audit24, alerts24, trades24] = await Promise.all([
     countCollectionGroupDocs(f, 'audit'),
     countCollectionGroupDocs(f, 'alerts'),
     countCollectionGroupDocs(f, 'trades'),
+    countCollectionGroupSince(f, 'audit', 'timestamp', sinceIso),
+    countCollectionGroupSince(f, 'alerts', 'at', sinceIso),
+    countCollectionGroupSince(f, 'trades', 'executedAt', sinceIso),
   ]);
   const counts: PurgeCollectionCounts = {
     audit: auditG ?? 0,
     alerts: alertsG ?? 0,
     trades: tradesG ?? 0,
+    added24h: {
+      audit: audit24 ?? 0,
+      alerts: alerts24 ?? 0,
+      trades: trades24 ?? 0,
+    },
   };
-  if (auditG == null || alertsG == null || tradesG == null) {
+  if (
+    auditG == null ||
+    alertsG == null ||
+    tradesG == null ||
+    audit24 == null ||
+    alerts24 == null ||
+    trades24 == null
+  ) {
     const users = await getAllUsers();
     const ids = [...new Set([...users.map((u) => u.userId).filter(Boolean), 'system'])];
     if (auditG == null) counts.audit = await countNamedSubcollections(f, 'audit', ids);
     if (alertsG == null) counts.alerts = await countNamedSubcollections(f, 'alerts', ids);
     if (tradesG == null) counts.trades = await countNamedSubcollections(f, 'trades', ids);
+    if (audit24 == null) counts.added24h.audit = await countNamedSubcollectionsSince(f, 'audit', 'timestamp', sinceIso, ids);
+    if (alerts24 == null) counts.added24h.alerts = await countNamedSubcollectionsSince(f, 'alerts', 'at', sinceIso, ids);
+    if (trades24 == null) {
+      counts.added24h.trades = await countNamedSubcollectionsSince(f, 'trades', 'executedAt', sinceIso, ids);
+    }
   }
   purgeCountsCache = { at: Date.now(), counts };
   return counts;

@@ -90,6 +90,20 @@ describe('summarizeTodayPathBuys', () => {
     expect(formatHomePathBuyLines(summary)).toEqual(['Home  BTC 1', 'Auto  ETH 1']);
     expect(formatHomePathBuyLines(summary).join(' ')).not.toMatch(/Manual/i);
   });
+
+  test('counts Pair lock hedge fills under Pair lock, not Auto', () => {
+    const summary = summarizeTodayPathBuys(
+      [
+        rec({ id: 'r', asset: 'BTC', entry_path: 'pair_lock' }),
+        rec({ id: 'h', asset: 'BTC', entry_path: 'pair_lock_hedge' }),
+      ],
+      NOW
+    );
+    expect(summary.pairLock).toEqual([{ asset: 'BTC', count: 2 }]);
+    expect(summary.pairLockTotal).toBe(2);
+    expect(summary.autoTotal).toBe(0);
+    expect(formatHomePathBuyLines(summary)).toEqual(['Pair lock  BTC 2']);
+  });
 });
 
 describe('history trade display', () => {
@@ -103,6 +117,8 @@ describe('history trade display', () => {
     expect(entryPathChipLabel('step_buy')).toBe('Step buy');
     expect(entryPathChipLabel('spike_fade')).toBe('Spike fade');
     expect(entryPathChipLabel('pair_lock')).toBe('Pair lock');
+    expect(entryPathChipLabel('pair_lock_hedge')).toBe('PL hedge');
+    expect(entryPathChipLabel('pair-lock-hedge')).toBe('PL hedge');
     expect(entryPathChipLabel('manual_buy')).toBe('Home');
     expect(entryPathChipLabel(null)).toBeNull();
     expect(entryPathChipLabel(undefined)).toBeNull();

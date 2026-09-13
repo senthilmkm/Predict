@@ -84,6 +84,7 @@ describe('cloud alerts persist + mute + settlement', () => {
       'Order Placed · Pair lock hedge · Gold NO'
     );
     expect(iocMissAlertTitle('pair_lock')).toBe('IOC miss · Pair lock');
+    expect(iocMissAlertTitle('pair_lock_hedge')).toBe('IOC miss · Pair lock hedge');
     expect(
       iocMissAlertBody({
         asset: 'BTC',

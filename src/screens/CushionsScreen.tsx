@@ -166,13 +166,13 @@ export function CushionsScreen() {
                 const a = assetDef.key;
                 const b = assetDef.cushionBounds;
                 const val = cushions[a] ?? assetDef.defaultCushion;
-                const isEnabled = enabled[a] ?? true;
+                const isEnabled = enabled[a] ?? assetDef.defaultOn !== false;
 
                 return (
                   <View key={a} style={styles.card} testID={`cushion-card-${a}`}>
                     <View style={styles.header}>
-                      <View>
-                        <Text style={styles.asset}>
+                      <View style={styles.titleBlock}>
+                        <Text style={styles.asset} numberOfLines={1}>
                           {assetDef.name} ({a})
                         </Text>
                         <Pressable
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   filterText: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
   filterTextActive: { color: colors.bg, fontWeight: '700' },
-  categorySection: { gap: spacing.sm, marginBottom: spacing.xs },
+  categorySection: { gap: spacing.xs, marginBottom: 2 },
   categoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -307,23 +307,25 @@ const styles = StyleSheet.create({
   emptyCategoryText: { color: colors.textSecondary, fontSize: 12, fontStyle: 'italic' },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: spacing.md,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderColor: colors.border,
     borderWidth: 1,
-    gap: 6,
+    gap: 2,
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  asset: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
-  cushion: { color: colors.accent, fontSize: 22, fontWeight: '700', marginTop: 2 },
+  titleBlock: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingRight: 8 },
+  asset: { flexShrink: 1, color: colors.textPrimary, fontSize: 13, fontWeight: '600' },
+  cushion: { color: colors.accent, fontSize: 15, fontWeight: '700' },
   bounds: { flexDirection: 'row', justifyContent: 'space-between' },
-  bound: { color: colors.mute, fontSize: 11 },
-  nudge: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  bound: { color: colors.mute, fontSize: 10 },
+  nudge: { flexDirection: 'row', gap: 6, marginTop: 0 },
   chip: {
     backgroundColor: colors.surfaceElevated,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   chipText: { color: colors.textPrimary, fontSize: 12 },
   footerContainer: {

@@ -32,7 +32,24 @@
   <style>
     html { color-scheme: dark; }
     body { background-color: #0F172A; color: #F8FAFC; font-family: 'Inter', sans-serif; }
-    input[type="date"], input[type="time"], input[type="datetime-local"] { color-scheme: dark; }
+    input[type="date"], input[type="time"], input[type="datetime-local"] { color-scheme: dark; color: #F8FAFC; }
+    input[type="date"]::-webkit-datetime-edit,
+    input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+    input[type="date"]::-webkit-datetime-edit-text,
+    input[type="date"]::-webkit-datetime-edit-month-field,
+    input[type="date"]::-webkit-datetime-edit-day-field,
+    input[type="date"]::-webkit-datetime-edit-year-field,
+    input[type="time"]::-webkit-datetime-edit,
+    input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+    input[type="time"]::-webkit-datetime-edit-text,
+    input[type="time"]::-webkit-datetime-edit-hour-field,
+    input[type="time"]::-webkit-datetime-edit-minute-field,
+    input[type="time"]::-webkit-datetime-edit-second-field,
+    input[type="time"]::-webkit-datetime-edit-ampm-field,
+    input[type="datetime-local"]::-webkit-datetime-edit,
+    input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
+      color: #F8FAFC;
+    }
     input[type="date"]::-webkit-calendar-picker-indicator,
     input[type="time"]::-webkit-calendar-picker-indicator,
     input[type="datetime-local"]::-webkit-calendar-picker-indicator {
@@ -42,6 +59,38 @@
       filter: invert(0.85);
       width: 18px;
       height: 18px;
+    }
+    .trade-date-wrap { position: relative; height: 36px; }
+    .trade-date-native {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 36px;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .trade-date-face {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      background: #0F172A;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #F8FAFC;
+      pointer-events: none;
+    }
+    .trade-date-face.empty { color: #94A3B8; font-weight: 500; }
+    .trade-date-preset.is-active {
+      background: #0284C7;
+      border-color: #0369A1;
+      color: #FFFFFF;
     }
     .glass-card { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid #334155; }
     .tab-btn.active { background-color: #0284C7; color: #FFFFFF; font-weight: 700; }
@@ -345,7 +394,7 @@
               <div class="tooltip-wrapper">
                 <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
                 <div class="tooltip-content">
-                  Filters run on the full trade set. Realized P&amp;L is the sum of matching live trades (SETTLED / win / loss / protect-sell exited), not only the rows on this page. Open fills show an em dash. Entered via is Home, Auto, or Cash out — blank on older rows that predate path tagging. Cash out sells add “sold @” under the buy price. TWAP, Last-minute, Step buy, Spike fade, and Pair lock watcher chips are live last-70s status, not table rows.
+                  Filters run on the full trade set. Realized P&amp;L is the sum of matching live trades (SETTLED / win / loss / protect-sell exited), not only the rows on this page. Open fills show an em dash. Entered via is the path that bought the ticket (Home, Auto, Cash out, Gold fade, TWAP, Last-minute, Step buy, Spike fade, Pair lock, Pair lock hedge). A dash means the row predates path tagging. Cash out sells add “sold @” under the buy price. TWAP, Last-minute, Step buy, Spike fade, and Pair lock watcher chips are live last-70s status, not table rows.
                 </div>
               </div>
             </h3>
@@ -396,21 +445,23 @@
             </select>
           </label>
           <label class="block">
-            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">From (date &amp; time)</span>
-            <div class="mt-1 flex gap-1">
-              <input type="date" id="tradeFilterFromDate" onchange="applyTradeFilters()" class="min-w-0 flex-1 bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-2 py-2 focus:outline-none focus:border-sky-500" />
-              <input type="time" id="tradeFilterFromTime" step="1" onchange="applyTradeFilters()" class="w-[7.25rem] bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-2 py-2 focus:outline-none focus:border-sky-500" />
+            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">From date</span>
+            <div class="trade-date-wrap mt-1">
+              <input type="date" id="tradeFilterFromDate" onchange="onTradeDateFilterChange()" class="trade-date-native" />
+              <span id="tradeFilterFromLabel" class="trade-date-face empty">Any start</span>
             </div>
           </label>
           <label class="block">
-            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">To (date &amp; time)</span>
-            <div class="mt-1 flex gap-1">
-              <input type="date" id="tradeFilterToDate" onchange="applyTradeFilters()" class="min-w-0 flex-1 bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-2 py-2 focus:outline-none focus:border-sky-500" />
-              <input type="time" id="tradeFilterToTime" step="1" onchange="applyTradeFilters()" class="w-[7.25rem] bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-2 py-2 focus:outline-none focus:border-sky-500" />
+            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">To date</span>
+            <div class="trade-date-wrap mt-1">
+              <input type="date" id="tradeFilterToDate" onchange="onTradeDateFilterChange()" class="trade-date-native" />
+              <span id="tradeFilterToLabel" class="trade-date-face empty">Any end</span>
             </div>
           </label>
-          <div class="flex items-center">
-            <button type="button" onclick="clearTradeFilters()" class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition">Clear</button>
+          <div class="flex items-center gap-1">
+            <button type="button" id="tradeDatePresetToday" onclick="setTradeDatePreset('today')" class="trade-date-preset flex-1 px-2 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] rounded-xl border border-slate-700 transition">Today</button>
+            <button type="button" id="tradeDatePreset7d" onclick="setTradeDatePreset('7d')" class="trade-date-preset flex-1 px-2 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] rounded-xl border border-slate-700 transition">7 days</button>
+            <button type="button" onclick="clearTradeFilters()" class="flex-1 px-2 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[11px] rounded-xl border border-slate-700 transition">Clear</button>
           </div>
         </form>
 
@@ -485,7 +536,7 @@
             <div class="tooltip-wrapper">
               <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
               <div class="tooltip-content">
-                Deletes old documents after each Cloud Scheduler /tick (same minute job as trading — no extra Cloud Run service). At most 400 deletes per minute. Off jobs are not queried.
+                Keep for is the age cutoff. Run once in is how often an On job auto-sweeps. Cloud still checks every Scheduler minute and skips a job until its interval is due. At most 400 deletes per pass. Off jobs are not queried. Run once now ignores On/Off and the interval.
               </div>
             </div>
           </h3>
@@ -511,6 +562,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <p class="lg:col-span-3 text-[11px] text-slate-500">
             Numbers in parentheses are current Firestore document counts across all users. They are not “how many will delete this minute.”
+            The ↑ 24h line is how many of those documents were written in the last 24 hours (inflow, not net after a purge).
           </p>
           <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800 space-y-3">
             <div class="flex items-center justify-between gap-2">
@@ -528,7 +580,13 @@
             <label class="block text-[11px] text-slate-400">Keep for (days)
               <input type="number" id="purgeAuditDays" min="7" max="365" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
             </label>
-            <button type="button" onclick="runPurgeJob('audit')" class="w-full px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">Run once now</button>
+            <div class="flex items-end gap-2">
+              <button type="button" onclick="runPurgeJob('audit')" class="flex-1 px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">Run once now</button>
+              <label class="block text-[11px] text-slate-400 w-[7.5rem]">Run once in (days)
+                <input type="number" id="purgeAuditIntervalDays" min="1" max="30" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
+              </label>
+            </div>
+            <p id="purgeAuditAdded24h" class="text-[11px] text-emerald-400 font-mono font-semibold">↑ 24h —</p>
           </div>
 
           <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800 space-y-3">
@@ -547,7 +605,13 @@
             <label class="block text-[11px] text-slate-400">Keep for (days)
               <input type="number" id="purgeAlertsDays" min="7" max="365" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
             </label>
-            <button type="button" onclick="runPurgeJob('alerts')" class="w-full px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">Run once now</button>
+            <div class="flex items-end gap-2">
+              <button type="button" onclick="runPurgeJob('alerts')" class="flex-1 px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">Run once now</button>
+              <label class="block text-[11px] text-slate-400 w-[7.5rem]">Run once in (days)
+                <input type="number" id="purgeAlertsIntervalDays" min="1" max="30" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
+              </label>
+            </div>
+            <p id="purgeAlertsAdded24h" class="text-[11px] text-emerald-400 font-mono font-semibold">↑ 24h —</p>
           </div>
 
           <div class="bg-slate-900/60 rounded-xl p-4 border border-rose-900/60 space-y-3">
@@ -566,15 +630,22 @@
             <label class="block text-[11px] text-slate-400">Keep for (days)
               <input type="number" id="purgeTradesDays" min="30" max="3650" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
             </label>
-            <button type="button" onclick="runPurgeJob('trades')" class="w-full px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800">Run once now</button>
+            <div class="flex items-end gap-2">
+              <button type="button" onclick="runPurgeJob('trades')" class="flex-1 px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800">Run once now</button>
+              <label class="block text-[11px] text-rose-200/80 w-[7.5rem]">Run once in (days)
+                <input type="number" id="purgeTradesIntervalDays" min="1" max="30" class="mt-1 w-full bg-slate-950 border border-rose-800 rounded-lg px-2 py-1.5 text-white font-mono" onchange="markPurgeFormDirty()" oninput="markPurgeFormDirty()" />
+              </label>
+            </div>
+            <p id="purgeTradesAdded24h" class="text-[11px] text-rose-200 font-mono font-semibold">↑ 24h —</p>
           </div>
         </div>
 
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div class="text-[11px] text-slate-400 space-y-1">
             <div>Last purge pass: <span id="purgeLastRunAt" class="font-mono text-slate-200">Never</span></div>
+            <div>Next purge pass: <span id="purgeNextRunAt" class="font-mono text-slate-200">—</span></div>
             <div>Last deleted: <span id="purgeLastDeleted" class="font-mono text-slate-200">audit 0 · alerts 0 · trades 0</span></div>
-            <p class="text-slate-500">Ticking On does not start the job until you click <strong class="text-white">Save purge settings</strong>. The page refreshes every 10s; unsaved ticks are kept until you Save or leave. Run once uses the Keep-for days saved on the server.</p>
+            <p class="text-slate-500">Ticking On does not start the job until you click <strong class="text-white">Save purge settings</strong>. The page refreshes every 10s; unsaved ticks are kept until you Save or leave. Run once now uses Keep for and ignores the interval. Auto-sweep uses Run once in.</p>
           </div>
           <button type="button" onclick="savePurgeSettings()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl border border-sky-400">
             Save purge settings
@@ -897,6 +968,9 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       { key: 'DOGE', name: 'Dogecoin 15m', cat: 'Crypto 24/7', default: 0.005, min: 0.001, max: 0.05, step: 0.001 },
       { key: 'XRP', name: 'Ripple 15m', cat: 'Crypto 24/7', default: 0.01, min: 0.002, max: 0.2, step: 0.002 },
       { key: 'BNB', name: 'Binance Coin 15m', cat: 'Crypto 24/7', default: 2.5, min: 0.25, max: 20, step: 0.25 },
+      { key: 'HYPE', name: 'Hyperliquid 15m', cat: 'Crypto 24/7', default: 0.4, min: 0.05, max: 8, step: 0.05 },
+      { key: 'NEAR', name: 'NEAR 15m', cat: 'Crypto 24/7', default: 0.02, min: 0.005, max: 0.5, step: 0.005 },
+      { key: 'ZEC', name: 'Zcash 15m', cat: 'Crypto 24/7', default: 8.0, min: 1, max: 50, step: 0.5 },
       { key: 'AVAX', name: 'Avalanche 15m', cat: 'Crypto 24/7', default: 0.2, min: 0.02, max: 5, step: 0.02 },
       { key: 'SUI', name: 'Sui 15m', cat: 'Crypto 24/7', default: 0.02, min: 0.005, max: 0.5, step: 0.005 },
       { key: 'LINK', name: 'Chainlink 15m', cat: 'Crypto 24/7', default: 0.1, min: 0.01, max: 2, step: 0.01 },
@@ -942,6 +1016,83 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       const time = timeVal || (endOfDay ? '23:59:59' : '00:00:00');
       const d = new Date(`${dateVal}T${time}`);
       return Number.isFinite(d.getTime()) ? d.toISOString() : '';
+    }
+
+    function localYmd(d) {
+      const dt = d instanceof Date ? d : new Date();
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const day = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatTradeDateLabel(isoDate, emptyText) {
+      if (!isoDate) return emptyText;
+      const parts = String(isoDate).split('-').map(Number);
+      if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return emptyText;
+      const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (!Number.isFinite(dt.getTime())) return emptyText;
+      return dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function syncTradeDateLabels() {
+      const fromEl = document.getElementById('tradeFilterFromDate');
+      const toEl = document.getElementById('tradeFilterToDate');
+      const fromLabel = document.getElementById('tradeFilterFromLabel');
+      const toLabel = document.getElementById('tradeFilterToLabel');
+      if (fromLabel) {
+        const has = Boolean(fromEl?.value);
+        fromLabel.textContent = formatTradeDateLabel(fromEl?.value, 'Any start');
+        fromLabel.classList.toggle('empty', !has);
+      }
+      if (toLabel) {
+        const has = Boolean(toEl?.value);
+        toLabel.textContent = formatTradeDateLabel(toEl?.value, 'Any end');
+        toLabel.classList.toggle('empty', !has);
+      }
+      syncTradeDatePresetButtons();
+    }
+
+    function tradeDatePresetActive() {
+      const from = document.getElementById('tradeFilterFromDate')?.value || '';
+      const to = document.getElementById('tradeFilterToDate')?.value || '';
+      if (!from || !to) return '';
+      const today = localYmd(new Date());
+      if (from === today && to === today) return 'today';
+      const start = new Date();
+      start.setDate(start.getDate() - 6);
+      if (from === localYmd(start) && to === today) return '7d';
+      return '';
+    }
+
+    function syncTradeDatePresetButtons() {
+      const active = tradeDatePresetActive();
+      const todayBtn = document.getElementById('tradeDatePresetToday');
+      const weekBtn = document.getElementById('tradeDatePreset7d');
+      todayBtn?.classList.toggle('is-active', active === 'today');
+      weekBtn?.classList.toggle('is-active', active === '7d');
+    }
+
+    function onTradeDateFilterChange() {
+      syncTradeDateLabels();
+      applyTradeFilters();
+    }
+
+    function setTradeDatePreset(kind) {
+      const fromEl = document.getElementById('tradeFilterFromDate');
+      const toEl = document.getElementById('tradeFilterToDate');
+      if (!fromEl || !toEl) return;
+      const today = localYmd(new Date());
+      if (kind === 'today') {
+        fromEl.value = today;
+        toEl.value = today;
+      } else if (kind === '7d') {
+        const start = new Date();
+        start.setDate(start.getDate() - 6);
+        fromEl.value = localYmd(start);
+        toEl.value = today;
+      }
+      onTradeDateFilterChange();
     }
 
     function populateTradeAssetFilter(assets) {
@@ -991,6 +1142,9 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       if (v === 'spike_fade' || v === 'spikefade' || v === 'spike-fade') {
         return { label: 'Spike fade', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' };
       }
+      if (v === 'pair_lock_hedge' || v === 'pairlockhedge' || v === 'pair-lock-hedge') {
+        return { label: 'Pair lock hedge', cls: 'bg-amber-500/20 text-amber-200 border-amber-500/30' };
+      }
       if (v === 'pair_lock' || v === 'pairlock' || v === 'pair-lock') {
         return { label: 'Pair lock', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
       }
@@ -1003,16 +1157,8 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       const asset = document.getElementById('tradeFilterAsset')?.value?.trim();
       const entryPath = document.getElementById('tradeFilterPath')?.value?.trim();
       const status = document.getElementById('tradeFilterStatus')?.value?.trim();
-      const from = combineDateTimeToIso(
-        document.getElementById('tradeFilterFromDate')?.value,
-        document.getElementById('tradeFilterFromTime')?.value,
-        false
-      );
-      const to = combineDateTimeToIso(
-        document.getElementById('tradeFilterToDate')?.value,
-        document.getElementById('tradeFilterToTime')?.value,
-        true
-      );
+      const from = combineDateTimeToIso(document.getElementById('tradeFilterFromDate')?.value, '', false);
+      const to = combineDateTimeToIso(document.getElementById('tradeFilterToDate')?.value, '', true);
       if (userId) params.set('userId', userId);
       if (asset) params.set('asset', asset);
       if (entryPath) params.set('entryPath', entryPath);
@@ -1037,17 +1183,14 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       const pathEl = document.getElementById('tradeFilterPath');
       const statusEl = document.getElementById('tradeFilterStatus');
       const fromDateEl = document.getElementById('tradeFilterFromDate');
-      const fromTimeEl = document.getElementById('tradeFilterFromTime');
       const toDateEl = document.getElementById('tradeFilterToDate');
-      const toTimeEl = document.getElementById('tradeFilterToTime');
       if (userEl) userEl.value = '';
       if (assetEl) assetEl.value = '';
       if (pathEl) pathEl.value = '';
       if (statusEl) statusEl.value = '';
       if (fromDateEl) fromDateEl.value = '';
-      if (fromTimeEl) fromTimeEl.value = '';
       if (toDateEl) toDateEl.value = '';
-      if (toTimeEl) toTimeEl.value = '';
+      syncTradeDateLabels();
       applyTradeFilters();
     }
 
@@ -1091,6 +1234,26 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
         tradesEl.innerText = fmt(counts && counts.trades);
         tradesEl.title = 'Documents in users/*/trades (open + closed). This job only deletes old closed fills.';
       }
+      const fmtAdded = (n) => {
+        if (n == null || Number.isNaN(Number(n))) return '↑ 24h —';
+        return '↑ 24h +' + Math.max(0, Math.round(Number(n))).toLocaleString();
+      };
+      const added = (counts && counts.added24h) || {};
+      const audit24 = document.getElementById('purgeAuditAdded24h');
+      const alerts24 = document.getElementById('purgeAlertsAdded24h');
+      const trades24 = document.getElementById('purgeTradesAdded24h');
+      if (audit24) {
+        audit24.innerText = fmtAdded(added.audit);
+        audit24.title = 'Audit documents written in the last 24 hours (timestamp)';
+      }
+      if (alerts24) {
+        alerts24.innerText = fmtAdded(added.alerts);
+        alerts24.title = 'Alert documents written in the last 24 hours (at). Includes live and dismissed.';
+      }
+      if (trades24) {
+        trades24.innerText = fmtAdded(added.trades);
+        trades24.title = 'Trade documents written in the last 24 hours (executedAt). Includes open, closed, and misses.';
+      }
     }
 
     async function fetchPurgeCounts(fresh) {
@@ -1104,12 +1267,45 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       }
     }
 
+    function nextPurgeJobAtMs(job, nowMs) {
+      if (!job || !job.enabled) return null;
+      const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+      const last = Date.parse(String(job.lastRunAt || ''));
+      const intervalDays = Math.max(1, Math.round(Number(job.intervalDays) || 1));
+      if (!Number.isFinite(last)) return now;
+      const next = last + intervalDays * 24 * 60 * 60 * 1000;
+      return next <= now ? now : next;
+    }
+
+    function nextSoonestPurgeAtMs(purge, nowMs) {
+      const times = ['audit', 'alerts', 'trades']
+        .map((key) => nextPurgeJobAtMs(purge && purge[key], nowMs))
+        .filter((n) => Number.isFinite(n));
+      return times.length ? Math.min.apply(null, times) : null;
+    }
+
+    function formatPurgeCountdown(nextMs, nowMs) {
+      const sec = Math.max(0, Math.round((nextMs - nowMs) / 1000));
+      if (sec < 60) return `in ${sec}s`;
+      const min = Math.floor(sec / 60);
+      const rem = sec % 60;
+      return rem ? `in ${min}m ${rem}s` : `in ${min}m`;
+    }
+
     function applyPurgeForm(systemConfig, opts) {
       const purge = systemConfig && systemConfig.purge ? systemConfig.purge : {};
       const force = Boolean(opts && opts.force);
       const lastRun = document.getElementById('purgeLastRunAt');
       if (lastRun) {
         lastRun.innerText = purge.lastRunAt ? new Date(purge.lastRunAt).toLocaleString() : 'Never';
+      }
+      const nextRun = document.getElementById('purgeNextRunAt');
+      if (nextRun) {
+        const now = Date.now();
+        const nextMs = nextSoonestPurgeAtMs(purge, now);
+        nextRun.innerText = nextMs
+          ? `${new Date(nextMs).toLocaleString()} (${formatPurgeCountdown(nextMs, now)})`
+          : 'No On jobs — auto-sweep sits out';
       }
       const lastDel = document.getElementById('purgeLastDeleted');
       if (lastDel) {
@@ -1126,12 +1322,18 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       const auditDays = document.getElementById('purgeAuditDays');
       const alertsDays = document.getElementById('purgeAlertsDays');
       const tradesDays = document.getElementById('purgeTradesDays');
+      const auditInterval = document.getElementById('purgeAuditIntervalDays');
+      const alertsInterval = document.getElementById('purgeAlertsIntervalDays');
+      const tradesInterval = document.getElementById('purgeTradesIntervalDays');
       if (auditEl) auditEl.checked = audit.enabled !== false;
       if (alertsEl) alertsEl.checked = alerts.enabled === true;
       if (tradesEl) tradesEl.checked = trades.enabled === true;
       if (auditDays) auditDays.value = audit.retainDays || 30;
       if (alertsDays) alertsDays.value = alerts.retainDays || 90;
       if (tradesDays) tradesDays.value = trades.retainDays || 365;
+      if (auditInterval) auditInterval.value = audit.intervalDays || 1;
+      if (alertsInterval) alertsInterval.value = alerts.intervalDays || 1;
+      if (tradesInterval) tradesInterval.value = trades.intervalDays || 1;
     }
 
     function readPurgeForm() {
@@ -1139,14 +1341,17 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
         audit: {
           enabled: document.getElementById('purgeAuditEnabled').checked,
           retainDays: Number(document.getElementById('purgeAuditDays').value),
+          intervalDays: Number(document.getElementById('purgeAuditIntervalDays').value),
         },
         alerts: {
           enabled: document.getElementById('purgeAlertsEnabled').checked,
           retainDays: Number(document.getElementById('purgeAlertsDays').value),
+          intervalDays: Number(document.getElementById('purgeAlertsIntervalDays').value),
         },
         trades: {
           enabled: document.getElementById('purgeTradesEnabled').checked,
           retainDays: Number(document.getElementById('purgeTradesDays').value),
+          intervalDays: Number(document.getElementById('purgeTradesIntervalDays').value),
         },
       };
     }
@@ -1154,7 +1359,7 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
     async function savePurgeSettings() {
       const status = document.getElementById('purgeStatusMsg');
       const purge = readPurgeForm();
-      if (purge.trades.enabled && !confirm('Closed-trades purge is ON. After you save, each Cloud Scheduler minute can permanently delete old closed fills from Live Trade Stream, History, and Cloud P&L. Open fills are not deleted. Continue?')) {
+      if (purge.trades.enabled && !confirm('Closed-trades purge is ON. After you save, Cloud will auto-delete closed fills older than Keep for, at most once per Run once in days. Open fills are not deleted. Continue?')) {
         return;
       }
       try {
@@ -1173,7 +1378,7 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
         applyPurgeForm(data.systemConfig, { force: true });
         purgeFormDirty = false;
         setPurgeUnsavedHint(false);
-        if (status) status.innerText = 'Purge settings saved. On jobs run after trading on the next Cloud Scheduler minute.';
+        if (status) status.innerText = 'Purge settings saved. On jobs auto-sweep when their Run once in interval is due.';
       } catch (e) {
         alert('Error saving purge settings: ' + (e?.message || e));
       }
@@ -2025,6 +2230,7 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
 
     // Initialize Page
     populateTradeAssetFilter(ASSETS_CATALOG_FALLBACK);
+    syncTradeDateLabels();
     renderCushionsGrid();
     refreshData();
     setInterval(refreshData, 10000); // Auto refresh every 10 seconds

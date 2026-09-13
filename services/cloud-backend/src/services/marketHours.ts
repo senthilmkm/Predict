@@ -46,7 +46,7 @@ export function getETParts(date: Date = new Date()) {
  * - Stocks / forex: exchange hours only
  */
 function getSchedule(asset: string): string {
-  if (['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'SUI', 'LINK'].includes(asset)) return 'CRYPTO_24_7';
+  if (['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'HYPE', 'NEAR', 'ZEC', 'AVAX', 'SUI', 'LINK'].includes(asset)) return 'CRYPTO_24_7';
   if (['SPX', 'NDX'].includes(asset)) return 'US_STOCK_HOURS';
   if (['EURUSD', 'GBPUSD', 'USDJPY'].includes(asset)) return 'FOREX_HOURS';
   if (['WTI', 'Gold', 'Silver', 'COPPER', 'NG'].includes(asset)) return 'CME_COMMODITY';

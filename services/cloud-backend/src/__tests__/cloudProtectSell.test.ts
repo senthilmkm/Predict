@@ -148,8 +148,10 @@ describe('cloud protect-sell', () => {
     const auto = filledTrade({ tradeId: 'a1', asset: 'ETH', entryPath: 'auto' });
     const path = filledTrade({ tradeId: 'p1', asset: 'Gold', entryPath: 'cash_out' });
     const twap = filledTrade({ tradeId: 't1', asset: 'BTC', entryPath: 'twap_lock' });
-    expect(openProtectWatchAssets([home, auto, path, twap], now).sort()).toEqual(['BTC', 'ETH']);
-    expect(pendingProtectTradesForMarket([path, twap], path.ticker, now)).toHaveLength(0);
+    const pairHedge = filledTrade({ tradeId: 'h2', asset: 'ETH', entryPath: 'pair_lock_hedge' });
+    expect(openProtectWatchAssets([home, auto, path, twap, pairHedge], now).sort()).toEqual(['BTC', 'ETH']);
+    expect(pendingProtectTradesForMarket([path, twap, pairHedge], path.ticker, now)).toHaveLength(0);
+    expect(pendingProtectTradesForMarket([pairHedge], pairHedge.ticker, now)).toHaveLength(0);
   });
 
   test('ratio 0.5 can sell below the entry cushion', () => {

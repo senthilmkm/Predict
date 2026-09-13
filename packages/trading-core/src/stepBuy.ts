@@ -87,11 +87,13 @@ export function stepBuyDefaultAssets(): string[] {
   return ASSETS_CATALOG.map((a) => a.key);
 }
 
-/** Missing → all catalog assets. Empty = no Step buy buys. */
+/** Missing → catalog coins that start On. Empty = no Step buy buys. Off-by-default coins stay selectable. */
 export function normalizeStepBuyAssets(raw: unknown): string[] {
   const allowed = stepBuyDefaultAssets();
   const allowedSet = new Set(allowed);
-  if (raw == null || !Array.isArray(raw)) return allowed;
+  if (raw == null || !Array.isArray(raw)) {
+    return allowed.filter((k) => ASSETS_CATALOG.find((a) => a.key === k)?.defaultOn !== false);
+  }
   const out: string[] = [];
   for (const item of raw) {
     const k = String(item || '').trim();
