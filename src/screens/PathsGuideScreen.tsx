@@ -6,7 +6,7 @@ import { PATH_TILES } from '../content/pathCatalog';
 
 const COMPARE: { path: string; buys: string; exits: string; hold: string; cushion: string }[] = [
   { path: 'Home Buy', buys: 'The lean you tap', exits: 'You Sell, or Protect if On', hold: 'Unless you sell', cushion: 'Yes' },
-  { path: 'Auto-trade', buys: 'Cushion lean', exits: 'Protect if On, else settle', hold: 'Unless Protect', cushion: 'Yes, full' },
+  { path: 'Cushion lean', buys: 'Gap > cushion', exits: 'Protect if On, else settle', hold: 'Unless Protect', cushion: 'Yes, full' },
   { path: 'Cash out', buys: 'Lean, cheaper entry', exits: 'Target bid, stop, thin bid', hold: 'Tries to sell', cushion: 'Enter %' },
   { path: 'Gold fade', buys: 'Cheap Gold side', exits: 'Take, stop, flatten', hold: 'Always dumps', cushion: 'On/Off only' },
   { path: 'TWAP lock', buys: 'BTC/ETH Yes lock', exits: 'None — hold to $1', hold: 'Yes', cushion: 'On/Off only' },

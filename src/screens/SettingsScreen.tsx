@@ -1118,12 +1118,13 @@ function RiskHelpModal({
               tab, not Auto-trade.
             </HelpItem>
             <HelpItem title="Max entry ask ($) (Buy limit)">
-              Per path. Auto-trade uses the Auto-trade tab; Home Buy uses the Home Buy tab. If the
-              ask is above that tab’s cap, that path skips “ask too rich.” With Smart buy On, Auto
-              can still skip a cheaper ticket if it is not a good deal vs our guess.
+              Per path. Cushion lean uses Settings → Paths → Cushion lean; Home Buy uses the Home
+              Buy tab. If the ask is above that tab’s cap, that path skips “ask too rich.” With
+              Smart buy On, Cushion lean can still skip a cheaper ticket if it is not a good deal vs
+              our guess.
             </HelpItem>
             <HelpItem title="Time in force (Auto-trade)">
-              Settings → Risk → Auto-trade. How long a robot buy stays live on Kalshi:{'\n'}
+              Settings → Paths → Cushion lean. How long a Cushion lean buy stays live on Kalshi:{'\n'}
               • IOC — try to fill now; cancel anything not filled{'\n'}
               • FOK — fill all of it now, or cancel everything{'\n'}
               • GTC — leave the order open until filled or you cancel{'\n\n'}
@@ -1141,10 +1142,10 @@ function RiskHelpModal({
               slippage.
             </HelpItem>
 
-            <Text style={styles.modalSection}>Risk — Smart buy (Auto-trade only)</Text>
+            <Text style={styles.modalSection}>Risk — Smart buy (Cushion lean only)</Text>
             <HelpItem title="Smart buy">
-              Settings → Risk → Auto-trade only. Home Buy taps ignore this.{'\n\n'}
-              When On (default), Auto still uses your cushions, minutes, max ask, and shared caps —
+              Settings → Paths → Cushion lean only. Home Buy taps ignore this.{'\n\n'}
+              When On (default), Cushion lean still uses your cushions, minutes, max ask, and shared caps —
               then also asks: is our guess at least Min extra chance above the Kalshi ticket? The
               guess uses this 15-minute price path, time left, and how jumpy the window has been.
               {'\n\n'}

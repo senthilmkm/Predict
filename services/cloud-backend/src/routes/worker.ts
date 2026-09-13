@@ -10,6 +10,7 @@ import {
   countWindowBuysForTicker,
   evaluateStaticGate,
   formatSkipReason,
+  isCushionLeanEnabled,
   skipReasonForWindowCap,
   windowBuyCap,
 } from '../../../../packages/trading-core/src/gates';
@@ -1963,12 +1964,14 @@ async function runOneTick() {
                     skipThinBid: cashOutThin,
                     bidSize: await cashOutBestBidSize(marketTicker, lean.decision, cashOutThin),
                   })
-                : evaluateStaticGate(leanForGate, cfg, {
-                    openPositions,
-                    tradesToday,
-                    assetTradesInWindow: existingBuys,
-                    dailyPnlUsd,
-                  });
+                : isCushionLeanEnabled(cfg.risk)
+                  ? evaluateStaticGate(leanForGate, cfg, {
+                      openPositions,
+                      tradesToday,
+                      assetTradesInWindow: existingBuys,
+                      dailyPnlUsd,
+                    })
+                  : { ok: false, skip_reason: 'cushion_lean_off' };
             const entryPath = twapLockWanted
               ? 'twap_lock'
               : lastMinuteTick &&

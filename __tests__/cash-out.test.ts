@@ -706,6 +706,6 @@ describe('Cash out path book', () => {
     expect(formatSkipReason('cash_out_holding')).toBe('cash out is holding this ticket');
     expect(formatSkipReason('cash_out_spread_wide')).toBe('spread too wide');
     expect(formatSkipReason('cash_out_thin_bid')).toBe('bid too thin');
-    expect(formatSkipReason('cash_out_holding_other_path')).toBe('Home or Auto already holding');
+    expect(formatSkipReason('cash_out_holding_other_path')).toBe('Home or Cushion lean already holding');
   });
 });

@@ -68,6 +68,7 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
   const extra = (id: PathFocusId, flag: boolean) =>
     flag && (resolvedFocus === id || (showAll && tab === 'auto'));
   const showRestoreTab = showAll || resolvedFocus === 'home' || resolvedFocus === 'auto';
+  const cushionLeanOn = config.risk.cushion_lean_enabled !== false;
 
   async function restoreShared() {
     if (busy) return;
@@ -169,14 +170,27 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
 
       {showAutoCore ? (
         <>
-          <View style={styles.titleRow}>
-            <Text style={[styles.groupTitle, { marginBottom: 0 }]}>Auto-trade</Text>
-            <PathInfoIcon title={PATH_INFO.auto.title} body={PATH_INFO.auto.body} testID="path-info-auto" />
+          <View style={styles.field} testID="risk-field-auto-cushion_lean_enabled">
+            <View style={styles.toggleRow}>
+              <View style={styles.labelWithInfo}>
+                <Text style={[styles.label, { marginBottom: 0 }]}>Cushion lean</Text>
+                <PathInfoIcon title={PATH_INFO.auto.title} body={PATH_INFO.auto.body} testID="path-info-auto" />
+              </View>
+              <Switch
+                testID="risk-toggle-cushion_lean_enabled"
+                value={cushionLeanOn}
+                onValueChange={(v) => setRiskField('cushion_lean_enabled', v)}
+                trackColor={{ true: colors.accent, false: colors.mute }}
+              />
+            </View>
+            <Text style={styles.hint} testID="risk-auto-hint">
+              {cushionLeanOn
+                ? 'Used only when Settings Auto-trade is On. Off = no gap>cushion buys. Last-minute and other paths keep their own switches. Protect money can still exit a Home Buy fill.'
+                : 'Off = no gap>cushion buys. Last-minute and other paths keep their own switches. Settings Auto-trade still kills every path. Protect money still works.'}
+            </Text>
           </View>
-          <Text style={styles.hint} testID="risk-auto-hint">
-            Used only when Auto-trade is On. Smart buy is Auto-only. Protect money can still exit a
-            Home Buy fill. Cash out, Gold fade, TWAP lock, and Last-minute are separate paths.
-          </Text>
+          {cushionLeanOn ? (
+            <>
           <PathFields
             values={{
               fixed_dollars_per_trade: config.risk.fixed_dollars_per_trade,
@@ -217,11 +231,13 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
                     />
                   ))}
                 <Text style={styles.hint}>
-                  Auto-trade only. Buy when our guess is at least Min extra chance above the ticket
+                  Cushion lean only. Buy when our guess is at least Min extra chance above the ticket
                 </Text>
               </>
             ) : null}
           </View>
+            </>
+          ) : null}
           {metaFor(PROTECT_RISK_FIELD_KEYS).map((meta) => {
             if (meta.kind === 'toggle') {
               const on = Boolean(config.risk.protect_sell_enabled);

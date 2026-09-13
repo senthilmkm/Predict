@@ -164,6 +164,11 @@ export interface RiskConfig {
    */
   protect_sell_grace_seconds: number;
   /**
+   * Cushion lean Auto path (gap > cushion). Missing → On.
+   * Off skips those buys only. Settings Auto-trade still kills every path.
+   */
+  cushion_lean_enabled?: boolean;
+  /**
    * Auto-trade only. When On, Cloud also requires our guess to beat the ticket
    * by at least min extra chance. Home Buy ignores this. Missing → On.
    */
@@ -345,6 +350,7 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_enabled: false,
       protect_sell_gap_ratio: 1,
       protect_sell_grace_seconds: 45,
+      cushion_lean_enabled: true,
       smart_buy_enabled: true,
       smart_buy_min_edge_usd: 0.08,
       cash_out_enabled: false,

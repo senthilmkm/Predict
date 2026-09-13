@@ -45,6 +45,11 @@ function money2(n: number): string {
   return (Math.round(n * 10000) / 10000).toFixed(4);
 }
 
+/** Cushion lean (gap > cushion) Auto path. Missing / old docs → On. */
+export function isCushionLeanEnabled(risk?: { cushion_lean_enabled?: boolean } | null): boolean {
+  return risk?.cushion_lean_enabled !== false;
+}
+
 /** Home Last-signals amber/green label for a Cloud gate skip. */
 export function formatSkipReason(reason: string | undefined): string {
   switch (reason) {
@@ -73,7 +78,9 @@ export function formatSkipReason(reason: string | undefined): string {
     case 'window_used_by_home':
       return 'Home already filled this window';
     case 'window_used_by_auto':
-      return 'Auto already filled this window';
+      return 'Cushion lean already filled this window';
+    case 'cushion_lean_off':
+      return 'Cushion lean off';
     case 'window_used_by_cash_out':
       return 'Cash out already filled this window';
     case 'window_used_by_gold_fade':
@@ -119,7 +126,7 @@ export function formatSkipReason(reason: string | undefined): string {
     case 'cash_out_invalid_targets':
       return 'cash out bid must beat max ask';
     case 'cash_out_holding_other_path':
-      return 'Home or Auto already holding';
+      return 'Home or Cushion lean already holding';
     case 'cash_out_no_bid':
       return 'no bid';
     case 'cash_out_spread_wide':

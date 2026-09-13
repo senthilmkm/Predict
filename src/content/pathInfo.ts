@@ -42,10 +42,10 @@ export const PATH_INFO = {
       '• Home Sell is IOC; slippage is Home Buy chase',
   },
   auto: {
-    title: 'Auto-trade',
+    title: 'Cushion lean',
     body:
       'Uses\n' +
-      '• This tab’s $ per trade / min / max\n' +
+      '• This path’s $ per trade / min / max\n' +
       '• Minutes left and elapsed (default 2 / 2 — no last-minute chase)\n' +
       '• Auto max entry ask, TIF, chase\n' +
       '• Cushions $ gap, Smart buy (if On), shared limits, asset on/off\n\n' +
@@ -53,6 +53,9 @@ export const PATH_INFO = {
       '• Home Buy size/timing\n' +
       '• Cash out / Gold fade / TWAP / Last-minute / Step buy / Spike fade / Pair lock ask, side, or lots\n\n' +
       'Isolation\n' +
+      '• Off = Cloud skips gap>cushion buys only. Last-minute and other paths keep their own switches\n' +
+      '• Settings Auto-trade Off still stops every Auto path\n' +
+      '• Missing on old configs = On\n' +
       '• Default minutes left = 2, so Auto sits out the last minute\n' +
       '• If cushion already hit, this is the path — you do not need Last-minute on that coin\n' +
       '• If you set minutes left to 0, Auto can collide with Last-minute (window cap 1 wins)\n' +
@@ -63,7 +66,7 @@ export const PATH_INFO = {
     title: 'Smart buy',
     body:
       'Uses\n' +
-      '• Auto-trade only (Home Buy ignores it)\n' +
+      '• Cushion lean only (Home Buy ignores it)\n' +
       '• After cushion, minutes, and Auto max ask already pass — then also Min extra chance\n' +
       '• Shared caps\n\n' +
       'Does not use\n' +

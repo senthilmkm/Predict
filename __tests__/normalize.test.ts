@@ -106,6 +106,10 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.protect_sell_grace_seconds).toBe(45);
     expect(cfg.risk.smart_buy_enabled).toBe(true);
     expect(cfg.risk.smart_buy_min_edge_usd).toBe(0.08);
+    expect(cfg.risk.cushion_lean_enabled).toBe(true);
+    expect(
+      normalizeAppConfig({ risk: { cushion_lean_enabled: false } } as any).risk.cushion_lean_enabled
+    ).toBe(false);
   });
 
   test('old max_trades_per_asset_per_day is ignored; window cap defaults to 1 and clamps 1–5', () => {

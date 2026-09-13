@@ -107,9 +107,9 @@ describe('summarizeTodayPathBuys', () => {
 });
 
 describe('history trade display', () => {
-  test('chip is Home / Auto or omitted', () => {
+  test('chip is Home / Cushion lean or omitted', () => {
     expect(entryPathChipLabel('home')).toBe('Home');
-    expect(entryPathChipLabel('auto')).toBe('Auto');
+    expect(entryPathChipLabel('auto')).toBe('Cushion lean');
     expect(entryPathChipLabel('cash_out')).toBe('Cash out');
     expect(entryPathChipLabel('gold_fade')).toBe('Gold fade');
     expect(entryPathChipLabel('twap_lock')).toBe('TWAP lock');

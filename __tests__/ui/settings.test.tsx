@@ -501,6 +501,8 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_side).toBe('both'));
     await openFocusedPath(s, 'auto');
     expect(s.getByTestId('path-info-auto')).toBeTruthy();
+    expect(s.getByTestId('risk-toggle-cushion_lean_enabled')).toBeTruthy();
+    expect(useConfigStore.getState().config.risk.cushion_lean_enabled).toBe(true);
     expect(s.getByTestId('path-info-smartBuy')).toBeTruthy();
     expect(s.getByTestId('path-info-protect')).toBeTruthy();
     expect(s.getByTestId('risk-field-auto-smart_buy_enabled')).toBeTruthy();
@@ -525,6 +527,21 @@ describe('Settings credentials', () => {
       expect(useConfigStore.getState().config.manual_risk.min_minutes_left).toBe(3)
     );
     expect(useConfigStore.getState().config.risk.min_minutes_left).toBe(2);
+  });
+
+  test('Cushion lean Off hides size and Smart buy and keeps Protect', async () => {
+    const s = await render(<SettingsHost />);
+    await openFocusedPath(s, 'auto');
+    expect(s.getByTestId('risk-toggle-cushion_lean_enabled')).toBeTruthy();
+    expect(s.getByTestId('risk-toggle-smart_buy_enabled')).toBeTruthy();
+    expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy();
+    await fireEvent(s.getByTestId('risk-toggle-cushion_lean_enabled'), 'valueChange', false);
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.risk.cushion_lean_enabled).toBe(false)
+    );
+    expect(s.queryByTestId('risk-toggle-smart_buy_enabled')).toBeNull();
+    expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy();
+    expect(s.getByText(/no gap>cushion buys/i)).toBeTruthy();
   });
 
   test('test connection shows successful banner', async () => {

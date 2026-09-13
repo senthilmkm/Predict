@@ -235,6 +235,7 @@ describe('evaluateStaticGate edge cases', () => {
     expect(formatSkipReason('cash_out_thin_bid')).toBe('bid too thin');
     expect(formatSkipReason('gold_fade_gap_wide')).toBe('gap too wide to fade');
     expect(formatSkipReason('gold_fade_thin_bid')).toBe('bid too thin');
+    expect(formatSkipReason('cushion_lean_off')).toBe('Cushion lean off');
   });
 });
 

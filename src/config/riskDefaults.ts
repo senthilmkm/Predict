@@ -22,6 +22,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   protect_sell_enabled: false,
   protect_sell_gap_ratio: 1,
   protect_sell_grace_seconds: 45,
+  cushion_lean_enabled: true,
   smart_buy_enabled: true,
   smart_buy_min_edge_usd: 0.08,
   cash_out_enabled: false,

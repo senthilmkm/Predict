@@ -32,7 +32,7 @@ export type PathTileDef = {
 export const PATH_TILES: PathTileDef[] = [
   { id: 'shared', title: 'Shared limits', sub: 'Day cap, window, open' },
   { id: 'home', title: 'Home Buy', sub: 'Your tap size' },
-  { id: 'auto', title: 'Auto-trade', sub: 'Cushion lean' },
+  { id: 'auto', title: 'Cushion lean', sub: 'Gap > cushion' },
   { id: 'cashOut', title: 'Cash out', sub: 'Partial cushion', adminFlag: 'cashOutFeatureOn' },
   { id: 'goldFade', title: 'Gold fade', sub: 'Gold, always dump', adminFlag: 'goldFadeFeatureOn' },
   { id: 'twapLock', title: 'TWAP lock', sub: 'BTC / ETH to $1', adminFlag: 'twapLockFeatureOn' },

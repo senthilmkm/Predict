@@ -1,4 +1,4 @@
-import { normalizePinnedPathIds, PINNED_PATHS_MAX } from '../src/content/pathCatalog';
+import { normalizePinnedPathIds, pathTileById, PINNED_PATHS_MAX } from '../src/content/pathCatalog';
 
 describe('normalizePinnedPathIds', () => {
   test('drops unknown ids, duplicates, and caps at three', () => {
@@ -10,5 +10,7 @@ describe('normalizePinnedPathIds', () => {
     expect(PINNED_PATHS_MAX).toBe(3);
     expect(normalizePinnedPathIds(null)).toEqual([]);
     expect(normalizePinnedPathIds('auto')).toEqual([]);
+    expect(pathTileById('auto').title).toBe('Cushion lean');
+    expect(pathTileById('auto').sub).toBe('Gap > cushion');
   });
 });

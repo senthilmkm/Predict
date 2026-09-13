@@ -202,7 +202,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What’s the difference between Signal alerts and Auto-trade?',
           a:
             'Signal alerts On = you can be notified when a lean appears. No order is placed just because an alert fired.\n\n' +
-            'Auto-trade On = Cloud Run may place real Kalshi buy orders when cushions and Risk rules pass. Face ID is required to turn this On.\n\n' +
+            'Auto-trade On = Cloud Run may place real Kalshi buy orders when a path (Cushion lean, Last-minute, Pair lock, and the others) and Risk rules pass. Face ID is required to turn this On.\n\n' +
             'Home Buy / Sell (when the Last signals Buy / Sell flag is On) = you tap to place now, even if Auto-trade is Off. The tap uses Settings → Risk → Home Buy. Shared limits apply to both paths.\n\n' +
             'They are independent. Example: alerts On + Auto-trade Off = research pings, plus optional Home taps if the buttons are shown.',
         },
@@ -383,10 +383,19 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'smart-buy',
           q: 'What is Smart buy on Auto-trade?',
           a:
-            'Settings → Risk → Auto-trade. It is Off/On plus Min extra chance (default On, $0.08). Home Buy ignores it.\n\n' +
-            'When On, Auto still uses cushions, minutes, max ask, and shared caps. Then it also skips unless our guess is at least Min extra chance above the Kalshi ticket. The guess uses this window’s price path, time left, and how jumpy the price has been. Kalshi sets the ask; you do not type it.\n\n' +
+            'Settings → Paths → Cushion lean. It is Off/On plus Min extra chance (default On, $0.08). Home Buy ignores it.\n\n' +
+            'When On, Cushion lean still uses cushions, minutes, max ask, and shared caps. Then it also skips unless our guess is at least Min extra chance above the Kalshi ticket. The guess uses this window’s price path, time left, and how jumpy the price has been. Kalshi sets the ask; you do not type it.\n\n' +
             'Skip lines you may see: “ticket not a good deal,” “gap shrinking,” or “need a longer price path.”\n\n' +
             'Turn it Off to go back to cushion + risk only. It does not guarantee more wins or profits.',
+        },
+        {
+          id: 'cushion-lean',
+          q: 'What is Cushion lean?',
+          a:
+            'Settings → Paths → Cushion lean. This is the leftover Auto path: Cloud buys when the live gap is bigger than your Cushions $ (and Smart buy, minutes, max ask, and shared caps pass). Default On.\n\n' +
+            'Off = Cloud skips those gap>cushion buys only. Last-minute, Pair lock, Spike fade, Step buy, Cash out, Gold fade, and TWAP lock keep their own switches.\n\n' +
+            'Settings Auto-trade is the master. Off there stops every Auto path, including Cushion lean.\n\n' +
+            'Missing on old phones = On, so nothing changes until you flip it. Protect money still works when Cushion lean is Off.',
         },
       ],
     },
@@ -398,7 +407,7 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'protect-how',
           q: 'How does Protect money work?',
           a:
-            'When On (Settings → Risk → Auto-trade), if you already hold a fill and the live lean flips strongly against you, Cloud Run sends an IOC sell after the wait-after-fill.\n\n' +
+            'When On (Settings → Paths → Cushion lean), if you already hold a fill and the live lean flips strongly against you, Cloud Run sends an IOC sell after the wait-after-fill.\n\n' +
             'Default wait is 45 seconds so the first noisy ticks after a buy don’t instantly sell. After that wait, a sell can fire at any remaining time in the window — not only in the last minutes.\n\n' +
             'When Off (default), open trades ride until the 15-minute contract settles win or loss.',
         },

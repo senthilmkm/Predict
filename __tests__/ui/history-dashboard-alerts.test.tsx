@@ -274,7 +274,7 @@ describe('History / Dashboard / AlertsHub', () => {
     });
     const s = await render(<HistoryScreen />);
     expect(s.getByTestId('trade-path-home-fill').props.children).toBe('Home');
-    expect(s.getByTestId('trade-path-auto-fill').props.children).toBe('Auto');
+    expect(s.getByTestId('trade-path-auto-fill').props.children).toBe('Cushion lean');
     expect(s.queryByTestId('trade-path-legacy-fill')).toBeNull();
     expect(s.getByTestId('trade-path-pair-runner').props.children).toBe('Pair lock 1');
     expect(s.getByTestId('trade-path-pair-hedge').props.children).toBe('PL hedge 1');

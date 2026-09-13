@@ -10,7 +10,7 @@ export function entryPathChipLabel(
   pairNo?: number | null
 ):
   | 'Home'
-  | 'Auto'
+  | 'Cushion lean'
   | 'Cash out'
   | 'Gold fade'
   | 'TWAP lock'
@@ -23,7 +23,7 @@ export function entryPathChipLabel(
   | null {
   const parsed = parseEntryPath(path);
   if (parsed === 'home') return 'Home';
-  if (parsed === 'auto') return 'Auto';
+  if (parsed === 'auto') return 'Cushion lean';
   if (parsed === 'cash_out') return 'Cash out';
   if (parsed === 'gold_fade') return 'Gold fade';
   if (parsed === 'twap_lock') return 'TWAP lock';

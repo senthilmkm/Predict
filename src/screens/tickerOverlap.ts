@@ -37,7 +37,7 @@ const SITTER_ORDER: OverlapPathId[] = [
 
 export const OVERLAP_PATH_LABEL: Record<OverlapPathId, string> = {
   home: 'Home',
-  auto: 'Auto',
+  auto: 'Cushion lean',
   cash_out: 'Cash out',
   gold_fade: 'Gold fade',
   twap_lock: 'TWAP lock',

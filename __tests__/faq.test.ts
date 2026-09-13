@@ -44,6 +44,8 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/Step buy/);
     expect(blob).toMatch(/Spike fade/);
     expect(blob).toMatch(/Pair lock/);
+    expect(blob).toMatch(/Cushion lean/);
+    expect(blob).toMatch(/gap>cushion buys only/);
     expect(blob).toMatch(/This is not Gold fade/);
     expect(blob).toMatch(/Stop adding with 30s left/);
     expect(blob).toMatch(/does not pull coins off those paths/);

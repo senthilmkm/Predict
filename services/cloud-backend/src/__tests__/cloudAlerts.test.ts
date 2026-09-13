@@ -54,12 +54,12 @@ describe('cloud alerts persist + mute + settlement', () => {
     ).toBe('Order Placed · Home · Gold YES');
     expect(
       orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'YES', entryPath: 'auto' })
-    ).toBe('Order Placed · Auto · Gold YES');
+    ).toBe('Order Placed · Cushion lean · Gold YES');
     expect(
       orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'NO', entryPath: 'cash_out' })
     ).toBe('Order Placed · Cash out · Gold NO');
     expect(orderPlacedAlertTitle({ live: false, asset: 'BTC', decision: 'YES', entryPath: 'auto' })).toBe(
-      'Dry-Run Order · Auto · BTC YES'
+      'Dry-Run Order · Cushion lean · BTC YES'
     );
     expect(
       orderPlacedAlertTitle({ live: true, asset: 'BTC', decision: 'YES', entryPath: 'twap_lock' })
@@ -97,7 +97,7 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(iocMissAlertTitle()).toBe('IOC miss');
     expect(iocMissAlertBody({ asset: 'BTC', decision: 'YES' })).toBe('BTC YES · IOC no fill');
     expect(iocMissAlertBody({ asset: 'ETH', decision: 'NO', entryPath: 'auto', price: 0.88 })).toBe(
-      'Auto · ETH NO · $0.88 · IOC no fill'
+      'Cushion lean · ETH NO · $0.88 · IOC no fill'
     );
   });
 

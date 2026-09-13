@@ -160,7 +160,7 @@
       <p class="lede">Predict watches short Kalshi contracts and can buy or sell for you. The phone shows the picture. Cloud places live orders. You pick a path. Each path has one job, its own knobs, and clear “do not mix” rules.</p>
       <div class="pills">
         <span class="pill">Home Buy</span>
-        <span class="pill">Auto-trade</span>
+        <span class="pill">Cushion lean</span>
         <span class="pill">Smart buy</span>
         <span class="pill">Protect money</span>
         <span class="pill">Cash out</span>
@@ -177,7 +177,7 @@
       <a href="#how">How Predict works<span>15-minute tickets, Cloud, cushions</span></a>
       <a href="#shared">Shared limits<span>Day cap, window cap, max open</span></a>
       <a href="#home">Home Buy<span>You tap. Real money.</span></a>
-      <a href="#auto">Auto-trade<span>Cushion lean, Cloud buys</span></a>
+      <a href="#auto">Cushion lean<span>Gap > cushion, Cloud buys</span></a>
       <a href="#cash">Cash out<span>Partial cushion, take the bid</span></a>
       <a href="#gold">Gold fade<span>Gold only, always dumps</span></a>
       <a href="#twap">TWAP lock<span>BTC / ETH, hold to $1</span></a>
@@ -241,11 +241,12 @@
     <section id="auto">
       <div class="card">
         <span class="tag" style="background:rgba(139,180,247,.15);color:var(--auto)">Cushion path</span>
-        <h3>Auto-trade</h3>
-        <p>Cloud buys the lean when the dollar gap is big enough, on a schedule. This is the “the move already happened” path.</p>
+        <h3>Cushion lean</h3>
+        <p>Cloud buys the lean when the dollar gap is big enough, on a schedule. This is the “the move already happened” path. Settings Auto-trade is the master kill. This switch stops only these gap>cushion buys.</p>
         <div class="example"><strong>Example.</strong> WTI cushion $1.50. Live WTI is $2.10 above the line. Auto is On, $5, ask 58¢. Cloud buys YES. It will not chase the last minute (default minutes left = 2).</div>
         <table class="knobs">
-          <tr><td>$ / min / max</td><td>Auto size. Separate from Home. Default $5.</td></tr>
+          <tr><td>On / Off</td><td>Default On. Off = no gap>cushion buys. Other Auto paths keep their own switches.</td></tr>
+          <tr><td>$ / min / max</td><td>Cushion lean size. Separate from Home. Default $5.</td></tr>
           <tr><td>Minutes elapsed / left</td><td>Default 2 / 2. Auto sits out the last minute on purpose.</td></tr>
           <tr><td>Max entry ask / TIF / chase</td><td>Default $0.90, IOC, 2¢. Chase is also Protect sell slippage.</td></tr>
           <tr><td>Smart buy</td><td>Default On. After cushion passes, also require Min extra chance (default 8¢). Home ignores this.</td></tr>
@@ -456,8 +457,8 @@
               <td>Always there</td>
             </tr>
             <tr>
-              <td>Auto-trade</td>
-              <td>Auto lean</td>
+              <td>Cushion lean</td>
+              <td>Cushion lean</td>
               <td>After elapsed, before last minutes, cushion clears</td>
               <td>Auto $</td>
               <td>Protect if On, else settle</td>
@@ -589,7 +590,7 @@
           <thead>
             <tr>
               <th>New buy by ↓ / already holding →</th>
-              <th>Home / Auto fill</th>
+              <th>Home / Cushion lean fill</th>
               <th>Cash out</th>
               <th>Gold fade</th>
               <th>TWAP (BTC/ETH On)</th>
@@ -612,7 +613,7 @@
               <td class="no">Sit out</td>
             </tr>
             <tr>
-              <td>Auto-trade</td>
+              <td>Cushion lean</td>
               <td class="no">Sit out</td>
               <td class="no">Sit out</td>
               <td class="no">Sit out</td>
