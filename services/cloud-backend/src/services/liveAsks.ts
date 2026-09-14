@@ -2,6 +2,8 @@ import { getFirestoreDb } from './firestore';
 import type { LiveAskByAsset } from './oneSecondMarket';
 
 export const LIVE_ASKS_STALE_MS = 8_000;
+/** Serve this process's just-written book without a Firestore round trip. */
+export const LIVE_ASKS_LOCAL_FRESH_MS = 1_500;
 const WRITE_MIN_MS = 1_000;
 const IDLE_WRITE_MIN_MS = 30_000;
 
@@ -12,6 +14,7 @@ export type LiveAsksSnapshot = {
 
 let memory: LiveAsksSnapshot = idleLiveAsksSnapshot(new Date(0));
 let lastWriteMs = 0;
+let lastMemoryWriteMs = 0;
 let lastKey = '';
 
 export function idleLiveAsksSnapshot(now = new Date()): LiveAsksSnapshot {
@@ -51,6 +54,7 @@ export function peekLiveAsksByAsset(): Record<string, LiveAskByAsset> {
 export function resetLiveAsksMemoryForTests(): void {
   memory = idleLiveAsksSnapshot(new Date(0));
   lastWriteMs = 0;
+  lastMemoryWriteMs = 0;
   lastKey = '';
 }
 
@@ -60,20 +64,22 @@ export async function persistLiveAsksSnapshot(snap: LiveAsksSnapshot): Promise<v
   const watching = key !== 'idle';
   const forceIdle = lastKey !== 'idle' && lastKey !== '' && !watching;
   const minMs = watching ? WRITE_MIN_MS : IDLE_WRITE_MIN_MS;
-  if (!forceIdle && key === lastKey && nowMs - lastWriteMs < minMs) {
-    memory = { ...snap, byAsset: { ...snap.byAsset } };
+  memory = { at: snap.at, byAsset: { ...snap.byAsset } };
+  lastMemoryWriteMs = nowMs;
+  if (!watching && !forceIdle && key === lastKey && nowMs - lastWriteMs < minMs) {
     return;
   }
-  memory = { at: snap.at, byAsset: { ...snap.byAsset } };
   lastKey = key;
   lastWriteMs = nowMs;
   const db = getFirestoreDb();
   if (!db) return;
-  try {
-    await db.collection('system').doc('liveAsks').set(memory);
-  } catch {
-    /* */
-  }
+  void db
+    .collection('system')
+    .doc('liveAsks')
+    .set(memory)
+    .catch(() => {
+      /* keep memory */
+    });
 }
 
 function parseSnapshot(raw: Partial<LiveAsksSnapshot> | null | undefined): LiveAsksSnapshot | null {
@@ -104,8 +110,9 @@ function parseSnapshot(raw: Partial<LiveAsksSnapshot> | null | undefined): LiveA
 }
 
 export async function getLiveAsksSnapshot(): Promise<LiveAsksSnapshot> {
-  const memAt = Date.parse(memory.at);
-  if (Number.isFinite(memAt) && Date.now() - memAt < 3_000) return memory;
+  if (lastMemoryWriteMs && Date.now() - lastMemoryWriteMs < LIVE_ASKS_LOCAL_FRESH_MS) {
+    return memory;
+  }
   const db = getFirestoreDb();
   if (db) {
     try {
@@ -113,6 +120,16 @@ export async function getLiveAsksSnapshot(): Promise<LiveAsksSnapshot> {
       if (doc.exists && doc.data()) {
         const snap = parseSnapshot(doc.data() as Partial<LiveAsksSnapshot>);
         if (snap) {
+          const remoteAt = Date.parse(snap.at);
+          const localAt = Date.parse(memory.at);
+          if (
+            lastMemoryWriteMs &&
+            Number.isFinite(localAt) &&
+            Number.isFinite(remoteAt) &&
+            localAt >= remoteAt
+          ) {
+            return memory;
+          }
           memory = snap;
           return snap;
         }

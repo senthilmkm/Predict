@@ -17,6 +17,8 @@ import {
 } from '../services/firestore';
 import { resolveActiveBroadcast } from '../services/broadcast';
 import { executeManualOrder } from '../services/manualTrade';
+import { collectHomeQuoteAssets } from '../services/oneSecondMarket';
+import { refreshLiveAskBookShared } from '../services/liveAskRefresh';
 import { getLiveAsksSnapshot, liveAsksForClient } from '../services/liveAsks';
 
 export const apiRouter = Router();
@@ -149,7 +151,16 @@ apiRouter.post('/me/disclaimer', async (req: Request, res: Response) => {
 });
 
 // Get User Status & Config
-apiRouter.get('/me/quotes', async (_req: Request, res: Response) => {
+apiRouter.get('/me/quotes', async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const userDoc = await getUserDoc(extractUserId(req));
+      const assets = collectHomeQuoteAssets([userDoc]);
+      await refreshLiveAskBookShared(assets);
+    } catch {
+      /* serve last book */
+    }
+  }
   const liveAsks = liveAsksForClient(await getLiveAsksSnapshot());
   res.json({ ok: true, at: liveAsks.at, asks: liveAsks.byAsset });
 });

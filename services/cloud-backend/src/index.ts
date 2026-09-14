@@ -4,6 +4,8 @@ import path from 'path';
 import { apiRouter } from './routes/api';
 import { workerRouter } from './routes/worker';
 import { adminRouter } from './routes/admin';
+import { peekAskTickers, refreshLiveAskBookShared } from './services/liveAskRefresh';
+import { peekLiveAsksByAsset } from './services/liveAsks';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8080;
@@ -35,6 +37,15 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Predict GCP Cloud Backend running on 0.0.0.0:${PORT}`);
   });
+  setInterval(() => {
+    const assets = Object.keys(peekAskTickers());
+    const peek = Object.keys(peekLiveAsksByAsset());
+    const list = assets.length ? assets : peek;
+    if (!list.length) return;
+    void refreshLiveAskBookShared(list).catch(() => {
+      /* next beat */
+    });
+  }, 1000);
 }
 
 export { app };

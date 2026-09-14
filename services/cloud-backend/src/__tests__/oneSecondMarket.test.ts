@@ -1,8 +1,13 @@
 import {
+  collectHomeQuoteAssets,
   collectWatchAssets,
   fetchAskQuotesOnce,
   leanWithSnapshotQuote,
   liveAsksByAsset,
+  liveAsksFromTickers,
+  rememberTickersFromLeans,
+  resolveAskTickers,
+  unionAssetKeys,
   uniqueTickersFromLeans,
 } from '../services/oneSecondMarket';
 
@@ -24,6 +29,34 @@ describe('one-second market snapshot', () => {
       'Silver',
     ]);
     expect(collectWatchAssets()).toEqual([]);
+  });
+
+  test('home quote assets are explicit On chips and union with path watches', () => {
+    expect(
+      collectHomeQuoteAssets([
+        { config: { assets_enabled: { BTC: true, ETH: true, HYPE: false, NEAR: true } } },
+        { config: { assets_enabled: { SOL: true, BTC: true } } },
+        { config: {} },
+        null,
+      ]).sort()
+    ).toEqual(['BTC', 'ETH', 'NEAR', 'SOL']);
+    expect(unionAssetKeys(['BTC', 'SOL'], ['ETH', 'BTC'], []).sort()).toEqual(['BTC', 'ETH', 'SOL']);
+    expect(
+      rememberTickersFromLeans({ BTC: 'OLD' }, { BTC: { market_ticker: 'KXBTC15M' }, ETH: {} })
+    ).toEqual({ BTC: 'KXBTC15M' });
+    expect(
+      resolveAskTickers(
+        ['BTC', 'ETH', 'SOL'],
+        { BTC: 'KXBTC15M' },
+        { ETH: { ticker: 'KXETH15M' }, SOL: { ticker: '' } }
+      )
+    ).toEqual({ BTC: 'KXBTC15M', ETH: 'KXETH15M' });
+    expect(
+      liveAsksFromTickers(
+        { BTC: 'KXBTC15M' },
+        new Map([['KXBTC15M', { yes_ask: 0.4, no_ask: 0.61 }]])
+      )
+    ).toEqual({ BTC: { yes_ask: 0.4, no_ask: 0.61, ticker: 'KXBTC15M' } });
   });
 
   test('fetches each ticker once even if many leans share it', async () => {
