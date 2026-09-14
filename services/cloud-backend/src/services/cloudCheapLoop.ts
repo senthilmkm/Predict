@@ -331,7 +331,12 @@ export async function runCheapLoopForcedBidExit(opts: {
     exitPayPrice,
   });
   const weekly = isCheapLoopWeeklyEntryPath(trade.entryPath);
-  const title = weekly ? 'Cheap loop weekly sell' : 'Cheap loop hourly sell';
+  const hourly = isCheapLoopHourlyEntryPath(trade.entryPath);
+  const title = weekly
+    ? 'Cheap loop weekly sell'
+    : hourly
+      ? 'Cheap loop hourly sell'
+      : 'Cheap loop 15m sell';
   return {
     ok: true,
     alert: {

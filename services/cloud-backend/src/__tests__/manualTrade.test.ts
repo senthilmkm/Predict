@@ -423,9 +423,10 @@ describe('manual buy/sell place-now', () => {
     );
   });
 
-  test('History Sell rejects 15m Cheap loop and loses the second claim', async () => {
-    const uid = 'usr_hist_sell_race';
-    await upsertUserDoc(uid, { state: 'ARMED', kalshiConfigured: true, config: liveCfg() });
+  test('History Sell dumps 15m Cheap loop without Last signals', async () => {
+    await setSystemConfig({ featureFlags: { lastSignalsManualTrade: false } });
+    const uid = 'usr_hist_sell_15m';
+    await upsertUserDoc(uid, { state: 'KILL_SWITCH', kalshiConfigured: true, config: liveCfg() });
     await saveTradeRecord(uid, {
       tradeId: 'trade_15m',
       userId: uid,
@@ -443,18 +444,42 @@ describe('manual buy/sell place-now', () => {
       outcome: 'pending',
       entryPath: 'cheap_loop',
     });
+    const leanFn = jest.fn();
+    const place = jest.fn(async () => ({
+      ok: true,
+      http_status: 200,
+      dry_run: false,
+      payload: {},
+      fill_count: '1',
+      order_id: 'ord_hist_15m',
+    }));
     const fifteen = await executeManualOrder(
       { userId: uid, asset: 'BTC', action: 'sell', requestId: 'hist_15', tradeId: 'trade_15m' },
       {
-        getMarketQuoteFn: async () => ({ yes_bid_dollars: 0.35, yes_ask_dollars: 0.36 }) as any,
+        computeLeanFn: leanFn as any,
+        getMarketQuoteFn: async () =>
+          ({
+            yes_bid_dollars: 0.35,
+            yes_ask_dollars: 0.36,
+            no_bid_dollars: 0.64,
+            no_ask_dollars: 0.65,
+          }) as any,
         getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
         isMarketOpenFn: () => ({ open: true }) as any,
-        placeOrderFn: jest.fn() as any,
+        placeOrderFn: place as any,
       }
     );
-    expect(fifteen.ok).toBe(false);
-    expect(fifteen.error).toBe('not_sellable');
+    expect(fifteen.ok).toBe(true);
+    expect(leanFn).not.toHaveBeenCalled();
+    expect(place).toHaveBeenCalledTimes(1);
+    const placed = (place.mock.calls[0] as any)?.[0] as { ticker?: string; time_in_force?: string } | undefined;
+    expect(placed?.ticker).toBe('KXBTC15M-T');
+    expect(placed?.time_in_force).toBe('immediate_or_cancel');
+  });
 
+  test('History Sell rejects a second claim on the same weekly fill', async () => {
+    const uid = 'usr_hist_sell_race';
+    await upsertUserDoc(uid, { state: 'ARMED', kalshiConfigured: true, config: liveCfg() });
     await saveTradeRecord(uid, {
       tradeId: 'trade_clw',
       userId: uid,

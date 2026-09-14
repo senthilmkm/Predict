@@ -5,6 +5,15 @@ function moneyUsd(n: unknown): string {
   return Number.isFinite(v) ? v.toFixed(2) : '—';
 }
 
+export function formatSignedUsd(n: unknown): string {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  const abs = Math.abs(v).toFixed(2);
+  if (v > 0) return `+$${abs}`;
+  if (v < 0) return `-$${abs}`;
+  return '$0.00';
+}
+
 export function entryPathChipLabel(
   path: unknown,
   pairNo?: number | null
@@ -98,6 +107,7 @@ export function formatHistoryTradeSubline(item: {
   fill_count?: number | null;
   fill_price?: number | null;
   pnl_usd?: number | null;
+  live_pnl_usd?: number | null;
 }): string {
   const parts: string[] = [];
   const ticker = String(item.market_ticker || '').trim();
@@ -118,6 +128,8 @@ export function formatHistoryTradeSubline(item: {
   parts.push(`cost $${moneyUsd(item.notional_usd)}`);
   if (item.pnl_usd != null && Number.isFinite(Number(item.pnl_usd))) {
     parts.push(`P&L $${moneyUsd(item.pnl_usd)}`);
+  } else if (item.live_pnl_usd != null && Number.isFinite(Number(item.live_pnl_usd))) {
+    parts.push(`live ${formatSignedUsd(item.live_pnl_usd)}`);
   }
   return parts.join(' · ');
 }

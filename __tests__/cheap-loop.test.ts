@@ -7,6 +7,8 @@ import {
   cheapLoopCooldownWatchText,
   cheapLoopExitsForTicker,
   cheapLoopHoldingWatchText,
+  cheapLoopLivePnlForTicker,
+  cheapLoopLivePnlUsd,
   cheapLoopHourlyEventKey,
   cheapLoopHourlyExitsForEvent,
   cheapLoopHourlySeriesTicker,
@@ -428,6 +430,33 @@ describe('Cheap loop path', () => {
     });
     expect(lm.skip_reason).toBe('cheap_loop_last_minute_owns');
     expect(cheapLoopHoldingWatchText(0.05)).toBe('Cheap loop holding · take +5¢');
+    expect(cheapLoopHoldingWatchText(0.05, 0.05)).toBe('Cheap loop holding · take +5¢ · live +$0.05');
+    expect(cheapLoopHoldingWatchText(0.05, -0.1)).toBe('Cheap loop holding · take +5¢ · live -$0.10');
+    expect(cheapLoopLivePnlUsd({ heldSide: 'YES', fillUsd: 0.3, fillCount: 1, yesBid: 0.35, noBid: 0.64 })).toBe(
+      0.05
+    );
+    expect(cheapLoopLivePnlUsd({ heldSide: 'YES', fillUsd: 0.3, fillCount: 1, yesBid: 0.2, noBid: 0.78 })).toBe(
+      -0.1
+    );
+    expect(cheapLoopLivePnlUsd({ heldSide: 'YES', fillUsd: 0.3, fillCount: 1, yesBid: null, noBid: 0.78 })).toBeNull();
+    expect(
+      cheapLoopLivePnlForTicker({
+        ticker: 'KXBTC15M-T',
+        heldSide: 'YES',
+        fillUsd: 0.3,
+        fillCount: 1,
+        quotes: [{ market_ticker: 'KXBTC15M-OTHER', yes_bid: 0.9, no_bid: 0.1 }],
+      })
+    ).toBeNull();
+    expect(
+      cheapLoopLivePnlForTicker({
+        ticker: 'KXBTC15M-T',
+        heldSide: 'YES',
+        fillUsd: 0.3,
+        fillCount: 1,
+        quotes: [{ market_ticker: 'KXBTC15M-T', yes_bid: 0.35, no_bid: 0.64 }],
+      })
+    ).toBe(0.05);
     expect(cheapLoopCooldownWatchText(80)).toBe('Cheap loop cooldown · 80s');
     expect(isCheapLoopEnterPath({ adminEnabled: true, userEnabled: true, assetEnabled: true, asset: 'BTC', assets: [] })).toBe(
       false
@@ -792,7 +821,7 @@ describe('Cheap loop path', () => {
         outcome: 'pending',
         fillCount: 1,
       })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isCheapLoopHistorySellableTrade({
         entryPath: 'home',

@@ -349,9 +349,11 @@ Loop: buy cheap ATM → wait until **bid ≥ fill + Take** (or Stop On and **bid
 
 ### History Sell
 
-On a **pending** fill tagged **Cheap loop hourly** or **Cheap loop weekly**, History shows **Sell**. Tap = sell **that ticker / trade id now** on Kalshi’s book (bid IOC). Does **not** wait for Take, Flatten, or Friday.
+On a **pending** Cheap loop **15m, hourly, or weekly** fill, History shows **Sell**. Tap = sell **that ticker / trade id now** on Kalshi’s book (bid IOC). Does **not** wait for Take, Stop, Flatten, or Friday.
 
-Confirm dialog. Placing… lock so a double tap cannot race itself. IOC miss stays pending and releases the claim. Success is a Cheap loop **exit** (cycle++, cooldown, then hunt). Allowed when Auto Off. Allowed on Kill switch (emergency dump). Does **not** require Last signals Buy/Sell. Does **not** go through 15m `computeLean`. Hide Sell on 15m Cheap loop and all other paths.
+Confirm dialog. Placing… lock so a double tap cannot race itself. IOC miss stays pending and releases the claim. Success is a Cheap loop **exit** (cycle++, cooldown, then hunt). Allowed when Auto Off. Allowed on Kill switch (emergency dump). Does **not** require Last signals Buy/Sell. Hide Sell on all other paths.
+
+When History has a **live bid on that same ticker**, it shows **live P&L** (mark-to-market if sold at that bid). 15m uses the current 15m book. Hourly/weekly do not use the 15m bid.
 
 Race with the 1s watcher: `claimProtectSell` — first wins. Second tap or watcher tick gets `claim_lost`.
 

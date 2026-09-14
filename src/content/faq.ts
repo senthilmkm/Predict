@@ -608,9 +608,9 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'cheap-loop-history-sell',
           q: 'What does History Sell do on Cheap loop?',
           a:
-            'On a pending Cheap loop hourly or Cheap loop weekly fill, History shows Sell. Tap sells that contract now on Kalshi’s book (bid IOC). It does not wait for Take, Stop, Flatten, or Friday.\n\n' +
+            'On a pending Cheap loop 15m, hourly, or weekly fill, History shows Sell. Tap sells that contract now on Kalshi’s book (bid IOC). It does not wait for Take, Stop, Flatten, or Friday.\n\n' +
             'A confirm dialog, then Placing… so a double tap cannot fire twice. If IOC misses, the fill stays pending. If Cloud’s 1s watcher already sold it, you get “already sold.” Success counts as a Cheap loop exit (cycle + cooldown, then hunt again).\n\n' +
-            'Works with Auto Off and with Kill switch (emergency dump). It does not use Home Buy/Sell or 15m lean. 15m Cheap loop and other paths do not show this button.',
+            'Works with Auto Off and with Kill switch (emergency dump). It does not use Home Buy/Sell. Other paths do not show this button. When History has a live bid on that same ticker, it also shows live P&L at that bid (15m when the window still matches). Hourly/weekly live P&L shows only if that ticker’s quote is on the phone.',
         },
         {
           id: 'cheap-loop-risk-hidden',

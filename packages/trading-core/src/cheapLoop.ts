@@ -7,7 +7,7 @@ import {
   sideBidOf,
   ticketUsd,
 } from './cashOut';
-import { buildProtectSellOrder, inProtectSellGrace } from './protectSell';
+import { buildProtectSellOrder, computeProtectSellPnlUsd, inProtectSellGrace } from './protectSell';
 import { lastMinuteTwapOwns } from './lastMinute';
 import { goldFadeMinutesLeft } from './goldFade';
 
@@ -310,7 +310,7 @@ export function isAnyCheapLoopEntryPath(raw: unknown): boolean {
 }
 
 export function isCheapLoopHistorySellPath(raw: unknown): boolean {
-  return isCheapLoopHourlyEntryPath(raw) || isCheapLoopWeeklyEntryPath(raw);
+  return isAnyCheapLoopEntryPath(raw);
 }
 
 /** Kalshi hourly books are ~1h. Daily ~24h and weekly ~7d share the same series. */
@@ -1146,9 +1146,65 @@ export function buildCheapLoopSellOrder(opts: {
   });
 }
 
-export function cheapLoopHoldingWatchText(takeUsd?: unknown): string {
+export function cheapLoopHoldingWatchText(takeUsd?: unknown, livePnlUsd?: number | null): string {
   const take = normalizeCheapLoopTakeUsd(takeUsd);
-  return `Cheap loop holding · take +${Math.round(take * 100)}¢`;
+  const live = livePnlUsd == null ? NaN : Number(livePnlUsd);
+  const liveBit =
+    Number.isFinite(live) ? ` · live ${live > 0 ? '+' : live < 0 ? '-' : ''}$${Math.abs(live).toFixed(2)}` : '';
+  return `Cheap loop holding · take +${Math.round(take * 100)}¢${liveBit}`;
+}
+
+/** Mark-to-market if sold at the held side’s bid now. Null when bid/fill/count is missing. */
+export function cheapLoopLivePnlUsd(opts: {
+  heldSide?: unknown;
+  fillUsd?: unknown;
+  fillCount?: unknown;
+  yesBid?: unknown;
+  noBid?: unknown;
+}): number | null {
+  const fill = ticketUsd(opts.fillUsd);
+  const n = Math.floor(Number(opts.fillCount) || 0);
+  if (fill == null || n <= 0) return null;
+  const held = String(opts.heldSide || '').toUpperCase() === 'NO' ? 'NO' : 'YES';
+  const yesBid = ticketUsd(opts.yesBid);
+  const noBid = ticketUsd(opts.noBid);
+  const bid = sideBidOf(held, { yes_bid: yesBid, no_bid: noBid, yes_ask: null, no_ask: null });
+  if (bid == null) return null;
+  return computeProtectSellPnlUsd({
+    heldSide: held,
+    entryPay: fill,
+    exitEconomic: bid,
+    fillCount: n,
+  });
+}
+
+export function cheapLoopLivePnlForTicker(opts: {
+  ticker?: unknown;
+  heldSide?: unknown;
+  fillUsd?: unknown;
+  fillCount?: unknown;
+  quotes?: Array<{
+    ticker?: string | null;
+    market_ticker?: string | null;
+    yes_bid?: unknown;
+    no_bid?: unknown;
+  } | null | undefined>;
+}): number | null {
+  const want = String(opts.ticker || '').trim();
+  if (!want) return null;
+  for (const q of opts.quotes || []) {
+    if (!q) continue;
+    const got = String(q.ticker || q.market_ticker || '').trim();
+    if (got !== want) continue;
+    return cheapLoopLivePnlUsd({
+      heldSide: opts.heldSide,
+      fillUsd: opts.fillUsd,
+      fillCount: opts.fillCount,
+      yesBid: q.yes_bid,
+      noBid: q.no_bid,
+    });
+  }
+  return null;
 }
 
 export function cheapLoopCooldownWatchText(remainingSec: number): string {

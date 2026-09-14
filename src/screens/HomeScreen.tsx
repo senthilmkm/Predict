@@ -52,7 +52,7 @@ import {
 } from './lastSignalsManual';
 import { formatTickerOverlapLine } from './tickerOverlap';
 import { isPairLockEntryPath } from '../../packages/trading-core/src/pairLock';
-import { cheapLoopCooldownRemainingSec, isCheapLoopEntryPath } from '../../packages/trading-core/src/cheapLoop';
+import { cheapLoopCooldownRemainingSec, cheapLoopLivePnlForTicker, isCheapLoopEntryPath } from '../../packages/trading-core/src/cheapLoop';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -546,6 +546,28 @@ export function HomeScreen({
         flattenMinutes: config.risk.cheap_loop_flatten_minutes,
         takeUsd: config.risk.cheap_loop_take_usd,
         holding: cheapLoopHeld,
+        livePnlUsd: cheapLoopHeld
+          ? cheapLoopLivePnlForTicker({
+              ticker: row.marketTicker,
+              heldSide: held?.side,
+              fillUsd: held?.fill_price,
+              fillCount: held?.fill_count,
+              quotes: [
+                {
+                  market_ticker: (leans[row.asset] as { market_ticker?: string } | undefined)?.market_ticker,
+                  yes_bid: (leans[row.asset] as { yes_bid?: number | null } | undefined)?.yes_bid,
+                  no_bid: (leans[row.asset] as { no_bid?: number | null } | undefined)?.no_bid,
+                },
+                liveAsks[row.asset]
+                  ? {
+                      ticker: liveAsks[row.asset]?.ticker,
+                      yes_bid: liveAsks[row.asset]?.yes_bid,
+                      no_bid: liveAsks[row.asset]?.no_bid,
+                    }
+                  : null,
+              ],
+            })
+          : null,
         cooldownSec: cheapLoopCooldownRemainingSec({
           trades,
           marketTicker: row.marketTicker,

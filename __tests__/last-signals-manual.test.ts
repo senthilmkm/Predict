@@ -409,6 +409,18 @@ describe('last signal extra line', () => {
         assetEnabled: true,
         asset: 'BTC',
         assets: ['BTC'],
+        holding: true,
+        takeUsd: 0.05,
+        livePnlUsd: 0.05,
+      })
+    ).toBe('Cheap loop holding · take +5¢ · live +$0.05');
+    expect(
+      formatCheapLoopWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'BTC',
+        assets: ['BTC'],
         minutesElapsed: 4,
         minutesLeft: 10,
         startMinutes: 2,

@@ -196,7 +196,7 @@ async function executeCheapLoopHistorySell(opts: {
       action: 'sell',
       tradeId,
       ticker: trade.ticker,
-      message: 'History Sell is only for pending Cheap loop hourly or weekly fills.',
+      message: 'History Sell is only for pending Cheap loop fills.',
     });
   }
   const ticker = String(trade.ticker || '').trim();

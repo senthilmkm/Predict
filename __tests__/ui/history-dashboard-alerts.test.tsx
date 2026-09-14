@@ -87,7 +87,7 @@ describe('History / Dashboard / AlertsHub', () => {
     await fireEvent.press(s.getByTestId('seg-trades'));
   });
 
-  test('History Sell shows on pending hourly and weekly Cheap loop, not 15m', async () => {
+  test('History Sell shows on pending 15m, hourly, and weekly Cheap loop, not Home', async () => {
     const Alert = require('react-native').Alert;
     const place = jest.fn(async () => ({ ok: true, message: 'Sold BTC YES' }));
     const { cloudClient } = require('../../src/services/cloud/cloudClient');
@@ -98,6 +98,14 @@ describe('History / Dashboard / AlertsHub', () => {
     });
     useRuntimeStore.setState({
       refreshCloudSnapshot: async () => {},
+      leans: {
+        SOL: {
+          asset: 'SOL',
+          market_ticker: 'KXSOL15M-T',
+          yes_bid: 0.35,
+          no_bid: 0.64,
+        } as any,
+      },
       trades: [
         {
           id: 'clh-1',
@@ -133,6 +141,7 @@ describe('History / Dashboard / AlertsHub', () => {
           outcome: 'pending',
           dry_run: false,
           fill_count: 1,
+          fill_price: 0.3,
           entry_path: 'cheap_loop',
         } as any,
         {
@@ -152,8 +161,12 @@ describe('History / Dashboard / AlertsHub', () => {
     const s = await render(<HistoryScreen />);
     expect(s.getByTestId('history-sell-clh-1')).toBeTruthy();
     expect(s.getByTestId('history-sell-clw-1')).toBeTruthy();
-    expect(s.queryByTestId('history-sell-cl15-1')).toBeNull();
+    expect(s.getByTestId('history-sell-cl15-1')).toBeTruthy();
+    const liveKids = s.getByTestId('trade-live-pnl-cl15-1').props.children;
+    const liveText = Array.isArray(liveKids) ? liveKids.join('') : String(liveKids);
+    expect(liveText).toMatch(/Live \+\$0\.05/);
     expect(s.queryByTestId('history-sell-home-1')).toBeNull();
+    expect(s.queryByTestId('trade-live-pnl-clh-1')).toBeNull();
     await fireEvent.press(s.getByTestId('history-sell-clh-1'));
     await waitFor(() => expect(place).toHaveBeenCalledTimes(1));
     expect(place.mock.calls[0][0]).toMatchObject({

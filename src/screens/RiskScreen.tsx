@@ -1118,8 +1118,8 @@ function CheapLoopFields() {
             for every chip; BTC and SOL use their own cushion. 0% = off. After Min hold, take when
             that bid ≥ fill + Take. Stop default Off — On sells bid IOC when that bid ≤ fill −
             Stop. Flatten in the last Flatten left minutes. Then Cooldown. Cycles is how many
-            exits this ticker this window. Always dumps. Spike fade / Step buy / Pair lock still
-            take first pick.
+            exits this ticker this window. Always dumps. History Sell dumps a pending 15m fill now
+            (bid IOC). Spike fade / Step buy / Pair lock still take first pick.
           </Text>
         </View>
       ) : null}

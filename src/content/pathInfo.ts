@@ -317,6 +317,7 @@ export const PATH_INFO = {
       '• Spike fade, Step buy, and Pair lock take first pick for a new buy when they want the ticker\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Home tap or any other open fill blocks a new Cheap loop buy\n' +
+      '• History Sell on a pending 15m fill dumps that ticker now (bid IOC). Allowed with Auto Off and Kill switch\n' +
       '• Protect skips Cheap loop rows\n' +
       '• Hourly is a second switch on this tile. It trades Kalshi above/below ATM strikes (KXBTCD, …), not the 15m book. Own chips, clocks, and Cycles per hour event. One open hourly lot per coin. 15m and Hourly may both hold. TWAP / Last-minute / Spike / Step / Pair stay on 15m',
   },

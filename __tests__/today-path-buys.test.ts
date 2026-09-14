@@ -224,5 +224,14 @@ describe('history trade display', () => {
         notional_usd: 1.1,
       })
     ).toBe('KXETH15M-X · 2 ctr · cost $1.10');
+    expect(
+      formatHistoryTradeSubline({
+        market_ticker: 'KXSOL15M-T',
+        fill_count: 1,
+        fill_price: 0.3,
+        notional_usd: 0.3,
+        live_pnl_usd: 0.05,
+      })
+    ).toBe('KXSOL15M-T · 1 ctr @ $0.30 · cost $0.30 · live +$0.05');
   });
 });

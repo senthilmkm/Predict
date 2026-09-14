@@ -516,6 +516,7 @@ export function formatCheapLoopWatchLine(opts: {
   flattenMinutes?: unknown;
   takeUsd?: unknown;
   holding?: boolean;
+  livePnlUsd?: number | null;
   cooldownSec?: number;
   autoDetail?: string | null;
   autoStatus?: string | null;
@@ -532,7 +533,7 @@ export function formatCheapLoopWatchLine(opts: {
   ) {
     return null;
   }
-  if (opts.holding) return cheapLoopHoldingWatchText(opts.takeUsd);
+  if (opts.holding) return cheapLoopHoldingWatchText(opts.takeUsd, opts.livePnlUsd);
   const cool = Number(opts.cooldownSec);
   if (Number.isFinite(cool) && cool > 0) return cheapLoopCooldownWatchText(cool);
   if (

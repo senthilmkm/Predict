@@ -16,9 +16,9 @@ import { useRuntimeStore } from '../state/runtimeStore';
 import { AssetKey } from '../config/types';
 import { LeanResult } from '../services/lean/lean';
 import { TradeRecord } from '../storage/repos';
-import { entryPathChipLabel, formatHistoryTradeSubline, pairLockHistoryPairNumbers } from '../history/tradeDisplay';
+import { entryPathChipLabel, formatHistoryTradeSubline, formatSignedUsd, pairLockHistoryPairNumbers } from '../history/tradeDisplay';
 import { useMarkAlertsSeenOnLeave } from '../hooks/useMarkAlertsSeenOnLeave';
-import { isCheapLoopHistorySellableTrade } from '../../packages/trading-core/src/cheapLoop';
+import { cheapLoopLivePnlForTicker, isCheapLoopHistorySellableTrade } from '../../packages/trading-core/src/cheapLoop';
 import { cloudClient } from '../services/cloud/cloudClient';
 import {
   ALERT_FILTERS,
@@ -95,6 +95,7 @@ export function HistoryScreen() {
   const cushions = useConfigStore((s) => s.config.cushions);
   const tradesRaw = useRuntimeStore((s) => s.trades);
   const leans = useRuntimeStore((s) => s.leans);
+  const liveAsks = useRuntimeStore((s) => s.liveAsks);
   const alertsRaw = useRuntimeStore((s) => s.alerts);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const [refreshing, setRefreshing] = useState(false);
@@ -146,6 +147,36 @@ export function HistoryScreen() {
     };
   }, []);
 
+  const livePnlFor = useCallback(
+    (trade: TradeRecord) => {
+      if (
+        !isCheapLoopHistorySellableTrade({
+          entry_path: trade.entry_path,
+          dry_run: trade.dry_run,
+          outcome: trade.outcome,
+          fill_count: trade.fill_count,
+        })
+      ) {
+        return null;
+      }
+      const lean = leans[trade.asset as AssetKey];
+      const ask = liveAsks?.[trade.asset as AssetKey];
+      return cheapLoopLivePnlForTicker({
+        ticker: trade.market_ticker,
+        heldSide: trade.side,
+        fillUsd: trade.fill_price,
+        fillCount: trade.fill_count,
+        quotes: [
+          lean
+            ? { market_ticker: lean.market_ticker, yes_bid: lean.yes_bid, no_bid: lean.no_bid }
+            : null,
+          ask ? { ticker: ask.ticker, yes_bid: ask.yes_bid, no_bid: ask.no_bid } : null,
+        ],
+      });
+    },
+    [leans, liveAsks]
+  );
+
   const sellCheapLoopFill = useCallback(
     async (trade: TradeRecord) => {
       const id = String(trade.id || '').trim();
@@ -190,9 +221,12 @@ export function HistoryScreen() {
   const confirmCheapLoopSell = useCallback(
     (trade: TradeRecord) => {
       const pathLabel = entryPathChipLabel(trade.entry_path) || 'Cheap loop';
+      const live = livePnlFor(trade);
+      const liveLine =
+        live != null ? `\nLive ${formatSignedUsd(live)} if this bid fills.` : '';
       Alert.alert(
         'Sell now?',
-        `${trade.asset} ${trade.side} · ${pathLabel}. Bid IOC on Kalshi’s book. Does not wait for Take, Flatten, or Friday.`,
+        `${trade.asset} ${trade.side} · ${pathLabel}. Bid IOC on Kalshi’s book. Does not wait for Take, Stop, or Flatten.${liveLine}`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -205,7 +239,7 @@ export function HistoryScreen() {
         ]
       );
     },
-    [sellCheapLoopFill]
+    [livePnlFor, sellCheapLoopFill]
   );
 
   return (
@@ -322,6 +356,13 @@ export function HistoryScreen() {
                   const cushion = cushions[item.asset as AssetKey];
                   const statusInfo = computeTradeStatusDot(item, lean, cushion);
                   const pathLabel = entryPathChipLabel(item.entry_path, pairLockPairNo.get(item.id));
+                  const sellable = isCheapLoopHistorySellableTrade({
+                    entry_path: item.entry_path,
+                    dry_run: item.dry_run,
+                    outcome: item.outcome,
+                    fill_count: item.fill_count,
+                  });
+                  const livePnl = sellable ? livePnlFor(item) : null;
                   return (
                     <View style={styles.row} testID={`trade-row-${item.id}`}>
                       <View style={styles.tradeTitleGroup}>
@@ -340,13 +381,19 @@ export function HistoryScreen() {
                         ) : null}
                       </View>
                       <Text style={styles.sub}>{formatHistoryTradeSubline(item)}</Text>
+                      {livePnl != null ? (
+                        <Text
+                          style={[
+                            styles.livePnl,
+                            { color: livePnl >= 0 ? colors.win : colors.loss },
+                          ]}
+                          testID={`trade-live-pnl-${item.id}`}
+                        >
+                          Live {formatSignedUsd(livePnl)} at this bid
+                        </Text>
+                      ) : null}
                       <Text style={styles.time}>{formatWhen(item.at)}</Text>
-                      {isCheapLoopHistorySellableTrade({
-                        entry_path: item.entry_path,
-                        dry_run: item.dry_run,
-                        outcome: item.outcome,
-                        fill_count: item.fill_count,
-                      }) ? (
+                      {sellable ? (
                         <Pressable
                           testID={`history-sell-${item.id}`}
                           style={[styles.historySellBtn, sellingIds[item.id] && styles.historySellBtnBusy]}
@@ -643,6 +690,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   sub: { color: colors.textSecondary, marginTop: 4, fontSize: 13 },
+  livePnl: { marginTop: 4, fontSize: 13, fontWeight: '700' },
   time: { color: colors.mute, marginTop: 4, fontSize: 11 },
   historySellBtn: {
     marginTop: 10,
