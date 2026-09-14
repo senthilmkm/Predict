@@ -4394,7 +4394,7 @@ export async function runCheapLoopWatchTick(
             if (cheapRes.exited > 0) {
               lastTradeAction[asset] = {
                 status: 'placed',
-                detail: `Cheap loop · sold ${cheapRes.exited}`,
+                detail: `Cheap loop 15m · sold ${cheapRes.exited}`,
                 at: tickIso,
               };
               openPositions = Math.max(0, openPositions - cheapRes.exited);

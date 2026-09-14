@@ -48,7 +48,7 @@ export const OVERLAP_PATH_LABEL: Record<OverlapPathId, string> = {
   step_buy: 'Step buy',
   spike_fade: 'Spike fade',
   pair_lock: 'Pair lock',
-  cheap_loop: 'Cheap loop',
+  cheap_loop: 'Cheap loop 15m',
   cheap_loop_hourly: 'Cheap loop hourly',
 };
 
@@ -62,7 +62,7 @@ const HOLDING_LINE: Record<OverlapPathId, string> = {
   step_buy: 'step buy is holding this ticket',
   spike_fade: 'spike fade is holding this ticket',
   pair_lock: 'pair lock is holding this ticket',
-  cheap_loop: 'cheap loop is holding this ticket',
+  cheap_loop: 'cheap loop 15m is holding this ticket',
   cheap_loop_hourly: 'cheap loop hourly is holding this ticket',
 };
 

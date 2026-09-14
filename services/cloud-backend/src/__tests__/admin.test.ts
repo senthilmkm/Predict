@@ -420,9 +420,11 @@ describe('Admin trade stream HTML', () => {
     const html = fs.readFileSync(path.join(__dirname, '../../public/admin/index.html'), 'utf8');
     expect(html).toContain("v === 'cheap_loop'");
     expect(html).toContain('value="cheap_loop"');
-    expect(html).toMatch(/label: 'Cheap loop'/);
+    expect(html).toContain("label: 'Cheap loop 15m'");
+    expect(html).toContain('>Cheap loop 15m</option>');
     expect(html).toContain("v === 'cheap_loop_hourly'");
     expect(html).toContain('value="cheap_loop_hourly"');
-    expect(html).toMatch(/label: 'Cheap loop hourly'/);
+    expect(html).toContain("label: 'Cheap loop hourly'");
+    expect(html).toContain('>Cheap loop hourly</option>');
   });
 });

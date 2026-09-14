@@ -13,7 +13,7 @@ export type TradeStreamEntryLabel =
   | 'Spike fade'
   | 'Pair lock'
   | 'Pair lock hedge'
-  | 'Cheap loop'
+  | 'Cheap loop 15m'
   | 'Cheap loop hourly'
   | '—';
 
@@ -34,7 +34,7 @@ export function tradeStreamEntryLabel(raw: unknown): TradeStreamEntryLabel {
   if (parsed === 'step_buy') return 'Step buy';
   if (parsed === 'spike_fade') return 'Spike fade';
   if (parsed === 'pair_lock') return 'Pair lock';
-  if (parsed === 'cheap_loop') return 'Cheap loop';
+  if (parsed === 'cheap_loop') return 'Cheap loop 15m';
   if (parsed === 'cheap_loop_hourly') return 'Cheap loop hourly';
   return '—';
 }

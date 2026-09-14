@@ -140,7 +140,8 @@ describe('admin overview metrics', () => {
     expect(tradeStreamEntryLabel('spike_fade')).toBe('Spike fade');
     expect(tradeStreamEntryLabel('pair_lock')).toBe('Pair lock');
     expect(tradeStreamEntryLabel('pair_lock_hedge')).toBe('Pair lock hedge');
-    expect(tradeStreamEntryLabel('cheap_loop')).toBe('Cheap loop');
+    expect(tradeStreamEntryLabel('cheap_loop')).toBe('Cheap loop 15m');
+    expect(tradeStreamEntryLabel('cheap_loop_hourly')).toBe('Cheap loop hourly');
     expect(tradeStreamEntryLabel(undefined)).toBe('—');
     expect(tradeStreamEntryLabel('other')).toBe('—');
     expect(parseTradeStreamQuery({ entryPath: 'cheap_loop' }).entryPath).toBe('cheap_loop');

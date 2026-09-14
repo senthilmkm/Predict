@@ -112,7 +112,7 @@ describe('summarizeTodayPathBuys', () => {
     );
     expect(summary.cheapLoopTotal).toBe(1);
     expect(summary.autoTotal).toBe(0);
-    expect(formatHomePathBuyLines(summary)).toEqual(['Cheap loop  SOL 1']);
+    expect(formatHomePathBuyLines(summary)).toEqual(['Cheap loop 15m  SOL 1']);
   });
 
   test('counts Cheap loop hourly fills on their own line', () => {
@@ -138,7 +138,7 @@ describe('history trade display', () => {
     expect(entryPathChipLabel('step_buy')).toBe('Step buy');
     expect(entryPathChipLabel('spike_fade')).toBe('Spike fade');
     expect(entryPathChipLabel('pair_lock')).toBe('Pair lock');
-    expect(entryPathChipLabel('cheap_loop')).toBe('Cheap loop');
+    expect(entryPathChipLabel('cheap_loop')).toBe('Cheap loop 15m');
     expect(entryPathChipLabel('cheap_loop_hourly')).toBe('Cheap loop hourly');
     expect(entryPathChipLabel('pair_lock', 1)).toBe('Pair lock 1');
     expect(entryPathChipLabel('pair_lock', 2)).toBe('Pair lock 2');

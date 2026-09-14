@@ -195,14 +195,14 @@ export async function runCloudCheapLoopExits(opts: {
       evalRes.kind === 'cheap_loop_take'
         ? hourly
           ? 'Cheap loop hourly take'
-          : 'Cheap loop take'
+          : 'Cheap loop 15m take'
         : evalRes.kind === 'cheap_loop_stop'
           ? hourly
             ? 'Cheap loop hourly stop'
-            : 'Cheap loop stop'
+            : 'Cheap loop 15m stop'
           : hourly
             ? 'Cheap loop hourly flatten'
-            : 'Cheap loop flatten';
+            : 'Cheap loop 15m flatten';
     alerts.push({
       tradeId: trade.tradeId,
       title,

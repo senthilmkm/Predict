@@ -119,7 +119,7 @@ export function formatHomePathBuyLines(summary: PathBuyCounts): string[] {
   if (summary.stepBuyTotal > 0) lines.push(`Step buy  ${formatAssetCounts(summary.stepBuy)}`);
   if (summary.spikeFadeTotal > 0) lines.push(`Spike fade  ${formatAssetCounts(summary.spikeFade)}`);
   if (summary.pairLockTotal > 0) lines.push(`Pair lock  ${formatAssetCounts(summary.pairLock)}`);
-  if (summary.cheapLoopTotal > 0) lines.push(`Cheap loop  ${formatAssetCounts(summary.cheapLoop)}`);
+  if (summary.cheapLoopTotal > 0) lines.push(`Cheap loop 15m  ${formatAssetCounts(summary.cheapLoop)}`);
   if (summary.cheapLoopHourlyTotal > 0) {
     lines.push(`Cheap loop hourly  ${formatAssetCounts(summary.cheapLoopHourly)}`);
   }
@@ -137,7 +137,7 @@ export function formatDashboardPathBuys(summary: PathBuyCounts): string | null {
   if (summary.stepBuyTotal > 0) parts.push(`Step buy ${summary.stepBuyTotal}`);
   if (summary.spikeFadeTotal > 0) parts.push(`Spike fade ${summary.spikeFadeTotal}`);
   if (summary.pairLockTotal > 0) parts.push(`Pair lock ${summary.pairLockTotal}`);
-  if (summary.cheapLoopTotal > 0) parts.push(`Cheap loop ${summary.cheapLoopTotal}`);
+  if (summary.cheapLoopTotal > 0) parts.push(`Cheap loop 15m ${summary.cheapLoopTotal}`);
   if (summary.cheapLoopHourlyTotal > 0) parts.push(`Cheap loop hourly ${summary.cheapLoopHourlyTotal}`);
   return parts.length ? parts.join(' · ') : null;
 }

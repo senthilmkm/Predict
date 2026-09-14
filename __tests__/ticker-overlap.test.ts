@@ -74,7 +74,7 @@ describe('ticker overlap live line', () => {
       cheapLoopFlattenMinutes: 5,
     });
     expect(line).toBe(
-      'cheap loop is holding this ticket — Last-minute and Spike fade sit out'
+      'cheap loop 15m is holding this ticket — Last-minute and Spike fade sit out'
     );
   });
 
