@@ -351,6 +351,8 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'cheap side not cheap';
     case 'cheap_loop_no_favorite':
       return 'no cheap-side gap';
+    case 'cheap_loop_below_min_live':
+      return 'live too close to strike';
     case 'cheap_loop_no_cheap_side':
       return 'no cheaper side';
     case 'cheap_loop_no_ask':

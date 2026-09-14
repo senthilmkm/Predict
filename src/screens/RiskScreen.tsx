@@ -1092,11 +1092,12 @@ function CheapLoopFields() {
             </View>
           </View>
           <Text style={styles.hint} testID="cheap-loop-hint">
-            After Start after and before Flatten left. Cheaper ask ≤ Cheap max and |YES − NO| ≥ Min
-            gap → buy that side. After Min hold, take when that bid ≥ fill + Take. No Stop — a
-            falling ticket holds until Take or Flatten. Flatten in the last Flatten left minutes.
-            Then Cooldown. Cycles is how many exits this ticker this window. Always dumps. Spike
-            fade / Step buy / Pair lock still take first pick.
+            After Start after and before Flatten left. Cheaper ask ≤ Cheap max, |YES − NO| ≥ Min
+            gap, and |live − strike| ≥ Min live $ → buy that side. Min live $ is the same dollar
+            floor for every chip (0 = off). After Min hold, take when that bid ≥ fill + Take. No
+            Stop — a falling ticket holds until Take or Flatten. Flatten in the last Flatten left
+            minutes. Then Cooldown. Cycles is how many exits this ticker this window. Always dumps.
+            Spike fade / Step buy / Pair lock still take first pick.
           </Text>
         </View>
       ) : null}

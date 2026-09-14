@@ -40,6 +40,9 @@ export const CHEAP_LOOP_CYCLES_MIN = 1;
 export const CHEAP_LOOP_CYCLES_MAX = 5;
 export const CHEAP_LOOP_LOT_COUNT_DEFAULT = 1;
 export const CHEAP_LOOP_LOT_COUNT_MAX = 5;
+export const CHEAP_LOOP_MIN_ABS_GAP_DEFAULT = 25;
+export const CHEAP_LOOP_MIN_ABS_GAP_MIN = 0;
+export const CHEAP_LOOP_MIN_ABS_GAP_MAX = 250;
 export const CHEAP_LOOP_GRACE_SEC = 5;
 export const CHEAP_LOOP_ASK_CEILING = 0.995;
 
@@ -128,6 +131,14 @@ export function normalizeCheapLoopCycles(raw: unknown): number {
 
 export function normalizeCheapLoopLotCount(raw: unknown): number {
   return Math.round(clamp(Number(raw ?? CHEAP_LOOP_LOT_COUNT_DEFAULT), 1, CHEAP_LOOP_LOT_COUNT_MAX));
+}
+
+/** |live − strike| floor for 15m Cheap loop. 0 = off. Hourly must not inherit this. */
+export function normalizeCheapLoopMinAbsGapUsd(raw: unknown): number {
+  return snap(
+    clamp(Number(raw ?? CHEAP_LOOP_MIN_ABS_GAP_DEFAULT), CHEAP_LOOP_MIN_ABS_GAP_MIN, CHEAP_LOOP_MIN_ABS_GAP_MAX),
+    1
+  );
 }
 
 export function normalizeCheapLoopAssets(raw: unknown): string[] {
@@ -299,6 +310,7 @@ export function cheapLoopCfgForHourly(cfg: AppConfig): AppConfig {
       cheap_loop_lot_count: normalizeCheapLoopLotCount(risk.cheap_loop_hourly_lot_count),
       cheap_loop_skip_thin_bid: risk.cheap_loop_hourly_skip_thin_bid === true,
       cheap_loop_assets: normalizeCheapLoopHourlyAssets(risk.cheap_loop_hourly_assets),
+      cheap_loop_min_abs_gap_usd: 0,
     },
   };
 }
@@ -655,6 +667,7 @@ export function evaluateCheapLoopEnter(opts: {
     cheap_loop_flatten_minutes?: number;
     cheap_loop_cheap_max_ask_usd?: number;
     cheap_loop_min_gap_usd?: number;
+    cheap_loop_min_abs_gap_usd?: number;
     cheap_loop_take_usd?: number;
     cheap_loop_stop_usd?: number;
     cheap_loop_lot_count?: number;
@@ -703,6 +716,13 @@ export function evaluateCheapLoopEnter(opts: {
   const cycles = normalizeCheapLoopCycles(risk.cheap_loop_cycles);
   if ((opts.cyclesUsed ?? 0) >= cycles) return { ok: false, skip_reason: 'cheap_loop_cycles' };
   if (opts.inCooldown) return { ok: false, skip_reason: 'cheap_loop_cooldown' };
+  const minLive = normalizeCheapLoopMinAbsGapUsd(risk.cheap_loop_min_abs_gap_usd);
+  if (minLive > 0) {
+    const absGap = Number(opts.lean.abs_gap);
+    if (!Number.isFinite(absGap) || absGap + 1e-9 < minLive) {
+      return { ok: false, skip_reason: 'cheap_loop_below_min_live' };
+    }
+  }
   const picked = pickCheapLoopSide({
     yesAsk: opts.lean.yes_ask,
     noAsk: opts.lean.no_ask,

@@ -69,6 +69,7 @@ Shipped defaults are **15m trial**. Hourly numbers stay in this table for a late
 | `cheap_loop_flatten_minutes` | Flatten left | int | **5** | 5 | 3–10 | No new buys; dump if holding |
 | `cheap_loop_cheap_max_ask_usd` | Cheap max ask | chase | **0.40** | 0.40 | 0.25–0.45 | Cheaper ask must be ≤ this |
 | `cheap_loop_min_gap_usd` | Min gap | chase | **0.10** | 0.10 | 0.08–0.20 | \|YES ask − NO ask\| |
+| `cheap_loop_min_abs_gap_usd` | Min live $ | money | **25** | — | 0–250 | 15m only. \|live − strike\|. 0 = off. Hourly does not use this |
 | `cheap_loop_take_usd` | Take | chase | **0.05** | 0.05 | 0.03–0.08 | Sell when held **bid** ≥ fill + this. Minimum trigger, not a cap |
 | `cheap_loop_stop_usd` | *(unused)* | — | unused | — | — | **Stop Off.** Do not show. Do not sell on ask ≤ fill − Stop. Leftover Firestore value is ignored |
 | `cheap_loop_min_hold_minutes` | Min hold | int | **1** | 2 | 1–8 | After buy, take cannot fire until this elapses |
@@ -118,10 +119,11 @@ All must pass:
 11. Cheaper ask = min(YES ask, NO ask). Tie → skip `cheap_loop_no_cheap_side`
 12. Cheaper ask ≤ Cheap max (`cheap_loop_ask_rich`)
 13. \|YES − NO\| ≥ Min gap (`cheap_loop_no_favorite`)
-14. Shared static gate: lot size, max open, daily loss, Auto armed. **Window cap 1 does not block this path** — Cycles is the cap. Place lock uses `existingBuys + 1` so a second cycle is not window-capped, but an in-flight order still blocks a double submit.
-15. Skip thin bid On: fail closed if bid size unknown or `<` lots
-16. TWAP lock On for BTC/ETH → those two stay with TWAP (`cheap_loop_twap_owns`)
-17. Last-minute in its buy window with no Cheap loop lot → Last-minute owns new buys (`cheap_loop_last_minute_owns`)
+14. \|live − strike\| ≥ Min live $ (`cheap_loop_below_min_live`). Missing live gap fail closed. 0 = off. Hourly maps this to 0
+15. Shared static gate: lot size, max open, daily loss, Auto armed. **Window cap 1 does not block this path** — Cycles is the cap. Place lock uses `existingBuys + 1` so a second cycle is not window-capped, but an in-flight order still blocks a double submit.
+16. Skip thin bid On: fail closed if bid size unknown or `<` lots
+17. TWAP lock On for BTC/ETH → those two stay with TWAP (`cheap_loop_twap_owns`)
+18. Last-minute in its buy window with no Cheap loop lot → Last-minute owns new buys (`cheap_loop_last_minute_owns`)
 
 `entry_path`: **`cheap_loop`**.
 
@@ -303,7 +305,7 @@ Hourly series map (chips only if listed): BTC `KXBTCD`, ETH `KXETHD`, SOL `KXSOL
 
 `entry_path`: **`cheap_loop_hourly`**. Protect skips these rows. Window cap 1 does not block. Cycles count **per hourly event** (`KXBTCD-26SEP1406`), not per strike. **One open hourly Cheap loop lot per asset** (any strike). Cooldown is per event.
 
-Stop Off. Take or Flatten only. Same 5s grace / bid IOC as 15m.
+Stop Off. Take or Flatten only. Same 5s grace / bid IOC as 15m. Does **not** use 15m Min live $ (ATM is already close to live).
 
 TWAP / Last-minute / Spike / Step / Pair stay on **15m** books. They do not first-pick hourly. 15m Cheap loop and Hourly may both hold (different tickers). Shared: max open, daily loss, trades/day.
 

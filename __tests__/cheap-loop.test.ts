@@ -19,6 +19,7 @@ import {
   normalizeCheapLoopHourlyCycles,
   normalizeCheapLoopHourlyStartMinutes,
   normalizeCheapLoopLotCount,
+  normalizeCheapLoopMinAbsGapUsd,
   normalizeCheapLoopMinGapUsd,
   normalizeCheapLoopStartMinutes,
   normalizeCheapLoopStopUsd,
@@ -43,6 +44,7 @@ function cfg(over: Record<string, unknown> = {}) {
   c.risk.cheap_loop_flatten_minutes = 5;
   c.risk.cheap_loop_cheap_max_ask_usd = 0.4;
   c.risk.cheap_loop_min_gap_usd = 0.1;
+  c.risk.cheap_loop_min_abs_gap_usd = 25;
   c.risk.cheap_loop_take_usd = 0.05;
   c.risk.cheap_loop_stop_usd = 0.06;
   c.risk.cheap_loop_min_hold_minutes = 1;
@@ -140,6 +142,59 @@ describe('Cheap loop path', () => {
     expect(other.ok).toBe(false);
     expect(other.skip_reason).toBe('cheap_loop_holding_other_path');
     expect(formatSkipReason('cheap_loop_holding_other_path')).toBe('another path already holding');
+  });
+
+  test('Min live $ sits a small live-strike gap; 0 turns the floor off', () => {
+    const c = cfg();
+    const thin = evaluateCheapLoopEnter({
+      lean: lean({ abs_gap: 10 }),
+      cfg: c,
+      adminEnabled: true,
+    });
+    expect(thin.ok).toBe(false);
+    expect(thin.skip_reason).toBe('cheap_loop_below_min_live');
+    expect(formatSkipReason('cheap_loop_below_min_live')).toBe('live too close to strike');
+
+    const ok = evaluateCheapLoopEnter({
+      lean: lean({ abs_gap: 25 }),
+      cfg: c,
+      adminEnabled: true,
+    });
+    expect(ok.ok).toBe(true);
+
+    const off = evaluateCheapLoopEnter({
+      lean: lean({ abs_gap: 1 }),
+      cfg: { ...c, risk: { ...c.risk, cheap_loop_min_abs_gap_usd: 0 } },
+      adminEnabled: true,
+    });
+    expect(off.ok).toBe(true);
+
+    expect(normalizeCheapLoopMinAbsGapUsd(25)).toBe(25);
+    expect(normalizeCheapLoopMinAbsGapUsd(-4)).toBe(0);
+    expect(normalizeCheapLoopMinAbsGapUsd(900)).toBe(250);
+
+    const hourly = cheapLoopCfgForHourly({
+      ...cfg(),
+      risk: {
+        ...cfg().risk,
+        cheap_loop_hourly_enabled: true,
+        cheap_loop_hourly_assets: ['BTC'],
+        cheap_loop_min_abs_gap_usd: 25,
+      },
+    });
+    expect(hourly.risk.cheap_loop_min_abs_gap_usd).toBe(0);
+    const atm = evaluateCheapLoopEnter({
+      lean: lean({
+        market_ticker: 'KXBTCD-26SEP1406-T67099.99',
+        abs_gap: 2,
+        minutes_elapsed: 12,
+        minutes_left: 40,
+      }),
+      cfg: hourly,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+    });
+    expect(atm.ok).toBe(true);
   });
 
   test('min hold blocks take; dumped ask during min hold holds (Stop Off)', () => {

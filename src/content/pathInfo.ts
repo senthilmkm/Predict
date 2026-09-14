@@ -295,6 +295,7 @@ export const PATH_INFO = {
       '• Cheap loop asset chips, and that asset On (Cushions tab on/off). Empty chips = no Cheap loop buys\n' +
       '• Start after / Flatten left (15m defaults: after 2 minutes, dump with 5 minutes left)\n' +
       '• Cheap max ask, Min gap — buy only the cheaper YES or NO\n' +
+      '• Min live $ — |live − strike| must be at least this (15m only; 0 = off). Not a % of Cushions\n' +
       '• Take (bid ≥ fill + Take), Min hold, Cooldown, Cycles, Lot contracts. Stop is Off\n' +
       '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block this path — Cycles is the cap\n' +
       '• IOC. 1-second watcher from fill for take / flatten, then cooldown re-entry\n\n' +
