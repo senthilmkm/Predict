@@ -462,7 +462,8 @@ describe('Cheap loop path', () => {
     expect(cheapLoopHourlySeriesTicker('Gold')).toBeNull();
     expect(normalizeCheapLoopHourlyAssets(['BTC', 'Gold', 'HYPE', 'BTC'])).toEqual(['BTC', 'HYPE']);
     expect(normalizeCheapLoopHourlyStartMinutes(10)).toBe(10);
-    expect(normalizeCheapLoopHourlyCycles(9)).toBe(5);
+    expect(normalizeCheapLoopHourlyCycles(9)).toBe(9);
+    expect(normalizeCheapLoopHourlyCycles(11)).toBe(10);
     const hourly = cheapLoopCfgForHourly({
       ...cfg(),
       risk: {
@@ -517,6 +518,36 @@ describe('Cheap loop path', () => {
       )
     ).toBe(true);
     expect(PATH_INFO.cheapLoopHourly.title).toBe('Cheap loop hourly');
+    const hourly10 = cheapLoopCfgForHourly({
+      ...cfg(),
+      risk: {
+        ...cfg().risk,
+        cheap_loop_hourly_enabled: true,
+        cheap_loop_hourly_cycles: 10,
+        cheap_loop_hourly_start_minutes: 10,
+        cheap_loop_hourly_assets: ['BTC'],
+      },
+    });
+    const sixHourly = evaluateCheapLoopEnter({
+      lean: lean({ market_ticker: 'KXBTCD-26SEP1406-T67099.99', minutes_elapsed: 12, minutes_left: 40 }),
+      cfg: hourly10,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      lastMinuteOwnsNewBuys: false,
+      cyclesUsed: 6,
+      cyclesMax: 10,
+    });
+    expect(sixHourly.ok).toBe(true);
+    const sixHourlyDefaultMax = evaluateCheapLoopEnter({
+      lean: lean({ market_ticker: 'KXBTCD-26SEP1406-T67099.99', minutes_elapsed: 12, minutes_left: 40 }),
+      cfg: hourly10,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      lastMinuteOwnsNewBuys: false,
+      cyclesUsed: 6,
+    });
+    expect(sixHourlyDefaultMax.ok).toBe(false);
+    expect(sixHourlyDefaultMax.skip_reason).toBe('cheap_loop_cycles');
   });
 
   test('weekly duration filter, cycles 10, one lot per asset, History Sell helper', () => {
@@ -554,8 +585,9 @@ describe('Cheap loop path', () => {
     );
     expect(normalizeCheapLoopWeeklyCycles(undefined)).toBe(10);
     expect(normalizeCheapLoopWeeklyCycles(20)).toBe(20);
-    expect(normalizeCheapLoopWeeklyCycles(21)).toBe(20);
-    expect(normalizeCheapLoopHourlyCycles(9)).toBe(5);
+    expect(normalizeCheapLoopWeeklyCycles(21)).toBe(21);
+    expect(normalizeCheapLoopWeeklyCycles(51)).toBe(50);
+    expect(normalizeCheapLoopHourlyCycles(9)).toBe(9);
     const weekly = cheapLoopCfgForWeekly({
       ...cfg(),
       risk: {
@@ -578,7 +610,7 @@ describe('Cheap loop path', () => {
       adminEnabled: true,
       twapAdminEnabled: false,
       cyclesUsed: 6,
-      cyclesMax: 20,
+      cyclesMax: 50,
     });
     expect(sixExits.ok).toBe(true);
     const tenExits = evaluateCheapLoopEnter({
@@ -591,10 +623,46 @@ describe('Cheap loop path', () => {
       adminEnabled: true,
       twapAdminEnabled: false,
       cyclesUsed: 10,
-      cyclesMax: 20,
+      cyclesMax: 50,
     });
     expect(tenExits.ok).toBe(false);
     expect(tenExits.skip_reason).toBe('cheap_loop_cycles');
+    const weekly50 = cheapLoopCfgForWeekly({
+      ...cfg(),
+      risk: {
+        ...cfg().risk,
+        cheap_loop_weekly_enabled: true,
+        cheap_loop_weekly_cycles: 50,
+        cheap_loop_weekly_assets: ['BTC'],
+      },
+    });
+    const twentyOneExits = evaluateCheapLoopEnter({
+      lean: lean({
+        market_ticker: 'KXBTCD-26SEP1817-T67099.99',
+        minutes_elapsed: 12,
+        minutes_left: 4000,
+      }),
+      cfg: weekly50,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      cyclesUsed: 21,
+      cyclesMax: 50,
+    });
+    expect(twentyOneExits.ok).toBe(true);
+    const fiftyExits = evaluateCheapLoopEnter({
+      lean: lean({
+        market_ticker: 'KXBTCD-26SEP1817-T67099.99',
+        minutes_elapsed: 12,
+        minutes_left: 4000,
+      }),
+      cfg: weekly50,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      cyclesUsed: 50,
+      cyclesMax: 50,
+    });
+    expect(fiftyExits.ok).toBe(false);
+    expect(fiftyExits.skip_reason).toBe('cheap_loop_cycles');
     const withoutWeeklyMax = evaluateCheapLoopEnter({
       lean: lean({
         market_ticker: 'KXBTCD-26SEP1817-T67099.99',

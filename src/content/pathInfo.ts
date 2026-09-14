@@ -347,7 +347,7 @@ export const PATH_INFO = {
       '• Weekly switch and weekly asset chips. Empty chips = no weekly buys. Asset must be On in Cushions\n' +
       '• Same KX*D series as Hourly. Cloud picks the live event whose open→close is 4–10 days (~7d week)\n' +
       '• Unique ATM strike. After fill, hold that ticker until Take, Flatten, or History Sell\n' +
-      '• Start after / Flatten left / Cheap max / Min gap / Take / Min hold / Cooldown (minutes). Cycles default 10 (max 20) per weekly event. Stop is Off\n' +
+      '• Start after / Flatten left / Cheap max / Min gap / Take / Min hold / Cooldown (minutes). Cycles default 10 (max 50) per weekly event. Stop is Off\n' +
       '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block\n\n' +
       'Does not use\n' +
       '• 15m or hourly Cheap loop chips or clocks\n' +

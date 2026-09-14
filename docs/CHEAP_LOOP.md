@@ -296,7 +296,7 @@ Kalshi hourly is **above/below strike ladders** (`KXBTCD`, `KXETHD`, …), not 1
 | `cheap_loop_hourly_take_usd` | Take | **0.05** | 0.03–0.08 |
 | `cheap_loop_hourly_min_hold_minutes` | Min hold | **2** | 1–8 |
 | `cheap_loop_hourly_cooldown_minutes` | Cooldown | **3** | 1–10 |
-| `cheap_loop_hourly_cycles` | Cycles | **2** | 1–5 |
+| `cheap_loop_hourly_cycles` | Cycles | **2** | 1–10 |
 | `cheap_loop_hourly_lot_count` | Lot contracts | **1** | 1–5 |
 | `cheap_loop_hourly_skip_thin_bid` | Skip thin bid | **false** | — |
 | `cheap_loop_hourly_assets` | Hourly assets | **[]** | mapped series only |
@@ -321,7 +321,7 @@ Same `KX*D` series as Hourly. Cloud picks the live event whose open→close is *
 
 Loop: buy cheap ATM → wait until **bid ≥ fill + Take** → sell → **Cooldown minutes** → hunt ATM again (ATM may move) → repeat until **Flatten left** minutes of that weekly window. Flatten: no new buys; dump if holding. Stop Off. Never both sides. Never hold to $1. One open weekly lot per asset.
 
-`entry_path`: **`cheap_loop_weekly`**. Protect skips these rows. Cycles = completed **exits this weekly event** (default **10**, range **1–20**). Cooldown / Start / Flatten / Min hold are **minutes** (same ranges as hourly). Take / Cheap max / Min gap same 5¢ / 40¢ / 10¢. Skip thin default Off. Min live % mapped to 0 (ATM). Cloud-only; Home stays 15m.
+`entry_path`: **`cheap_loop_weekly`**. Protect skips these rows. Cycles = completed **exits this weekly event** (default **10**, range **1–50**). Cooldown / Start / Flatten / Min hold are **minutes** (same ranges as hourly). Take / Cheap max / Min gap same 5¢ / 40¢ / 10¢. Skip thin default Off. Min live % mapped to 0 (ATM). Cloud-only; Home stays 15m.
 
 | Risk key | UI | Weekly shipped | Range |
 |---|---|---|---|
@@ -333,7 +333,7 @@ Loop: buy cheap ATM → wait until **bid ≥ fill + Take** → sell → **Cooldo
 | `cheap_loop_weekly_take_usd` | Take | **0.05** | 0.03–0.08 |
 | `cheap_loop_weekly_min_hold_minutes` | Min hold | **2** | 1–8 |
 | `cheap_loop_weekly_cooldown_minutes` | Cooldown | **3** | 1–10 |
-| `cheap_loop_weekly_cycles` | Cycles | **10** | 1–20 |
+| `cheap_loop_weekly_cycles` | Cycles | **10** | 1–50 |
 | `cheap_loop_weekly_lot_count` | Lot contracts | **1** | 1–5 |
 | `cheap_loop_weekly_skip_thin_bid` | Skip thin bid | **false** | — |
 | `cheap_loop_weekly_assets` | Weekly assets | **[]** | same series as hourly |

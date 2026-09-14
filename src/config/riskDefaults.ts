@@ -937,7 +937,7 @@ export const RISK_FIELD_META: {
     kind: 'int',
     step: 1,
     min: 1,
-    max: 5,
+    max: 10,
   },
   {
     key: 'cheap_loop_hourly_lot_count',
@@ -1019,7 +1019,7 @@ export const RISK_FIELD_META: {
     kind: 'int',
     step: 1,
     min: 1,
-    max: 20,
+    max: 50,
   },
   {
     key: 'cheap_loop_weekly_lot_count',

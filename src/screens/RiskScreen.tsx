@@ -1196,7 +1196,8 @@ function CheapLoopFields() {
           </View>
           <Text style={styles.hint} testID="cheap-loop-hourly-hint">
             Buys the cheaper YES or NO on the unique ATM strike. Hold that ticker until Take or
-            Flatten. Does not hop strikes. Cycles are per hour event. One open hourly lot per coin.
+            Flatten. Does not hop strikes. Cycles are per hour event (max 10). One open hourly lot
+            per coin.
           </Text>
         </View>
       ) : null}
@@ -1289,7 +1290,8 @@ function CheapLoopFields() {
           </View>
           <Text style={styles.hint} testID="cheap-loop-weekly-hint">
             Buys the cheaper YES or NO on unique ATM. After Take, Cooldown minutes, then hunt ATM
-            again. Cycles are exits this weekly event (default 10). One open weekly lot per coin.
+            again. Cycles are exits this weekly event (default 10, max 50). One open weekly lot per
+            coin.
             History Sell dumps now without waiting for Take or Flatten.
           </Text>
         </View>

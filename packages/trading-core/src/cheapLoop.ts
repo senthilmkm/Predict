@@ -171,9 +171,11 @@ export const CHEAP_LOOP_HOURLY_START_DEFAULT = 10;
 export const CHEAP_LOOP_HOURLY_MIN_HOLD_DEFAULT = 2;
 export const CHEAP_LOOP_HOURLY_COOLDOWN_DEFAULT = 3;
 export const CHEAP_LOOP_HOURLY_CYCLES_DEFAULT = 2;
+export const CHEAP_LOOP_HOURLY_CYCLES_MIN = 1;
+export const CHEAP_LOOP_HOURLY_CYCLES_MAX = 10;
 export const CHEAP_LOOP_WEEKLY_CYCLES_DEFAULT = 10;
 export const CHEAP_LOOP_WEEKLY_CYCLES_MIN = 1;
-export const CHEAP_LOOP_WEEKLY_CYCLES_MAX = 20;
+export const CHEAP_LOOP_WEEKLY_CYCLES_MAX = 50;
 
 /** Kalshi above/below hourly series. Missing key = no hourly chip. */
 export const CHEAP_LOOP_HOURLY_SERIES: Record<string, string> = {
@@ -249,7 +251,11 @@ export function normalizeCheapLoopHourlyCooldownMinutes(raw: unknown): number {
 
 export function normalizeCheapLoopHourlyCycles(raw: unknown): number {
   return Math.round(
-    clamp(Number(raw ?? CHEAP_LOOP_HOURLY_CYCLES_DEFAULT), CHEAP_LOOP_CYCLES_MIN, CHEAP_LOOP_CYCLES_MAX)
+    clamp(
+      Number(raw ?? CHEAP_LOOP_HOURLY_CYCLES_DEFAULT),
+      CHEAP_LOOP_HOURLY_CYCLES_MIN,
+      CHEAP_LOOP_HOURLY_CYCLES_MAX
+    )
   );
 }
 
@@ -941,7 +947,7 @@ export function evaluateCheapLoopEnter(opts: {
   inCooldown?: boolean;
   skipThinBid?: boolean;
   bidSize?: number | null;
-  /** Weekly maps Cycles 1–20. Default is the 15m/hourly max of 5. */
+  /** Hourly maps 1–10, weekly 1–50. Default is the 15m max of 5. */
   cyclesMax?: number;
 }): GateResult {
   const risk = opts.cfg.risk as AppConfig['risk'] & {

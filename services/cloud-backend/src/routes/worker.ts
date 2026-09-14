@@ -188,6 +188,7 @@ import {
   type PairLockStackAddResult,
 } from '../../../../packages/trading-core/src/pairLock';
 import {
+  CHEAP_LOOP_HOURLY_CYCLES_MAX,
   CHEAP_LOOP_WEEKLY_CYCLES_MAX,
   assetHasOpenCheapLoopHourly,
   assetHasOpenCheapLoopWeekly,
@@ -4960,7 +4961,7 @@ async function runCheapLoopAtmLadderWatchTick(
           cyclesUsed,
           inCooldown,
           skipThinBid,
-          cyclesMax: weekly ? CHEAP_LOOP_WEEKLY_CYCLES_MAX : undefined,
+          cyclesMax: weekly ? CHEAP_LOOP_WEEKLY_CYCLES_MAX : CHEAP_LOOP_HOURLY_CYCLES_MAX,
           bidSize: await cashOutBestBidSize(
             marketTicker,
             cheapLoopPickedSide(leanForGate, ladderCfg),
@@ -5015,7 +5016,7 @@ async function runCheapLoopAtmLadderWatchTick(
               ? isCheapLoopWeeklyCooldown({ trades: userTrades, eventKey, cooldownMinutes, now })
               : isCheapLoopHourlyCooldown({ trades: userTrades, eventKey, cooldownMinutes, now }),
             skipThinBid,
-            cyclesMax: weekly ? CHEAP_LOOP_WEEKLY_CYCLES_MAX : undefined,
+            cyclesMax: weekly ? CHEAP_LOOP_WEEKLY_CYCLES_MAX : CHEAP_LOOP_HOURLY_CYCLES_MAX,
             bidSize: await cashOutBestBidSize(
               marketTicker,
               cheapLoopPickedSide(leanForGate, ladderCfg),

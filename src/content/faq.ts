@@ -593,15 +593,15 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Cheap loop Hourly?',
           a:
             'A second switch on the Cheap loop tile (same Admin flag). Default Off. Empty hourly chips mean no hourly buys.\n\n' +
-            'Kalshi hourly is above/below strike ladders (KXBTCD, KXETHD, …), not the 15m up/down book. Cloud picks the unique ATM strike closest to live. A tie sits out. After a fill it holds that ticker until Take or Flatten — it does not hop strikes. Cycles count per hour event. One open hourly lot per coin.\n\n' +
-            'Start after default 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Min hold 2, Cooldown 3, Cycles 2. Stop is Off. Window cap 1 does not block. TWAP / Last-minute / Spike / Step / Pair stay on 15m. 15m Cheap loop and Hourly may both hold. Protect skips these rows.',
+            'Kalshi hourly is above/below strike ladders (KXBTCD, KXETHD, …), not the 15m up/down book. Cloud picks the unique ATM strike closest to live. A tie sits out. After a fill it holds that ticker until Take or Flatten — it does not hop strikes. Cycles count per hour event (default 2, max 10). One open hourly lot per coin.\n\n' +
+            'Start after default 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Min hold 2, Cooldown 3, Cycles 2 (max 10). Stop is Off. Window cap 1 does not block. TWAP / Last-minute / Spike / Step / Pair stay on 15m. 15m Cheap loop and Hourly may both hold. Protect skips these rows.',
         },
         {
           id: 'what-is-cheap-loop-weekly',
           q: 'What is Cheap loop Weekly?',
           a:
             'A third switch on the Cheap loop tile (same Admin flag). Default Off. Empty weekly chips mean no weekly buys.\n\n' +
-            'Same Kalshi above/below series as Hourly (KXBTCD, …). Cloud picks the live event that lasts about a week (4–10 days), not the hour or the day. Unique ATM strike. After a fill it holds that ticker until Take, Flatten, or you tap History Sell. Then Cooldown (minutes), then it looks for the cheaper ATM side again. Cycles count exits this weekly event (default 10, max 20). One open weekly lot per coin.\n\n' +
+            'Same Kalshi above/below series as Hourly (KXBTCD, …). Cloud picks the live event that lasts about a week (4–10 days), not the hour or the day. Unique ATM strike. After a fill it holds that ticker until Take, Flatten, or you tap History Sell. Then Cooldown (minutes), then it looks for the cheaper ATM side again. Cycles count exits this weekly event (default 10, max 50). One open weekly lot per coin.\n\n' +
             'Start after 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Min hold 2, Cooldown 3. Stop is Off. 15m, Hourly, and Weekly may all hold. Protect skips these rows.',
         },
         {
