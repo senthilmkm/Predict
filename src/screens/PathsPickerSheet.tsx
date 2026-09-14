@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PathFocusId, PATH_TILES, PathTileDef } from '../content/pathCatalog';
@@ -42,6 +42,8 @@ export function PathsPickerSheet({
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
   const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const config = useConfigStore((s) => s.config);
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetMaxHeight = Math.max(280, windowHeight - lift - 96);
 
   useEffect(() => {
     if (visible) void hydrate();
@@ -106,11 +108,11 @@ export function PathsPickerSheet({
   return (
     <View
       testID="modal-paths-picker"
-      style={[styles.overlay, { paddingBottom: lift }]}
+      style={[styles.overlay, { paddingBottom: lift, paddingTop: 56 }]}
       pointerEvents="auto"
     >
       <Pressable style={styles.scrim} onPress={onClose} testID="paths-picker-scrim" />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { maxHeight: sheetMaxHeight }]}>
         <View style={styles.grab} />
         <View style={styles.head}>
           <View style={styles.headLeft}>
@@ -127,44 +129,58 @@ export function PathsPickerSheet({
             {overlapNote}
           </Text>
         ) : null}
-        <View style={styles.grid}>
-          {tiles.map((tile) => {
-            const starred = pinned.includes(tile.id);
-            return (
-              <View key={tile.id} style={styles.tileWrap}>
-                <Pressable
-                  testID={`path-tile-${tile.id}`}
-                  style={styles.tile}
-                  onPress={() => onOpenPath(tile.id)}
-                  accessibilityLabel={`${tile.title}. ${tile.sub}`}
+        <ScrollView
+          testID="paths-picker-scroll"
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollInner}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+          bounces
+        >
+          <View style={styles.grid}>
+            {tiles.map((tile, index) => {
+              const starred = pinned.includes(tile.id);
+              const lastOdd = tiles.length % 2 === 1 && index === tiles.length - 1;
+              return (
+                <View
+                  key={tile.id}
+                  testID={`path-tile-wrap-${tile.id}`}
+                  style={[styles.tileWrap, lastOdd && styles.tileWrapFull]}
                 >
-                  <Text style={styles.tileTitle} numberOfLines={1}>
-                    {tile.title}
-                  </Text>
-                  <Text style={styles.tileSub} numberOfLines={1}>
-                    {tile.sub}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  testID={`pin-path-${tile.id}`}
-                  style={styles.pin}
-                  onPress={() => void onStar(tile)}
-                  hitSlop={6}
-                  accessibilityLabel={starred ? `Unpin ${tile.title}` : `Pin ${tile.title}`}
-                >
-                  <Text style={[styles.pinText, starred && styles.pinOn]}>
-                    {starred ? '★' : '☆'}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
-        {onOpenGuide ? (
-          <Pressable testID="btn-paths-guide" style={styles.guideBtn} onPress={onOpenGuide}>
-            <Text style={styles.guideText}>How paths work</Text>
-          </Pressable>
-        ) : null}
+                  <Pressable
+                    testID={`path-tile-${tile.id}`}
+                    style={styles.tile}
+                    onPress={() => onOpenPath(tile.id)}
+                    accessibilityLabel={`${tile.title}. ${tile.sub}`}
+                  >
+                    <Text style={styles.tileTitle} numberOfLines={1}>
+                      {tile.title}
+                    </Text>
+                    <Text style={styles.tileSub} numberOfLines={1}>
+                      {tile.sub}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    testID={`pin-path-${tile.id}`}
+                    style={styles.pin}
+                    onPress={() => void onStar(tile)}
+                    hitSlop={6}
+                    accessibilityLabel={starred ? `Unpin ${tile.title}` : `Pin ${tile.title}`}
+                  >
+                    <Text style={[styles.pinText, starred && styles.pinOn]}>
+                      {starred ? '★' : '☆'}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+          {onOpenGuide ? (
+            <Pressable testID="btn-paths-guide" style={styles.guideBtn} onPress={onOpenGuide}>
+              <Text style={styles.guideText}>How paths work</Text>
+            </Pressable>
+          ) : null}
+        </ScrollView>
       </View>
     </View>
   );
@@ -184,9 +200,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingBottom: 4,
     paddingTop: 8,
   },
+  scroll: { flexGrow: 0 },
+  scrollInner: { paddingBottom: 18, flexGrow: 0 },
   grab: {
     width: 36,
     height: 4,
@@ -208,6 +226,7 @@ const styles = StyleSheet.create({
   overlap: { color: colors.warn, fontSize: 11, lineHeight: 15, marginBottom: 8 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   tileWrap: { width: '48.5%', position: 'relative' },
+  tileWrapFull: { width: '100%' },
   tile: {
     backgroundColor: colors.surface,
     borderWidth: 1,

@@ -725,6 +725,28 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(s.getByTestId('alerts-sheet-open')).toBeTruthy());
   });
 
+  test('Cheap loop tile is full-width and sits in a scrollable Paths sheet', async () => {
+    useRuntimeStore.setState({
+      cashOutFeatureOn: true,
+      goldFadeFeatureOn: true,
+      twapLockFeatureOn: true,
+      lastMinuteFeatureOn: true,
+      stepBuyFeatureOn: true,
+      spikeFadeFeatureOn: true,
+      pairLockFeatureOn: true,
+      cheapLoopFeatureOn: true,
+    });
+    const s = await render(<SettingsHost />);
+    await fireEvent.press(s.getByTestId('btn-toggle-risk'));
+    await waitFor(() => expect(s.getByTestId('path-tile-cheapLoop')).toBeTruthy());
+    expect(s.getByTestId('paths-picker-scroll')).toBeTruthy();
+    const cheapWrap = StyleSheet.flatten(s.getByTestId('path-tile-wrap-cheapLoop').props.style);
+    expect(cheapWrap.width).toBe('100%');
+    const overlayStyle = StyleSheet.flatten(s.getByTestId('modal-paths-picker').props.style);
+    expect(overlayStyle.paddingTop).toBe(56);
+    expect(overlayStyle.paddingBottom).toBeGreaterThan(0);
+  });
+
   test('Risk Show opens the Risk screen; Back returns to Settings', async () => {
     const s = await render(<SettingsHost />);
     await fireEvent.press(s.getByTestId('btn-toggle-risk'));
