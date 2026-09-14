@@ -161,7 +161,6 @@ export function SettingsScreen({
   }
   const insets = useSafeAreaInsets();
   const tabBarHeight = React.useContext(BottomTabBarHeightContext);
-  const [hubH, setHubH] = useState(0);
   const sheetLift =
     (typeof tabBarHeight === 'number' ? tabBarHeight : Math.max(insets.bottom, 8) + 64) + 12;
 
@@ -497,10 +496,30 @@ export function SettingsScreen({
 
   return (
     <View style={styles.root} testID="screen-settings">
+      {pathsOpen ? (
+      <PathsPickerSheet
+        visible
+        lift={0}
+        topInset={0}
+        onClose={() => showHubSheet(null)}
+        onOpenPath={(id) => {
+          showHubSheet(null);
+          onOpenRisk?.(id);
+        }}
+        onOpenGuide={
+          onOpenPathsGuide
+            ? () => {
+                showHubSheet(null);
+                onOpenPathsGuide();
+              }
+            : undefined
+        }
+      />
+      ) : (
+      <>
       <View
         style={styles.hubDock}
         testID="settings-hub-dock"
-        onLayout={(e) => setHubH(Math.round(e.nativeEvent.layout.height))}
       >
         <View style={styles.statusCard} testID="settings-mode">
           <View style={styles.statusTop}>
@@ -935,25 +954,8 @@ export function SettingsScreen({
           </KeyboardAvoidingView>
         </View>
       </View>
-
-      <PathsPickerSheet
-        visible={pathsOpen}
-        lift={sheetLift}
-        topInset={Math.max(hubH, 24)}
-        onClose={() => showHubSheet(null)}
-        onOpenPath={(id) => {
-          showHubSheet(null);
-          onOpenRisk?.(id);
-        }}
-        onOpenGuide={
-          onOpenPathsGuide
-            ? () => {
-                showHubSheet(null);
-                onOpenPathsGuide();
-              }
-            : undefined
-        }
-      />
+      </>
+      )}
       <KalshiCredsHelpModal visible={credsHelpOpen} onClose={() => setCredsHelpOpen(false)} />
       <RiskHelpModal visible={riskHelpOpen} onClose={() => setRiskHelpOpen(false)} />
       <AutoTradeRiskAcceptModal
@@ -1498,7 +1500,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   bodyPane: { flex: 1, overflow: 'hidden' },
   hubDock: {
-    zIndex: 40,
     backgroundColor: colors.bg,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,

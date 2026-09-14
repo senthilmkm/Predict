@@ -532,6 +532,15 @@ describe('Settings credentials', () => {
     expect(s.queryByTestId('cheap-loop-hourly-asset-Gold')).toBeNull();
     expect(s.getByTestId('path-info-cheapLoopHourly')).toBeTruthy();
     expect(useConfigStore.getState().config.risk.cheap_loop_hourly_assets).toEqual([]);
+    expect(s.getByTestId('risk-toggle-cheap_loop_weekly_enabled').props.value).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-cheap_loop_weekly_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.cheap_loop_weekly_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_start_minutes').props.children).toBe('10 min');
+    expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_flatten_minutes').props.children).toBe('5 min');
+    expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_cycles').props.children).toBe('10');
+    expect(s.getByTestId('cheap-loop-weekly-asset-BTC')).toBeTruthy();
+    expect(s.getByTestId('path-info-cheapLoopWeekly')).toBeTruthy();
+    expect(useConfigStore.getState().config.risk.cheap_loop_weekly_assets).toEqual([]);
     await openFocusedPath(s, 'lastMinute');
     await fireEvent.press(s.getByTestId('last-minute-side-both'));
     await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_side).toBe('both'));
@@ -704,12 +713,15 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(s.getByTestId('modal-paths-picker')).toBeTruthy());
     expect(s.queryByTestId('alerts-sheet-open')).toBeNull();
     expect(s.queryByTestId('keys-sheet-open')).toBeNull();
+    expect(s.queryByTestId('settings-hub-dock')).toBeNull();
+    await fireEvent.press(s.getByTestId('btn-close-paths-picker'));
+    await waitFor(() => expect(s.getByTestId('settings-hub-dock')).toBeTruthy());
     await fireEvent.press(s.getByTestId('tile-alerts'));
     await waitFor(() => expect(s.getByTestId('alerts-sheet-open')).toBeTruthy());
     expect(s.queryByTestId('modal-paths-picker')).toBeNull();
   });
 
-  test('Paths picker stays under the hub and does not stack over the tab bar', async () => {
+  test('Paths picker replaces the hub and leaves the tab bar free', async () => {
     const s = await render(
       <View testID="settings-with-tabs">
         <SettingsScreen />
@@ -723,16 +735,20 @@ describe('Settings credentials', () => {
     await fireEvent.press(s.getByTestId('tile-paths'));
     await waitFor(() => expect(s.getByTestId('modal-paths-picker')).toBeTruthy());
     const overlayStyle = StyleSheet.flatten(s.getByTestId('modal-paths-picker').props.style);
+    expect(overlayStyle.flex).toBe(1);
     expect(overlayStyle.elevation).toBeUndefined();
     expect(overlayStyle.zIndex).toBeUndefined();
-    expect(overlayStyle.paddingBottom).toBeGreaterThan(0);
+    expect(overlayStyle.paddingTop).toBe(0);
+    expect(overlayStyle.paddingBottom).toBe(0);
+    expect(s.queryByTestId('settings-hub-dock')).toBeNull();
     expect(s.getByTestId('path-tile-shared')).toBeTruthy();
     expect(s.getByTestId('path-tile-home')).toBeTruthy();
     expect(s.getByTestId('path-tile-auto')).toBeTruthy();
-    expect(s.getByTestId('settings-hub-dock')).toBeTruthy();
     expect(s.getByTestId('fake-tab-bar')).toBeTruthy();
     await fireEvent.press(s.getByTestId('fake-tab-home'));
     expect(s.getByTestId('modal-paths-picker')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('btn-close-paths-picker'));
+    await waitFor(() => expect(s.getByTestId('settings-hub-dock')).toBeTruthy());
     await fireEvent.press(s.getByTestId('tile-alerts'));
     await waitFor(() => expect(s.getByTestId('alerts-sheet-open')).toBeTruthy());
   });
@@ -751,16 +767,20 @@ describe('Settings credentials', () => {
     const s = await render(<SettingsHost />);
     await fireEvent.press(s.getByTestId('btn-toggle-risk'));
     await waitFor(() => expect(s.getByTestId('path-tile-cheapLoop')).toBeTruthy());
+    expect(s.queryByTestId('settings-hub-dock')).toBeNull();
     expect(s.getByTestId('paths-picker-scroll')).toBeTruthy();
     const cheapWrap = StyleSheet.flatten(s.getByTestId('path-tile-wrap-cheapLoop').props.style);
     expect(cheapWrap.width).toBe('100%');
     const overlayStyle = StyleSheet.flatten(s.getByTestId('modal-paths-picker').props.style);
-    expect(overlayStyle.paddingTop).toBeGreaterThanOrEqual(24);
-    expect(overlayStyle.paddingBottom).toBeGreaterThanOrEqual(64);
+    expect(overlayStyle.flex).toBe(1);
+    expect(overlayStyle.paddingTop).toBe(0);
+    expect(overlayStyle.paddingBottom).toBe(0);
     const sheetStyle = StyleSheet.flatten(s.getByTestId('paths-picker-sheet').props.style);
     expect(sheetStyle.flex).toBe(1);
     const scrollStyle = StyleSheet.flatten(s.getByTestId('paths-picker-scroll').props.style);
     expect(scrollStyle.flex).toBe(1);
+    expect(s.getByTestId('path-tile-pairLock')).toBeTruthy();
+    expect(s.getByTestId('path-tile-spikeFade')).toBeTruthy();
   });
 
   test('Risk Show opens the Risk screen; Back returns to Settings', async () => {

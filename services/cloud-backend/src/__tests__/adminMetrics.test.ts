@@ -142,6 +142,7 @@ describe('admin overview metrics', () => {
     expect(tradeStreamEntryLabel('pair_lock_hedge')).toBe('Pair lock hedge');
     expect(tradeStreamEntryLabel('cheap_loop')).toBe('Cheap loop 15m');
     expect(tradeStreamEntryLabel('cheap_loop_hourly')).toBe('Cheap loop hourly');
+    expect(tradeStreamEntryLabel('cheap_loop_weekly')).toBe('Cheap loop weekly');
     expect(tradeStreamEntryLabel(undefined)).toBe('—');
     expect(tradeStreamEntryLabel('other')).toBe('—');
     expect(parseTradeStreamQuery({ entryPath: 'cheap_loop' }).entryPath).toBe('cheap_loop');

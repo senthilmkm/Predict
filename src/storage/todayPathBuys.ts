@@ -16,6 +16,7 @@ export type PathBuyCounts = {
   pairLock: PathBuyRow[];
   cheapLoop: PathBuyRow[];
   cheapLoopHourly: PathBuyRow[];
+  cheapLoopWeekly: PathBuyRow[];
   homeTotal: number;
   autoTotal: number;
   cashOutTotal: number;
@@ -26,6 +27,7 @@ export type PathBuyCounts = {
   pairLockTotal: number;
   cheapLoopTotal: number;
   cheapLoopHourlyTotal: number;
+  cheapLoopWeeklyTotal: number;
 };
 
 function assetSortIndex(asset: string): number {
@@ -52,6 +54,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   const pairLock: Record<string, number> = {};
   const cheapLoop: Record<string, number> = {};
   const cheapLoopHourly: Record<string, number> = {};
+  const cheapLoopWeekly: Record<string, number> = {};
   for (const t of trades || []) {
     if (!isEtToday(t.at, now)) continue;
     if (!isCountableWindowBuy(t)) continue;
@@ -68,6 +71,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     else if (path === 'pair_lock') pairLock[asset] = (pairLock[asset] || 0) + 1;
     else if (path === 'cheap_loop') cheapLoop[asset] = (cheapLoop[asset] || 0) + 1;
     else if (path === 'cheap_loop_hourly') cheapLoopHourly[asset] = (cheapLoopHourly[asset] || 0) + 1;
+    else if (path === 'cheap_loop_weekly') cheapLoopWeekly[asset] = (cheapLoopWeekly[asset] || 0) + 1;
     else auto[asset] = (auto[asset] || 0) + 1;
   }
   const homeRows = grouped(home);
@@ -80,6 +84,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   const pairLockRows = grouped(pairLock);
   const cheapLoopRows = grouped(cheapLoop);
   const cheapLoopHourlyRows = grouped(cheapLoopHourly);
+  const cheapLoopWeeklyRows = grouped(cheapLoopWeekly);
   return {
     home: homeRows,
     auto: autoRows,
@@ -91,6 +96,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     pairLock: pairLockRows,
     cheapLoop: cheapLoopRows,
     cheapLoopHourly: cheapLoopHourlyRows,
+    cheapLoopWeekly: cheapLoopWeeklyRows,
     homeTotal: homeRows.reduce((s, r) => s + r.count, 0),
     autoTotal: autoRows.reduce((s, r) => s + r.count, 0),
     cashOutTotal: cashOutRows.reduce((s, r) => s + r.count, 0),
@@ -101,6 +107,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     pairLockTotal: pairLockRows.reduce((s, r) => s + r.count, 0),
     cheapLoopTotal: cheapLoopRows.reduce((s, r) => s + r.count, 0),
     cheapLoopHourlyTotal: cheapLoopHourlyRows.reduce((s, r) => s + r.count, 0),
+    cheapLoopWeeklyTotal: cheapLoopWeeklyRows.reduce((s, r) => s + r.count, 0),
   };
 }
 
@@ -123,6 +130,9 @@ export function formatHomePathBuyLines(summary: PathBuyCounts): string[] {
   if (summary.cheapLoopHourlyTotal > 0) {
     lines.push(`Cheap loop hourly  ${formatAssetCounts(summary.cheapLoopHourly)}`);
   }
+  if (summary.cheapLoopWeeklyTotal > 0) {
+    lines.push(`Cheap loop weekly  ${formatAssetCounts(summary.cheapLoopWeekly)}`);
+  }
   return lines;
 }
 
@@ -139,5 +149,6 @@ export function formatDashboardPathBuys(summary: PathBuyCounts): string | null {
   if (summary.pairLockTotal > 0) parts.push(`Pair lock ${summary.pairLockTotal}`);
   if (summary.cheapLoopTotal > 0) parts.push(`Cheap loop 15m ${summary.cheapLoopTotal}`);
   if (summary.cheapLoopHourlyTotal > 0) parts.push(`Cheap loop hourly ${summary.cheapLoopHourlyTotal}`);
+  if (summary.cheapLoopWeeklyTotal > 0) parts.push(`Cheap loop weekly ${summary.cheapLoopWeeklyTotal}`);
   return parts.length ? parts.join(' · ') : null;
 }

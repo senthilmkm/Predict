@@ -363,6 +363,176 @@ describe('manual buy/sell place-now', () => {
     );
   });
 
+  test('History Sell dumps hourly Cheap loop without Last signals or 15m lean', async () => {
+    await setSystemConfig({ featureFlags: { lastSignalsManualTrade: false } });
+    const uid = 'usr_hist_sell_hourly';
+    await upsertUserDoc(uid, { state: 'KILL_SWITCH', kalshiConfigured: true, config: liveCfg() });
+    await saveTradeRecord(uid, {
+      tradeId: 'trade_clh',
+      userId: uid,
+      ticker: 'KXBTCD-26SEP1406-T67099.99',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '1',
+      price: '0.30',
+      notionalUsd: 0.3,
+      dryRun: false,
+      status: 'FILLED',
+      executedAt: new Date().toISOString(),
+      fillCount: 1,
+      payPrice: 0.3,
+      outcome: 'pending',
+      entryPath: 'cheap_loop_hourly',
+    });
+    const leanFn = jest.fn();
+    const place = jest.fn(async () => ({
+      ok: true,
+      http_status: 200,
+      dry_run: false,
+      payload: {},
+      fill_count: '1',
+      order_id: 'ord_hist_sell',
+    }));
+    const res = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'sell', requestId: 'hist_ok', tradeId: 'trade_clh' },
+      {
+        computeLeanFn: leanFn as any,
+        getMarketQuoteFn: async () =>
+          ({
+            yes_bid_dollars: 0.35,
+            yes_ask_dollars: 0.36,
+            no_bid_dollars: 0.64,
+            no_ask_dollars: 0.65,
+          }) as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: place as any,
+      }
+    );
+    expect(res.ok).toBe(true);
+    expect(leanFn).not.toHaveBeenCalled();
+    expect(place).toHaveBeenCalledTimes(1);
+    const placed = (place.mock.calls[0] as any)?.[0] as { ticker?: string; time_in_force?: string } | undefined;
+    expect(placed?.ticker).toBe('KXBTCD-26SEP1406-T67099.99');
+    expect(placed?.time_in_force).toBe('immediate_or_cancel');
+    const trades = await getTradeRecords(uid);
+    expect(trades[0].outcome).toBe('exited');
+    const logs = await getAuditLogs(uid);
+    expect(logs.some((l) => l.eventType === 'TRADE_TRIGGERED' && l.details?.source === 'history_sell')).toBe(
+      true
+    );
+  });
+
+  test('History Sell rejects 15m Cheap loop and loses the second claim', async () => {
+    const uid = 'usr_hist_sell_race';
+    await upsertUserDoc(uid, { state: 'ARMED', kalshiConfigured: true, config: liveCfg() });
+    await saveTradeRecord(uid, {
+      tradeId: 'trade_15m',
+      userId: uid,
+      ticker: 'KXBTC15M-T',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '1',
+      price: '0.30',
+      notionalUsd: 0.3,
+      dryRun: false,
+      status: 'FILLED',
+      executedAt: new Date().toISOString(),
+      fillCount: 1,
+      payPrice: 0.3,
+      outcome: 'pending',
+      entryPath: 'cheap_loop',
+    });
+    const fifteen = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'sell', requestId: 'hist_15', tradeId: 'trade_15m' },
+      {
+        getMarketQuoteFn: async () => ({ yes_bid_dollars: 0.35, yes_ask_dollars: 0.36 }) as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: jest.fn() as any,
+      }
+    );
+    expect(fifteen.ok).toBe(false);
+    expect(fifteen.error).toBe('not_sellable');
+
+    await saveTradeRecord(uid, {
+      tradeId: 'trade_clw',
+      userId: uid,
+      ticker: 'KXBTCD-26SEP1817-T67099.99',
+      asset: 'BTC',
+      decision: 'NO',
+      count: '1',
+      price: '0.30',
+      notionalUsd: 0.3,
+      dryRun: false,
+      status: 'FILLED',
+      executedAt: new Date().toISOString(),
+      fillCount: 1,
+      payPrice: 0.3,
+      outcome: 'pending',
+      entryPath: 'cheap_loop_weekly',
+    });
+    let started = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const place = jest.fn(async () => {
+      started += 1;
+      if (started === 1) await gate;
+      return {
+        ok: true,
+        http_status: 200,
+        dry_run: false,
+        payload: {},
+        fill_count: '1',
+        order_id: `ord_w_${started}`,
+      };
+    });
+    let quotes = 0;
+    const deps = {
+      getMarketQuoteFn: async () => {
+        quotes += 1;
+        return {
+          yes_bid_dollars: 0.3,
+          yes_ask_dollars: 0.31,
+          no_bid_dollars: 0.69,
+          no_ask_dollars: 0.7,
+        } as any;
+      },
+      getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+      isMarketOpenFn: () => ({ open: true }) as any,
+      placeOrderFn: place as any,
+    };
+    const p1 = executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'sell', requestId: 'hist_a', tradeId: 'trade_clw' },
+      deps
+    );
+    const startedAt = Date.now();
+    while (started < 1 && Date.now() - startedAt < 2000) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(started).toBe(1);
+    const p2 = executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'sell', requestId: 'hist_b', tradeId: 'trade_clw' },
+      deps
+    );
+    const quotedAt = Date.now();
+    while (quotes < 2 && Date.now() - quotedAt < 2000) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(quotes).toBe(2);
+    release();
+    release();
+    const [a, b] = await Promise.all([p1, p2]);
+    const wins = [a, b].filter((r) => r.ok);
+    const loses = [a, b].filter((r) => !r.ok);
+    expect(wins).toHaveLength(1);
+    expect(loses).toHaveLength(1);
+    expect(loses[0].error).toBe('claim_lost');
+    expect(place).toHaveBeenCalledTimes(1);
+  });
+
   test('POST /me/orders/manual wires auth and returns skip message', async () => {
     const uid = 'usr_manual_http';
     await upsertUserDoc(uid, { state: 'KILL_SWITCH', kalshiConfigured: true, config: liveCfg() });

@@ -1,6 +1,8 @@
 import {
   assetHasOpenCheapLoopHourly,
+  assetHasOpenCheapLoopWeekly,
   cheapLoopCfgForHourly,
+  cheapLoopCfgForWeekly,
   cheapLoopCooldownOwnsTicker,
   cheapLoopCooldownWatchText,
   cheapLoopExitsForTicker,
@@ -12,12 +14,16 @@ import {
   evaluateCheapLoopExit,
   isCheapLoopEnterPath,
   isCheapLoopEnterWindow,
+  isCheapLoopHistorySellableTrade,
+  isCheapLoopHourlyEventDuration,
+  isCheapLoopWeeklyEventDuration,
   normalizeCheapLoopAssets,
   normalizeCheapLoopCheapMaxAskUsd,
   normalizeCheapLoopCycles,
   normalizeCheapLoopHourlyAssets,
   normalizeCheapLoopHourlyCycles,
   normalizeCheapLoopHourlyStartMinutes,
+  normalizeCheapLoopWeeklyCycles,
   normalizeCheapLoopLotCount,
   normalizeCheapLoopMinLiveCushionPct,
   cheapLoopMinLiveUsd,
@@ -26,10 +32,12 @@ import {
   normalizeCheapLoopStopUsd,
   normalizeCheapLoopTakeUsd,
   pickCheapLoopSide,
+  pickSoonestLiveLadderEvent,
   pickUniqueAtmStrike,
   reconcileCheapLoopTakeStop,
   tickerHasOpenCheapLoop,
   tickerHasOpenOtherThanCheapLoop,
+  tickerHasOpenOtherThanCheapLoopWeekly,
 } from '../packages/trading-core/src/cheapLoop';
 import { formatSkipReason } from '../packages/trading-core/src/gates';
 import { defaultAppConfig } from '../packages/trading-core/src/types';
@@ -510,4 +518,156 @@ describe('Cheap loop path', () => {
     ).toBe(true);
     expect(PATH_INFO.cheapLoopHourly.title).toBe('Cheap loop hourly');
   });
+
+  test('weekly duration filter, cycles 10, one lot per asset, History Sell helper', () => {
+    expect(
+      isCheapLoopHourlyEventDuration(60 * 60 * 1000)
+    ).toBe(true);
+    expect(isCheapLoopHourlyEventDuration(24 * 60 * 60 * 1000)).toBe(false);
+    expect(isCheapLoopHourlyEventDuration(169 * 60 * 60 * 1000)).toBe(false);
+    expect(isCheapLoopWeeklyEventDuration(60 * 60 * 1000)).toBe(false);
+    expect(isCheapLoopWeeklyEventDuration(24 * 60 * 60 * 1000)).toBe(false);
+    expect(isCheapLoopWeeklyEventDuration(169 * 60 * 60 * 1000)).toBe(true);
+    expect(isCheapLoopWeeklyEventDuration(3 * 24 * 60 * 60 * 1000)).toBe(false);
+    expect(isCheapLoopWeeklyEventDuration(11 * 24 * 60 * 60 * 1000)).toBe(false);
+    const now = new Date('2026-09-14T11:30:00.000Z');
+    const hour = {
+      eventTicker: 'KXBTCD-26SEP1412',
+      openUtc: new Date('2026-09-14T11:00:00.000Z'),
+      closeUtc: new Date('2026-09-14T12:00:00.000Z'),
+    };
+    const day = {
+      eventTicker: 'KXBTCD-26SEP1512',
+      openUtc: new Date('2026-09-14T11:00:00.000Z'),
+      closeUtc: new Date('2026-09-15T12:00:00.000Z'),
+    };
+    const week = {
+      eventTicker: 'KXBTCD-26SEP1817',
+      openUtc: new Date('2026-09-11T17:00:00.000Z'),
+      closeUtc: new Date('2026-09-18T17:00:00.000Z'),
+    };
+    expect(pickSoonestLiveLadderEvent([hour, day, week], now, isCheapLoopHourlyEventDuration)?.eventTicker).toBe(
+      'KXBTCD-26SEP1412'
+    );
+    expect(pickSoonestLiveLadderEvent([hour, day, week], now, isCheapLoopWeeklyEventDuration)?.eventTicker).toBe(
+      'KXBTCD-26SEP1817'
+    );
+    expect(normalizeCheapLoopWeeklyCycles(undefined)).toBe(10);
+    expect(normalizeCheapLoopWeeklyCycles(20)).toBe(20);
+    expect(normalizeCheapLoopWeeklyCycles(21)).toBe(20);
+    expect(normalizeCheapLoopHourlyCycles(9)).toBe(5);
+    const weekly = cheapLoopCfgForWeekly({
+      ...cfg(),
+      risk: {
+        ...cfg().risk,
+        cheap_loop_weekly_enabled: true,
+        cheap_loop_weekly_cycles: 10,
+        cheap_loop_weekly_assets: ['BTC'],
+      },
+    });
+    expect(weekly.risk.cheap_loop_enabled).toBe(true);
+    expect(weekly.risk.cheap_loop_cycles).toBe(10);
+    expect(weekly.risk.cheap_loop_min_live_cushion_pct).toBe(0);
+    const sixExits = evaluateCheapLoopEnter({
+      lean: lean({
+        market_ticker: 'KXBTCD-26SEP1817-T67099.99',
+        minutes_elapsed: 12,
+        minutes_left: 4000,
+      }),
+      cfg: weekly,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      cyclesUsed: 6,
+      cyclesMax: 20,
+    });
+    expect(sixExits.ok).toBe(true);
+    const tenExits = evaluateCheapLoopEnter({
+      lean: lean({
+        market_ticker: 'KXBTCD-26SEP1817-T67099.99',
+        minutes_elapsed: 12,
+        minutes_left: 4000,
+      }),
+      cfg: weekly,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      cyclesUsed: 10,
+      cyclesMax: 20,
+    });
+    expect(tenExits.ok).toBe(false);
+    expect(tenExits.skip_reason).toBe('cheap_loop_cycles');
+    const withoutWeeklyMax = evaluateCheapLoopEnter({
+      lean: lean({
+        market_ticker: 'KXBTCD-26SEP1817-T67099.99',
+        minutes_elapsed: 12,
+        minutes_left: 4000,
+      }),
+      cfg: weekly,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      cyclesUsed: 6,
+    });
+    expect(withoutWeeklyMax.ok).toBe(false);
+    expect(
+      assetHasOpenCheapLoopWeekly(
+        [
+          {
+            ticker: 'KXBTCD-26SEP1817-T67099.99',
+            asset: 'BTC',
+            entryPath: 'cheap_loop_weekly',
+            dryRun: false,
+            status: 'FILLED',
+            fillCount: 1,
+            outcome: 'pending',
+          },
+        ],
+        'BTC'
+      )
+    ).toBe(true);
+    expect(
+      tickerHasOpenOtherThanCheapLoopWeekly(
+        [
+          {
+            ticker: 'KXBTCD-26SEP1817-T67099.99',
+            entryPath: 'cheap_loop_hourly',
+            dryRun: false,
+            status: 'FILLED',
+            fillCount: 1,
+            outcome: 'pending',
+          },
+        ],
+        'KXBTCD-26SEP1817-T67099.99'
+      )
+    ).toBe(true);
+    expect(
+      isCheapLoopHistorySellableTrade({
+        entryPath: 'cheap_loop_hourly',
+        outcome: 'pending',
+        fillCount: 1,
+      })
+    ).toBe(true);
+    expect(
+      isCheapLoopHistorySellableTrade({
+        entry_path: 'cheap_loop_weekly',
+        outcome: 'pending',
+        fill_count: 1,
+      })
+    ).toBe(true);
+    expect(
+      isCheapLoopHistorySellableTrade({
+        entryPath: 'cheap_loop',
+        outcome: 'pending',
+        fillCount: 1,
+      })
+    ).toBe(false);
+    expect(
+      isCheapLoopHistorySellableTrade({
+        entryPath: 'home',
+        outcome: 'pending',
+        fillCount: 1,
+      })
+    ).toBe(false);
+    expect(PATH_INFO.cheapLoopWeekly.title).toBe('Cheap loop weekly');
+    expect(formatSkipReason('cheap_loop_weekly_no_market')).toBe('no weekly market');
+  });
 });
+

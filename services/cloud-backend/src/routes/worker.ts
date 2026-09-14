@@ -3,6 +3,7 @@ import {
   AssetKey,
   AssetRegistry,
   computeHourlyAtmLean,
+  computeWeeklyAtmLean,
   computeLean,
   KalshiClient,
   defaultAppConfig,
@@ -187,27 +188,37 @@ import {
   type PairLockStackAddResult,
 } from '../../../../packages/trading-core/src/pairLock';
 import {
+  CHEAP_LOOP_WEEKLY_CYCLES_MAX,
   assetHasOpenCheapLoopHourly,
+  assetHasOpenCheapLoopWeekly,
   cheapLoopCfgForHourly,
+  cheapLoopCfgForWeekly,
   cheapLoopCooldownOwnsTicker,
   cheapLoopExitsForTicker,
   cheapLoopHourlyEventKey,
   cheapLoopHourlyExitsForEvent,
   cheapLoopTwapOwns,
+  cheapLoopWeeklyEventKey,
+  cheapLoopWeeklyExitsForEvent,
   evaluateCheapLoopEnter,
   isCheapLoopCooldown,
   isCheapLoopEnterPath,
   isCheapLoopEnterWindow,
   isCheapLoopHourlyCooldown,
   isCheapLoopHourlyEnterPath,
+  isCheapLoopWeeklyCooldown,
+  isCheapLoopWeeklyEnterPath,
   normalizeCheapLoopCycles,
   normalizeCheapLoopFlattenMinutes,
   openCheapLoopHourlyAssets,
   openCheapLoopHourlyTickerForAsset,
+  openCheapLoopWeeklyAssets,
+  openCheapLoopWeeklyTickerForAsset,
   pickCheapLoopSide,
   tickerHasOpenCheapLoop,
   tickerHasOpenOtherThanCheapLoop,
   tickerHasOpenOtherThanCheapLoopHourly,
+  tickerHasOpenOtherThanCheapLoopWeekly,
 } from '../../../../packages/trading-core/src/cheapLoop';
 import { resolveSkipThinBid } from '../../../../packages/trading-core/src/skipThinBid';
 import { cfbRtiBuffer, fetchCfbRtiPrints, ingestRecentCfbPrints } from '../services/cfbRti';
@@ -247,7 +258,12 @@ import {
 import { runCloudStepBuyStops } from '../services/cloudStepBuy';
 import { pendingSpikeFadeTradesForMarket, runCloudSpikeFadeExits } from '../services/cloudSpikeFade';
 import { runCloudPairLockFlatten } from '../services/cloudPairLock';
-import { pendingCheapLoopHourlyTradesForMarket, pendingCheapLoopTradesForMarket, runCloudCheapLoopExits } from '../services/cloudCheapLoop';
+import {
+  pendingCheapLoopHourlyTradesForMarket,
+  pendingCheapLoopTradesForMarket,
+  pendingCheapLoopWeeklyTradesForMarket,
+  runCloudCheapLoopExits,
+} from '../services/cloudCheapLoop';
 
 export const workerRouter = Router();
 
@@ -266,6 +282,8 @@ const pairLockWatchUsers = new Map<string, string[]>();
 const cheapLoopWatchUsers = new Map<string, string[]>();
 const cheapLoopHourlyWatchUsers = new Map<string, string[]>();
 const cheapLoopHourlyQuoteTickers = new Set<string>();
+const cheapLoopWeeklyWatchUsers = new Map<string, string[]>();
+const cheapLoopWeeklyQuoteTickers = new Set<string>();
 /** Home / Auto lots while Protect is On — 1s dump only. */
 const protectWatchUsers = new Map<string, string[]>();
 /** Enabled Home assets — keep a 1s ask book even when no path is watching. */
@@ -281,6 +299,7 @@ function oneSecondWatchAssets(): AssetKey[] {
     pairLockWatchUsers,
     cheapLoopWatchUsers,
     cheapLoopHourlyWatchUsers,
+    cheapLoopWeeklyWatchUsers,
     cashOutWatchUsers,
     goldFadeWatchUsers,
     protectWatchUsers
@@ -369,7 +388,8 @@ function oneSecondPathWatching(): boolean {
     spikeFadeWatchUsers.size > 0 ||
     pairLockWatchUsers.size > 0 ||
     cheapLoopWatchUsers.size > 0 ||
-    cheapLoopHourlyWatchUsers.size > 0
+    cheapLoopHourlyWatchUsers.size > 0 ||
+    cheapLoopWeeklyWatchUsers.size > 0
   );
 }
 
@@ -386,6 +406,7 @@ async function ingestCfbPrintsForAssets(watchAssets: AssetKey[], now: Date): Pro
       ...pairLockWatchUsers.keys(),
       ...cheapLoopWatchUsers.keys(),
       ...cheapLoopHourlyWatchUsers.keys(),
+      ...cheapLoopWeeklyWatchUsers.keys(),
       ...cashOutWatchUsers.keys(),
       ...goldFadeWatchUsers.keys(),
       ...protectWatchUsers.keys(),
@@ -443,7 +464,9 @@ export async function buildOneSecondMarketSnapshot(
   const leans = await computeWatchLeans(watchAssets, now);
   const needed = [
     ...uniqueTickersFromLeans(leans),
-    ...[...(extraTickers || []), ...cheapLoopHourlyQuoteTickers].map((t) => String(t || '').trim()).filter(Boolean),
+    ...[...(extraTickers || []), ...cheapLoopHourlyQuoteTickers, ...cheapLoopWeeklyQuoteTickers]
+      .map((t) => String(t || '').trim())
+      .filter(Boolean),
   ];
   const uniqueNeeded = [...new Set(needed)];
   const missing = uniqueNeeded.filter((ticker) => !existingQuotes?.has(ticker));
@@ -635,6 +658,10 @@ function mergedCheapLoopWatchUsers(): Map<string, string[]> {
     const cur = out.get(userId) || [];
     out.set(userId, [...new Set([...cur, ...assets])]);
   }
+  for (const [userId, assets] of cheapLoopWeeklyWatchUsers) {
+    const cur = out.get(userId) || [];
+    out.set(userId, [...new Set([...cur, ...assets])]);
+  }
   return out;
 }
 
@@ -673,6 +700,8 @@ export function resetLeanAlertMemoryForTests(): void {
   cheapLoopWatchUsers.clear();
   cheapLoopHourlyWatchUsers.clear();
   cheapLoopHourlyQuoteTickers.clear();
+  cheapLoopWeeklyWatchUsers.clear();
+  cheapLoopWeeklyQuoteTickers.clear();
   protectWatchUsers.clear();
   homeQuoteAssets = [];
   homeTickerByAsset = {};
@@ -883,6 +912,8 @@ async function runOneTick() {
     cheapLoopWatchUsers.clear();
     cheapLoopHourlyWatchUsers.clear();
     cheapLoopHourlyQuoteTickers.clear();
+    cheapLoopWeeklyWatchUsers.clear();
+    cheapLoopWeeklyQuoteTickers.clear();
     protectWatchUsers.clear();
     await flushTwapLockWatcher(now, {});
     await flushLastMinuteWatcher(now, {});
@@ -953,6 +984,7 @@ async function runOneTick() {
   const userBatches = chunkArray(activeUsers, BATCH_SIZE);
   const quoteCache = createQuoteCache();
   cheapLoopHourlyQuoteTickers.clear();
+  cheapLoopWeeklyQuoteTickers.clear();
 
   for (const batch of userBatches) {
     if (isCloudKalshiPaused()) break;
@@ -2928,6 +2960,31 @@ async function runOneTick() {
               if (ticker) cheapLoopHourlyQuoteTickers.add(ticker);
             }
           }
+          {
+            const openWeekly = openCheapLoopWeeklyAssets(userTrades);
+            const enterWeekly =
+              featureFlags.cheapLoop &&
+              cfg.auto_trade_enabled &&
+              user.state === 'ARMED' &&
+              Boolean(cfg.risk?.cheap_loop_weekly_enabled)
+                ? assets.filter((a) =>
+                    isCheapLoopWeeklyEnterPath({
+                      adminEnabled: true,
+                      userEnabled: true,
+                      assetEnabled: cfg.assets_enabled?.[a] !== false,
+                      asset: a,
+                      assets: cfg.risk?.cheap_loop_weekly_assets,
+                    })
+                  )
+                : [];
+            const weeklyWatch = [...new Set([...openWeekly, ...enterWeekly])];
+            if (weeklyWatch.length) cheapLoopWeeklyWatchUsers.set(userId, weeklyWatch);
+            else cheapLoopWeeklyWatchUsers.delete(userId);
+            for (const asset of openWeekly) {
+              const ticker = openCheapLoopWeeklyTickerForAsset(userTrades, asset);
+              if (ticker) cheapLoopWeeklyQuoteTickers.add(ticker);
+            }
+          }
           await upsertUserDoc(userId, {
             lastTickAt: now.toISOString(),
             lastError: null,
@@ -4664,8 +4721,37 @@ export async function runCheapLoopHourlyWatchTick(
   watched: number;
   paused?: boolean;
 }> {
+  return runCheapLoopAtmLadderWatchTick('hourly', snapshot);
+}
+
+export async function runCheapLoopWeeklyWatchTick(
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
+  timestamp: string;
+  watched: number;
+  paused?: boolean;
+}> {
+  return runCheapLoopAtmLadderWatchTick('weekly', snapshot);
+}
+
+async function runCheapLoopAtmLadderWatchTick(
+  kind: 'hourly' | 'weekly',
+  snapshot?: OneSecondMarketSnapshot | null
+): Promise<{
+  timestamp: string;
+  watched: number;
+  paused?: boolean;
+}> {
+  const weekly = kind === 'weekly';
+  const watchUsers = weekly ? cheapLoopWeeklyWatchUsers : cheapLoopHourlyWatchUsers;
+  const quoteTickers = weekly ? cheapLoopWeeklyQuoteTickers : cheapLoopHourlyQuoteTickers;
+  const entryPath = weekly ? 'cheap_loop_weekly' : 'cheap_loop_hourly';
+  const lockPrefix = weekly ? 'clw_' : 'clh_';
+  const collapsePrefix = weekly ? 'clw:' : 'clh:';
+  const soldLabel = weekly ? 'Cheap loop weekly · sold' : 'Cheap loop hourly · sold';
+  const skipNoMarket = weekly ? 'cheap_loop_weekly_no_market' : 'cheap_loop_hourly_no_market';
   const now = snapshot?.now ?? new Date();
-  if (cheapLoopHourlyWatchUsers.size === 0) {
+  if (watchUsers.size === 0) {
     await flushCheapLoopWatcher(now, snapshot?.leans || {});
     return { timestamp: now.toISOString(), watched: 0 };
   }
@@ -4675,19 +4761,19 @@ export async function runCheapLoopHourlyWatchTick(
   if (isCloudKalshiPaused()) {
     return { timestamp: now.toISOString(), watched: 0, paused: true };
   }
-  const hourlyLeanByAsset: Partial<Record<AssetKey, any>> = {};
+  const ladderLeanByAsset: Partial<Record<AssetKey, any>> = {};
   const activeUsers = await getEnrolledActiveUsers();
   const byId = new Map(activeUsers.map((u) => [u.userId, u]));
   let watched = 0;
-  for (const [userId, userAssets] of [...cheapLoopHourlyWatchUsers.entries()]) {
+  for (const [userId, userAssets] of [...watchUsers.entries()]) {
     const user = byId.get(userId);
     if (!user) {
-      cheapLoopHourlyWatchUsers.delete(userId);
+      watchUsers.delete(userId);
       continue;
     }
     try {
       const cfg = user.config || defaultAppConfig();
-      const hourlyCfg = cheapLoopCfgForHourly(cfg);
+      const ladderCfg = weekly ? cheapLoopCfgForWeekly(cfg) : cheapLoopCfgForHourly(cfg);
       const userTrades = await getTradeRecords(userId);
       const tradesTodayList = liveCloudTradesToday(userTrades, now);
       let tradesToday = tradesTodayList.length;
@@ -4701,12 +4787,36 @@ export async function runCheapLoopHourlyWatchTick(
       );
       const tickIso = now.toISOString();
       const still: string[] = [];
+      const enabled = weekly
+        ? Boolean(cfg.risk?.cheap_loop_weekly_enabled)
+        : Boolean(cfg.risk?.cheap_loop_hourly_enabled);
+      const takeUsd = weekly ? cfg.risk?.cheap_loop_weekly_take_usd : cfg.risk?.cheap_loop_hourly_take_usd;
+      const flattenMinutes = weekly
+        ? cfg.risk?.cheap_loop_weekly_flatten_minutes
+        : cfg.risk?.cheap_loop_hourly_flatten_minutes;
+      const minHoldMinutes = weekly
+        ? cfg.risk?.cheap_loop_weekly_min_hold_minutes
+        : cfg.risk?.cheap_loop_hourly_min_hold_minutes;
+      const cooldownMinutes = weekly
+        ? cfg.risk?.cheap_loop_weekly_cooldown_minutes
+        : cfg.risk?.cheap_loop_hourly_cooldown_minutes;
+      const skipThinBid = weekly
+        ? cfg.risk?.cheap_loop_weekly_skip_thin_bid === true
+        : cfg.risk?.cheap_loop_hourly_skip_thin_bid === true;
+      const selectedAssets = weekly ? cfg.risk?.cheap_loop_weekly_assets : cfg.risk?.cheap_loop_hourly_assets;
       for (const asset of userAssets) {
         still.push(asset);
         watched += 1;
-        const heldTicker = openCheapLoopHourlyTickerForAsset(userTrades, asset);
+        const heldTicker = weekly
+          ? openCheapLoopWeeklyTickerForAsset(userTrades, asset)
+          : openCheapLoopHourlyTickerForAsset(userTrades, asset);
+        const pendingHeld = heldTicker
+          ? weekly
+            ? pendingCheapLoopWeeklyTradesForMarket(userTrades, heldTicker)
+            : pendingCheapLoopHourlyTradesForMarket(userTrades, heldTicker)
+          : [];
         if (heldTicker) {
-          if (pendingCheapLoopHourlyTradesForMarket(userTrades, heldTicker).length > 0) {
+          if (pendingHeld.length > 0) {
             const secret = await getUserSecret(userId);
             if (secret?.privateKeyPem && secret.keyId) {
               const quoted = await overlayHourlyTickerLean(heldTicker, now, snapshot);
@@ -4725,13 +4835,14 @@ export async function runCheapLoopHourlyWatchTick(
                   no_ask: quoted.no_ask,
                 },
                 trades: userTrades,
-                takeUsd: cfg.risk?.cheap_loop_hourly_take_usd,
-                flattenMinutes: cfg.risk?.cheap_loop_hourly_flatten_minutes,
-                minHoldMinutes: cfg.risk?.cheap_loop_hourly_min_hold_minutes,
+                takeUsd,
+                flattenMinutes,
+                minHoldMinutes,
                 slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
                 dryRun: false,
                 now,
-                hourly: true,
+                hourly: !weekly,
+                weekly,
                 place: (input) => client.placeOrder(input),
               });
               for (const alert of cheapRes.alerts) {
@@ -4743,7 +4854,7 @@ export async function runCheapLoopHourlyWatchTick(
                   body: alert.body,
                   cfg: cfg as never,
                   tokens: userTokens,
-                  collapseId: `clh:${userId}:${alert.tradeId}`.slice(0, 64),
+                  collapseId: `${collapsePrefix}${userId}:${alert.tradeId}`.slice(0, 64),
                   asset,
                   ticker: heldTicker,
                   tradeId: alert.tradeId,
@@ -4753,7 +4864,7 @@ export async function runCheapLoopHourlyWatchTick(
               if (cheapRes.exited > 0) {
                 lastTradeAction[asset] = {
                   status: 'placed',
-                  detail: `Cheap loop hourly · sold ${cheapRes.exited}`,
+                  detail: `${soldLabel} ${cheapRes.exited}`,
                   at: tickIso,
                 };
                 openPositions = Math.max(0, openPositions - cheapRes.exited);
@@ -4762,36 +4873,41 @@ export async function runCheapLoopHourlyWatchTick(
           }
           continue;
         }
-        if (
-          !featureFlags.cheapLoop ||
-          !cfg.auto_trade_enabled ||
-          user.state !== 'ARMED' ||
-          !cfg.risk?.cheap_loop_hourly_enabled
-        ) {
+        if (!featureFlags.cheapLoop || !cfg.auto_trade_enabled || user.state !== 'ARMED' || !enabled) {
           continue;
         }
-        if (
-          !isCheapLoopHourlyEnterPath({
-            adminEnabled: true,
-            userEnabled: true,
-            assetEnabled: cfg.assets_enabled?.[asset] !== false,
-            asset,
-            assets: cfg.risk?.cheap_loop_hourly_assets,
-          })
-        ) {
-          continue;
-        }
-        if (assetHasOpenCheapLoopHourly(userTrades, asset)) continue;
-        if (!hourlyLeanByAsset[asset]) {
+        const enterOk = weekly
+          ? isCheapLoopWeeklyEnterPath({
+              adminEnabled: true,
+              userEnabled: true,
+              assetEnabled: cfg.assets_enabled?.[asset] !== false,
+              asset,
+              assets: selectedAssets,
+            })
+          : isCheapLoopHourlyEnterPath({
+              adminEnabled: true,
+              userEnabled: true,
+              assetEnabled: cfg.assets_enabled?.[asset] !== false,
+              asset,
+              assets: selectedAssets,
+            });
+        if (!enterOk) continue;
+        const alreadyHolding = weekly
+          ? assetHasOpenCheapLoopWeekly(userTrades, asset)
+          : assetHasOpenCheapLoopHourly(userTrades, asset);
+        if (alreadyHolding) continue;
+        if (!ladderLeanByAsset[asset]) {
           try {
-            hourlyLeanByAsset[asset] = await computeHourlyAtmLean(asset, fetch, now);
+            ladderLeanByAsset[asset] = weekly
+              ? await computeWeeklyAtmLean(asset, fetch, now)
+              : await computeHourlyAtmLean(asset, fetch, now);
           } catch (err: any) {
             noteTransientKalshiFailure(err);
-            lastTradeAction[asset] = skippedTradeAction('cheap_loop_hourly_no_market', tickIso);
+            lastTradeAction[asset] = skippedTradeAction(skipNoMarket, tickIso);
             continue;
           }
         }
-        const lean = hourlyLeanByAsset[asset];
+        const lean = ladderLeanByAsset[asset];
         if (!lean?.ok || !lean.market_ticker) {
           if (lean?.message) lastTradeAction[asset] = skippedTradeAction(lean.message, tickIso);
           continue;
@@ -4799,8 +4915,7 @@ export async function runCheapLoopHourlyWatchTick(
         const quoted = snapshot ? leanWithSnapshotQuote(lean, snapshot.quotes) : lean;
         const marketTicker = String(quoted.market_ticker || lean.market_ticker).trim();
         if (!marketTicker) continue;
-        const eventKey = cheapLoopHourlyEventKey(marketTicker);
-        const skipThinBid = cfg.risk?.cheap_loop_hourly_skip_thin_bid === true;
+        const eventKey = weekly ? cheapLoopWeeklyEventKey(marketTicker) : cheapLoopHourlyEventKey(marketTicker);
         const absGap = Number.isFinite(Number(lean.abs_gap))
           ? Number(lean.abs_gap)
           : Math.abs((lean.live || 0) - (lean.strike || 0));
@@ -4822,28 +4937,33 @@ export async function runCheapLoopHourlyWatchTick(
           timeseries: lean.timeseries,
           close_utc: quoted.close_utc || lean.close_utc,
         };
+        const cyclesUsed = weekly
+          ? cheapLoopWeeklyExitsForEvent(userTrades, eventKey)
+          : cheapLoopHourlyExitsForEvent(userTrades, eventKey);
+        const inCooldown = weekly
+          ? isCheapLoopWeeklyCooldown({ trades: userTrades, eventKey, cooldownMinutes, now })
+          : isCheapLoopHourlyCooldown({ trades: userTrades, eventKey, cooldownMinutes, now });
+        const hasOpenOnTicker = weekly
+          ? tickerHasOpenOtherThanCheapLoopWeekly(userTrades, marketTicker)
+          : tickerHasOpenOtherThanCheapLoopHourly(userTrades, marketTicker);
         const gate = evaluateCheapLoopEnter({
           lean: leanForGate,
-          cfg: hourlyCfg,
+          cfg: ladderCfg,
           adminEnabled: featureFlags.cheapLoop,
           twapAdminEnabled: false,
           openPositions,
           tradesToday,
           dailyPnlUsd,
-          hasOpenOnTicker: tickerHasOpenOtherThanCheapLoopHourly(userTrades, marketTicker),
+          hasOpenOnTicker,
           alreadyHolding: false,
           lastMinuteOwnsNewBuys: false,
-          cyclesUsed: cheapLoopHourlyExitsForEvent(userTrades, eventKey),
-          inCooldown: isCheapLoopHourlyCooldown({
-            trades: userTrades,
-            eventKey,
-            cooldownMinutes: cfg.risk?.cheap_loop_hourly_cooldown_minutes,
-            now,
-          }),
+          cyclesUsed,
+          inCooldown,
           skipThinBid,
+          cyclesMax: weekly ? CHEAP_LOOP_WEEKLY_CYCLES_MAX : undefined,
           bidSize: await cashOutBestBidSize(
             marketTicker,
-            cheapLoopPickedSide(leanForGate, hourlyCfg),
+            cheapLoopPickedSide(leanForGate, ladderCfg),
             skipThinBid
           ),
         });
@@ -4854,7 +4974,7 @@ export async function runCheapLoopHourlyWatchTick(
         const secret = await getUserSecret(userId);
         if (!secret?.privateKeyPem || !secret.keyId) continue;
         const existingBuys = countWindowBuysForTicker(userTrades, marketTicker);
-        const placeRequestId = `clh_${userId}_${marketTicker}_${Date.now()}_${Math.random()
+        const placeRequestId = `${lockPrefix}${userId}_${marketTicker}_${Date.now()}_${Math.random()
           .toString(36)
           .slice(2, 8)}`.slice(0, 64);
         const claimed = await tryAcquirePlaceLock({
@@ -4870,9 +4990,12 @@ export async function runCheapLoopHourlyWatchTick(
         try {
           const freshTrades = await getTradeRecords(userId);
           userTrades.splice(0, userTrades.length, ...freshTrades);
+          const recheckHolding = weekly
+            ? assetHasOpenCheapLoopWeekly(userTrades, asset)
+            : assetHasOpenCheapLoopHourly(userTrades, asset);
           const recheck = evaluateCheapLoopEnter({
             lean: leanForGate,
-            cfg: hourlyCfg,
+            cfg: ladderCfg,
             adminEnabled: featureFlags.cheapLoop,
             twapAdminEnabled: false,
             openPositions: userTrades.filter(
@@ -4880,20 +5003,22 @@ export async function runCheapLoopHourlyWatchTick(
             ).length,
             tradesToday,
             dailyPnlUsd,
-            hasOpenOnTicker: tickerHasOpenOtherThanCheapLoopHourly(userTrades, marketTicker),
-            alreadyHolding: assetHasOpenCheapLoopHourly(userTrades, asset),
+            hasOpenOnTicker: weekly
+              ? tickerHasOpenOtherThanCheapLoopWeekly(userTrades, marketTicker)
+              : tickerHasOpenOtherThanCheapLoopHourly(userTrades, marketTicker),
+            alreadyHolding: recheckHolding,
             lastMinuteOwnsNewBuys: false,
-            cyclesUsed: cheapLoopHourlyExitsForEvent(userTrades, eventKey),
-            inCooldown: isCheapLoopHourlyCooldown({
-              trades: userTrades,
-              eventKey,
-              cooldownMinutes: cfg.risk?.cheap_loop_hourly_cooldown_minutes,
-              now,
-            }),
+            cyclesUsed: weekly
+              ? cheapLoopWeeklyExitsForEvent(userTrades, eventKey)
+              : cheapLoopHourlyExitsForEvent(userTrades, eventKey),
+            inCooldown: weekly
+              ? isCheapLoopWeeklyCooldown({ trades: userTrades, eventKey, cooldownMinutes, now })
+              : isCheapLoopHourlyCooldown({ trades: userTrades, eventKey, cooldownMinutes, now }),
             skipThinBid,
+            cyclesMax: weekly ? CHEAP_LOOP_WEEKLY_CYCLES_MAX : undefined,
             bidSize: await cashOutBestBidSize(
               marketTicker,
-              cheapLoopPickedSide(leanForGate, hourlyCfg),
+              cheapLoopPickedSide(leanForGate, ladderCfg),
               skipThinBid
             ),
           });
@@ -4935,7 +5060,7 @@ export async function runCheapLoopHourlyWatchTick(
             fillCount: filled ? fillCount : 0,
             outcome: filled ? 'pending' : 'miss',
             pnlUsd: null,
-            entryPath: 'cheap_loop_hourly',
+            entryPath,
           };
           await saveTradeRecord(userId, tradeDoc);
           userTrades.unshift(tradeDoc);
@@ -4943,7 +5068,7 @@ export async function runCheapLoopHourlyWatchTick(
             openPositions += 1;
             tradesToday += 1;
             tradesTodayList.push(tradeDoc);
-            cheapLoopHourlyQuoteTickers.add(marketTicker);
+            quoteTickers.add(marketTicker);
           }
           const priceVal = typeof gate.price === 'number' ? gate.price : parseFloat(String(gate.price || 0));
           lastTradeAction[asset] = filled
@@ -4962,7 +5087,7 @@ export async function runCheapLoopHourlyWatchTick(
                 live: true,
                 asset,
                 decision: String(placeDecision || ''),
-                entryPath: 'cheap_loop_hourly',
+                entryPath,
               }),
               body: `${gate.count} ctr @ $${priceVal.toFixed(2)} · Cost $${(gate.notional_usd || 0).toFixed(2)}`,
               cfg,
@@ -4979,11 +5104,11 @@ export async function runCheapLoopHourlyWatchTick(
               userId,
               alertId: missAlertId(tradeId),
               kind: 'ioc_miss',
-              title: iocMissAlertTitle('cheap_loop_hourly'),
+              title: iocMissAlertTitle(entryPath),
               body: iocMissAlertBody({
                 asset,
                 decision: String(placeDecision || ''),
-                entryPath: 'cheap_loop_hourly',
+                entryPath,
                 price: priceVal,
                 count: gate.count,
               }),
@@ -5000,8 +5125,8 @@ export async function runCheapLoopHourlyWatchTick(
           await releasePlaceLock({ userId, ticker: marketTicker, requestId: placeRequestId });
         }
       }
-      if (still.length) cheapLoopHourlyWatchUsers.set(userId, still);
-      else cheapLoopHourlyWatchUsers.delete(userId);
+      if (still.length) watchUsers.set(userId, still);
+      else watchUsers.delete(userId);
       await upsertUserDoc(userId, { lastTradeAction, lastTickAt: now.toISOString() } as any);
     } catch (err: any) {
       noteTransientKalshiFailure(err);
@@ -6270,6 +6395,10 @@ workerRouter.post('/tick', async (req: Request, res: Response) => {
         if (cheapLoopHourlyWatchUsers.size > 0) {
           const clh = await runCheapLoopHourlyWatchTick(snap);
           if (clh.paused) return;
+        }
+        if (cheapLoopWeeklyWatchUsers.size > 0) {
+          const clw = await runCheapLoopWeeklyWatchTick(snap);
+          if (clw.paused) return;
         }
         if (oneSecondDumpWatching()) {
           const dump = await runCashOutBidWatchTick(snap);

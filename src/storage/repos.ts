@@ -14,7 +14,8 @@ export type TradeEntryPath =
   | 'pair_lock'
   | 'pair_lock_hedge'
   | 'cheap_loop'
-  | 'cheap_loop_hourly';
+  | 'cheap_loop_hourly'
+  | 'cheap_loop_weekly';
 
 /** Home tap vs Auto-trade vs Cash out. Missing on legacy fills — do not guess. */
 export function parseEntryPath(raw: unknown): TradeEntryPath | undefined {
@@ -34,6 +35,9 @@ export function parseEntryPath(raw: unknown): TradeEntryPath | undefined {
   }
   if (v === 'pair_lock' || v === 'pairlock' || v === 'pair-lock') {
     return 'pair_lock';
+  }
+  if (v === 'cheap_loop_weekly' || v === 'cheaploopweekly' || v === 'cheap-loop-weekly') {
+    return 'cheap_loop_weekly';
   }
   if (v === 'cheap_loop_hourly' || v === 'cheaploophourly' || v === 'cheap-loop-hourly') {
     return 'cheap_loop_hourly';

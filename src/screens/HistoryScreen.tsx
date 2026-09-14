@@ -1,5 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
@@ -8,6 +18,8 @@ import { LeanResult } from '../services/lean/lean';
 import { TradeRecord } from '../storage/repos';
 import { entryPathChipLabel, formatHistoryTradeSubline, pairLockHistoryPairNumbers } from '../history/tradeDisplay';
 import { useMarkAlertsSeenOnLeave } from '../hooks/useMarkAlertsSeenOnLeave';
+import { isCheapLoopHistorySellableTrade } from '../../packages/trading-core/src/cheapLoop';
+import { cloudClient } from '../services/cloud/cloudClient';
 import {
   ALERT_FILTERS,
   AlertFilter,
@@ -123,6 +135,78 @@ export function HistoryScreen() {
       : assetOptions.find((o) => o.id === tradeFilters.asset)?.label || tradeFilters.asset;
 
   const closeTradeMenu = useCallback(() => setOpenTradeMenu(null), []);
+  const [sellingIds, setSellingIds] = useState<Record<string, true>>({});
+  const sellingRef = useRef<Record<string, true>>({});
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      sellingRef.current = {};
+    };
+  }, []);
+
+  const sellCheapLoopFill = useCallback(
+    async (trade: TradeRecord) => {
+      const id = String(trade.id || '').trim();
+      if (!id || sellingRef.current[id]) return;
+      sellingRef.current[id] = true;
+      setSellingIds((prev) => ({ ...prev, [id]: true }));
+      const requestId = `ios_hist_sell_${id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        const res = await cloudClient.placeManualOrder({
+          asset: String(trade.asset || ''),
+          action: 'sell',
+          requestId,
+          tradeId: id,
+        });
+        if (!mountedRef.current) return;
+        if (!res.ok) {
+          Alert.alert(
+            'Could not sell',
+            res.message || res.error || 'Sell failed. Your position is still open if Kalshi missed.'
+          );
+          return;
+        }
+        Alert.alert('Sold', res.message || 'Sold on Kalshi’s book.');
+        void refreshCloudSnapshot();
+      } catch (err: any) {
+        if (!mountedRef.current) return;
+        Alert.alert('Could not sell', String(err?.message || err || 'Sell failed.'));
+      } finally {
+        delete sellingRef.current[id];
+        if (mountedRef.current) {
+          setSellingIds((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        }
+      }
+    },
+    [refreshCloudSnapshot]
+  );
+
+  const confirmCheapLoopSell = useCallback(
+    (trade: TradeRecord) => {
+      const pathLabel = entryPathChipLabel(trade.entry_path) || 'Cheap loop';
+      Alert.alert(
+        'Sell now?',
+        `${trade.asset} ${trade.side} · ${pathLabel}. Bid IOC on Kalshi’s book. Does not wait for Take, Flatten, or Friday.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sell',
+            style: 'destructive',
+            onPress: () => {
+              void sellCheapLoopFill(trade);
+            },
+          },
+        ]
+      );
+    },
+    [sellCheapLoopFill]
+  );
 
   return (
     <View style={styles.root} testID="screen-history">
@@ -257,6 +341,31 @@ export function HistoryScreen() {
                       </View>
                       <Text style={styles.sub}>{formatHistoryTradeSubline(item)}</Text>
                       <Text style={styles.time}>{formatWhen(item.at)}</Text>
+                      {isCheapLoopHistorySellableTrade({
+                        entry_path: item.entry_path,
+                        dry_run: item.dry_run,
+                        outcome: item.outcome,
+                        fill_count: item.fill_count,
+                      }) ? (
+                        <Pressable
+                          testID={`history-sell-${item.id}`}
+                          style={[styles.historySellBtn, sellingIds[item.id] && styles.historySellBtnBusy]}
+                          disabled={Boolean(sellingIds[item.id])}
+                          onPress={() => confirmCheapLoopSell(item)}
+                          accessibilityState={{ busy: Boolean(sellingIds[item.id]), disabled: Boolean(sellingIds[item.id]) }}
+                        >
+                          {sellingIds[item.id] ? (
+                            <ActivityIndicator
+                              color="#fff"
+                              size="small"
+                              testID={`history-sell-placing-${item.id}`}
+                            />
+                          ) : null}
+                          <Text style={styles.historySellBtnText}>
+                            {sellingIds[item.id] ? 'Placing…' : 'Sell'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   );
                 } catch {
@@ -535,6 +644,22 @@ const styles = StyleSheet.create({
   },
   sub: { color: colors.textSecondary, marginTop: 4, fontSize: 13 },
   time: { color: colors.mute, marginTop: 4, fontSize: 11 },
+  historySellBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.warn,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    minHeight: 32,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  historySellBtnBusy: { opacity: 0.72 },
+  historySellBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   empty: { flex: 1, justifyContent: 'center', padding: spacing.lg },
   emptyTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '600', textAlign: 'center' },
   emptySub: { color: colors.textSecondary, textAlign: 'center', marginTop: 8 },

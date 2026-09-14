@@ -45,6 +45,8 @@ describe('FAQ content', () => {
     expect(blob).toMatch(/Spike fade/);
     expect(blob).toMatch(/Pair lock/);
     expect(blob).toMatch(/Cheap loop/);
+    expect(blob).toMatch(/Cheap loop Weekly/);
+    expect(blob).toMatch(/History Sell/);
     expect(blob).toMatch(/Cushion lean/);
     expect(blob).toMatch(/this path’s \$ per trade/);
     expect(blob).toMatch(/no longer changes Gold fade/);

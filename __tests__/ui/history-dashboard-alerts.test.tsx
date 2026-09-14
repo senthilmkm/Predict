@@ -87,6 +87,84 @@ describe('History / Dashboard / AlertsHub', () => {
     await fireEvent.press(s.getByTestId('seg-trades'));
   });
 
+  test('History Sell shows on pending hourly and weekly Cheap loop, not 15m', async () => {
+    const Alert = require('react-native').Alert;
+    const place = jest.fn(async () => ({ ok: true, message: 'Sold BTC YES' }));
+    const { cloudClient } = require('../../src/services/cloud/cloudClient');
+    const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockImplementation(place);
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_t: string, _m: string, buttons?: any[]) => {
+      const sell = (buttons || []).find((b) => b.text === 'Sell');
+      sell?.onPress?.();
+    });
+    useRuntimeStore.setState({
+      refreshCloudSnapshot: async () => {},
+      trades: [
+        {
+          id: 'clh-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTCD-26SEP1406-T67099.99',
+          side: 'YES',
+          notional_usd: 0.3,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          entry_path: 'cheap_loop_hourly',
+        } as any,
+        {
+          id: 'clw-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'ETH',
+          market_ticker: 'KXETHD-26SEP1817-T4500',
+          side: 'NO',
+          notional_usd: 0.3,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          entry_path: 'cheap_loop_weekly',
+        } as any,
+        {
+          id: 'cl15-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'SOL',
+          market_ticker: 'KXSOL15M-T',
+          side: 'YES',
+          notional_usd: 0.3,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          entry_path: 'cheap_loop',
+        } as any,
+        {
+          id: 'home-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'YES',
+          notional_usd: 5,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          entry_path: 'home',
+        } as any,
+      ],
+    });
+    const s = await render(<HistoryScreen />);
+    expect(s.getByTestId('history-sell-clh-1')).toBeTruthy();
+    expect(s.getByTestId('history-sell-clw-1')).toBeTruthy();
+    expect(s.queryByTestId('history-sell-cl15-1')).toBeNull();
+    expect(s.queryByTestId('history-sell-home-1')).toBeNull();
+    await fireEvent.press(s.getByTestId('history-sell-clh-1'));
+    await waitFor(() => expect(place).toHaveBeenCalledTimes(1));
+    expect(place.mock.calls[0][0]).toMatchObject({
+      asset: 'BTC',
+      action: 'sell',
+      tradeId: 'clh-1',
+    });
+    alertSpy.mockRestore();
+    placeSpy.mockRestore();
+  });
+
   test('History trade dropdowns AND status, side, and asset', async () => {
     useRuntimeStore.setState({
       refreshCloudSnapshot: async () => {},

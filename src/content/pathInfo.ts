@@ -336,7 +336,30 @@ export const PATH_INFO = {
       'Isolation\n' +
       '• After fill, hold that strike until Take or Flatten. Do not hop ATM\n' +
       '• One open hourly lot per coin. 15m Cheap loop may also hold the 15m book\n' +
+      '• History Sell on a pending hourly fill dumps that ticker now (bid IOC). Allowed with Auto Off and Kill switch\n' +
       '• Open lot still exits if Hourly is later turned Off\n' +
       '• Protect skips cheap_loop_hourly rows',
+  },
+  cheapLoopWeekly: {
+    title: 'Cheap loop weekly',
+    body:
+      'Uses\n' +
+      '• Weekly switch and weekly asset chips. Empty chips = no weekly buys. Asset must be On in Cushions\n' +
+      '• Same KX*D series as Hourly. Cloud picks the live event whose open→close is 4–10 days (~7d week)\n' +
+      '• Unique ATM strike. After fill, hold that ticker until Take, Flatten, or History Sell\n' +
+      '• Start after / Flatten left / Cheap max / Min gap / Take / Min hold / Cooldown (minutes). Cycles default 10 (max 20) per weekly event. Stop is Off\n' +
+      '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block\n\n' +
+      'Does not use\n' +
+      '• 15m or hourly Cheap loop chips or clocks\n' +
+      '• 15m tickers\n' +
+      '• TWAP / Last-minute / Spike / Step / Pair (those stay on 15m)\n' +
+      '• Daily / monthly / annual ladders this pass\n\n' +
+      'Isolation\n' +
+      '• Buy cheap ATM → wait until bid ≥ fill + Take → sell → Cooldown minutes → hunt ATM again (ATM may move)\n' +
+      '• Repeat until Flatten left minutes of that weekly window. Flatten: no new buys; dump if holding\n' +
+      '• One open weekly lot per coin. 15m / Hourly / Weekly may all hold (different tickers)\n' +
+      '• History Sell on a pending hourly or weekly fill dumps that ticker now (bid IOC). Allowed with Auto Off and Kill switch\n' +
+      '• Open lot still exits if Weekly is later turned Off\n' +
+      '• Protect skips cheap_loop_weekly rows',
   },
 } as const;

@@ -11,6 +11,7 @@ import {
   PAIR_LOCK_RISK_FIELD_KEYS,
   CHEAP_LOOP_RISK_FIELD_KEYS,
   CHEAP_LOOP_HOURLY_RISK_FIELD_KEYS,
+  CHEAP_LOOP_WEEKLY_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
   TWAP_LOCK_RISK_FIELD_KEYS,
   PROTECT_RISK_FIELD_KEYS,
@@ -33,8 +34,10 @@ import { normalizeSpikeFadeAssets } from '../../packages/trading-core/src/spikeF
 import { normalizePairLockAssets } from '../../packages/trading-core/src/pairLock';
 import {
   CHEAP_LOOP_HOURLY_SERIES,
+  CHEAP_LOOP_WEEKLY_SERIES,
   normalizeCheapLoopAssets,
   normalizeCheapLoopHourlyAssets,
+  normalizeCheapLoopWeeklyAssets,
 } from '../../packages/trading-core/src/cheapLoop';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PATH_INFO } from '../content/pathInfo';
@@ -1011,6 +1014,7 @@ function CheapLoopFields() {
   const setRiskField = useConfigStore((s) => s.setRiskField);
   const on = Boolean(config.risk.cheap_loop_enabled);
   const hourlyOn = Boolean(config.risk.cheap_loop_hourly_enabled);
+  const weeklyOn = Boolean(config.risk.cheap_loop_weekly_enabled);
   return (
     <>
       <View style={styles.field} testID="risk-field-auto-cheap_loop_enabled">
@@ -1193,6 +1197,100 @@ function CheapLoopFields() {
           <Text style={styles.hint} testID="cheap-loop-hourly-hint">
             Buys the cheaper YES or NO on the unique ATM strike. Hold that ticker until Take or
             Flatten. Does not hop strikes. Cycles are per hour event. One open hourly lot per coin.
+          </Text>
+        </View>
+      ) : null}
+      <View style={styles.field} testID="risk-field-auto-cheap_loop_weekly_enabled">
+        <View style={styles.toggleRow}>
+          <View style={styles.labelWithInfo}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Weekly</Text>
+            <PathInfoIcon
+              title={PATH_INFO.cheapLoopWeekly.title}
+              body={PATH_INFO.cheapLoopWeekly.body}
+              testID="path-info-cheapLoopWeekly"
+            />
+          </View>
+          <Switch
+            testID="risk-toggle-cheap_loop_weekly_enabled"
+            value={weeklyOn}
+            onValueChange={(v) => setRiskField('cheap_loop_weekly_enabled', v)}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        {weeklyOn ? (
+          <Text style={styles.hint}>
+            Same KX*D series as Hourly. Picks the ~7 day event by duration. Buy cheap ATM, take,
+            cooldown, look again until Flatten.
+          </Text>
+        ) : null}
+      </View>
+      {weeklyOn ? (
+        <View style={styles.pathInner}>
+          <SkipThinBidRow
+            testID="risk-toggle-cheap_loop_weekly_skip_thin_bid"
+            value={Boolean(config.risk.cheap_loop_weekly_skip_thin_bid)}
+            onChange={(v) => setRiskField('cheap_loop_weekly_skip_thin_bid', v)}
+          />
+          {metaFor(CHEAP_LOOP_WEEKLY_RISK_FIELD_KEYS)
+            .filter((meta) => meta.key !== 'cheap_loop_weekly_enabled')
+            .map((meta) => {
+              const start = meta.key === 'cheap_loop_weekly_start_minutes';
+              const flatten = meta.key === 'cheap_loop_weekly_flatten_minutes';
+              const hold = meta.key === 'cheap_loop_weekly_min_hold_minutes';
+              const cool = meta.key === 'cheap_loop_weekly_cooldown_minutes';
+              return (
+                <RiskStepper
+                  key={meta.key}
+                  meta={meta}
+                  value={config.risk[meta.key]}
+                  testPrefix="auto"
+                  displayOverride={
+                    start
+                      ? `${Math.round(Number(config.risk.cheap_loop_weekly_start_minutes) || 0)} min`
+                      : flatten
+                        ? `${Math.round(Number(config.risk.cheap_loop_weekly_flatten_minutes) || 0)} min`
+                        : hold
+                          ? `${Math.round(Number(config.risk.cheap_loop_weekly_min_hold_minutes) || 0)} min`
+                          : cool
+                            ? `${Math.round(Number(config.risk.cheap_loop_weekly_cooldown_minutes) || 0)} min`
+                            : undefined
+                  }
+                  onChange={(next) => setRiskField(meta.key, next as never)}
+                />
+              );
+            })}
+          <View style={styles.field} testID="risk-field-auto-cheap_loop_weekly_assets">
+            <Text style={styles.label}>Weekly assets</Text>
+            <Text style={styles.hint}>
+              Same series as Hourly. Cloud picks the weekly-length event. Also On in Cushions. Empty
+              means no weekly buys.
+            </Text>
+            <View style={styles.tifRow}>
+              {Object.keys(CHEAP_LOOP_WEEKLY_SERIES).map((key) => {
+                const selected = normalizeCheapLoopWeeklyAssets(config.risk.cheap_loop_weekly_assets).includes(
+                  key
+                );
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`cheap-loop-weekly-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizeCheapLoopWeeklyAssets(config.risk.cheap_loop_weekly_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('cheap_loop_weekly_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={styles.hint} testID="cheap-loop-weekly-hint">
+            Buys the cheaper YES or NO on unique ATM. After Take, Cooldown minutes, then hunt ATM
+            again. Cycles are exits this weekly event (default 10). One open weekly lot per coin.
+            History Sell dumps now without waiting for Take or Flatten.
           </Text>
         </View>
       ) : null}

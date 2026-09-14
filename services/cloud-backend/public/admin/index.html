@@ -435,6 +435,7 @@
               <option value="pair_lock">Pair lock</option>
               <option value="cheap_loop">Cheap loop 15m</option>
               <option value="cheap_loop_hourly">Cheap loop hourly</option>
+              <option value="cheap_loop_weekly">Cheap loop weekly</option>
             </select>
           </label>
           <label class="block">
@@ -1175,6 +1176,9 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       }
       if (v === 'pair_lock' || v === 'pairlock' || v === 'pair-lock') {
         return { label: 'Pair lock', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
+      }
+      if (v === 'cheap_loop_weekly' || v === 'cheaploopweekly' || v === 'cheap-loop-weekly') {
+        return { label: 'Cheap loop weekly', cls: 'bg-teal-500/20 text-teal-100 border-teal-500/30' };
       }
       if (v === 'cheap_loop_hourly' || v === 'cheaploophourly' || v === 'cheap-loop-hourly') {
         return { label: 'Cheap loop hourly', cls: 'bg-teal-500/20 text-teal-200 border-teal-500/30' };

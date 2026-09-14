@@ -423,6 +423,14 @@ describe('normalize / cushions', () => {
     expect(d.cheap_loop_hourly_cooldown_minutes).toBe(3);
     expect(d.cheap_loop_hourly_assets).toEqual([]);
     expect(d.cheap_loop_hourly_skip_thin_bid).toBe(false);
+    expect(d.cheap_loop_weekly_enabled).toBe(false);
+    expect(d.cheap_loop_weekly_start_minutes).toBe(10);
+    expect(d.cheap_loop_weekly_flatten_minutes).toBe(5);
+    expect(d.cheap_loop_weekly_cycles).toBe(10);
+    expect(d.cheap_loop_weekly_min_hold_minutes).toBe(2);
+    expect(d.cheap_loop_weekly_cooldown_minutes).toBe(3);
+    expect(d.cheap_loop_weekly_assets).toEqual([]);
+    expect(d.cheap_loop_weekly_skip_thin_bid).toBe(false);
     const cheapOn = normalizeAppConfig({
       risk: {
         cheap_loop_enabled: true,

@@ -373,6 +373,7 @@ apiRouter.post('/me/orders/manual', async (req: Request, res: Response) => {
   const asset = String(req.body?.asset || '').trim();
   const action = req.body?.action === 'sell' ? 'sell' : req.body?.action === 'buy' ? 'buy' : '';
   const requestId = String(req.body?.requestId || '').trim() || undefined;
+  const tradeId = String(req.body?.tradeId || '').trim() || undefined;
   if (!asset || (action !== 'buy' && action !== 'sell')) {
     res.status(400).json({
       ok: false,
@@ -382,7 +383,7 @@ apiRouter.post('/me/orders/manual', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const result = await executeManualOrder({ userId, asset, action, requestId });
+    const result = await executeManualOrder({ userId, asset, action, requestId, tradeId });
     res.status(result.httpStatus).json(result);
   } catch (err: any) {
     await writeAuditLog(userId, 'ERROR', {

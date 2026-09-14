@@ -171,6 +171,9 @@ export const CHEAP_LOOP_HOURLY_START_DEFAULT = 10;
 export const CHEAP_LOOP_HOURLY_MIN_HOLD_DEFAULT = 2;
 export const CHEAP_LOOP_HOURLY_COOLDOWN_DEFAULT = 3;
 export const CHEAP_LOOP_HOURLY_CYCLES_DEFAULT = 2;
+export const CHEAP_LOOP_WEEKLY_CYCLES_DEFAULT = 10;
+export const CHEAP_LOOP_WEEKLY_CYCLES_MIN = 1;
+export const CHEAP_LOOP_WEEKLY_CYCLES_MAX = 20;
 
 /** Kalshi above/below hourly series. Missing key = no hourly chip. */
 export const CHEAP_LOOP_HOURLY_SERIES: Record<string, string> = {
@@ -190,10 +193,21 @@ export function cheapLoopHourlySeriesTicker(asset: string): string | null {
   return series || null;
 }
 
+/** Weekly above/below lives on the same KX*D series as hourly; pick by event duration. */
+export const CHEAP_LOOP_WEEKLY_SERIES = CHEAP_LOOP_HOURLY_SERIES;
+
+export function cheapLoopWeeklySeriesTicker(asset: string): string | null {
+  return cheapLoopHourlySeriesTicker(asset);
+}
+
 export function cheapLoopHourlyEventKey(ticker: string): string {
   const t = String(ticker || '').trim();
   const cut = t.lastIndexOf('-T');
   return cut > 0 ? t.slice(0, cut) : t;
+}
+
+export function cheapLoopWeeklyEventKey(ticker: string): string {
+  return cheapLoopHourlyEventKey(ticker);
 }
 
 export function pickUniqueAtmStrike(opts: {
@@ -261,6 +275,13 @@ export function isCheapLoopHourlyEntryPath(raw: unknown): boolean {
   return v === 'cheap_loop_hourly' || v === 'cheaploophourly' || v === 'cheap-loop-hourly';
 }
 
+export function isCheapLoopWeeklyEntryPath(raw: unknown): boolean {
+  const v = String(raw ?? '')
+    .toLowerCase()
+    .trim();
+  return v === 'cheap_loop_weekly' || v === 'cheaploopweekly' || v === 'cheap-loop-weekly';
+}
+
 export function isCheapLoopEntryPath(raw: unknown): boolean {
   const v = String(raw ?? '')
     .toLowerCase()
@@ -269,7 +290,79 @@ export function isCheapLoopEntryPath(raw: unknown): boolean {
 }
 
 export function isAnyCheapLoopEntryPath(raw: unknown): boolean {
-  return isCheapLoopEntryPath(raw) || isCheapLoopHourlyEntryPath(raw);
+  return isCheapLoopEntryPath(raw) || isCheapLoopHourlyEntryPath(raw) || isCheapLoopWeeklyEntryPath(raw);
+}
+
+export function isCheapLoopHistorySellPath(raw: unknown): boolean {
+  return isCheapLoopHourlyEntryPath(raw) || isCheapLoopWeeklyEntryPath(raw);
+}
+
+/** Kalshi hourly books are ~1h. Daily ~24h and weekly ~7d share the same series. */
+export const CHEAP_LOOP_HOURLY_DURATION_MIN_MS = 20 * 60 * 1000;
+export const CHEAP_LOOP_HOURLY_DURATION_MAX_MS = 3 * 60 * 60 * 1000;
+export const CHEAP_LOOP_WEEKLY_DURATION_MIN_MS = 4 * 24 * 60 * 60 * 1000;
+export const CHEAP_LOOP_WEEKLY_DURATION_MAX_MS = 10 * 24 * 60 * 60 * 1000;
+
+export function cheapLoopEventDurationMs(
+  openUtc: Date | null | undefined,
+  closeUtc: Date | null | undefined
+): number | null {
+  if (!openUtc || !closeUtc) return null;
+  const ms = closeUtc.getTime() - openUtc.getTime();
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+
+export function isCheapLoopHourlyEventDuration(ms: unknown): boolean {
+  const n = Number(ms);
+  return (
+    Number.isFinite(n) &&
+    n >= CHEAP_LOOP_HOURLY_DURATION_MIN_MS &&
+    n <= CHEAP_LOOP_HOURLY_DURATION_MAX_MS
+  );
+}
+
+export function isCheapLoopWeeklyEventDuration(ms: unknown): boolean {
+  const n = Number(ms);
+  return (
+    Number.isFinite(n) &&
+    n >= CHEAP_LOOP_WEEKLY_DURATION_MIN_MS &&
+    n <= CHEAP_LOOP_WEEKLY_DURATION_MAX_MS
+  );
+}
+
+export function pickSoonestLiveLadderEvent<
+  T extends { openUtc: Date | null; closeUtc: Date | null; eventTicker: string },
+>(events: T[], now: Date, durationOk: (ms: number) => boolean): T | null {
+  const live: Array<T & { closeMs: number }> = [];
+  for (const e of events || []) {
+    if (!e.openUtc || !e.closeUtc) continue;
+    if (now < e.openUtc || now >= e.closeUtc) continue;
+    const dur = cheapLoopEventDurationMs(e.openUtc, e.closeUtc);
+    if (dur == null || !durationOk(dur)) continue;
+    live.push({ ...e, closeMs: e.closeUtc.getTime() });
+  }
+  live.sort((a, b) => a.closeMs - b.closeMs || a.eventTicker.localeCompare(b.eventTicker));
+  return live[0] || null;
+}
+
+export function isCheapLoopHistorySellableTrade(trade: {
+  entryPath?: unknown;
+  entry_path?: unknown;
+  dryRun?: boolean;
+  dry_run?: boolean;
+  outcome?: string | null;
+  fillCount?: number | null;
+  fill_count?: number | null;
+  protectExitOrderId?: string | null;
+}): boolean {
+  const path = trade.entryPath ?? trade.entry_path;
+  if (!isCheapLoopHistorySellPath(path)) return false;
+  if (trade.dryRun === true || trade.dry_run === true) return false;
+  if (String(trade.protectExitOrderId || '').trim()) return false;
+  const fills = Number(trade.fillCount ?? trade.fill_count ?? 0);
+  if (!(fills > 0)) return false;
+  const outcome = String(trade.outcome || 'pending').toLowerCase();
+  return outcome === 'pending' || outcome === 'exiting';
 }
 
 export function isCheapLoopHourlyEnterPath(opts: {
@@ -432,6 +525,183 @@ export function tickerHasOpenOtherThanCheapLoopHourly(
 ): boolean {
   return openFillsForTicker(trades, marketTicker).some(
     (t) => !isCheapLoopHourlyEntryPath(t.entryPath ?? t.entry_path)
+  );
+}
+
+export function normalizeCheapLoopWeeklyCycles(raw: unknown): number {
+  return Math.round(
+    clamp(Number(raw ?? CHEAP_LOOP_WEEKLY_CYCLES_DEFAULT), CHEAP_LOOP_WEEKLY_CYCLES_MIN, CHEAP_LOOP_WEEKLY_CYCLES_MAX)
+  );
+}
+
+export function normalizeCheapLoopWeeklyAssets(raw: unknown): string[] {
+  return normalizeCheapLoopHourlyAssets(raw);
+}
+
+export function isCheapLoopWeeklyAssetSelected(assets: unknown, asset: string): boolean {
+  return normalizeCheapLoopWeeklyAssets(assets).includes(String(asset));
+}
+
+export function isCheapLoopWeeklyEnterPath(opts: {
+  adminEnabled: boolean;
+  userEnabled: boolean;
+  assetEnabled: boolean;
+  asset: string;
+  assets?: unknown;
+}): boolean {
+  return Boolean(
+    opts.adminEnabled &&
+      opts.userEnabled &&
+      opts.assetEnabled &&
+      cheapLoopWeeklySeriesTicker(opts.asset) &&
+      isCheapLoopWeeklyAssetSelected(opts.assets, opts.asset)
+  );
+}
+
+export function cheapLoopCfgForWeekly(cfg: AppConfig): AppConfig {
+  const risk = cfg.risk as AppConfig['risk'] & {
+    cheap_loop_weekly_enabled?: boolean;
+    cheap_loop_weekly_start_minutes?: number;
+    cheap_loop_weekly_flatten_minutes?: number;
+    cheap_loop_weekly_cheap_max_ask_usd?: number;
+    cheap_loop_weekly_min_gap_usd?: number;
+    cheap_loop_weekly_take_usd?: number;
+    cheap_loop_weekly_min_hold_minutes?: number;
+    cheap_loop_weekly_cooldown_minutes?: number;
+    cheap_loop_weekly_cycles?: number;
+    cheap_loop_weekly_lot_count?: number;
+    cheap_loop_weekly_skip_thin_bid?: boolean;
+    cheap_loop_weekly_assets?: string[];
+  };
+  return {
+    ...cfg,
+    risk: {
+      ...cfg.risk,
+      cheap_loop_enabled: risk.cheap_loop_weekly_enabled === true,
+      cheap_loop_start_minutes: normalizeCheapLoopHourlyStartMinutes(risk.cheap_loop_weekly_start_minutes),
+      cheap_loop_flatten_minutes: normalizeCheapLoopFlattenMinutes(risk.cheap_loop_weekly_flatten_minutes),
+      cheap_loop_cheap_max_ask_usd: normalizeCheapLoopCheapMaxAskUsd(risk.cheap_loop_weekly_cheap_max_ask_usd),
+      cheap_loop_min_gap_usd: normalizeCheapLoopMinGapUsd(risk.cheap_loop_weekly_min_gap_usd),
+      cheap_loop_take_usd: normalizeCheapLoopTakeUsd(risk.cheap_loop_weekly_take_usd),
+      cheap_loop_min_hold_minutes: normalizeCheapLoopHourlyMinHoldMinutes(risk.cheap_loop_weekly_min_hold_minutes),
+      cheap_loop_cooldown_minutes: normalizeCheapLoopHourlyCooldownMinutes(
+        risk.cheap_loop_weekly_cooldown_minutes
+      ),
+      cheap_loop_cycles: normalizeCheapLoopWeeklyCycles(risk.cheap_loop_weekly_cycles),
+      cheap_loop_lot_count: normalizeCheapLoopLotCount(risk.cheap_loop_weekly_lot_count),
+      cheap_loop_skip_thin_bid: risk.cheap_loop_weekly_skip_thin_bid === true,
+      cheap_loop_assets: normalizeCheapLoopWeeklyAssets(risk.cheap_loop_weekly_assets),
+      cheap_loop_min_live_cushion_pct: 0,
+    },
+  };
+}
+
+export function isCheapLoopWeeklyCompletedExit(trade: CheapLoopTradeRow): boolean {
+  if (!isCheapLoopWeeklyEntryPath(entryOf(trade))) return false;
+  const outcome = String(trade.outcome || '').toLowerCase();
+  if (outcome === 'exited') return true;
+  return Boolean(trade.protectExitOrderId) && String(trade.status || '').toUpperCase() === 'SETTLED';
+}
+
+export function cheapLoopWeeklyExitsForEvent(trades: CheapLoopTradeRow[], eventKey: string): number {
+  const key = String(eventKey || '').trim();
+  if (!key) return 0;
+  return (trades || []).filter(
+    (t) => cheapLoopWeeklyEventKey(tickerOf(t)) === key && isCheapLoopWeeklyCompletedExit(t)
+  ).length;
+}
+
+export function cheapLoopWeeklyLastExitAt(trades: CheapLoopTradeRow[], eventKey: string): Date | null {
+  const key = String(eventKey || '').trim();
+  if (!key) return null;
+  let latest = 0;
+  for (const t of trades || []) {
+    if (cheapLoopWeeklyEventKey(tickerOf(t)) !== key || !isCheapLoopWeeklyCompletedExit(t)) continue;
+    const raw = t.settledAt ?? t.executedAt ?? (t as { at?: unknown }).at;
+    const ms = raw instanceof Date ? raw.getTime() : Date.parse(String(raw || ''));
+    if (Number.isFinite(ms) && ms > latest) latest = ms;
+  }
+  return latest > 0 ? new Date(latest) : null;
+}
+
+export function cheapLoopWeeklyCooldownRemainingSec(opts: {
+  trades: CheapLoopTradeRow[];
+  eventKey: string;
+  cooldownMinutes?: unknown;
+  now?: Date;
+}): number {
+  const last = cheapLoopWeeklyLastExitAt(opts.trades, opts.eventKey);
+  if (!last) return 0;
+  const coolMs = normalizeCheapLoopHourlyCooldownMinutes(opts.cooldownMinutes) * 60_000;
+  const now = (opts.now || new Date()).getTime();
+  return Math.max(0, Math.ceil((last.getTime() + coolMs - now) / 1000));
+}
+
+export function isCheapLoopWeeklyCooldown(opts: {
+  trades: CheapLoopTradeRow[];
+  eventKey: string;
+  cooldownMinutes?: unknown;
+  now?: Date;
+}): boolean {
+  return cheapLoopWeeklyCooldownRemainingSec(opts) > 0;
+}
+
+export function assetHasOpenCheapLoopWeekly(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>,
+  asset: string
+): boolean {
+  const a = String(asset || '').trim();
+  if (!a) return false;
+  return (trades || []).some(
+    (t) =>
+      String((t as { asset?: string }).asset || '').trim() === a &&
+      isCheapLoopWeeklyEntryPath(entryOf(t)) &&
+      isOpenLiveFill(t)
+  );
+}
+
+export function openCheapLoopWeeklyAssets(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>
+): string[] {
+  const out: string[] = [];
+  for (const t of trades || []) {
+    if (!isCheapLoopWeeklyEntryPath(entryOf(t)) || !isOpenLiveFill(t)) continue;
+    const a = String((t as { asset?: string }).asset || '').trim();
+    if (a && !out.includes(a)) out.push(a);
+  }
+  return out;
+}
+
+export function openCheapLoopWeeklyTickerForAsset(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>,
+  asset: string
+): string | null {
+  const a = String(asset || '').trim();
+  if (!a) return null;
+  for (const t of trades || []) {
+    if (String((t as { asset?: string }).asset || '').trim() !== a) continue;
+    if (!isCheapLoopWeeklyEntryPath(entryOf(t)) || !isOpenLiveFill(t)) continue;
+    const ticker = tickerOf(t);
+    if (ticker) return ticker;
+  }
+  return null;
+}
+
+export function tickerHasOpenCheapLoopWeekly(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>,
+  marketTicker: string
+): boolean {
+  return openFillsForTicker(trades, marketTicker).some((t) =>
+    isCheapLoopWeeklyEntryPath(t.entryPath ?? t.entry_path)
+  );
+}
+
+export function tickerHasOpenOtherThanCheapLoopWeekly(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>,
+  marketTicker: string
+): boolean {
+  return openFillsForTicker(trades, marketTicker).some(
+    (t) => !isCheapLoopWeeklyEntryPath(t.entryPath ?? t.entry_path)
   );
 }
 
@@ -671,6 +941,8 @@ export function evaluateCheapLoopEnter(opts: {
   inCooldown?: boolean;
   skipThinBid?: boolean;
   bidSize?: number | null;
+  /** Weekly maps Cycles 1–20. Default is the 15m/hourly max of 5. */
+  cyclesMax?: number;
 }): GateResult {
   const risk = opts.cfg.risk as AppConfig['risk'] & {
     cheap_loop_enabled?: boolean;
@@ -724,7 +996,13 @@ export function evaluateCheapLoopEnter(opts: {
     }
     return { ok: false, skip_reason: 'cheap_loop_too_late' };
   }
-  const cycles = normalizeCheapLoopCycles(risk.cheap_loop_cycles);
+  const cycleMax =
+    Number.isFinite(Number(opts.cyclesMax)) && Number(opts.cyclesMax) >= CHEAP_LOOP_CYCLES_MIN
+      ? Math.round(Number(opts.cyclesMax))
+      : CHEAP_LOOP_CYCLES_MAX;
+  const cycles = Math.round(
+    clamp(Number(risk.cheap_loop_cycles ?? CHEAP_LOOP_CYCLES_DEFAULT), CHEAP_LOOP_CYCLES_MIN, cycleMax)
+  );
   if ((opts.cyclesUsed ?? 0) >= cycles) return { ok: false, skip_reason: 'cheap_loop_cycles' };
   if (opts.inCooldown) return { ok: false, skip_reason: 'cheap_loop_cooldown' };
   const needLive = cheapLoopMinLiveUsd({

@@ -3,9 +3,12 @@ import {
   AssetRegistry,
   computeLean,
   defaultAppConfig,
+  getMarketQuote,
   KalshiClient,
   KalshiPlaceResult,
 } from 'trading-core';
+import { isCheapLoopHistorySellableTrade } from '../../../../packages/trading-core/src/cheapLoop';
+import { runCheapLoopForcedBidExit } from './cloudCheapLoop';
 import {
   countWindowBuysForTicker,
   evaluateStaticGate,
@@ -51,6 +54,7 @@ import {
   iocMissAlertTitle,
   missAlertId,
   orderPlacedAlertTitle,
+  protectAlertId,
 } from './cloudAlerts';
 import { fillCollapseId } from './leanAlerts';
 
@@ -61,6 +65,7 @@ export interface ManualOrderInput {
   asset: string;
   action: ManualTradeAction;
   requestId?: string;
+  tradeId?: string;
 }
 
 export interface ManualOrderResult {
@@ -87,6 +92,7 @@ export type PlaceOrderFn = (input: {
 export interface ManualTradeDeps {
   now?: Date;
   computeLeanFn?: typeof computeLean;
+  getMarketQuoteFn?: typeof getMarketQuote;
   getUserDocFn?: typeof getUserDoc;
   getTradeRecordsFn?: typeof getTradeRecords;
   getSystemConfigFn?: typeof getSystemConfig;
@@ -140,6 +146,180 @@ async function fail(
   return { ok: false, httpStatus, error, skip_reason, message };
 }
 
+async function executeCheapLoopHistorySell(opts: {
+  userId: string;
+  asset: AssetKey;
+  tradeId: string;
+  requestId: string;
+  now: Date;
+  deps: ManualTradeDeps;
+}): Promise<ManualOrderResult> {
+  const { userId, asset, tradeId, requestId, now, deps } = opts;
+  const getUser = deps.getUserDocFn || getUserDoc;
+  const getTrades = deps.getTradeRecordsFn || getTradeRecords;
+  const getSys = deps.getSystemConfigFn || getSystemConfig;
+  const secretFn = deps.getUserSecretFn || getUserSecret;
+  const hoursFn = deps.isMarketOpenFn || isMarketOpen;
+  const quoteFn = deps.getMarketQuoteFn || getMarketQuote;
+
+  const [user, sys] = await Promise.all([getUser(userId), getSys()]);
+  setActiveKalshiRetryPolicy(sys?.kalshiRetry);
+  if (isCloudKalshiPaused()) {
+    return fail(userId, 503, 'kalshi_paused', 'kalshi_paused', { asset, action: 'sell', tradeId });
+  }
+  const hours = hoursFn(asset, now);
+  if (!hours.open) {
+    return fail(userId, 409, 'market_closed', 'market_closed', { asset, action: 'sell', tradeId });
+  }
+
+  const trades = await getTrades(userId);
+  const trade = trades.find((t) => String(t.tradeId || '').trim() === tradeId);
+  if (!trade) {
+    return fail(userId, 404, 'trade_not_found', undefined, {
+      asset,
+      action: 'sell',
+      tradeId,
+      message: 'That fill is gone.',
+    });
+  }
+  if (String(trade.asset || '').trim() !== asset) {
+    return fail(userId, 409, 'asset_mismatch', undefined, {
+      asset,
+      action: 'sell',
+      tradeId,
+      message: 'Asset does not match this fill.',
+    });
+  }
+  if (!isCheapLoopHistorySellableTrade(trade)) {
+    return fail(userId, 409, 'not_sellable', undefined, {
+      asset,
+      action: 'sell',
+      tradeId,
+      ticker: trade.ticker,
+      message: 'History Sell is only for pending Cheap loop hourly or weekly fills.',
+    });
+  }
+  const ticker = String(trade.ticker || '').trim();
+  if (!ticker) {
+    return fail(userId, 409, 'no_market', 'no_market', { asset, action: 'sell', tradeId });
+  }
+
+  let market: Awaited<ReturnType<typeof getMarketQuote>>;
+  try {
+    market = await quoteFn(ticker, fetch, { skipCache: true });
+  } catch (err) {
+    noteTransientKalshiFailure(err);
+    return fail(userId, 502, 'quote_failed', undefined, {
+      asset,
+      action: 'sell',
+      tradeId,
+      ticker,
+      message: String((err as any)?.message || err || 'Could not load that ticker’s quote.'),
+    });
+  }
+  const quotes = {
+    yes_bid: market?.yes_bid_dollars != null ? Number(market.yes_bid_dollars) : null,
+    yes_ask: market?.yes_ask_dollars != null ? Number(market.yes_ask_dollars) : null,
+    no_bid: market?.no_bid_dollars != null ? Number(market.no_bid_dollars) : null,
+    no_ask: market?.no_ask_dollars != null ? Number(market.no_ask_dollars) : null,
+  };
+
+  const secret = await secretFn(userId);
+  if (!secret?.privateKeyPem || !secret.keyId) {
+    return fail(userId, 409, 'no_client', 'no_client', { asset, action: 'sell', tradeId, ticker });
+  }
+  const cfg = user?.config || defaultAppConfig();
+  const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+  const place = deps.placeOrderFn
+    ? deps.placeOrderFn
+    : (input: Parameters<PlaceOrderFn>[0]) => client.placeOrder(input);
+
+  let forced: Awaited<ReturnType<typeof runCheapLoopForcedBidExit>>;
+  try {
+    forced = await runCheapLoopForcedBidExit({
+      userId,
+      asset,
+      ticker,
+      trade,
+      quotes,
+      slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+      dryRun: false,
+      now,
+      place,
+    });
+  } catch (err) {
+    noteTransientKalshiFailure(err);
+    return fail(userId, 502, 'place_failed', undefined, {
+      asset,
+      action: 'sell',
+      tradeId,
+      ticker,
+      message: String((err as any)?.message || err || 'Sell failed.'),
+    });
+  }
+
+  if (!forced.ok) {
+    const skipped = String(forced.skipped || 'sell_failed');
+    const httpStatus = skipped === 'claim_lost' ? 409 : skipped === 'ioc_miss' ? 409 : 409;
+    const message =
+      skipped === 'claim_lost'
+        ? 'Cloud already sold this fill.'
+        : skipped === 'ioc_miss'
+          ? 'Sell did not fill (IOC). Your position is still open.'
+          : skipped === 'already_exited_on_kalshi'
+            ? 'This fill is already sold on Kalshi.'
+            : skipped === 'quote' || skipped === 'bid_unavailable' || skipped === 'ask_unavailable'
+              ? 'No bid to sell against. Try again in a moment.'
+              : 'Could not sell this fill.';
+    return fail(userId, httpStatus, skipped, skipped, {
+      asset,
+      action: 'sell',
+      tradeId,
+      ticker,
+      message,
+    });
+  }
+
+  const tokenUser = user as { pushTokens?: string[]; fcmTokens?: string[] } | null | undefined;
+  const userTokens = [...(tokenUser?.pushTokens || []), ...(tokenUser?.fcmTokens || [])].filter(
+    (t, i, arr) => t && arr.indexOf(t) === i
+  );
+  if (forced.alert) {
+    await emitCloudAlert({
+      userId,
+      alertId: protectAlertId(forced.alert.tradeId),
+      kind: 'protect_sell',
+      title: forced.alert.title,
+      body: forced.alert.body,
+      cfg: cfg as never,
+      tokens: userTokens,
+      collapseId: `clhs:${userId}:${forced.alert.tradeId}`.slice(0, 64),
+      asset,
+      ticker,
+      tradeId: forced.alert.tradeId,
+      at: now.toISOString(),
+    });
+  }
+  await writeAuditLog(userId, 'TRADE_TRIGGERED', {
+    source: 'history_sell',
+    tradeId,
+    ticker,
+    asset,
+    decision: trade.decision,
+    pnlUsd: forced.alert?.pnlUsd ?? null,
+    filled: true,
+  });
+  void requestId;
+  return {
+    ok: true,
+    httpStatus: 200,
+    message: forced.alert?.body || `Sold ${trade.decision}`,
+    tradeId,
+    filled: true,
+    ticker,
+  };
+}
+
 export async function executeManualOrder(
   input: ManualOrderInput,
   deps: ManualTradeDeps = {}
@@ -148,6 +328,7 @@ export async function executeManualOrder(
   const asset = String(input.asset || '').trim() as AssetKey;
   const action: ManualTradeAction = input.action === 'sell' ? 'sell' : 'buy';
   const requestId = String(input.requestId || '').trim() || newRequestId(`ios_${action}_${asset}`);
+  const tradeId = String(input.tradeId || '').trim();
   const now = deps.now || new Date();
 
   if (!userId) {
@@ -155,6 +336,17 @@ export async function executeManualOrder(
   }
   if (!AssetRegistry.get(asset)) {
     return fail(userId, 400, 'unknown_asset', undefined, { asset, action, message: 'Unknown asset.' });
+  }
+
+  if (action === 'sell' && tradeId) {
+    return executeCheapLoopHistorySell({
+      userId,
+      asset,
+      tradeId,
+      requestId,
+      now,
+      deps,
+    });
   }
 
   const getUser = deps.getUserDocFn || getUserDoc;

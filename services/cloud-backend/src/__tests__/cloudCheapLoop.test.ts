@@ -4,6 +4,7 @@ import { evaluateCheapLoopEnter } from '../../../../packages/trading-core/src/ch
 import {
   pendingCheapLoopHourlyTradesForMarket,
   pendingCheapLoopTradesForMarket,
+  pendingCheapLoopWeeklyTradesForMarket,
 } from '../services/cloudCheapLoop';
 import {
   buildCheapLoopWatcherSnapshot,
@@ -47,9 +48,14 @@ describe('Cheap loop cloud wiring', () => {
       ticker: 'KXBTCD-26SEP1406-T67099.99',
       entryPath: 'cheap_loop_hourly',
     });
+    const weekly = filledTrade({
+      tradeId: 'clw1',
+      ticker: 'KXBTCD-26SEP1817-T67099.99',
+      entryPath: 'cheap_loop_weekly',
+    });
     const home = filledTrade({ tradeId: 'home1', entryPath: 'home' });
     expect(
-      pendingProtectTradesForMarket([cl, hourly, home], 'KXBTC15M-T', new Date()).map((t) => t.tradeId)
+      pendingProtectTradesForMarket([cl, hourly, weekly, home], 'KXBTC15M-T', new Date()).map((t) => t.tradeId)
     ).toEqual(['home1']);
     expect(
       pendingProtectTradesForMarket(
@@ -118,5 +124,28 @@ describe('Cheap loop cloud wiring', () => {
       pendingCheapLoopHourlyTradesForMarket([cl, hourly], 'KXBTCD-26SEP1406-T67099.99').map((t) => t.tradeId)
     ).toEqual(['clh1']);
     expect(pendingCheapLoopHourlyTradesForMarket([cl, hourly], 'KXBTC15M-T')).toEqual([]);
+  });
+
+  test('weekly pending filter does not mix 15m or hourly lots', () => {
+    const cl = filledTrade({ tradeId: 'cl1' });
+    const hourly = filledTrade({
+      tradeId: 'clh1',
+      ticker: 'KXBTCD-26SEP1406-T67099.99',
+      entryPath: 'cheap_loop_hourly',
+    });
+    const weekly = filledTrade({
+      tradeId: 'clw1',
+      ticker: 'KXBTCD-26SEP1817-T67099.99',
+      entryPath: 'cheap_loop_weekly',
+    });
+    expect(
+      pendingCheapLoopWeeklyTradesForMarket([cl, hourly, weekly], 'KXBTCD-26SEP1817-T67099.99').map(
+        (t) => t.tradeId
+      )
+    ).toEqual(['clw1']);
+    expect(pendingCheapLoopWeeklyTradesForMarket([cl, hourly, weekly], 'KXBTC15M-T')).toEqual([]);
+    expect(
+      pendingProtectTradesForMarket([weekly], 'KXBTCD-26SEP1817-T67099.99', new Date())
+    ).toEqual([]);
   });
 });

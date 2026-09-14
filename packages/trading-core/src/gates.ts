@@ -371,6 +371,10 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'no unique atm strike';
     case 'cheap_loop_hourly_no_market':
       return 'no hourly market';
+    case 'cheap_loop_weekly_no_atm':
+      return 'no unique atm strike';
+    case 'cheap_loop_weekly_no_market':
+      return 'no weekly market';
     case 'cheap_loop_take':
       return 'Cheap loop take';
     case 'cheap_loop_stop':

@@ -311,3 +311,41 @@ TWAP / Last-minute / Spike / Step / Pair stay on **15m** books. They do not firs
 
 No open hourly event → sit. Open lot still exits if Hourly toggle later turns Off.
 
+---
+
+## 14. Weekly (ATM ladder) + History Sell — locked
+
+Status: **shipping**. Same Admin flag `cheapLoop`. Own user toggle **Weekly** under Hourly. Default Off. Empty weekly chips = no weekly buys.
+
+Same `KX*D` series as Hourly. Cloud picks the live event whose open→close is **4–10 days** (~7d). Hourly is fail-closed to **20 min–3 h** so a weekend with only a weekly book cannot buy a week as “hourly.” No daily / monthly / annual this pass.
+
+Loop: buy cheap ATM → wait until **bid ≥ fill + Take** → sell → **Cooldown minutes** → hunt ATM again (ATM may move) → repeat until **Flatten left** minutes of that weekly window. Flatten: no new buys; dump if holding. Stop Off. Never both sides. Never hold to $1. One open weekly lot per asset.
+
+`entry_path`: **`cheap_loop_weekly`**. Protect skips these rows. Cycles = completed **exits this weekly event** (default **10**, range **1–20**). Cooldown / Start / Flatten / Min hold are **minutes** (same ranges as hourly). Take / Cheap max / Min gap same 5¢ / 40¢ / 10¢. Skip thin default Off. Min live % mapped to 0 (ATM). Cloud-only; Home stays 15m.
+
+| Risk key | UI | Weekly shipped | Range |
+|---|---|---|---|
+| `cheap_loop_weekly_enabled` | Weekly | **false** | — |
+| `cheap_loop_weekly_start_minutes` | Start after | **10** | 1–20 |
+| `cheap_loop_weekly_flatten_minutes` | Flatten left | **5** | 3–10 |
+| `cheap_loop_weekly_cheap_max_ask_usd` | Cheap max ask | **0.40** | 0.25–0.45 |
+| `cheap_loop_weekly_min_gap_usd` | Min gap | **0.10** | 0.08–0.20 |
+| `cheap_loop_weekly_take_usd` | Take | **0.05** | 0.03–0.08 |
+| `cheap_loop_weekly_min_hold_minutes` | Min hold | **2** | 1–8 |
+| `cheap_loop_weekly_cooldown_minutes` | Cooldown | **3** | 1–10 |
+| `cheap_loop_weekly_cycles` | Cycles | **10** | 1–20 |
+| `cheap_loop_weekly_lot_count` | Lot contracts | **1** | 1–5 |
+| `cheap_loop_weekly_skip_thin_bid` | Skip thin bid | **false** | — |
+| `cheap_loop_weekly_assets` | Weekly assets | **[]** | same series as hourly |
+
+15m / Hourly / Weekly may all hold (different tickers). Shared: max open, daily loss, trades/day. TWAP / Last-minute / Spike / Step / Pair stay on **15m**.
+
+### History Sell
+
+On a **pending** fill tagged **Cheap loop hourly** or **Cheap loop weekly**, History shows **Sell**. Tap = sell **that ticker / trade id now** on Kalshi’s book (bid IOC). Does **not** wait for Take, Flatten, or Friday.
+
+Confirm dialog. Placing… lock so a double tap cannot race itself. IOC miss stays pending and releases the claim. Success is a Cheap loop **exit** (cycle++, cooldown, then hunt). Allowed when Auto Off. Allowed on Kill switch (emergency dump). Does **not** require Last signals Buy/Sell. Does **not** go through 15m `computeLean`. Hide Sell on 15m Cheap loop and all other paths.
+
+Race with the 1s watcher: `claimProtectSell` — first wins. Second tap or watcher tick gets `claim_lost`.
+
+

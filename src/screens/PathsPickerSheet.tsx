@@ -17,8 +17,8 @@ import { formatSharedChipOverlapNote } from './tickerOverlap';
 const PATHS_HELP =
   'Tap a name to edit only that path. Star pins it on Home (three max). Unpin by starring again. Admin-off paths stay hidden.';
 
-/** Fallback if hub height has not been measured yet. */
-export const PATHS_PICKER_OVERLAY_PAD_TOP = 24;
+/** Paths replaces the Settings hub, so do not inset by hub height. */
+export const PATHS_PICKER_OVERLAY_PAD_TOP = 0;
 
 export function PathsPickerSheet({
   visible,
@@ -47,7 +47,7 @@ export function PathsPickerSheet({
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
   const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const config = useConfigStore((s) => s.config);
-  const padTop = Math.max(PATHS_PICKER_OVERLAY_PAD_TOP, topInset);
+  const padTop = Math.max(0, topInset);
 
   useEffect(() => {
     if (visible) void hydrate();
@@ -193,7 +193,8 @@ export function PathsPickerSheet({
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
+    minHeight: 0,
     overflow: 'hidden',
   },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
@@ -242,7 +243,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingLeft: 10,
     paddingRight: 28,
-    minHeight: 46,
+    minHeight: 58,
   },
   tileTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '700', lineHeight: 16 },
   tileSub: { color: colors.mute, fontSize: 10, marginTop: 2 },

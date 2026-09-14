@@ -597,6 +597,22 @@ export function getFaqCategories(): FaqCategory[] {
             'Start after default 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Min hold 2, Cooldown 3, Cycles 2. Stop is Off. Window cap 1 does not block. TWAP / Last-minute / Spike / Step / Pair stay on 15m. 15m Cheap loop and Hourly may both hold. Protect skips these rows.',
         },
         {
+          id: 'what-is-cheap-loop-weekly',
+          q: 'What is Cheap loop Weekly?',
+          a:
+            'A third switch on the Cheap loop tile (same Admin flag). Default Off. Empty weekly chips mean no weekly buys.\n\n' +
+            'Same Kalshi above/below series as Hourly (KXBTCD, …). Cloud picks the live event that lasts about a week (4–10 days), not the hour or the day. Unique ATM strike. After a fill it holds that ticker until Take, Flatten, or you tap History Sell. Then Cooldown (minutes), then it looks for the cheaper ATM side again. Cycles count exits this weekly event (default 10, max 20). One open weekly lot per coin.\n\n' +
+            'Start after 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Min hold 2, Cooldown 3. Stop is Off. 15m, Hourly, and Weekly may all hold. Protect skips these rows.',
+        },
+        {
+          id: 'cheap-loop-history-sell',
+          q: 'What does History Sell do on Cheap loop?',
+          a:
+            'On a pending Cheap loop hourly or Cheap loop weekly fill, History shows Sell. Tap sells that contract now on Kalshi’s book (bid IOC). It does not wait for Take, Flatten, or Friday.\n\n' +
+            'A confirm dialog, then Placing… so a double tap cannot fire twice. If IOC misses, the fill stays pending. If Cloud’s 1s watcher already sold it, you get “already sold.” Success counts as a Cheap loop exit (cycle + cooldown, then hunt again).\n\n' +
+            'Works with Auto Off and with Kill switch (emergency dump). It does not use Home Buy/Sell or 15m lean. 15m Cheap loop and other paths do not show this button.',
+        },
+        {
           id: 'cheap-loop-risk-hidden',
           q: 'Why don’t I see Cheap loop on Paths?',
           a:

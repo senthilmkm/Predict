@@ -344,6 +344,7 @@ export class PredictCloudClient {
     asset: string;
     action: 'buy' | 'sell';
     requestId: string;
+    tradeId?: string;
   }): Promise<{
     ok: boolean;
     message?: string;

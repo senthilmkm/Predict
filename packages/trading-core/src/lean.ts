@@ -7,7 +7,7 @@ import {
 } from './kalshiRetry';
 import { sanitizeTimeseries } from './smartBuy';
 import { CashOutOrderBook, parseKalshiOrderbook } from './cashOut';
-import { cheapLoopHourlySeriesTicker, pickUniqueAtmStrike } from './cheapLoop';
+import { cheapLoopHourlySeriesTicker, cheapLoopWeeklySeriesTicker, isCheapLoopHourlyEventDuration, isCheapLoopWeeklyEventDuration, cheapLoopEventDurationMs, pickUniqueAtmStrike } from './cheapLoop';
 
 const PUBLIC_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
@@ -432,9 +432,24 @@ export async function getLiveHourlyEventMarkets(
   fetchImpl: typeof fetch = fetch,
   now = new Date()
 ): Promise<{ phase: LeanPhase; eventTicker: string; markets: MarketRow[] } | null> {
-  const pickAll = await getCurrentOrNext15mMarket(seriesTicker, fetchImpl, now);
-  if (!pickAll) return null;
-  const url = `${PUBLIC_BASE}/events?limit=8&status=open&series_ticker=${encodeURIComponent(seriesTicker)}&with_nested_markets=true`;
+  return getLiveLadderEventMarkets(seriesTicker, fetchImpl, now, isCheapLoopHourlyEventDuration);
+}
+
+export async function getLiveWeeklyEventMarkets(
+  seriesTicker: string,
+  fetchImpl: typeof fetch = fetch,
+  now = new Date()
+): Promise<{ phase: LeanPhase; eventTicker: string; markets: MarketRow[] } | null> {
+  return getLiveLadderEventMarkets(seriesTicker, fetchImpl, now, isCheapLoopWeeklyEventDuration);
+}
+
+async function getLiveLadderEventMarkets(
+  seriesTicker: string,
+  fetchImpl: typeof fetch,
+  now: Date,
+  durationOk: (ms: number) => boolean
+): Promise<{ phase: LeanPhase; eventTicker: string; markets: MarketRow[] } | null> {
+  const url = `${PUBLIC_BASE}/events?limit=12&status=open&series_ticker=${encodeURIComponent(seriesTicker)}&with_nested_markets=true`;
   const cached = eventsCache.get(seriesTicker);
   let ev: any;
   if (cached && Date.now() - cached.at < EVENTS_CACHE_TTL_MS) {
@@ -471,15 +486,15 @@ export async function getLiveHourlyEventMarkets(
       (c) => c.open_utc && c.close_utc && now >= c.open_utc && now < c.close_utc
     );
     if (!live.length) continue;
+    const sample = live[0];
+    const dur = cheapLoopEventDurationMs(sample.open_utc, sample.close_utc);
+    if (dur == null || !durationOk(dur)) continue;
     const close = Math.min(...live.map((c) => c.close_utc!.getTime()));
     liveEvents.push({ eventTicker, markets: live, close });
   }
   liveEvents.sort((a, b) => a.close - b.close);
   if (liveEvents.length) {
     return { phase: 'live', eventTicker: liveEvents[0].eventTicker, markets: liveEvents[0].markets };
-  }
-  if (pickAll.phase === 'upcoming' || pickAll.phase === 'ended') {
-    return { phase: pickAll.phase, eventTicker: pickAll.row.event_ticker, markets: [pickAll.row] };
   }
   return null;
 }
@@ -489,13 +504,49 @@ export async function computeHourlyAtmLean(
   fetchImpl: typeof fetch = fetch,
   now = new Date()
 ): Promise<LeanResult> {
-  const series = cheapLoopHourlySeriesTicker(asset);
-  if (!series) {
-    return { ok: false, asset, decision: 'SKIP', phase: 'unknown', message: 'cheap_loop_hourly_no_market' };
+  return computeAtmLadderLean(asset, fetchImpl, now, {
+    seriesOf: cheapLoopHourlySeriesTicker,
+    loadEvents: getLiveHourlyEventMarkets,
+    noMarket: 'cheap_loop_hourly_no_market',
+  });
+}
+
+export async function computeWeeklyAtmLean(
+  asset: AssetKey,
+  fetchImpl: typeof fetch = fetch,
+  now = new Date()
+): Promise<LeanResult> {
+  return computeAtmLadderLean(asset, fetchImpl, now, {
+    seriesOf: cheapLoopWeeklySeriesTicker,
+    loadEvents: getLiveWeeklyEventMarkets,
+    noMarket: 'cheap_loop_weekly_no_market',
+    remapAtmSkip: (reason) =>
+      reason === 'cheap_loop_hourly_no_atm' ? 'cheap_loop_weekly_no_atm' : reason,
+  });
+}
+
+async function computeAtmLadderLean(
+  asset: AssetKey,
+  fetchImpl: typeof fetch,
+  now: Date,
+  opts: {
+    seriesOf: (asset: string) => string | null;
+    loadEvents: (
+      seriesTicker: string,
+      fetchImpl?: typeof fetch,
+      now?: Date
+    ) => Promise<{ phase: LeanPhase; eventTicker: string; markets: MarketRow[] } | null>;
+    noMarket: string;
+    remapAtmSkip?: (reason: string) => string;
   }
-  const bundle = await getLiveHourlyEventMarkets(series, fetchImpl, now);
+): Promise<LeanResult> {
+  const series = opts.seriesOf(asset);
+  if (!series) {
+    return { ok: false, asset, decision: 'SKIP', phase: 'unknown', message: opts.noMarket };
+  }
+  const bundle = await opts.loadEvents(series, fetchImpl, now);
   if (!bundle) {
-    return { ok: false, asset, decision: 'SKIP', phase: 'unknown', message: 'cheap_loop_hourly_no_market' };
+    return { ok: false, asset, decision: 'SKIP', phase: 'unknown', message: opts.noMarket };
   }
   if (bundle.phase !== 'live') {
     return {
@@ -532,7 +583,7 @@ export async function computeHourlyAtmLean(
       phase: bundle.phase,
       event_ticker: bundle.eventTicker,
       live,
-      message: atm.skip_reason,
+      message: opts.remapAtmSkip ? opts.remapAtmSkip(atm.skip_reason) : atm.skip_reason,
     };
   }
   const row = bundle.markets.find((m) => m.market_ticker === atm.ticker) || bundle.markets[0];
