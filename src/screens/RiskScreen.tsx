@@ -1047,6 +1047,7 @@ function CheapLoopFields() {
               const flatten = meta.key === 'cheap_loop_flatten_minutes';
               const hold = meta.key === 'cheap_loop_min_hold_minutes';
               const cool = meta.key === 'cheap_loop_cooldown_minutes';
+              const livePct = meta.key === 'cheap_loop_min_live_cushion_pct';
               return (
                 <RiskStepper
                   key={meta.key}
@@ -1062,7 +1063,9 @@ function CheapLoopFields() {
                           ? `${Math.round(Number(config.risk.cheap_loop_min_hold_minutes) || 0)} min`
                           : cool
                             ? `${Math.round(Number(config.risk.cheap_loop_cooldown_minutes) || 0)} min`
-                            : undefined
+                            : livePct
+                              ? `${Math.round(Number(config.risk.cheap_loop_min_live_cushion_pct) || 0)}%`
+                              : undefined
                   }
                   onChange={(next) => setRiskField(meta.key, next as never)}
                 />
@@ -1093,11 +1096,11 @@ function CheapLoopFields() {
           </View>
           <Text style={styles.hint} testID="cheap-loop-hint">
             After Start after and before Flatten left. Cheaper ask ≤ Cheap max, |YES − NO| ≥ Min
-            gap, and |live − strike| ≥ Min live $ → buy that side. Min live $ is the same dollar
-            floor for every chip (0 = off). After Min hold, take when that bid ≥ fill + Take. No
-            Stop — a falling ticket holds until Take or Flatten. Flatten in the last Flatten left
-            minutes. Then Cooldown. Cycles is how many exits this ticker this window. Always dumps.
-            Spike fade / Step buy / Pair lock still take first pick.
+            gap, and |live − strike| ≥ Min live % of that coin’s Cushions $ → buy that side. Same %
+            for every chip; BTC and SOL use their own cushion. 0% = off. After Min hold, take when
+            that bid ≥ fill + Take. No Stop — a falling ticket holds until Take or Flatten. Flatten
+            in the last Flatten left minutes. Then Cooldown. Cycles is how many exits this ticker
+            this window. Always dumps. Spike fade / Step buy / Pair lock still take first pick.
           </Text>
         </View>
       ) : null}

@@ -96,7 +96,7 @@ import {
   normalizeCheapLoopCycles,
   normalizeCheapLoopFlattenMinutes,
   normalizeCheapLoopLotCount,
-  normalizeCheapLoopMinAbsGapUsd,
+  normalizeCheapLoopMinLiveCushionPct,
   normalizeCheapLoopMinGapUsd,
   normalizeCheapLoopMinHoldMinutes,
   normalizeCheapLoopStartMinutes,
@@ -364,8 +364,8 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     cheap_loop_min_gap_usd: normalizeCheapLoopMinGapUsd(
       r.cheap_loop_min_gap_usd ?? d.cheap_loop_min_gap_usd
     ),
-    cheap_loop_min_abs_gap_usd: normalizeCheapLoopMinAbsGapUsd(
-      r.cheap_loop_min_abs_gap_usd ?? d.cheap_loop_min_abs_gap_usd
+    cheap_loop_min_live_cushion_pct: normalizeCheapLoopMinLiveCushionPct(
+      r.cheap_loop_min_live_cushion_pct ?? d.cheap_loop_min_live_cushion_pct
     ),
     cheap_loop_take_usd: normalizeCheapLoopTakeUsd(r.cheap_loop_take_usd ?? d.cheap_loop_take_usd),
     cheap_loop_stop_usd: normalizeCheapLoopStopUsd(r.cheap_loop_stop_usd ?? d.cheap_loop_stop_usd),

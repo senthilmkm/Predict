@@ -515,7 +515,7 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-cheap_loop_start_minutes').props.children).toBe('2 min');
     expect(s.getByTestId('risk-value-auto-cheap_loop_flatten_minutes').props.children).toBe('5 min');
     expect(s.getByTestId('risk-value-auto-cheap_loop_cheap_max_ask_usd').props.children).toMatch(/\$0\.40/);
-    expect(s.getByTestId('risk-value-auto-cheap_loop_min_abs_gap_usd').props.children).toMatch(/\$25/);
+    expect(s.getByTestId('risk-value-auto-cheap_loop_min_live_cushion_pct').props.children).toBe('15%');
     expect(s.getByTestId('risk-value-auto-cheap_loop_take_usd').props.children).toMatch(/\$0\.05/);
     expect(s.queryByTestId('risk-value-auto-cheap_loop_stop_usd')).toBeNull();
     expect(s.getByTestId('risk-value-auto-cheap_loop_cycles').props.children).toBe('1');

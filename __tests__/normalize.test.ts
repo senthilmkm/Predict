@@ -409,7 +409,7 @@ describe('normalize / cushions', () => {
     expect(d.cheap_loop_flatten_minutes).toBe(5);
     expect(d.cheap_loop_cheap_max_ask_usd).toBe(0.4);
     expect(d.cheap_loop_min_gap_usd).toBe(0.1);
-    expect(d.cheap_loop_min_abs_gap_usd).toBe(25);
+    expect(d.cheap_loop_min_live_cushion_pct).toBe(15);
     expect(d.cheap_loop_take_usd).toBe(0.05);
     expect(d.cheap_loop_stop_usd).toBe(0.06);
     expect(d.cheap_loop_cycles).toBe(1);

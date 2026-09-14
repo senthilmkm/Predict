@@ -19,7 +19,8 @@ import {
   normalizeCheapLoopHourlyCycles,
   normalizeCheapLoopHourlyStartMinutes,
   normalizeCheapLoopLotCount,
-  normalizeCheapLoopMinAbsGapUsd,
+  normalizeCheapLoopMinLiveCushionPct,
+  cheapLoopMinLiveUsd,
   normalizeCheapLoopMinGapUsd,
   normalizeCheapLoopStartMinutes,
   normalizeCheapLoopStopUsd,
@@ -37,14 +38,14 @@ import { PATH_INFO } from '../src/content/pathInfo';
 function cfg(over: Record<string, unknown> = {}) {
   const c = defaultAppConfig();
   c.auto_trade_enabled = true;
-  c.cushions.BTC = 0;
+  c.cushions.BTC = 175;
   c.assets_enabled.BTC = true;
   c.risk.cheap_loop_enabled = true;
   c.risk.cheap_loop_start_minutes = 2;
   c.risk.cheap_loop_flatten_minutes = 5;
   c.risk.cheap_loop_cheap_max_ask_usd = 0.4;
   c.risk.cheap_loop_min_gap_usd = 0.1;
-  c.risk.cheap_loop_min_abs_gap_usd = 25;
+  c.risk.cheap_loop_min_live_cushion_pct = 15;
   c.risk.cheap_loop_take_usd = 0.05;
   c.risk.cheap_loop_stop_usd = 0.06;
   c.risk.cheap_loop_min_hold_minutes = 1;
@@ -144,8 +145,11 @@ describe('Cheap loop path', () => {
     expect(formatSkipReason('cheap_loop_holding_other_path')).toBe('another path already holding');
   });
 
-  test('Min live $ sits a small live-strike gap; 0 turns the floor off', () => {
+  test('Min live % uses that coin’s cushion; 0% turns the floor off', () => {
     const c = cfg();
+    expect(cheapLoopMinLiveUsd({ cushionUsd: 175, pct: 15 })).toBe(26.25);
+    expect(cheapLoopMinLiveUsd({ cushionUsd: 0.5, pct: 15 })).toBe(0.075);
+    expect(cheapLoopMinLiveUsd({ cushionUsd: 0, pct: 15 })).toBe(Number.POSITIVE_INFINITY);
     const thin = evaluateCheapLoopEnter({
       lean: lean({ abs_gap: 10 }),
       cfg: c,
@@ -156,22 +160,41 @@ describe('Cheap loop path', () => {
     expect(formatSkipReason('cheap_loop_below_min_live')).toBe('live too close to strike');
 
     const ok = evaluateCheapLoopEnter({
-      lean: lean({ abs_gap: 25 }),
+      lean: lean({ abs_gap: 27 }),
       cfg: c,
       adminEnabled: true,
     });
     expect(ok.ok).toBe(true);
 
+    const sol = cfg();
+    sol.cushions.SOL = 0.5;
+    sol.assets_enabled.SOL = true;
+    sol.risk.cheap_loop_assets = ['SOL'];
+    const solOk = evaluateCheapLoopEnter({
+      lean: lean({ asset: 'SOL', market_ticker: 'KXSOL15M-T', abs_gap: 0.1 }),
+      cfg: sol,
+      adminEnabled: true,
+    });
+    expect(solOk.ok).toBe(true);
+
+    const noCushion = evaluateCheapLoopEnter({
+      lean: lean({ abs_gap: 100 }),
+      cfg: { ...c, cushions: { ...c.cushions, BTC: 0 } },
+      adminEnabled: true,
+    });
+    expect(noCushion.ok).toBe(false);
+    expect(noCushion.skip_reason).toBe('cheap_loop_below_min_live');
+
     const off = evaluateCheapLoopEnter({
       lean: lean({ abs_gap: 1 }),
-      cfg: { ...c, risk: { ...c.risk, cheap_loop_min_abs_gap_usd: 0 } },
+      cfg: { ...c, risk: { ...c.risk, cheap_loop_min_live_cushion_pct: 0 } },
       adminEnabled: true,
     });
     expect(off.ok).toBe(true);
 
-    expect(normalizeCheapLoopMinAbsGapUsd(25)).toBe(25);
-    expect(normalizeCheapLoopMinAbsGapUsd(-4)).toBe(0);
-    expect(normalizeCheapLoopMinAbsGapUsd(900)).toBe(250);
+    expect(normalizeCheapLoopMinLiveCushionPct(15)).toBe(15);
+    expect(normalizeCheapLoopMinLiveCushionPct(-4)).toBe(0);
+    expect(normalizeCheapLoopMinLiveCushionPct(90)).toBe(50);
 
     const hourly = cheapLoopCfgForHourly({
       ...cfg(),
@@ -179,10 +202,10 @@ describe('Cheap loop path', () => {
         ...cfg().risk,
         cheap_loop_hourly_enabled: true,
         cheap_loop_hourly_assets: ['BTC'],
-        cheap_loop_min_abs_gap_usd: 25,
+        cheap_loop_min_live_cushion_pct: 15,
       },
     });
-    expect(hourly.risk.cheap_loop_min_abs_gap_usd).toBe(0);
+    expect(hourly.risk.cheap_loop_min_live_cushion_pct).toBe(0);
     const atm = evaluateCheapLoopEnter({
       lean: lean({
         market_ticker: 'KXBTCD-26SEP1406-T67099.99',

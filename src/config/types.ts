@@ -266,7 +266,9 @@ export interface RiskConfig {
   cheap_loop_flatten_minutes?: number;
   cheap_loop_cheap_max_ask_usd?: number;
   cheap_loop_min_gap_usd?: number;
+  /** Leftover. 15m enter uses min live % of cushion instead. */
   cheap_loop_min_abs_gap_usd?: number;
+  cheap_loop_min_live_cushion_pct?: number;
   cheap_loop_take_usd?: number;
   cheap_loop_stop_usd?: number;
   cheap_loop_min_hold_minutes?: number;
@@ -474,7 +476,7 @@ export function defaultAppConfig(): AppConfig {
       cheap_loop_flatten_minutes: 5,
       cheap_loop_cheap_max_ask_usd: 0.4,
       cheap_loop_min_gap_usd: 0.1,
-      cheap_loop_min_abs_gap_usd: 25,
+      cheap_loop_min_live_cushion_pct: 15,
       cheap_loop_take_usd: 0.05,
       cheap_loop_stop_usd: 0.06,
       cheap_loop_min_hold_minutes: 1,
