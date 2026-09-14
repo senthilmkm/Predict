@@ -21,6 +21,8 @@ export interface FeatureFlags {
   spikeFade: boolean;
   /** Pair lock Auto path. Default Off — Admin must enable. */
   pairLock: boolean;
+  /** Cheap loop Auto path. Default Off — Admin must enable. */
+  cheapLoop: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -34,6 +36,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   stepBuy: false,
   spikeFade: false,
   pairLock: false,
+  cheapLoop: false,
 };
 
 export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): FeatureFlags {
@@ -48,6 +51,7 @@ export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): Featu
     stepBuy: raw?.stepBuy === true,
     spikeFade: raw?.spikeFade === true,
     pairLock: raw?.pairLock === true,
+    cheapLoop: raw?.cheapLoop === true,
   };
 }
 

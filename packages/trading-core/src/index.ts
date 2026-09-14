@@ -15,4 +15,5 @@ export * from './lastMinute';
 export * from './stepBuy';
 export * from './spikeFade';
 export * from './pairLock';
+export * from './cheapLoop';
 export * from './skipThinBid';

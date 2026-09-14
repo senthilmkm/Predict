@@ -30,6 +30,7 @@ export function entryPathChipLabel(
   if (parsed === 'last_minute') return 'Last-minute';
   if (parsed === 'step_buy') return 'Step buy';
   if (parsed === 'spike_fade') return 'Spike fade';
+  if (parsed === 'cheap_loop') return 'Cheap loop';
   const n = Number(pairNo);
   const numbered = Number.isFinite(n) && n >= 1 ? ` ${Math.floor(n)}` : '';
   if (parsed === 'pair_lock') return numbered ? `Pair lock${numbered}` : 'Pair lock';

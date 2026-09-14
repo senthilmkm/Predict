@@ -14,6 +14,7 @@ const COMPARE: { path: string; buys: string; exits: string; hold: string; cushio
   { path: 'Step buy', buys: 'Lean, then add lots', exits: 'Per-lot stop', hold: 'Unless stop', cushion: 'Cushion %' },
   { path: 'Spike fade', buys: 'Always cheap side', exits: 'Take, stop, flatten', hold: 'Always dumps', cushion: 'On/Off only' },
   { path: 'Pair lock', buys: 'Runner + opposite hedge', exits: 'Hold both, or flatten unmatched', hold: 'Locked pair yes', cushion: 'On/Off only' },
+  { path: 'Cheap loop', buys: 'Cheaper side, then repeat', exits: 'Take, stop, flatten', hold: 'Always dumps', cushion: 'On/Off only' },
 ];
 
 const GUIDE_KEYS = [
@@ -27,6 +28,7 @@ const GUIDE_KEYS = [
   'stepBuy',
   'spikeFade',
   'pairLock',
+  'cheapLoop',
 ] as const;
 
 export function PathsGuideScreen() {

@@ -95,6 +95,8 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Spike fade already filled this window';
     case 'window_used_by_pair_lock':
       return 'Pair lock already filled this window';
+    case 'window_used_by_cheap_loop':
+      return 'Cheap loop already filled this window';
     case 'ask_too_rich':
       return 'ask too rich';
     case 'smart_buy_no_path':
@@ -332,6 +334,43 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Pair lock add pair finish';
     case 'pair_lock_stack_dump':
       return 'Pair lock add pair dump';
+    case 'cheap_loop_admin_off':
+    case 'cheap_loop_off':
+      return 'cheap loop off';
+    case 'cheap_loop_asset_off':
+      return 'cheap loop asset off';
+    case 'cheap_loop_outside_window':
+      return 'cheap loop outside window';
+    case 'cheap_loop_too_late':
+      return 'too little time left';
+    case 'cheap_loop_cycles':
+      return 'cheap loop cycles used';
+    case 'cheap_loop_cooldown':
+      return 'cheap loop cooldown';
+    case 'cheap_loop_ask_rich':
+      return 'cheap side not cheap';
+    case 'cheap_loop_no_favorite':
+      return 'no cheap-side gap';
+    case 'cheap_loop_no_cheap_side':
+      return 'no cheaper side';
+    case 'cheap_loop_no_ask':
+      return 'no ask';
+    case 'cheap_loop_thin_bid':
+      return 'bid too thin';
+    case 'cheap_loop_holding':
+      return 'cheap loop is holding this ticket';
+    case 'cheap_loop_holding_other_path':
+      return 'another path already holding';
+    case 'cheap_loop_twap_owns':
+      return 'twap lock owns this coin';
+    case 'cheap_loop_last_minute_owns':
+      return 'last-minute owns new buys';
+    case 'cheap_loop_take':
+      return 'Cheap loop take';
+    case 'cheap_loop_stop':
+      return 'Cheap loop stop';
+    case 'cheap_loop_flatten':
+      return 'Cheap loop flatten';
     case 'no_open_fill':
       return 'no open fill to sell';
     case 'market_closed':
@@ -395,6 +434,7 @@ const WINDOW_USED_PATHS = [
   'step_buy',
   'spike_fade',
   'pair_lock',
+  'cheap_loop',
 ] as const;
 
 export function firstWindowBuyEntryPath(
@@ -436,7 +476,9 @@ export function firstWindowBuyEntryPath(
                       ? 'spike_fade'
                       : raw === 'pairlock' || raw === 'pair_lock_hedge' || raw === 'pairlockhedge'
                         ? 'pair_lock'
-                        : raw;
+                        : raw === 'cheaploop'
+                          ? 'cheap_loop'
+                          : raw;
     if ((WINDOW_USED_PATHS as readonly string[]).includes(alias)) {
       return alias as (typeof WINDOW_USED_PATHS)[number];
     }

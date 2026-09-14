@@ -373,6 +373,7 @@ describe('normalize / cushions', () => {
     expect(d.pair_lock_runner_stop_usd).toBe(0.1);
     expect(d.pair_lock_lot_count).toBe(1);
     expect(d.pair_lock_add_pairs).toBe(0);
+    expect(d.pair_lock_lock_first).toBe(true);
     expect(d.pair_lock_skip_thin_bid).toBe(false);
     expect(normalizeAppConfig({ risk: { pair_lock_assets: [] } } as any).risk.pair_lock_assets).toEqual([]);
     const pairOn = normalizeAppConfig({
@@ -398,7 +399,34 @@ describe('normalize / cushions', () => {
     expect(pairOn.pair_lock_runner_stop_usd).toBe(0.2);
     expect(pairOn.pair_lock_lot_count).toBe(1);
     expect(pairOn.pair_lock_add_pairs).toBe(3);
+    expect(pairOn.pair_lock_lock_first).toBe(true);
+    expect(
+      normalizeAppConfig({ risk: { pair_lock_lock_first: false } } as any).risk.pair_lock_lock_first
+    ).toBe(false);
     expect(on.pair_lock_skip_thin_bid).toBe(true);
+    expect(d.cheap_loop_enabled).toBe(false);
+    expect(d.cheap_loop_start_minutes).toBe(2);
+    expect(d.cheap_loop_flatten_minutes).toBe(5);
+    expect(d.cheap_loop_cheap_max_ask_usd).toBe(0.4);
+    expect(d.cheap_loop_take_usd).toBe(0.05);
+    expect(d.cheap_loop_stop_usd).toBe(0.06);
+    expect(d.cheap_loop_cycles).toBe(1);
+    expect(d.cheap_loop_assets).toEqual([]);
+    expect(d.cheap_loop_skip_thin_bid).toBe(false);
+    const cheapOn = normalizeAppConfig({
+      risk: {
+        cheap_loop_enabled: true,
+        cheap_loop_take_usd: 0.08,
+        cheap_loop_stop_usd: 0.05,
+        cheap_loop_cheap_max_ask_usd: 0.55,
+        cheap_loop_assets: ['BTC', 'HYPE'],
+      },
+    } as any).risk;
+    expect(cheapOn.cheap_loop_enabled).toBe(true);
+    expect(cheapOn.cheap_loop_take_usd).toBe(0.04);
+    expect(cheapOn.cheap_loop_stop_usd).toBe(0.05);
+    expect(cheapOn.cheap_loop_cheap_max_ask_usd).toBe(0.45);
+    expect(cheapOn.cheap_loop_assets).toEqual(['BTC', 'HYPE']);
     const split = normalizeAppConfig({
       risk: { cash_out_skip_thin_bid: true, gold_fade_skip_thin_bid: false },
     } as any).risk;

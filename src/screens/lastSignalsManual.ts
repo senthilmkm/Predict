@@ -18,6 +18,12 @@ import {
 import { isStepBuyEnterPath, normalizeStepBuyStartMinutes } from '../../packages/trading-core/src/stepBuy';
 import { isSpikeFadeEnterPath, isSpikeFadeEnterWindow } from '../../packages/trading-core/src/spikeFade';
 import { isPairLockEnterPath, isPairLockEnterWindow } from '../../packages/trading-core/src/pairLock';
+import {
+  cheapLoopCooldownWatchText,
+  cheapLoopHoldingWatchText,
+  isCheapLoopEnterPath,
+  isCheapLoopEnterWindow,
+} from '../../packages/trading-core/src/cheapLoop';
 
 export type GapLiveSide = 'above' | 'below';
 export type GapDisplayTone = 'with' | 'against' | 'neutral';
@@ -78,8 +84,6 @@ export function formatGapDisplay(opts: {
   return { text: `${amt} (gap)`, tone: 'neutral' };
 }
 
-export const LIVE_ASK_STALE_MS = 8_000;
-
 export type LiveAskQuote = {
   yes_ask?: number | null;
   no_ask?: number | null;
@@ -90,7 +94,7 @@ function finiteAsk(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-/** Prefer the Cloud 1s watcher book; fall back to the phone lean ask. */
+/** Prefer the Cloud 1s watcher book; lean only when that book has no ask. */
 export function pickLiveAsk(opts: {
   nowMs: number;
   cloudAt?: string | null;
@@ -98,12 +102,11 @@ export function pickLiveAsk(opts: {
   leanYes?: number | null;
   leanNo?: number | null;
 }): { yes_ask?: number; no_ask?: number; source: 'watcher' | 'lean' } | null {
-  const cloudAt = opts.cloudAt ? Date.parse(opts.cloudAt) : NaN;
-  const cloudFresh =
-    Number.isFinite(cloudAt) && opts.nowMs - cloudAt <= LIVE_ASK_STALE_MS;
+  void opts.nowMs;
+  void opts.cloudAt;
   const cloudYes = finiteAsk(opts.cloud?.yes_ask);
   const cloudNo = finiteAsk(opts.cloud?.no_ask);
-  if (cloudFresh && (cloudYes != null || cloudNo != null)) {
+  if (cloudYes != null || cloudNo != null) {
     return { yes_ask: cloudYes, no_ask: cloudNo, source: 'watcher' };
   }
   const leanYes = finiteAsk(opts.leanYes);
@@ -114,16 +117,25 @@ export function pickLiveAsk(opts: {
   return null;
 }
 
+export function formatLiveAskAgeSec(nowMs: number, cloudAt?: string | null): string {
+  const t = cloudAt ? Date.parse(cloudAt) : NaN;
+  if (!Number.isFinite(t)) return '';
+  return `${Math.max(0, Math.floor((nowMs - t) / 1000))}s`;
+}
+
 export function formatLiveAskLine(
-  quote: { yes_ask?: number | null; no_ask?: number | null } | null | undefined
+  quote: { yes_ask?: number | null; no_ask?: number | null } | null | undefined,
+  extra?: { age?: string | null }
 ): string {
   if (!quote) return '';
   const yes = finiteAsk(quote.yes_ask);
   const no = finiteAsk(quote.no_ask);
-  const fmt = (v: number) => `$${v.toFixed(2)}`;
-  if (yes != null && no != null) return `YES ${fmt(yes)} · NO ${fmt(no)}`;
-  if (yes != null) return `YES ${fmt(yes)}`;
-  if (no != null) return `NO ${fmt(no)}`;
+  const fmt = (v: number) => `${Math.round(v * 100)}¢`;
+  const age = String(extra?.age || '').trim();
+  const suffix = age ? ` · ${age}` : '';
+  if (yes != null && no != null) return `YES ${fmt(yes)} · NO ${fmt(no)}${suffix}`;
+  if (yes != null) return `YES ${fmt(yes)}${suffix}`;
+  if (no != null) return `NO ${fmt(no)}${suffix}`;
   return '';
 }
 
@@ -482,6 +494,62 @@ export function formatPairLockWatchLine(opts: {
   return `Pair lock watching · ${Math.round(left)}s left`;
 }
 
+export function formatCheapLoopWatchLine(opts: {
+  adminEnabled: boolean;
+  userEnabled: boolean;
+  assetEnabled: boolean;
+  asset: string;
+  assets?: unknown;
+  minutesElapsed?: number | null;
+  minutesLeft?: number | null;
+  startMinutes?: unknown;
+  flattenMinutes?: unknown;
+  takeUsd?: unknown;
+  holding?: boolean;
+  cooldownSec?: number;
+  autoDetail?: string | null;
+  autoStatus?: string | null;
+}): string | null {
+  if (
+    !isCheapLoopEnterPath({
+      adminEnabled: opts.adminEnabled,
+      userEnabled: opts.userEnabled,
+      assetEnabled: opts.assetEnabled,
+      asset: opts.asset,
+      assets: opts.assets,
+    }) &&
+    !opts.holding
+  ) {
+    return null;
+  }
+  if (opts.holding) return cheapLoopHoldingWatchText(opts.takeUsd);
+  const cool = Number(opts.cooldownSec);
+  if (Number.isFinite(cool) && cool > 0) return cheapLoopCooldownWatchText(cool);
+  if (
+    !isCheapLoopEnterWindow({
+      minutesElapsed: opts.minutesElapsed,
+      minutesLeft: opts.minutesLeft,
+      startMinutes: opts.startMinutes,
+      flattenMinutes: opts.flattenMinutes,
+    })
+  ) {
+    return null;
+  }
+  const status = String(opts.autoStatus || '');
+  if (status === 'placed') return null;
+  if (status === 'skipped') {
+    const reason = String(opts.autoDetail || '')
+      .replace(/^skipped\s*·\s*/i, '')
+      .trim();
+    if (reason) return `Cheap loop watching · ${reason}`;
+  }
+  if (status === 'failed') {
+    const detail = String(opts.autoDetail || '').trim();
+    if (detail) return `Cheap loop watching · ${detail}`;
+  }
+  return null;
+}
+
 export function twapWatchSecondsLeft(closeUtc: unknown, nowMs: number): number | null {
   if (closeUtc == null) return null;
   const close = closeUtc instanceof Date ? closeUtc : new Date(String(closeUtc));
@@ -514,11 +582,13 @@ export function lastSignalExtraLine(opts: {
   stepBuyHolding?: boolean;
   spikeFadeHolding?: boolean;
   pairLockHolding?: boolean;
+  cheapLoopHolding?: boolean;
   twapWatchText?: string | null;
   lastMinuteWatchText?: string | null;
   stepBuyWatchText?: string | null;
   spikeFadeWatchText?: string | null;
   pairLockWatchText?: string | null;
+  cheapLoopWatchText?: string | null;
   overlapText?: string | null;
 }): { testID: 'trade-action' | 'skip-reason'; text: string; placed?: boolean; failed?: boolean } | null {
   if (opts.err || !opts.isOpen || opts.noMarket) return null;
@@ -549,6 +619,9 @@ export function lastSignalExtraLine(opts: {
   if (opts.pairLockHolding) {
     return { testID: 'skip-reason', text: 'pair lock is holding this ticket' };
   }
+  if (opts.cheapLoopHolding) {
+    return { testID: 'skip-reason', text: 'cheap loop is holding this ticket' };
+  }
   if (opts.goldFadeHolding) {
     return { testID: 'skip-reason', text: 'gold fade is holding this ticket' };
   }
@@ -569,6 +642,9 @@ export function lastSignalExtraLine(opts: {
   }
   if (opts.pairLockWatchText) {
     return { testID: 'skip-reason', text: opts.pairLockWatchText };
+  }
+  if (opts.cheapLoopWatchText) {
+    return { testID: 'skip-reason', text: opts.cheapLoopWatchText };
   }
   if (opts.manualKind === 'buy') {
     if (opts.tapSkipReason) return { testID: 'skip-reason', text: opts.tapSkipReason };

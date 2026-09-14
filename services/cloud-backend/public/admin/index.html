@@ -391,6 +391,7 @@
               <span id="stepBuyWatcherChip" class="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30">Step buy watcher · idle</span>
               <span id="spikeFadeWatcherChip" class="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30">Spike fade watcher · idle</span>
               <span id="pairLockWatcherChip" class="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30">Pair lock watcher · idle</span>
+              <span id="cheapLoopWatcherChip" class="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30">Cheap loop watcher · idle</span>
               <div class="tooltip-wrapper">
                 <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
                 <div class="tooltip-content">
@@ -834,6 +835,20 @@
                 Flatten unmatched dumps the runner only. Protect skips this path. Window cap 1
                 blocks the runner only. Off hides the phone block and blocks new Pair lock buys.
                 Open unmatched runners still hedge or flatten.
+              </span>
+            </span>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagCheapLoop" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">Cheap loop</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                Separate Auto path. Default Off. Empty chips = no buys. After Start after and before
+                Flatten left, buy the cheaper side when it is under Cheap max and the YES/NO gap
+                meets Min gap. Take / stop / flatten always dump. Then cooldown and repeat up to
+                Cycles. Window cap 1 does not block this path. Spike fade / Step buy / Pair lock
+                keep first pick. Off hides the phone tile and blocks new buys. Open lots still
+                take / stop / flatten.
               </span>
             </span>
           </label>
@@ -1501,6 +1516,8 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       if (spikeFade) spikeFade.checked = flags.spikeFade === true;
       const pairLock = document.getElementById('flagPairLock');
       if (pairLock) pairLock.checked = flags.pairLock === true;
+      const cheapLoop = document.getElementById('flagCheapLoop');
+      if (cheapLoop) cheapLoop.checked = flags.cheapLoop === true;
     }
     async function saveFeatureSettings() {
       const status = document.getElementById('featureStatusMsg');
@@ -1521,6 +1538,7 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
               stepBuy: document.getElementById('flagStepBuy').checked,
               spikeFade: document.getElementById('flagSpikeFade').checked,
               pairLock: document.getElementById('flagPairLock').checked,
+              cheapLoop: document.getElementById('flagCheapLoop').checked,
             },
           }),
         });
@@ -1828,6 +1846,17 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
             if (!pairChip) continue;
             pairChip.textContent = pairLockLabel;
             pairChip.className = pairLockClass;
+          }
+          const cheapLoopWatching = data.cheapLoopWatcher?.watching === true && !String(data.cheapLoopWatcher?.label || '').includes('idle');
+          const cheapLoopLabel = data.cheapLoopWatcher?.label || 'Cheap loop watcher · idle';
+          const cheapLoopClass = cheapLoopWatching
+            ? 'text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+            : 'text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-slate-500/20 text-slate-400 border-slate-500/30';
+          for (const id of ['cheapLoopWatcherChip', 'headerCheapLoopChip']) {
+            const cheapChip = document.getElementById(id);
+            if (!cheapChip) continue;
+            cheapChip.textContent = cheapLoopLabel;
+            cheapChip.className = cheapLoopClass;
           }
         }
         if (data.ok && data.metrics) {

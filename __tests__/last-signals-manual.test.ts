@@ -1,12 +1,15 @@
 import { defaultAppConfig } from '../src/config/types';
+import { isNewerOrSameLiveAsksAt } from '../src/services/cloud/cloudClient';
 import {
   formatGapDisplay,
+  formatLiveAskAgeSec,
   formatLiveAskLine,
   pickLiveAsk,
   formatLastMinuteWatchLine,
   formatStepBuyWatchLine,
   formatSpikeFadeWatchLine,
   formatPairLockWatchLine,
+  formatCheapLoopWatchLine,
   formatTwapWatchLine,
   heldOpenFillForTicker,
   homeBuySkipReason,
@@ -24,9 +27,16 @@ describe('last signals manual kind', () => {
     marketTicker: 'KXBTC15M-X',
   };
 
-  test('live ask prefers fresh Cloud 1s watcher then lean fallback', () => {
-    expect(formatLiveAskLine({ yes_ask: 0.42, no_ask: 0.59 })).toBe('YES $0.42 · NO $0.59');
-    expect(formatLiveAskLine({ yes_ask: 0.41 })).toBe('YES $0.41');
+  test('live ask prefers Cloud 1s watcher even if the snapshot is older than 8s', () => {
+    expect(formatLiveAskLine({ yes_ask: 0.42, no_ask: 0.59 })).toBe('YES 42¢ · NO 59¢');
+    expect(formatLiveAskLine({ yes_ask: 0.1, no_ask: 0.91 })).toBe('YES 10¢ · NO 91¢');
+    expect(formatLiveAskLine({ yes_ask: 0.42, no_ask: 0.59 }, { age: '1s' })).toBe(
+      'YES 42¢ · NO 59¢ · 1s'
+    );
+    expect(formatLiveAskAgeSec(Date.parse('2026-09-13T15:00:03.000Z'), '2026-09-13T15:00:01.000Z')).toBe(
+      '2s'
+    );
+    expect(formatLiveAskLine({ yes_ask: 0.41 })).toBe('YES 41¢');
     expect(formatLiveAskLine(null)).toBe('');
     expect(
       pickLiveAsk({
@@ -45,7 +55,19 @@ describe('last signals manual kind', () => {
         leanYes: 0.55,
         leanNo: 0.46,
       })
+    ).toEqual({ yes_ask: 0.33, no_ask: 0.68, source: 'watcher' });
+    expect(
+      pickLiveAsk({
+        nowMs: Date.parse('2026-09-13T15:00:20.000Z'),
+        cloudAt: '2026-09-13T15:00:01.000Z',
+        cloud: {},
+        leanYes: 0.55,
+        leanNo: 0.46,
+      })
     ).toEqual({ yes_ask: 0.55, no_ask: 0.46, source: 'lean' });
+    expect(isNewerOrSameLiveAsksAt('2026-09-13T15:00:02.000Z', '2026-09-13T15:00:01.000Z')).toBe(true);
+    expect(isNewerOrSameLiveAsksAt('2026-09-13T15:00:01.000Z', '2026-09-13T15:00:02.000Z')).toBe(false);
+    expect(isNewerOrSameLiveAsksAt(null, '2026-09-13T15:00:02.000Z')).toBe(false);
   });
 
   test('Home gap is ▲/▼, or with you / against you when holding', () => {
@@ -368,6 +390,41 @@ describe('last signal extra line', () => {
         pairLockHolding: true,
       })
     ).toEqual({ testID: 'skip-reason', text: 'pair lock is holding this ticket' });
+    expect(
+      formatCheapLoopWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'BTC',
+        assets: ['BTC'],
+        holding: true,
+        takeUsd: 0.05,
+      })
+    ).toBe('Cheap loop holding · take +5¢');
+    expect(
+      formatCheapLoopWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'BTC',
+        assets: ['BTC'],
+        minutesElapsed: 4,
+        minutesLeft: 10,
+        startMinutes: 2,
+        flattenMinutes: 5,
+        cooldownSec: 80,
+      })
+    ).toBe('Cheap loop cooldown · 80s');
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        cheapLoopHolding: true,
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'cheap loop is holding this ticket' });
   });
 
   test('Gold fade holding hides Home buttons and says so', () => {

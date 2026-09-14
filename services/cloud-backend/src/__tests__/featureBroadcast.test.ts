@@ -23,6 +23,7 @@ describe('feature flags', () => {
     expect(normalizeFeatureFlags(null).stepBuy).toBe(false);
     expect(normalizeFeatureFlags(null).spikeFade).toBe(false);
     expect(normalizeFeatureFlags(null).pairLock).toBe(false);
+    expect(normalizeFeatureFlags(null).cheapLoop).toBe(false);
     expect(normalizeFeatureFlags({}).cashOutBidCheckSeconds).toBe(3);
     expect(normalizeFeatureFlags({ cashOut: true, cashOutBidCheckSeconds: 1 }).cashOut).toBe(true);
     expect(normalizeFeatureFlags({ cashOutBidCheckSeconds: 1 }).cashOutBidCheckSeconds).toBe(2);
@@ -33,9 +34,10 @@ describe('feature flags', () => {
     expect(normalizeFeatureFlags({ stepBuy: true }).stepBuy).toBe(true);
     expect(normalizeFeatureFlags({ spikeFade: true }).spikeFade).toBe(true);
     expect(normalizeFeatureFlags({ pairLock: true }).pairLock).toBe(true);
+    expect(normalizeFeatureFlags({ cheapLoop: true }).cheapLoop).toBe(true);
     const keepCash = mergeFeatureFlags(
       { cashOut: true },
-      { goldFade: true, twapLock: true, lastMinute: true, stepBuy: true, spikeFade: true, pairLock: true }
+      { goldFade: true, twapLock: true, lastMinute: true, stepBuy: true, spikeFade: true, pairLock: true, cheapLoop: true }
     );
     expect(keepCash.cashOut).toBe(true);
     expect(keepCash.goldFade).toBe(true);
@@ -44,6 +46,7 @@ describe('feature flags', () => {
     expect(keepCash.stepBuy).toBe(true);
     expect(keepCash.spikeFade).toBe(true);
     expect(keepCash.pairLock).toBe(true);
+    expect(keepCash.cheapLoop).toBe(true);
   });
 
   test('merge does not flip unspecified flags off', () => {
@@ -116,6 +119,7 @@ describe('systemConfig nested merge', () => {
         stepBuy: false,
         spikeFade: false,
         pairLock: false,
+        cheapLoop: false,
       },
       broadcast: { templates: [{ id: 'system_maintenance', show: true, message: 'Hi' } as any] },
     });

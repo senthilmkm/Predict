@@ -28,6 +28,7 @@ import { formatLastMinuteWatcherChip, getLastMinuteWatcherSnapshot } from '../se
 import { formatStepBuyWatcherChip, getStepBuyWatcherSnapshot } from '../services/stepBuyWatcher';
 import { formatSpikeFadeWatcherChip, getSpikeFadeWatcherSnapshot } from '../services/spikeFadeWatcher';
 import { formatPairLockWatcherChip, getPairLockWatcherSnapshot } from '../services/pairLockWatcher';
+import { formatCheapLoopWatcherChip, getCheapLoopWatcherSnapshot } from '../services/cheapLoopWatcher';
 import { mergeBroadcastConfig, type BroadcastConfig } from '../services/broadcast';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 import {
@@ -70,7 +71,7 @@ adminRouter.use(adminAuthMiddleware);
 // 2. System Overview & Key Metrics
 adminRouter.get('/overview', async (req: Request, res: Response) => {
   try {
-    const [users, trades, systemConfig, twapLockWatcher, lastMinuteWatcher, stepBuyWatcher, spikeFadeWatcher, pairLockWatcher] = await Promise.all([
+    const [users, trades, systemConfig, twapLockWatcher, lastMinuteWatcher, stepBuyWatcher, spikeFadeWatcher, pairLockWatcher, cheapLoopWatcher] = await Promise.all([
       getAllUsers(),
       getAllTradesForAdmin(),
       getSystemConfig(),
@@ -79,6 +80,7 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
       getStepBuyWatcherSnapshot(),
       getSpikeFadeWatcherSnapshot(),
       getPairLockWatcherSnapshot(),
+      getCheapLoopWatcherSnapshot(),
     ]);
 
     const tradeMetrics = computeOverviewTradeMetrics(trades);
@@ -138,6 +140,10 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
       pairLockWatcher: {
         ...pairLockWatcher,
         label: formatPairLockWatcherChip(pairLockWatcher),
+      },
+      cheapLoopWatcher: {
+        ...cheapLoopWatcher,
+        label: formatCheapLoopWatcherChip(cheapLoopWatcher),
       },
     });
   } catch (err: any) {
@@ -222,6 +228,9 @@ function parseAdminFeatureFlagsPatch(raw: unknown): Partial<FeatureFlags> | unde
   }
   if (body.pairLock !== undefined) {
     patch.pairLock = body.pairLock === true;
+  }
+  if (body.cheapLoop !== undefined) {
+    patch.cheapLoop = body.cheapLoop === true;
   }
   return Object.keys(patch).length ? patch : undefined;
 }

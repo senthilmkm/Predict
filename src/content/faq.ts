@@ -377,7 +377,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'Settings → Risk → Show opens Shared limits plus Home Buy and Auto-trade tabs.\n\n' +
             'Restore shared limits resets max open, trades/day, 15m window, and daily loss stop.\n\n' +
-            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, and Pair lock on Auto-trade). Cushions and keys are not wiped.',
+            'Restore Home Buy / Restore Auto-trade resets only that tab’s size and timing (and Smart buy, Protect money, Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, Pair lock, and Cheap loop on Auto-trade). Cushions and keys are not wiped.',
         },
         {
           id: 'smart-buy',
@@ -393,7 +393,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Cushion lean?',
           a:
             'Settings → Paths → Cushion lean. This is the leftover Auto path: Cloud buys when the live gap is bigger than your Cushions $ (and Smart buy, minutes, max ask, and shared caps pass). Default On.\n\n' +
-            'Off = Cloud skips those gap>cushion buys only. Last-minute, Pair lock, Spike fade, Step buy, Cash out, Gold fade, and TWAP lock keep their own switches.\n\n' +
+            'Off = Cloud skips those gap>cushion buys only. Last-minute, Pair lock, Spike fade, Step buy, Cheap loop, Cash out, Gold fade, and TWAP lock keep their own switches.\n\n' +
             'Settings Auto-trade is the master. Off there stops every Auto path, including Cushion lean.\n\n' +
             'Missing on old phones = On, so nothing changes until you flip it. Protect money still works when Cushion lean is Off.',
         },
@@ -561,9 +561,9 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Pair lock?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Pair lock. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Pair lock buys.\n\n' +
-            'After Start after and before Until minute (default minutes 2–10), Cloud buys the Auto lean side only if that ask is at or under Runner max ask (default 60¢) and the opposite ask already locks at least Min lock (default 5¢). Size is Lot contracts × live ask — not Auto $5. Example: YES 52¢ and NO 18¢ → buy 1 YES. YES 52¢ and NO 48¢ sits out.\n\n' +
+            'After Start after and before Until minute (default minutes 2–10), Cloud buys the Auto lean side if that ask is at or under Runner max ask (default 60¢). Lock first (default On) also requires the opposite ask already locks at least Min lock (default 5¢). Size is Lot contracts × live ask — not Auto $5. Example with Lock first On: YES 52¢ and NO 18¢ → buy 1 YES. YES 52¢ and NO 48¢ sits out. Lock first Off buys that 52¢ runner and waits for the hedge.\n\n' +
             'From that fill, a 1s watcher buys the opposite side when runner fill + opposite ask ≤ $1 − Min lock. 52¢ + 18¢ = 70¢ locks +30¢ at settlement. 50¢ + 50¢ sits out. Hedge count matches the runner. Hedge does not wait the 5s grace. Window cap 1 blocks the runner only.\n\n' +
-            'Add new pair (default 0, max 3) is extra pairs after that first lock. 0 = first pair only. 3 = 3 more (4 pairs total). Only after both first-pair legs fill. If both live asks still lock Min lock, Cloud fires YES and NO together on that hedge-fill pulse, then every 1s while the pair stays locked and Add new pair still has room. If one fills and one misses, it compares finish (pay the missing side) vs dump (sell the extra) and takes the smaller loss — even a tiny locked loss if dumping would hurt more.\n\n' +
+            'Add new pair (default 0, max 3) is extra pairs after that first lock. 0 = first pair only. 3 = 3 more (4 pairs total). Only after both first-pair legs fill. If live YES+NO asks still sum to $1 or less, Cloud fires YES and NO together on that hedge-fill pulse, then every 1s while the pair stays locked and Add new pair still has room. If one fills and one misses, it compares finish (pay the missing side) vs dump (sell the extra) and takes the smaller loss — even a tiny locked loss if dumping would hurt more.\n\n' +
             'A completed pair holds both sides to $1. No take, stop, Protect, or Home Sell. If the second leg is still missing, Cloud sells the runner IOC at the bid when minutes left ≤ Flatten unmatched (default 3), the window ends, or live runner ask ≤ fill − Runner stop (default 10¢; $0 = off) and the hedge is still too rich to lock. 5s grace after the runner fill for flatten / runner stop only. The sell does not cap the loss at exactly the stop if the bid gaps. After that sell we do not buy the other leg on this ticket.\n\n' +
             'While On for that chip and inside the enter window, Auto / Cash out / Gold fade sit that ticker out. After Until minute with no runner, those paths may use the coin again. Open runner or open pair sits Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Spike fade out. TWAP still owns BTC/ETH if that path is On. Last-minute owns new buys if it is in its buy window and Pair lock has no runner and no pair. Spike fade and Step buy take first pick for new buys when they want the ticker. Protect skips these rows.',
         },
@@ -576,6 +576,27 @@ export function getFaqCategories(): FaqCategory[] {
       ],
     },
     {
+      id: 'cheap-loop',
+      title: 'Cheap loop',
+      items: [
+        {
+          id: 'what-is-cheap-loop',
+          q: 'What is Cheap loop?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Paths → Cheap loop. Default Off. Empty chips mean no buys. The asset must also be On in Cushions.\n\n' +
+            'After Start after and before Flatten left, Cloud buys the cheaper YES or NO if that ask is at or under Cheap max and the YES/NO gap is at least Min gap. Size is Lot contracts × live ask — not Auto $5. Example: YES 30¢ and NO 70¢ → buy YES. 49¢ / 51¢ sits out.\n\n' +
+            'After Min hold, it sells IOC at the bid when that bid is fill + Take. Stop can dump earlier if the ask falls fill − Stop (after a 5s grace). Flatten dumps in the last Flatten left minutes or at window end. Then Cooldown, then it looks again until Cycles exits are done. Always dumps. Never both sides. Never hold to $1.\n\n' +
+            'Window cap 1 does not block this path — Cycles is the cap. Spike fade, Step buy, and Pair lock still take first pick. TWAP still owns BTC/ETH. Last-minute owns new buys if Cheap loop has no lot. Protect skips these rows. Home tap or any other open fill blocks a new Cheap loop buy.',
+        },
+        {
+          id: 'cheap-loop-risk-hidden',
+          q: 'Why don’t I see Cheap loop on Paths?',
+          a:
+            'The Admin portal Feature configs switch “Cheap loop” is Off (default). When an admin turns it On, the tile appears on Settings → Paths. Your Cheap loop switch stays Off until you turn it on.',
+        },
+      ],
+    },
+    {
       id: 'skipthin',
       title: 'Skip thin bid',
       items: [
@@ -584,7 +605,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What does Skip thin bid do on each path?',
           a:
             'Each Cloud path has its own Skip thin bid checkbox (default Off), shown only when that path is On. Home Buy does not use it.\n\n' +
-            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The paths do not share one switch — Cash out, Gold fade, Spike fade, and Pair lock can sell when the book thins (Pair lock only dumps an unmatched runner); TWAP lock, Last-minute, and Step buy only skip the buy (Step buy still runs its ask stop).',
+            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The paths do not share one switch — Cash out, Gold fade, Spike fade, and Pair lock can sell when the book thins (Pair lock only dumps an unmatched runner); TWAP lock, Last-minute, Step buy, and Cheap loop only skip the buy (Step buy still runs its ask stop; Cheap loop still take / stop / flatten).',
           table: {
             headers: ['Path', 'If thin', 'If book size unknown'],
             rows: [
@@ -621,6 +642,11 @@ export function getFaqCategories(): FaqCategory[] {
               [
                 'Pair lock',
                 'Skip the buy. Unmatched runner can dump. Locked pair holds.',
+                'Fail closed — no buy',
+              ],
+              [
+                'Cheap loop',
+                'Skip the buy only. Open lots still take / stop / flatten.',
                 'Fail closed — no buy',
               ],
             ],

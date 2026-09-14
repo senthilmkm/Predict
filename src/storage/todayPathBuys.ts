@@ -14,6 +14,7 @@ export type PathBuyCounts = {
   stepBuy: PathBuyRow[];
   spikeFade: PathBuyRow[];
   pairLock: PathBuyRow[];
+  cheapLoop: PathBuyRow[];
   homeTotal: number;
   autoTotal: number;
   cashOutTotal: number;
@@ -22,6 +23,7 @@ export type PathBuyCounts = {
   stepBuyTotal: number;
   spikeFadeTotal: number;
   pairLockTotal: number;
+  cheapLoopTotal: number;
 };
 
 function assetSortIndex(asset: string): number {
@@ -46,6 +48,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   const stepBuy: Record<string, number> = {};
   const spikeFade: Record<string, number> = {};
   const pairLock: Record<string, number> = {};
+  const cheapLoop: Record<string, number> = {};
   for (const t of trades || []) {
     if (!isEtToday(t.at, now)) continue;
     if (!isCountableWindowBuy(t)) continue;
@@ -60,6 +63,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     else if (path === 'step_buy') stepBuy[asset] = (stepBuy[asset] || 0) + 1;
     else if (path === 'spike_fade') spikeFade[asset] = (spikeFade[asset] || 0) + 1;
     else if (path === 'pair_lock') pairLock[asset] = (pairLock[asset] || 0) + 1;
+    else if (path === 'cheap_loop') cheapLoop[asset] = (cheapLoop[asset] || 0) + 1;
     else auto[asset] = (auto[asset] || 0) + 1;
   }
   const homeRows = grouped(home);
@@ -70,6 +74,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   const stepBuyRows = grouped(stepBuy);
   const spikeFadeRows = grouped(spikeFade);
   const pairLockRows = grouped(pairLock);
+  const cheapLoopRows = grouped(cheapLoop);
   return {
     home: homeRows,
     auto: autoRows,
@@ -79,6 +84,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     stepBuy: stepBuyRows,
     spikeFade: spikeFadeRows,
     pairLock: pairLockRows,
+    cheapLoop: cheapLoopRows,
     homeTotal: homeRows.reduce((s, r) => s + r.count, 0),
     autoTotal: autoRows.reduce((s, r) => s + r.count, 0),
     cashOutTotal: cashOutRows.reduce((s, r) => s + r.count, 0),
@@ -87,6 +93,7 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     stepBuyTotal: stepBuyRows.reduce((s, r) => s + r.count, 0),
     spikeFadeTotal: spikeFadeRows.reduce((s, r) => s + r.count, 0),
     pairLockTotal: pairLockRows.reduce((s, r) => s + r.count, 0),
+    cheapLoopTotal: cheapLoopRows.reduce((s, r) => s + r.count, 0),
   };
 }
 
@@ -105,6 +112,7 @@ export function formatHomePathBuyLines(summary: PathBuyCounts): string[] {
   if (summary.stepBuyTotal > 0) lines.push(`Step buy  ${formatAssetCounts(summary.stepBuy)}`);
   if (summary.spikeFadeTotal > 0) lines.push(`Spike fade  ${formatAssetCounts(summary.spikeFade)}`);
   if (summary.pairLockTotal > 0) lines.push(`Pair lock  ${formatAssetCounts(summary.pairLock)}`);
+  if (summary.cheapLoopTotal > 0) lines.push(`Cheap loop  ${formatAssetCounts(summary.cheapLoop)}`);
   return lines;
 }
 
@@ -119,5 +127,6 @@ export function formatDashboardPathBuys(summary: PathBuyCounts): string | null {
   if (summary.stepBuyTotal > 0) parts.push(`Step buy ${summary.stepBuyTotal}`);
   if (summary.spikeFadeTotal > 0) parts.push(`Spike fade ${summary.spikeFadeTotal}`);
   if (summary.pairLockTotal > 0) parts.push(`Pair lock ${summary.pairLockTotal}`);
+  if (summary.cheapLoopTotal > 0) parts.push(`Cheap loop ${summary.cheapLoopTotal}`);
   return parts.length ? parts.join(' · ') : null;
 }

@@ -30,6 +30,7 @@ export interface SystemConfig {
     stepBuy?: boolean;
     spikeFade?: boolean;
     pairLock?: boolean;
+    cheapLoop?: boolean;
   };
   broadcast?: {
     templates?: Array<{
@@ -99,6 +100,20 @@ export function parseLiveAsksPayload(raw: any): LiveAsksPayload {
     };
   }
   return { at, byAsset };
+}
+
+/** Status snapshot must not replace a newer 1s /me/quotes book. */
+export function isNewerOrSameLiveAsksAt(
+  incomingAt: string | null | undefined,
+  currentAt: string | null | undefined
+): boolean {
+  if (!incomingAt) return false;
+  if (!currentAt) return true;
+  const next = Date.parse(incomingAt);
+  const prev = Date.parse(currentAt);
+  if (!Number.isFinite(next)) return false;
+  if (!Number.isFinite(prev)) return true;
+  return next >= prev;
 }
 
 export class PredictCloudClient {
@@ -177,12 +192,23 @@ export class PredictCloudClient {
     }
   }
 
-  async getLiveAsks(): Promise<{ ok: boolean; liveAsks?: LiveAsksPayload; error?: string }> {
+  async getLiveAsks(): Promise<{
+    ok: boolean;
+    liveAsks?: LiveAsksPayload;
+    lastTradeAction?: UserStatusDoc['lastTradeAction'];
+    error?: string;
+  }> {
     try {
       const res = await this.fetchWithAuth('/me/quotes', { method: 'GET' });
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error || 'quotes_failed' };
-      return { ok: true, liveAsks: parseLiveAsksPayload(data) };
+      return {
+        ok: true,
+        liveAsks: parseLiveAsksPayload(data),
+        ...(data.lastTradeAction && typeof data.lastTradeAction === 'object'
+          ? { lastTradeAction: data.lastTradeAction }
+          : {}),
+      };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
     }

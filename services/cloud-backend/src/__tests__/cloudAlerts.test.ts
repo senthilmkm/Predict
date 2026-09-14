@@ -86,6 +86,10 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(iocMissAlertTitle('pair_lock')).toBe('IOC miss · Pair lock');
     expect(iocMissAlertTitle('pair_lock_hedge')).toBe('IOC miss · Pair lock hedge');
     expect(
+      orderPlacedAlertTitle({ live: true, asset: 'BTC', decision: 'YES', entryPath: 'cheap_loop' })
+    ).toBe('Order Placed · Cheap loop · BTC YES');
+    expect(iocMissAlertTitle('cheap_loop')).toBe('IOC miss · Cheap loop');
+    expect(
       iocMissAlertBody({
         asset: 'BTC',
         decision: 'YES',

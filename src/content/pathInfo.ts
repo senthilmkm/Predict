@@ -9,14 +9,14 @@ export const PATH_INFO = {
       '• Max trades / day\n' +
       '• Max trades / asset / 15m window (window cap 1)\n' +
       '• Daily loss stop\n\n' +
-      'Applies to Home Buy and every Auto path (Auto-trade, Cash out, Gold fade, TWAP lock, Last-minute first clip, Step buy lot 1, Spike fade, Pair lock runner).\n\n' +
+      'Applies to Home Buy and every Auto path (Auto-trade, Cash out, Gold fade, TWAP lock, Last-minute first clip, Step buy lot 1, Spike fade, Pair lock runner, Cheap loop).\n\n' +
       'Does not use\n' +
       '• Cushions $ gap (Cushions tab)\n' +
       '• Asset on/off (Cushions tab)\n' +
       '• Path-only fields (ask, minutes, Protect, Smart buy, Last-minute clips)\n\n' +
       'Isolation\n' +
       '• Max trades / day counts each filled buy. A sell of that fill does not add another. IOC misses do not count\n' +
-      '• Window cap 1 is one fill per coin per 15m window for Home / Auto / Cash out / fade / TWAP / Last-minute first clip / Step buy lot 1 / Spike fade / Pair lock runner\n' +
+      '• Window cap 1 is one fill per coin per 15m window for Home / Auto / Cash out / fade / TWAP / Last-minute first clip / Step buy lot 1 / Spike fade / Pair lock runner. Cheap loop uses Cycles instead\n' +
       '• Last-minute ladder clips after that first Last-minute fill are extra (up to Max clips/asset)\n' +
       '• Step buy lots after lot 1 are extra (up to Max lots)\n' +
       '• Pair lock hedge is extra (same count as the runner)',
@@ -36,7 +36,7 @@ export const PATH_INFO = {
       '• Cash out / Gold fade / TWAP lock / Last-minute fields\n\n' +
       'Isolation\n' +
       '• A tap still spends real money even if Auto-trade is Off\n' +
-      '• Will not buy a ticker Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, or Pair lock already holds\n' +
+      '• Will not buy a ticker Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, Pair lock, or Cheap loop already holds\n' +
       '• A Home fill counts toward window cap 1 (Last-minute first clip then sits out)\n' +
       '• Protect money can later sell a Home fill (if Protect is On)\n' +
       '• Home Sell is IOC; slippage is Home Buy chase',
@@ -51,7 +51,7 @@ export const PATH_INFO = {
       '• Cushions $ gap, Smart buy (if On), shared limits, asset on/off\n\n' +
       'Does not use\n' +
       '• Home Buy size/timing\n' +
-      '• Cash out / Gold fade / TWAP / Last-minute / Step buy / Spike fade / Pair lock ask, side, or lots\n\n' +
+      '• Cash out / Gold fade / TWAP / Last-minute / Step buy / Spike fade / Pair lock / Cheap loop ask, side, or lots\n\n' +
       'Isolation\n' +
       '• Off = Cloud skips gap>cushion buys only. Last-minute and other paths keep their own switches\n' +
       '• Settings Auto-trade Off still stops every Auto path\n' +
@@ -82,7 +82,7 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Gap ≥ cushion × ratio, after the wait\n' +
       '• Can exit Auto and Home fills only\n' +
-      '• Skips Step buy, Spike fade, and Pair lock rows — those paths stop themselves\n' +
+      '• Skips Step buy, Spike fade, Pair lock, and Cheap loop rows — those paths stop themselves\n' +
       '• IOC sell; slippage from Auto chase\n\n' +
       'Does not use\n' +
       '• Minutes left / elapsed (after the wait, any time left)\n' +
@@ -213,7 +213,7 @@ export const PATH_INFO = {
       '• Lot 1 stop sells every remaining Step buy lot on that ticker\n' +
       '• Sold lots free Max lots slots (open lots only)\n' +
       '• Window cap 1: Auto / Home / Cash out fill this window blocks lot 1. Later Step buy lots are extra\n' +
-      '• Open Step buy: Auto / Home / Cash out / Last-minute / Pair lock sit out that ticker\n' +
+      '• Open Step buy: Auto / Home / Cash out / Last-minute / Pair lock / Cheap loop sit out that ticker\n' +
       '• If Last-minute is in its buy window and Step buy has no lots yet, Last-minute owns new buys\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Protect skips Step buy rows\n' +
@@ -245,7 +245,7 @@ export const PATH_INFO = {
       '• After Until minute, no new Spike fade buys. An open lot still take / stop / flatten\n' +
       '• While On for that chip and inside Start after…Until minute, Auto / Cash out / Gold fade do not enter that ticker\n' +
       '• After Until minute with no lot, those paths may use the coin again (window cap 1 still applies)\n' +
-      '• Open Spike fade: Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Pair lock sit out that ticker\n' +
+      '• Open Spike fade: Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Pair lock / Cheap loop sit out that ticker\n' +
       '• If Last-minute is in its buy window and Spike fade has no lot, Last-minute owns new buys\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Protect skips Spike fade rows',
@@ -257,6 +257,7 @@ export const PATH_INFO = {
       '• Pair lock asset chips, and that asset On (Cushions tab on/off). Empty chips = no Pair lock buys\n' +
       '• Start after / Until minute (default minutes 2–10 of the 15m window)\n' +
       '• Runner max ask, Min lock, Flatten unmatched, Runner stop, Lot contracts, Add new pair\n' +
+      '• Lock first checkbox (default On). Off = buy the runner at/under Runner max without the opposite already locking\n' +
       '• Auto lean for the runner only. Hedge is always the other side\n' +
       '• Shared: max open, trades/day, daily loss stop, window cap 1 on the runner\n' +
       '• IOC. 1-second watcher from the runner fill for hedge / runner stop / flatten unmatched. After both legs lock, that watcher stays on if Add new pair > 0 and can fire YES+NO on the hedge-fill pulse and every 1s\n\n' +
@@ -269,9 +270,10 @@ export const PATH_INFO = {
       'Isolation\n' +
       '• Own path. Default Off. Admin must enable the block first\n' +
       '• Example: YES 52¢ and NO 18¢ already lock → buy YES, then NO. Spent 70¢. Settlement pays $1. Locked +30¢\n' +
-      '• First buy only if opposite ask already locks at least Min lock (default 5¢). 52¢ + 48¢ sits out. 50¢ + 50¢ sits out\n' +
+      '• Lock first On: first buy only if opposite ask already locks at least Min lock (default 5¢). 52¢ + 48¢ sits out. 50¢ + 50¢ sits out\n' +
+      '• Lock first Off: first buy if runner ask ≤ Runner max. Hedge still needs Min lock. Flatten unmatched and Runner stop dump leftovers\n' +
       '• Add new pair 0–3 (default 0 = first pair only). 3 = 3 more pairs after the first (4 total)\n' +
-      '• After both first-pair legs fill, if Add new pair > 0 and both live asks still lock Min lock, Cloud fires YES and NO together on that pulse and every 1s\n' +
+      '• After both first-pair legs fill, if Add new pair > 0 and live YES+NO asks still sum to $1 or less, Cloud fires YES and NO together on that pulse and every 1s\n' +
       '• If only one stacked side fills, compare finish vs dump and take the smaller loss. Do not sit unmatched\n' +
       '• Hedge when runner fill + opposite ask ≤ $1 − Min lock. Hedge count matches the runner. Window cap 1 blocks the runner only\n' +
       '• Hedge right after the runner fill. 5s grace is for flatten / runner stop so your own print does not dump you\n' +
@@ -280,10 +282,40 @@ export const PATH_INFO = {
       '• After Until minute, no new runner. An open runner may still hedge until flatten\n' +
       '• While On for that chip and inside Start after…Until minute, Auto / Cash out / Gold fade do not enter that ticker\n' +
       '• After Until minute with no runner, those paths may use the coin again (window cap 1 still applies)\n' +
-      '• Open runner or open pair: Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Spike fade sit out that ticker\n' +
+      '• Open runner or open pair: Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Spike fade / Cheap loop sit out that ticker\n' +
       '• If Last-minute is in its buy window and Pair lock has no runner and no pair, Last-minute owns new buys\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Spike fade and Step buy take first pick for new buys when they want the ticker\n' +
       '• Protect skips Pair lock rows',
+  },
+  cheapLoop: {
+    title: 'Cheap loop',
+    body:
+      'Uses\n' +
+      '• Cheap loop asset chips, and that asset On (Cushions tab on/off). Empty chips = no Cheap loop buys\n' +
+      '• Start after / Flatten left (15m defaults: after 2 minutes, dump with 5 minutes left)\n' +
+      '• Cheap max ask, Min gap — buy only the cheaper YES or NO\n' +
+      '• Take (bid ≥ fill + Take), Stop (ask ≤ fill − Stop), Min hold, Cooldown, Cycles, Lot contracts\n' +
+      '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block this path — Cycles is the cap\n' +
+      '• IOC. 1-second watcher from fill for take / stop / flatten, then cooldown re-entry\n\n' +
+      'Does not use\n' +
+      '• Auto $ per trade (size is Lot contracts × live ask)\n' +
+      '• Auto max ask, Smart buy, chase, Auto TIF, Auto lean\n' +
+      '• Cash out / Gold fade / Spike fade / Pair lock knobs\n' +
+      '• Protect, Home Sell\n' +
+      '• Skip thin bid unless you turn that checkbox On (default Off). On = fail closed on buy only\n\n' +
+      'Isolation\n' +
+      '• Own path. Default Off. Admin must enable the block first\n' +
+      '• Example: YES 30¢ and NO 70¢ → buy YES. After Min hold, sell if the YES bid is fill + Take. Then cooldown. Then buy whichever side is cheaper\n' +
+      '• Cycles = completed exits this ticker this window. A miss or a sit-out does not burn a cycle\n' +
+      '• Always dumps. Never both sides. Never hold to $1\n' +
+      '• 5s grace after fill so your own print does not stop you out. Flatten and a $1 ask still dump during grace\n' +
+      '• Stop may fire during Min hold. Take cannot\n' +
+      '• While On for that chip and inside Start after…Flatten left with Cycles left, Auto / Cash out / Gold fade do not enter that ticker\n' +
+      '• Open Cheap loop, or cooldown with cycles left: Spike fade / Step buy / Pair lock sit out. Last-minute still owns new buys if Cheap loop has no lot\n' +
+      '• Spike fade, Step buy, and Pair lock take first pick for a new buy when they want the ticker\n' +
+      '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
+      '• Home tap or any other open fill blocks a new Cheap loop buy\n' +
+      '• Protect skips Cheap loop rows',
   },
 } as const;

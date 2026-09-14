@@ -49,6 +49,35 @@ describe('ticker overlap live line', () => {
     );
   });
 
+  test('Cheap loop holding names sitters still in their window', () => {
+    const now = new Date('2026-09-12T20:10:00.000Z');
+    const closeUtc = new Date(now.getTime() + 80 * 1000);
+    const line = formatTickerOverlapLine({
+      asset: 'Gold',
+      ticker: goldTicker,
+      decision: 'YES',
+      trades: [trade({ entry_path: 'cheap_loop' })],
+      now,
+      closeUtc,
+      minutesElapsed: 4,
+      minutesLeft: 10,
+      lastMinuteAdmin: true,
+      lastMinuteOn: true,
+      lastMinuteAssets: ['Gold'],
+      spikeFadeAdmin: true,
+      spikeFadeOn: true,
+      spikeFadeAssets: ['Gold'],
+      cheapLoopAdmin: true,
+      cheapLoopOn: true,
+      cheapLoopAssets: ['Gold'],
+      cheapLoopStartMinutes: 2,
+      cheapLoopFlattenMinutes: 5,
+    });
+    expect(line).toBe(
+      'cheap loop is holding this ticket — Last-minute and Spike fade sit out'
+    );
+  });
+
   test('after a dump, window owner still names who sits out', () => {
     const now = new Date('2026-09-12T20:14:00.000Z');
     const closeUtc = new Date(now.getTime() + 80 * 1000);

@@ -50,7 +50,7 @@ export interface TradeRecordDoc {
   /** Admin stream only. Cash out sell price (stored or derived). */
   sellPriceUsd?: number | null;
   /** How the fill was opened. Protect / Home sell / Cash out must not overwrite. */
-  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'pair_lock_hedge';
+  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'pair_lock_hedge' | 'cheap_loop';
   stepLotIndex?: number | null;
 }
 

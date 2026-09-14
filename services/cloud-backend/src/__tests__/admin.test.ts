@@ -127,6 +127,8 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.spikeFadeWatcher.watching).toBe(false);
     expect(res.body.pairLockWatcher.label).toBe('Pair lock watcher · idle');
     expect(res.body.pairLockWatcher.watching).toBe(false);
+    expect(res.body.cheapLoopWatcher.label).toBe('Cheap loop watcher · idle');
+    expect(res.body.cheapLoopWatcher.watching).toBe(false);
   });
 
   test('4. GET /admin/api/users retrieves list of all enrolled users', async () => {
@@ -348,6 +350,7 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.systemConfig.featureFlags.stepBuy).toBe(false);
     expect(res.body.systemConfig.featureFlags.spikeFade).toBe(false);
     expect(res.body.systemConfig.featureFlags.pairLock).toBe(false);
+    expect(res.body.systemConfig.featureFlags.cheapLoop).toBe(false);
   });
 
   test('12. GET /admin/api/trades filters by asset, status, user, and reports realized P&L', async () => {

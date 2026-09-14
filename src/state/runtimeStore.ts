@@ -8,6 +8,7 @@ import {
   cloudClient,
   ActiveBroadcast,
   LiveAskQuote,
+  isNewerOrSameLiveAsksAt,
 } from '../services/cloud/cloudClient';
 import { getUserDisplayName } from '../services/userId';
 import { LeanResult } from '../services/lean/lean';
@@ -56,6 +57,7 @@ interface RuntimeState {
   stepBuyFeatureOn: boolean;
   spikeFadeFeatureOn: boolean;
   pairLockFeatureOn: boolean;
+  cheapLoopFeatureOn: boolean;
   activeBroadcast: ActiveBroadcast | null;
   cloudKillSwitch: boolean;
   liveAsksAt: string | null;
@@ -102,6 +104,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   stepBuyFeatureOn: false,
   spikeFadeFeatureOn: false,
   pairLockFeatureOn: false,
+  cheapLoopFeatureOn: false,
   activeBroadcast: null,
   cloudKillSwitch: false,
   liveAsksAt: null,
@@ -146,6 +149,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         stepBuyFeatureOn: get().stepBuyFeatureOn,
         spikeFadeFeatureOn: get().spikeFadeFeatureOn,
         pairLockFeatureOn: get().pairLockFeatureOn,
+        cheapLoopFeatureOn: get().cheapLoopFeatureOn,
         activeBroadcast: get().activeBroadcast,
         cloudKillSwitch: get().cloudKillSwitch,
       });
@@ -289,9 +293,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
             stepBuyFeatureOn: statusRes.systemConfig?.featureFlags?.stepBuy === true,
             spikeFadeFeatureOn: statusRes.systemConfig?.featureFlags?.spikeFade === true,
             pairLockFeatureOn: statusRes.systemConfig?.featureFlags?.pairLock === true,
+            cheapLoopFeatureOn: statusRes.systemConfig?.featureFlags?.cheapLoop === true,
             activeBroadcast: statusRes.activeBroadcast ?? null,
             cloudKillSwitch: statusRes.userDoc?.state === 'KILL_SWITCH',
-            ...(statusRes.liveAsks
+            ...(statusRes.liveAsks &&
+            isNewerOrSameLiveAsksAt(statusRes.liveAsks.at, get().liveAsksAt)
               ? {
                   liveAsksAt: statusRes.liveAsks.at,
                   liveAsks: statusRes.liveAsks.byAsset,
@@ -320,10 +326,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       try {
         const res = await cloudClient.getLiveAsks();
         if (!res.ok || !res.liveAsks) return;
+        if (!isNewerOrSameLiveAsksAt(res.liveAsks.at, get().liveAsksAt)) return;
         set({
           liveAsksAt: res.liveAsks.at,
           liveAsks: res.liveAsks.byAsset,
         });
+        if (res.lastTradeAction) {
+          get().ensure().syncCloudTradeActions(res.lastTradeAction);
+        }
       } catch {
         /* keep last asks */
       }
@@ -365,7 +375,8 @@ export function resetRuntimeStoreForTests() {
     lastMinuteFeatureOn: false,
     stepBuyFeatureOn: false,
     spikeFadeFeatureOn: false,
-  pairLockFeatureOn: false,
+    pairLockFeatureOn: false,
+    cheapLoopFeatureOn: false,
     activeBroadcast: null,
     cloudKillSwitch: false,
     liveAsksAt: null,

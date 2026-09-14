@@ -11,6 +11,7 @@ export const PATH_FOCUS_IDS = [
   'stepBuy',
   'spikeFade',
   'pairLock',
+  'cheapLoop',
 ] as const;
 
 export type PathFocusId = (typeof PATH_FOCUS_IDS)[number];
@@ -26,7 +27,8 @@ export type PathTileDef = {
     | 'lastMinuteFeatureOn'
     | 'stepBuyFeatureOn'
     | 'spikeFadeFeatureOn'
-    | 'pairLockFeatureOn';
+    | 'pairLockFeatureOn'
+    | 'cheapLoopFeatureOn';
 };
 
 export const PATH_TILES: PathTileDef[] = [
@@ -40,6 +42,7 @@ export const PATH_TILES: PathTileDef[] = [
   { id: 'stepBuy', title: 'Step buy', sub: 'Add if lean holds', adminFlag: 'stepBuyFeatureOn' },
   { id: 'spikeFade', title: 'Spike fade', sub: 'Buy cheap side', adminFlag: 'spikeFadeFeatureOn' },
   { id: 'pairLock', title: 'Pair lock', sub: 'Both sides under $1', adminFlag: 'pairLockFeatureOn' },
+  { id: 'cheapLoop', title: 'Cheap loop', sub: 'Cheap side, take, repeat', adminFlag: 'cheapLoopFeatureOn' },
 ];
 
 export function isPathFocusId(raw: unknown): raw is PathFocusId {

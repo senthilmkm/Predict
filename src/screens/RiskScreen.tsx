@@ -9,6 +9,7 @@ import {
   STEP_BUY_RISK_FIELD_KEYS,
   SPIKE_FADE_RISK_FIELD_KEYS,
   PAIR_LOCK_RISK_FIELD_KEYS,
+  CHEAP_LOOP_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
   TWAP_LOCK_RISK_FIELD_KEYS,
   PROTECT_RISK_FIELD_KEYS,
@@ -29,6 +30,7 @@ import {
 import { normalizeStepBuyAssets } from '../../packages/trading-core/src/stepBuy';
 import { normalizeSpikeFadeAssets } from '../../packages/trading-core/src/spikeFade';
 import { normalizePairLockAssets } from '../../packages/trading-core/src/pairLock';
+import { normalizeCheapLoopAssets } from '../../packages/trading-core/src/cheapLoop';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PATH_INFO } from '../content/pathInfo';
 import { PathFocusId } from '../content/pathCatalog';
@@ -60,6 +62,7 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
+  const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const [tab, setTab] = useState<TabId>(resolvedFocus === 'auto' ? 'auto' : 'home');
   const [busy, setBusy] = useState(false);
   const showShared = showAll || resolvedFocus === 'shared';
@@ -286,6 +289,7 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
       {extra('stepBuy', stepBuyFeatureOn) ? <StepBuyFields /> : null}
       {extra('spikeFade', spikeFadeFeatureOn) ? <SpikeFadeFields /> : null}
       {extra('pairLock', pairLockFeatureOn) ? <PairLockFields /> : null}
+      {extra('cheapLoop', cheapLoopFeatureOn) ? <CheapLoopFields /> : null}
 
       {showRestoreTab ? (
       <Pressable
@@ -912,14 +916,22 @@ function PairLockFields() {
         </View>
         {on ? (
           <Text style={styles.hint}>
-            Buy the lean side only if the opposite ask already locks at least Min lock. Then hedge
-            that other side. Add new pair 0 = first pair only; 3 = 3 more after the first. Flatten
-            unmatched only. A locked pair holds to settlement.
+            {config.risk.pair_lock_lock_first !== false
+              ? 'Lock first On: buy the lean side only if the opposite ask already locks Min lock. Then hedge that other side.'
+              : 'Lock first Off: buy the lean side at or under Runner max, then hope the hedge locks. Flatten unmatched and Runner stop dump leftovers.'}{' '}
+            Add new pair 0 = first pair only; 3 = 3 more after the first. A locked pair holds to
+            settlement.
           </Text>
         ) : null}
       </View>
       {on ? (
         <View style={styles.pathInner}>
+          <NestedCheckRow
+            testID="risk-toggle-pair_lock_lock_first"
+            label="Lock first"
+            value={config.risk.pair_lock_lock_first !== false}
+            onChange={(v) => setRiskField('pair_lock_lock_first', v)}
+          />
           <SkipThinBidRow
             testID="risk-toggle-pair_lock_skip_thin_bid"
             value={Boolean(config.risk.pair_lock_skip_thin_bid)}
@@ -974,11 +986,110 @@ function PairLockFields() {
             </View>
           </View>
           <Text style={styles.hint} testID="pair-lock-hint">
-            After Start after and before Until minute. Auto lean and Runner max ask, and only if the
-            opposite ask already locks at least Min lock → buy that side. Hedge the other side when
-            runner fill + opposite ask ≤ $1 − Min lock. After both first-pair legs fill, Add new pair
-            can fire on that pulse and every 1s. Add new pair 0–3 extra pairs after the first
-            lock (0 = none). Flatten unmatched with Flatten unmatched. A completed pair holds to $1.
+            After Start after and before Until minute. Auto lean and Runner max ask
+            {config.risk.pair_lock_lock_first !== false
+              ? ', and only if the opposite ask already locks at least Min lock'
+              : ''}{' '}
+            → buy that side. Hedge the other side when runner fill + opposite ask ≤ $1 − Min lock.
+            After both first-pair legs fill, Add new pair can fire on that pulse and every 1s. Add
+            new pair 0–3 extra pairs after the first lock (0 = none). Flatten unmatched with Flatten
+            unmatched. A completed pair holds to $1.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+function CheapLoopFields() {
+  const config = useConfigStore((s) => s.config);
+  const setRiskField = useConfigStore((s) => s.setRiskField);
+  const on = Boolean(config.risk.cheap_loop_enabled);
+  return (
+    <>
+      <View style={styles.field} testID="risk-field-auto-cheap_loop_enabled">
+        <View style={styles.toggleRow}>
+          <View style={styles.labelWithInfo}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Cheap loop</Text>
+            <PathInfoIcon title={PATH_INFO.cheapLoop.title} body={PATH_INFO.cheapLoop.body} testID="path-info-cheapLoop" />
+          </View>
+          <Switch
+            testID="risk-toggle-cheap_loop_enabled"
+            value={on}
+            onValueChange={(v) => setRiskField('cheap_loop_enabled', v)}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        {on ? (
+          <Text style={styles.hint}>
+            Buy the cheaper ticket, take a few cents, cooldown, repeat. Always dumps. Never both
+            sides. Never hold to $1.
+          </Text>
+        ) : null}
+      </View>
+      {on ? (
+        <View style={styles.pathInner}>
+          <SkipThinBidRow
+            testID="risk-toggle-cheap_loop_skip_thin_bid"
+            value={Boolean(config.risk.cheap_loop_skip_thin_bid)}
+            onChange={(v) => setRiskField('cheap_loop_skip_thin_bid', v)}
+          />
+          {metaFor(CHEAP_LOOP_RISK_FIELD_KEYS)
+            .filter((meta) => meta.key !== 'cheap_loop_enabled')
+            .map((meta) => {
+              const start = meta.key === 'cheap_loop_start_minutes';
+              const flatten = meta.key === 'cheap_loop_flatten_minutes';
+              const hold = meta.key === 'cheap_loop_min_hold_minutes';
+              const cool = meta.key === 'cheap_loop_cooldown_minutes';
+              return (
+                <RiskStepper
+                  key={meta.key}
+                  meta={meta}
+                  value={config.risk[meta.key]}
+                  testPrefix="auto"
+                  displayOverride={
+                    start
+                      ? `${Math.round(Number(config.risk.cheap_loop_start_minutes) || 0)} min`
+                      : flatten
+                        ? `${Math.round(Number(config.risk.cheap_loop_flatten_minutes) || 0)} min`
+                        : hold
+                          ? `${Math.round(Number(config.risk.cheap_loop_min_hold_minutes) || 0)} min`
+                          : cool
+                            ? `${Math.round(Number(config.risk.cheap_loop_cooldown_minutes) || 0)} min`
+                            : undefined
+                  }
+                  onChange={(next) => setRiskField(meta.key, next as never)}
+                />
+              );
+            })}
+          <View style={styles.field} testID="risk-field-auto-cheap_loop_assets">
+            <Text style={styles.label}>Cheap loop assets</Text>
+            <Text style={styles.hint}>Also must be On in Cushions. Empty means no Cheap loop buys.</Text>
+            <View style={styles.tifRow}>
+              {AssetRegistry.keys.map((key) => {
+                const selected = normalizeCheapLoopAssets(config.risk.cheap_loop_assets).includes(key);
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`cheap-loop-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizeCheapLoopAssets(config.risk.cheap_loop_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('cheap_loop_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={styles.hint} testID="cheap-loop-hint">
+            After Start after and before Flatten left. Cheaper ask ≤ Cheap max and |YES − NO| ≥ Min
+            gap → buy that side. Take when that bid ≥ fill + Take, after Min hold. Stop when that
+            ask ≤ fill − Stop (after 5s). Then Cooldown. Cycles is how many exits this ticker this
+            window. Always dumps. Spike fade / Step buy / Pair lock still take first pick.
           </Text>
         </View>
       ) : null}

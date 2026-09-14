@@ -258,8 +258,22 @@ export interface RiskConfig {
   pair_lock_runner_stop_usd?: number;
   pair_lock_lot_count?: number;
   pair_lock_add_pairs?: number;
+  pair_lock_lock_first?: boolean;
   pair_lock_skip_thin_bid?: boolean;
   pair_lock_assets?: string[];
+  cheap_loop_enabled?: boolean;
+  cheap_loop_start_minutes?: number;
+  cheap_loop_flatten_minutes?: number;
+  cheap_loop_cheap_max_ask_usd?: number;
+  cheap_loop_min_gap_usd?: number;
+  cheap_loop_take_usd?: number;
+  cheap_loop_stop_usd?: number;
+  cheap_loop_min_hold_minutes?: number;
+  cheap_loop_cooldown_minutes?: number;
+  cheap_loop_cycles?: number;
+  cheap_loop_lot_count?: number;
+  cheap_loop_skip_thin_bid?: boolean;
+  cheap_loop_assets?: string[];
 }
 
 export interface AlertPref {
@@ -439,8 +453,22 @@ export function defaultAppConfig(): AppConfig {
       pair_lock_runner_stop_usd: 0.1,
       pair_lock_lot_count: 1,
       pair_lock_add_pairs: 0,
+      pair_lock_lock_first: true,
       pair_lock_skip_thin_bid: false,
       pair_lock_assets: AssetRegistry.getDefaultPathAssets(),
+      cheap_loop_enabled: false,
+      cheap_loop_start_minutes: 2,
+      cheap_loop_flatten_minutes: 5,
+      cheap_loop_cheap_max_ask_usd: 0.4,
+      cheap_loop_min_gap_usd: 0.1,
+      cheap_loop_take_usd: 0.05,
+      cheap_loop_stop_usd: 0.06,
+      cheap_loop_min_hold_minutes: 1,
+      cheap_loop_cooldown_minutes: 2,
+      cheap_loop_cycles: 1,
+      cheap_loop_lot_count: 1,
+      cheap_loop_skip_thin_bid: false,
+      cheap_loop_assets: [],
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

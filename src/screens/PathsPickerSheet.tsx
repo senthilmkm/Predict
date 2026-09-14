@@ -10,6 +10,7 @@ import { normalizeLastMinuteAssets } from '../../packages/trading-core/src/lastM
 import { normalizeStepBuyAssets } from '../../packages/trading-core/src/stepBuy';
 import { normalizeSpikeFadeAssets } from '../../packages/trading-core/src/spikeFade';
 import { normalizePairLockAssets } from '../../packages/trading-core/src/pairLock';
+import { normalizeCheapLoopAssets } from '../../packages/trading-core/src/cheapLoop';
 import { normalizeTwapLockAssets } from '../../packages/trading-core/src/twapLock';
 import { formatSharedChipOverlapNote } from './tickerOverlap';
 
@@ -39,6 +40,7 @@ export function PathsPickerSheet({
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
+  const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const config = useConfigStore((s) => s.config);
 
   useEffect(() => {
@@ -54,6 +56,7 @@ export function PathsPickerSheet({
       stepBuyFeatureOn,
       spikeFadeFeatureOn,
       pairLockFeatureOn,
+      cheapLoopFeatureOn,
     }),
     [
       cashOutFeatureOn,
@@ -63,6 +66,7 @@ export function PathsPickerSheet({
       stepBuyFeatureOn,
       spikeFadeFeatureOn,
       pairLockFeatureOn,
+      cheapLoopFeatureOn,
     ]
   );
 
@@ -83,6 +87,9 @@ export function PathsPickerSheet({
         : null,
       pairLockFeatureOn && config.risk.pair_lock_enabled
         ? { title: 'Pair lock', assets: normalizePairLockAssets(config.risk.pair_lock_assets) }
+        : null,
+      cheapLoopFeatureOn && config.risk.cheap_loop_enabled
+        ? { title: 'Cheap loop', assets: normalizeCheapLoopAssets(config.risk.cheap_loop_assets) }
         : null,
     ].filter(Boolean) as Array<{ title: string; assets: string[] }>
   );

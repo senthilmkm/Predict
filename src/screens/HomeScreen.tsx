@@ -33,6 +33,7 @@ import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/mon
 import { cloudClient } from '../services/cloud/cloudClient';
 import {
   formatGapDisplay,
+  formatLiveAskAgeSec,
   formatLiveAskLine,
   pickLiveAsk,
   heldOpenFillForTicker,
@@ -41,6 +42,7 @@ import {
   formatStepBuyWatchLine,
   formatSpikeFadeWatchLine,
   formatPairLockWatchLine,
+  formatCheapLoopWatchLine,
   formatTwapWatchLine,
   lastSignalExtraLine,
   lastSignalManualKind,
@@ -49,6 +51,7 @@ import {
 } from './lastSignalsManual';
 import { formatTickerOverlapLine } from './tickerOverlap';
 import { isPairLockEntryPath } from '../../packages/trading-core/src/pairLock';
+import { cheapLoopCooldownRemainingSec, isCheapLoopEntryPath } from '../../packages/trading-core/src/cheapLoop';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
 
@@ -126,6 +129,7 @@ export function HomeScreen({
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
+  const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const pinnedIds = usePinnedPathsStore((s) => s.ids);
   const hydratePins = usePinnedPathsStore((s) => s.hydrate);
 
@@ -161,11 +165,24 @@ export function HomeScreen({
   }, [refreshCloudSnapshot]);
 
   useEffect(() => {
-    void refreshLiveAsks();
-    const id = setInterval(() => {
-      if (AppState.currentState === 'active') void refreshLiveAsks();
-    }, 1000);
-    return () => clearInterval(id);
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const loop = async () => {
+      const started = Date.now();
+      if (AppState.currentState === 'active') {
+        await refreshLiveAsks();
+      }
+      if (cancelled) return;
+      const wait = Math.max(0, 1000 - (Date.now() - started));
+      timeout = setTimeout(() => {
+        void loop();
+      }, wait);
+    };
+    void loop();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
   }, [refreshLiveAsks]);
 
   useEffect(() => {
@@ -174,7 +191,8 @@ export function HomeScreen({
     const stepBuyWatch = stepBuyFeatureOn && config.risk.step_buy_enabled;
     const spikeFadeWatch = spikeFadeFeatureOn && config.risk.spike_fade_enabled;
     const pairLockWatch = pairLockFeatureOn && config.risk.pair_lock_enabled;
-    if (!twapWatch && !lastMinuteWatch && !stepBuyWatch && !spikeFadeWatch && !pairLockWatch) return;
+    const cheapLoopWatch = cheapLoopFeatureOn && config.risk.cheap_loop_enabled;
+    if (!twapWatch && !lastMinuteWatch && !stepBuyWatch && !spikeFadeWatch && !pairLockWatch && !cheapLoopWatch) return;
     const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, [
@@ -183,11 +201,13 @@ export function HomeScreen({
     config.risk.step_buy_enabled,
     config.risk.spike_fade_enabled,
     config.risk.pair_lock_enabled,
+    config.risk.cheap_loop_enabled,
     twapLockFeatureOn,
     lastMinuteFeatureOn,
     stepBuyFeatureOn,
     spikeFadeFeatureOn,
     pairLockFeatureOn,
+    cheapLoopFeatureOn,
   ]);
 
   // 1. On Mount: Fetch Cloud Snapshot & Balances
@@ -306,15 +326,18 @@ export function HomeScreen({
       noMarket,
       marketTicker: lean?.market_ticker || null,
       askLine: open
-        ? formatLiveAskLine(
-            pickLiveAsk({
+        ? (() => {
+            const picked = pickLiveAsk({
               nowMs,
               cloudAt: liveAsksAt,
               cloud: liveAsks[asset],
               leanYes: lean?.yes_ask,
               leanNo: lean?.no_ask,
-            })
-          )
+            });
+            return formatLiveAskLine(picked, {
+              age: picked?.source === 'watcher' ? formatLiveAskAgeSec(nowMs, liveAsksAt) : undefined,
+            });
+          })()
         : '',
     };
   });
@@ -344,6 +367,7 @@ export function HomeScreen({
     const stepBuyHeld = held?.entry_path === 'step_buy';
     const spikeFadeHeld = held?.entry_path === 'spike_fade';
     const pairLockHeld = isPairLockEntryPath(held?.entry_path);
+    const cheapLoopHeld = isCheapLoopEntryPath(held?.entry_path);
     const pathHeld =
       cashOutHeld ||
       goldFadeHeld ||
@@ -351,7 +375,8 @@ export function HomeScreen({
       lastMinuteHeld ||
       stepBuyHeld ||
       spikeFadeHeld ||
-      pairLockHeld;
+      pairLockHeld ||
+      cheapLoopHeld;
     const manualKind = pathHeld
       ? 'none'
       : lastSignalManualKind({
@@ -386,6 +411,7 @@ export function HomeScreen({
         now: new Date(nowMs),
         closeUtc: leanRow?.close_utc,
         minutesElapsed: leanRow?.minutes_elapsed,
+        minutesLeft: (leans[row.asset] as { minutes_left?: number } | undefined)?.minutes_left,
         homeOn: featureOn && !cloudKillSwitch,
         autoOn: autoTradeOn,
         cashOutAdmin: cashOutFeatureOn,
@@ -416,6 +442,11 @@ export function HomeScreen({
         pairLockAssets: config.risk.pair_lock_assets,
         pairLockStartMinutes: config.risk.pair_lock_start_minutes,
         pairLockUntilMinutes: config.risk.pair_lock_until_minutes,
+        cheapLoopAdmin: cheapLoopFeatureOn,
+        cheapLoopOn: Boolean(config.risk.cheap_loop_enabled),
+        cheapLoopAssets: config.risk.cheap_loop_assets,
+        cheapLoopStartMinutes: config.risk.cheap_loop_start_minutes,
+        cheapLoopFlattenMinutes: config.risk.cheap_loop_flatten_minutes,
         assetEnabled: config.assets_enabled?.[row.asset] !== false,
       }),
       cashOutHolding: cashOutHeld,
@@ -425,6 +456,7 @@ export function HomeScreen({
       stepBuyHolding: stepBuyHeld,
       spikeFadeHolding: spikeFadeHeld,
       pairLockHolding: pairLockHeld,
+      cheapLoopHolding: cheapLoopHeld,
       twapWatchText: formatTwapWatchLine({
         adminEnabled: twapLockFeatureOn,
         userEnabled: Boolean(config.risk.twap_lock_enabled),
@@ -501,6 +533,27 @@ export function HomeScreen({
         autoDetail: row.trade?.detail,
         autoStatus: row.trade?.status,
       }),
+      cheapLoopWatchText: formatCheapLoopWatchLine({
+        adminEnabled: cheapLoopFeatureOn,
+        userEnabled: Boolean(config.risk.cheap_loop_enabled),
+        assetEnabled: config.assets_enabled?.[row.asset] !== false,
+        asset: row.asset,
+        assets: config.risk.cheap_loop_assets,
+        minutesElapsed: (leans[row.asset] as { minutes_elapsed?: number } | undefined)?.minutes_elapsed,
+        minutesLeft: (leans[row.asset] as { minutes_left?: number } | undefined)?.minutes_left,
+        startMinutes: config.risk.cheap_loop_start_minutes,
+        flattenMinutes: config.risk.cheap_loop_flatten_minutes,
+        takeUsd: config.risk.cheap_loop_take_usd,
+        holding: cheapLoopHeld,
+        cooldownSec: cheapLoopCooldownRemainingSec({
+          trades,
+          marketTicker: row.marketTicker,
+          cooldownMinutes: config.risk.cheap_loop_cooldown_minutes,
+          now: new Date(nowMs),
+        }),
+        autoDetail: row.trade?.detail,
+        autoStatus: row.trade?.status,
+      }),
     });
     const offerKind = lastSignalOfferKind(manualKind, tapSkipReason);
     return { ...row, held, manualKind: offerKind, placing: Boolean(placing[row.asset]), extraLine };
@@ -516,6 +569,7 @@ export function HomeScreen({
       stepBuyFeatureOn,
       spikeFadeFeatureOn,
       pairLockFeatureOn,
+      cheapLoopFeatureOn,
     };
     return pinnedIds.filter((id) => {
       const tile = pathTileById(id);
@@ -530,6 +584,7 @@ export function HomeScreen({
     stepBuyFeatureOn,
     spikeFadeFeatureOn,
     pairLockFeatureOn,
+    cheapLoopFeatureOn,
   ]);
   const scheduleNotice = useMemo(() => {
     const at = new Date(nowMs);

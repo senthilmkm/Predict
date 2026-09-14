@@ -90,6 +90,20 @@ import {
   reconcilePairLockWindow,
 } from '../../packages/trading-core/src/pairLock';
 import {
+  normalizeCheapLoopAssets,
+  normalizeCheapLoopCheapMaxAskUsd,
+  normalizeCheapLoopCooldownMinutes,
+  normalizeCheapLoopCycles,
+  normalizeCheapLoopFlattenMinutes,
+  normalizeCheapLoopLotCount,
+  normalizeCheapLoopMinGapUsd,
+  normalizeCheapLoopMinHoldMinutes,
+  normalizeCheapLoopStartMinutes,
+  normalizeCheapLoopStopUsd,
+  normalizeCheapLoopTakeUsd,
+  reconcileCheapLoopTakeStop,
+} from '../../packages/trading-core/src/cheapLoop';
+import {
   configForHomeBuy as mergeHomeBuyRisk,
   normalizeManualPathRisk,
 } from '../../packages/trading-core/src/pathRisk';
@@ -327,9 +341,37 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     ),
     pair_lock_lot_count: normalizePairLockLotCount(r.pair_lock_lot_count ?? d.pair_lock_lot_count),
     pair_lock_add_pairs: normalizePairLockAddPairs(r.pair_lock_add_pairs ?? d.pair_lock_add_pairs),
+    pair_lock_lock_first: r.pair_lock_lock_first !== false,
     pair_lock_skip_thin_bid: inheritSkipThinBid(r.pair_lock_skip_thin_bid, r.cash_out_skip_thin_bid === true),
     pair_lock_assets: normalizePairLockAssets(
       r.pair_lock_assets !== undefined ? r.pair_lock_assets : d.pair_lock_assets
+    ),
+    cheap_loop_enabled: r.cheap_loop_enabled === true,
+    cheap_loop_start_minutes: normalizeCheapLoopStartMinutes(
+      r.cheap_loop_start_minutes ?? d.cheap_loop_start_minutes
+    ),
+    cheap_loop_flatten_minutes: normalizeCheapLoopFlattenMinutes(
+      r.cheap_loop_flatten_minutes ?? d.cheap_loop_flatten_minutes
+    ),
+    cheap_loop_cheap_max_ask_usd: normalizeCheapLoopCheapMaxAskUsd(
+      r.cheap_loop_cheap_max_ask_usd ?? d.cheap_loop_cheap_max_ask_usd
+    ),
+    cheap_loop_min_gap_usd: normalizeCheapLoopMinGapUsd(
+      r.cheap_loop_min_gap_usd ?? d.cheap_loop_min_gap_usd
+    ),
+    cheap_loop_take_usd: normalizeCheapLoopTakeUsd(r.cheap_loop_take_usd ?? d.cheap_loop_take_usd),
+    cheap_loop_stop_usd: normalizeCheapLoopStopUsd(r.cheap_loop_stop_usd ?? d.cheap_loop_stop_usd),
+    cheap_loop_min_hold_minutes: normalizeCheapLoopMinHoldMinutes(
+      r.cheap_loop_min_hold_minutes ?? d.cheap_loop_min_hold_minutes
+    ),
+    cheap_loop_cooldown_minutes: normalizeCheapLoopCooldownMinutes(
+      r.cheap_loop_cooldown_minutes ?? d.cheap_loop_cooldown_minutes
+    ),
+    cheap_loop_cycles: normalizeCheapLoopCycles(r.cheap_loop_cycles ?? d.cheap_loop_cycles),
+    cheap_loop_lot_count: normalizeCheapLoopLotCount(r.cheap_loop_lot_count ?? d.cheap_loop_lot_count),
+    cheap_loop_skip_thin_bid: r.cheap_loop_skip_thin_bid === true,
+    cheap_loop_assets: normalizeCheapLoopAssets(
+      r.cheap_loop_assets !== undefined ? r.cheap_loop_assets : d.cheap_loop_assets
     ),
   };
   const targets = reconcileCashOutTargets(
@@ -357,6 +399,12 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
   });
   risk.pair_lock_start_minutes = pairWin.startMinutes;
   risk.pair_lock_until_minutes = pairWin.untilMinutes;
+  const cheapTakeStop = reconcileCheapLoopTakeStop({
+    takeUsd: risk.cheap_loop_take_usd,
+    stopUsd: risk.cheap_loop_stop_usd,
+  });
+  risk.cheap_loop_take_usd = cheapTakeStop.takeUsd;
+  risk.cheap_loop_stop_usd = cheapTakeStop.stopUsd;
   if (risk.fixed_dollars_per_trade > risk.max_dollars_per_trade) {
     risk.fixed_dollars_per_trade = risk.max_dollars_per_trade;
   }

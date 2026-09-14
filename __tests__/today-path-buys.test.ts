@@ -104,6 +104,16 @@ describe('summarizeTodayPathBuys', () => {
     expect(summary.autoTotal).toBe(0);
     expect(formatHomePathBuyLines(summary)).toEqual(['Pair lock  BTC 2']);
   });
+
+  test('counts Cheap loop fills on their own line', () => {
+    const summary = summarizeTodayPathBuys(
+      [rec({ id: 'c', asset: 'SOL', entry_path: 'cheap_loop' })],
+      NOW
+    );
+    expect(summary.cheapLoopTotal).toBe(1);
+    expect(summary.autoTotal).toBe(0);
+    expect(formatHomePathBuyLines(summary)).toEqual(['Cheap loop  SOL 1']);
+  });
 });
 
 describe('history trade display', () => {
@@ -117,6 +127,7 @@ describe('history trade display', () => {
     expect(entryPathChipLabel('step_buy')).toBe('Step buy');
     expect(entryPathChipLabel('spike_fade')).toBe('Spike fade');
     expect(entryPathChipLabel('pair_lock')).toBe('Pair lock');
+    expect(entryPathChipLabel('cheap_loop')).toBe('Cheap loop');
     expect(entryPathChipLabel('pair_lock', 1)).toBe('Pair lock 1');
     expect(entryPathChipLabel('pair_lock', 2)).toBe('Pair lock 2');
     expect(entryPathChipLabel('pair_lock_hedge')).toBe('PL hedge');

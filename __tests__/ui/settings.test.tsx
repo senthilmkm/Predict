@@ -252,9 +252,10 @@ describe('Settings toggles', () => {
     await fireEvent.press(s.getByTestId('faq-q-skip-thin-bid-paths'));
     await waitFor(() => expect(s.getByTestId('faq-table-skip-thin-bid-paths')).toBeTruthy());
     expect(s.getByText('If book size unknown')).toBeTruthy();
-    expect(s.getAllByText('Fail closed — no buy').length).toBe(5);
+    expect(s.getAllByText('Fail closed — no buy').length).toBe(6);
     expect(s.getByText('Does not skip or dump')).toBeTruthy();
     expect(s.getAllByText('Spike fade').length).toBeGreaterThan(0);
+    expect(s.getAllByText('Cheap loop').length).toBeGreaterThan(0);
   });
 
   test('5-tap version text unlocks Developer Diagnostics', async () => {
@@ -497,8 +498,28 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-pair_lock_runner_stop_usd').props.children).toMatch(/\$0\.10/);
     expect(s.getByTestId('risk-value-auto-pair_lock_lot_count').props.children).toBe('1');
     expect(s.getByTestId('risk-value-auto-pair_lock_add_pairs').props.children).toBe('0');
+    expect(s.getByTestId('risk-toggle-pair_lock_lock_first').props.accessibilityState.checked).toBe(true);
+    await fireEvent.press(s.getByTestId('risk-toggle-pair_lock_lock_first'));
+    await waitFor(() => expect(useConfigStore.getState().config.risk.pair_lock_lock_first).toBe(false));
     expect(s.getByTestId('pair-lock-asset-Gold')).toBeTruthy();
     expect(s.getByTestId('path-info-pairLock')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-cheap_loop_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ cheapLoopFeatureOn: true });
+    });
+    await openFocusedPath(s, 'cheapLoop');
+    await waitFor(() => expect(s.getByTestId('risk-toggle-cheap_loop_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-cheap_loop_enabled').props.value).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-cheap_loop_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.cheap_loop_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-cheap_loop_start_minutes').props.children).toBe('2 min');
+    expect(s.getByTestId('risk-value-auto-cheap_loop_flatten_minutes').props.children).toBe('5 min');
+    expect(s.getByTestId('risk-value-auto-cheap_loop_cheap_max_ask_usd').props.children).toMatch(/\$0\.40/);
+    expect(s.getByTestId('risk-value-auto-cheap_loop_take_usd').props.children).toMatch(/\$0\.05/);
+    expect(s.getByTestId('risk-value-auto-cheap_loop_stop_usd').props.children).toMatch(/\$0\.06/);
+    expect(s.getByTestId('risk-value-auto-cheap_loop_cycles').props.children).toBe('1');
+    expect(s.getByTestId('cheap-loop-asset-BTC')).toBeTruthy();
+    expect(s.getByTestId('path-info-cheapLoop')).toBeTruthy();
     await openFocusedPath(s, 'lastMinute');
     await fireEvent.press(s.getByTestId('last-minute-side-both'));
     await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_side).toBe('both'));
@@ -729,6 +750,7 @@ describe('Settings credentials', () => {
       await fireEvent.press(s.getByTestId('btn-paths-guide'));
       await waitFor(() => expect(s.getByTestId('screen-paths-guide')).toBeTruthy());
       expect(s.getByTestId('guide-card-pairLock')).toBeTruthy();
+      expect(s.getByTestId('guide-card-cheapLoop')).toBeTruthy();
       await fireEvent.press(s.getByTestId('btn-guide-back'));
       await waitFor(() => expect(s.queryByTestId('screen-paths-guide')).toBeNull());
       await fireEvent.press(s.getByTestId('btn-toggle-risk'));
