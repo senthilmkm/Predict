@@ -7,6 +7,7 @@ import {
 } from './kalshiRetry';
 import { sanitizeTimeseries } from './smartBuy';
 import { CashOutOrderBook, parseKalshiOrderbook } from './cashOut';
+import { cheapLoopHourlySeriesTicker, pickUniqueAtmStrike } from './cheapLoop';
 
 const PUBLIC_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
@@ -196,6 +197,39 @@ export async function getMarketQuote(
   return market;
 }
 
+/** Close clock for a Kalshi market payload (held hourly strike must not use a newer ATM). */
+export function marketClockFromKalshi(
+  market: { close_time?: unknown; status?: unknown } | null | undefined,
+  now = new Date()
+): {
+  phase: 'live' | 'ended';
+  minutes_left?: number;
+  minutes_remaining?: number;
+  close_utc?: string;
+} {
+  const closeRaw = market?.close_time;
+  const close = closeRaw ? new Date(String(closeRaw)) : null;
+  const closeMs = close && Number.isFinite(close.getTime()) ? close.getTime() : null;
+  const status = String(market?.status || '').toLowerCase();
+  const endedByStatus =
+    status === 'determined' ||
+    status === 'settled' ||
+    status === 'closed' ||
+    status === 'finalized' ||
+    status === 'inactive';
+  const ended = endedByStatus || (closeMs != null && now.getTime() >= closeMs);
+  const minutes_remaining =
+    closeMs == null ? undefined : Math.max(0, (closeMs - now.getTime()) / 60000);
+  const minutes_left =
+    minutes_remaining == null ? undefined : Math.max(0, Math.floor(minutes_remaining));
+  return {
+    phase: ended ? 'ended' : 'live',
+    minutes_left,
+    minutes_remaining,
+    close_utc: closeMs != null ? new Date(closeMs).toISOString() : undefined,
+  };
+}
+
 /** Public Kalshi book. null = fetch failed (treat as unknown, not thin). */
 export async function getMarketOrderbook(
   ticker: string,
@@ -220,11 +254,12 @@ export async function getMarketOrderbook(
 
 export async function getKalshiEventLiveSpot(
   eventTicker: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  range = '15min'
 ): Promise<{ price: number; timeseries: any[] } | null> {
   try {
     const resp = await jsonGet(
-      `${PUBLIC_BASE}/live_data/events/${encodeURIComponent(eventTicker)}?range=15min`,
+      `${PUBLIC_BASE}/live_data/events/${encodeURIComponent(eventTicker)}?range=${encodeURIComponent(range)}`,
       fetchImpl
     );
     const series = resp?.live_data?.details?.timeseries;
@@ -388,6 +423,173 @@ export async function computeLean(
     price_source: priceSource,
     cushion,
     timeseries,
+    close_utc: close ? close.toISOString() : undefined,
+  };
+}
+
+export async function getLiveHourlyEventMarkets(
+  seriesTicker: string,
+  fetchImpl: typeof fetch = fetch,
+  now = new Date()
+): Promise<{ phase: LeanPhase; eventTicker: string; markets: MarketRow[] } | null> {
+  const pickAll = await getCurrentOrNext15mMarket(seriesTicker, fetchImpl, now);
+  if (!pickAll) return null;
+  const url = `${PUBLIC_BASE}/events?limit=8&status=open&series_ticker=${encodeURIComponent(seriesTicker)}&with_nested_markets=true`;
+  const cached = eventsCache.get(seriesTicker);
+  let ev: any;
+  if (cached && Date.now() - cached.at < EVENTS_CACHE_TTL_MS) {
+    ev = cached.value;
+  } else {
+    ev = await jsonGet(url, fetchImpl);
+    eventsCache.set(seriesTicker, { at: Date.now(), value: ev });
+  }
+  const byEvent = new Map<string, MarketRow[]>();
+  for (const e of ev.events || []) {
+    let markets = e.markets || [];
+    if ((!markets || markets.length === 0) && ev.markets) {
+      markets = (ev.markets as any[]).filter((m) => m.event_ticker === e.event_ticker);
+    }
+    for (const m of markets || []) {
+      if (!m?.ticker) continue;
+      const row: MarketRow = {
+        event_ticker: String(e.event_ticker),
+        market_ticker: String(m.ticker),
+        open_utc: m.open_time ? new Date(m.open_time) : null,
+        close_utc: m.close_time ? new Date(m.close_time) : null,
+        floor_strike: m.floor_strike != null ? Number(m.floor_strike) : null,
+        yes_sub_title: m.yes_sub_title,
+        no_sub_title: m.no_sub_title,
+      };
+      const list = byEvent.get(row.event_ticker) || [];
+      list.push(row);
+      byEvent.set(row.event_ticker, list);
+    }
+  }
+  const liveEvents: Array<{ eventTicker: string; markets: MarketRow[]; close: number }> = [];
+  for (const [eventTicker, markets] of byEvent) {
+    const live = markets.filter(
+      (c) => c.open_utc && c.close_utc && now >= c.open_utc && now < c.close_utc
+    );
+    if (!live.length) continue;
+    const close = Math.min(...live.map((c) => c.close_utc!.getTime()));
+    liveEvents.push({ eventTicker, markets: live, close });
+  }
+  liveEvents.sort((a, b) => a.close - b.close);
+  if (liveEvents.length) {
+    return { phase: 'live', eventTicker: liveEvents[0].eventTicker, markets: liveEvents[0].markets };
+  }
+  if (pickAll.phase === 'upcoming' || pickAll.phase === 'ended') {
+    return { phase: pickAll.phase, eventTicker: pickAll.row.event_ticker, markets: [pickAll.row] };
+  }
+  return null;
+}
+
+export async function computeHourlyAtmLean(
+  asset: AssetKey,
+  fetchImpl: typeof fetch = fetch,
+  now = new Date()
+): Promise<LeanResult> {
+  const series = cheapLoopHourlySeriesTicker(asset);
+  if (!series) {
+    return { ok: false, asset, decision: 'SKIP', phase: 'unknown', message: 'cheap_loop_hourly_no_market' };
+  }
+  const bundle = await getLiveHourlyEventMarkets(series, fetchImpl, now);
+  if (!bundle) {
+    return { ok: false, asset, decision: 'SKIP', phase: 'unknown', message: 'cheap_loop_hourly_no_market' };
+  }
+  if (bundle.phase !== 'live') {
+    return {
+      ok: false,
+      asset,
+      decision: 'SKIP',
+      phase: bundle.phase,
+      event_ticker: bundle.eventTicker,
+      message: bundle.phase === 'upcoming' ? 'cheap_loop_outside_window' : 'window_ended',
+    };
+  }
+  let liveSpot = await getKalshiEventLiveSpot(bundle.eventTicker, fetchImpl, '60min');
+  if (!liveSpot) liveSpot = await getKalshiEventLiveSpot(bundle.eventTicker, fetchImpl, '15min');
+  let priceSource = 'predict_chart';
+  let live: number;
+  if (liveSpot) {
+    live = liveSpot.price;
+  } else {
+    const feedId = PYTH_IDS[asset];
+    if (!feedId) return { ok: false, asset, decision: 'SKIP', phase: bundle.phase, message: 'no_pyth_id' };
+    live = await getPythSpot(feedId, fetchImpl);
+    priceSource = 'pyth_fallback';
+    liveSpot = null;
+  }
+  const atm = pickUniqueAtmStrike({
+    live,
+    markets: bundle.markets.map((m) => ({ ticker: m.market_ticker, strike: m.floor_strike })),
+  });
+  if (!atm.ok) {
+    return {
+      ok: false,
+      asset,
+      decision: 'SKIP',
+      phase: bundle.phase,
+      event_ticker: bundle.eventTicker,
+      live,
+      message: atm.skip_reason,
+    };
+  }
+  const row = bundle.markets.find((m) => m.market_ticker === atm.ticker) || bundle.markets[0];
+  const quote = await getMarketQuote(atm.ticker, fetchImpl);
+  const close = row.close_utc;
+  const open = row.open_utc;
+  const minutes_remaining =
+    close == null ? undefined : Math.max(0, (close.getTime() - now.getTime()) / 60000);
+  const minutes_left =
+    minutes_remaining == null ? undefined : Math.max(0, Math.floor(minutes_remaining));
+  const minutes_elapsed =
+    open == null ? undefined : Math.max(0, Math.floor((now.getTime() - open.getTime()) / 60000));
+  let yes_bid: number | null = null;
+  let yes_ask: number | null = null;
+  let no_bid: number | null = null;
+  let no_ask: number | null = null;
+  try {
+    if (quote?.yes_bid_dollars != null) yes_bid = Number(quote.yes_bid_dollars);
+  } catch {
+    /* */
+  }
+  try {
+    if (quote?.yes_ask_dollars != null) yes_ask = Number(quote.yes_ask_dollars);
+  } catch {
+    /* */
+  }
+  try {
+    if ((quote as { no_bid_dollars?: number } | null)?.no_bid_dollars != null) {
+      no_bid = Number((quote as { no_bid_dollars?: number }).no_bid_dollars);
+    }
+  } catch {
+    /* */
+  }
+  try {
+    if (quote?.no_ask_dollars != null) no_ask = Number(quote.no_ask_dollars);
+  } catch {
+    /* */
+  }
+  return {
+    ok: true,
+    asset,
+    phase: bundle.phase,
+    market_ticker: atm.ticker,
+    event_ticker: bundle.eventTicker,
+    live,
+    strike: atm.strike,
+    abs_gap: Number(Math.abs(live - atm.strike).toFixed(6)),
+    minutes_left,
+    minutes_elapsed,
+    minutes_remaining,
+    decision: 'SKIP',
+    yes_bid,
+    yes_ask,
+    no_bid,
+    no_ask,
+    price_source: priceSource,
+    timeseries: sanitizeTimeseries(liveSpot?.timeseries),
     close_utc: close ? close.toISOString() : undefined,
   };
 }

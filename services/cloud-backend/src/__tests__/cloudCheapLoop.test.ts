@@ -2,6 +2,10 @@ import { normalizeFeatureFlags } from '../services/featureFlags';
 import { pendingProtectTradesForMarket } from '../services/cloudProtectSell';
 import { evaluateCheapLoopEnter } from '../../../../packages/trading-core/src/cheapLoop';
 import {
+  pendingCheapLoopHourlyTradesForMarket,
+  pendingCheapLoopTradesForMarket,
+} from '../services/cloudCheapLoop';
+import {
   buildCheapLoopWatcherSnapshot,
   formatCheapLoopWatcherChip,
 } from '../services/cheapLoopWatcher';
@@ -38,10 +42,22 @@ describe('Cheap loop cloud wiring', () => {
   test('Admin flag defaults Off; Protect skips cheap_loop rows', () => {
     expect(normalizeFeatureFlags(null).cheapLoop).toBe(false);
     const cl = filledTrade({ tradeId: 'cl1' });
+    const hourly = filledTrade({
+      tradeId: 'clh1',
+      ticker: 'KXBTCD-26SEP1406-T67099.99',
+      entryPath: 'cheap_loop_hourly',
+    });
     const home = filledTrade({ tradeId: 'home1', entryPath: 'home' });
-    expect(pendingProtectTradesForMarket([cl, home], 'KXBTC15M-T', new Date()).map((t) => t.tradeId)).toEqual([
-      'home1',
-    ]);
+    expect(
+      pendingProtectTradesForMarket([cl, hourly, home], 'KXBTC15M-T', new Date()).map((t) => t.tradeId)
+    ).toEqual(['home1']);
+    expect(
+      pendingProtectTradesForMarket(
+        [cl, hourly, home],
+        'KXBTCD-26SEP1406-T67099.99',
+        new Date()
+      ).map((t) => t.tradeId)
+    ).toEqual([]);
   });
 
   test('watcher chip is idle until users are watching', () => {
@@ -88,5 +104,19 @@ describe('Cheap loop cloud wiring', () => {
     });
     expect(gate.ok).toBe(false);
     expect(gate.skip_reason).toBe('cheap_loop_holding_other_path');
+  });
+
+  test('hourly pending filter does not mix 15m lots', () => {
+    const cl = filledTrade({ tradeId: 'cl1' });
+    const hourly = filledTrade({
+      tradeId: 'clh1',
+      ticker: 'KXBTCD-26SEP1406-T67099.99',
+      entryPath: 'cheap_loop_hourly',
+    });
+    expect(pendingCheapLoopTradesForMarket([cl, hourly], 'KXBTC15M-T').map((t) => t.tradeId)).toEqual(['cl1']);
+    expect(
+      pendingCheapLoopHourlyTradesForMarket([cl, hourly], 'KXBTCD-26SEP1406-T67099.99').map((t) => t.tradeId)
+    ).toEqual(['clh1']);
+    expect(pendingCheapLoopHourlyTradesForMarket([cl, hourly], 'KXBTC15M-T')).toEqual([]);
   });
 });

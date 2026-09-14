@@ -589,6 +589,14 @@ export function getFaqCategories(): FaqCategory[] {
             'Window cap 1 does not block this path — Cycles is the cap. Spike fade, Step buy, and Pair lock still take first pick. TWAP still owns BTC/ETH. Last-minute owns new buys if Cheap loop has no lot. Protect skips these rows. Home tap or any other open fill blocks a new Cheap loop buy.',
         },
         {
+          id: 'what-is-cheap-loop-hourly',
+          q: 'What is Cheap loop Hourly?',
+          a:
+            'A second switch on the Cheap loop tile (same Admin flag). Default Off. Empty hourly chips mean no hourly buys.\n\n' +
+            'Kalshi hourly is above/below strike ladders (KXBTCD, KXETHD, …), not the 15m up/down book. Cloud picks the unique ATM strike closest to live. A tie sits out. After a fill it holds that ticker until Take or Flatten — it does not hop strikes. Cycles count per hour event. One open hourly lot per coin.\n\n' +
+            'Start after default 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Min hold 2, Cooldown 3, Cycles 2. Stop is Off. Window cap 1 does not block. TWAP / Last-minute / Spike / Step / Pair stay on 15m. 15m Cheap loop and Hourly may both hold. Protect skips these rows.',
+        },
+        {
           id: 'cheap-loop-risk-hidden',
           q: 'Why don’t I see Cheap loop on Paths?',
           a:

@@ -434,6 +434,7 @@
               <option value="spike_fade">Spike fade</option>
               <option value="pair_lock">Pair lock</option>
               <option value="cheap_loop">Cheap loop</option>
+              <option value="cheap_loop_hourly">Cheap loop hourly</option>
             </select>
           </label>
           <label class="block">
@@ -1177,6 +1178,9 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       }
       if (v === 'cheap_loop' || v === 'cheaploop' || v === 'cheap-loop') {
         return { label: 'Cheap loop', cls: 'bg-teal-500/20 text-teal-300 border-teal-500/30' };
+      }
+      if (v === 'cheap_loop_hourly' || v === 'cheaploophourly' || v === 'cheap-loop-hourly') {
+        return { label: 'Cheap loop hourly', cls: 'bg-teal-500/20 text-teal-200 border-teal-500/30' };
       }
       return { label: '—', cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' };
     }

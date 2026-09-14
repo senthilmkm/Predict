@@ -5,11 +5,11 @@ Status: **locked for 15m**. Stop **Off**. Hold until **Take or Flatten**. Admin 
 Product name: **Cheap loop**  
 Firestore / code keys: `cheapLoop` (admin), `cheap_loop_*` (user risk), `entry_path: 'cheap_loop'`
 
-Path tile: **15 min** toggle + knobs (this spec). **Hourly** toggle + own knobs is a later ship — do not place hourly until that catalog + lean exists.
+Path tile: **15 min** toggle + knobs, then **Hourly** toggle + own knobs (ATM ladder). Same Admin flag.
 
 **Cheap-side hold for take**: buy the cheaper ticket → wait → sell when that side’s **bid ≥ fill + Take** → cooldown → look again up to **Cycles**. If Take never prints, **Flatten** dumps. **No Stop.** Always dump. Never hold to $1. Never hold YES and NO at once.
 
-Predict today only lists **15m** series. Shipped defaults are the **15m** clocks (Cycles **1**). Hourly is a separate toggle and clock set after 15m ships.
+Predict lists **15m** series on Home. Hourly Cheap loop is Cloud-only on `KX*D` ATM books.
 
 Goal: **small locked-in takes**, or flatten. Fail closed. Not Pair lock. Not Cash out. Not Spike fade (one lot).
 
@@ -270,6 +270,42 @@ Watch line in cooldown: `Cheap loop cooldown · 80s`.
 2. Cloud 1s watcher (copy Spike fade watch map; do not merge paths)
 3. Phone Paths block + pathInfo / FAQ / path catalog
 4. Admin feature flag
-5. Hourly series **only if** we are shipping hourly
+5. Hourly ATM Cheap loop (this ship): own toggle under 15 min, `KX*D` series, `entry_path: cheap_loop_hourly`
 
-Do not auto-check HYPE/NEAR/ZEC onto chips. Do not loosen Cheap max or Min gap. Stop stays Off.
+Do not auto-check HYPE/NEAR/ZEC onto chips. Do not loosen Cheap max or Min gap. Stop stays Off. Do not point 15m knobs at hourly tickers.
+
+---
+
+## 13. Hourly (ATM ladder) — locked
+
+Status: **shipping**. Same Admin flag `cheapLoop`. Own user toggle **Hourly** under the 15 min block. Default Off. Empty hourly chips = no hourly buys.
+
+Kalshi hourly is **above/below strike ladders** (`KXBTCD`, `KXETHD`, …), not 15m up/down. Cheap loop still buys and sells YES/NO on **one** book: the **unique ATM strike** (closest `floor_strike` to live). Tie → sit `cheap_loop_hourly_no_atm`. After a fill, watch **that ticker**; do not hop ATM mid-lot. After Take/Flatten + Cooldown, pick ATM again.
+
+**Tile:** 15 min toggle + 15m knobs, then Hourly toggle + hourly knobs + hourly chips.
+
+| Risk key | UI |  Hourly shipped | Range |
+|---|---|---|---|
+| `cheap_loop_hourly_enabled` | Hourly | **false** | — |
+| `cheap_loop_hourly_start_minutes` | Start after | **10** | 1–20 |
+| `cheap_loop_hourly_flatten_minutes` | Flatten left | **5** | 3–10 |
+| `cheap_loop_hourly_cheap_max_ask_usd` | Cheap max ask | **0.40** | 0.25–0.45 |
+| `cheap_loop_hourly_min_gap_usd` | Min gap | **0.10** | 0.08–0.20 |
+| `cheap_loop_hourly_take_usd` | Take | **0.05** | 0.03–0.08 |
+| `cheap_loop_hourly_min_hold_minutes` | Min hold | **2** | 1–8 |
+| `cheap_loop_hourly_cooldown_minutes` | Cooldown | **3** | 1–10 |
+| `cheap_loop_hourly_cycles` | Cycles | **2** | 1–5 |
+| `cheap_loop_hourly_lot_count` | Lot contracts | **1** | 1–5 |
+| `cheap_loop_hourly_skip_thin_bid` | Skip thin bid | **false** | — |
+| `cheap_loop_hourly_assets` | Hourly assets | **[]** | mapped series only |
+
+Hourly series map (chips only if listed): BTC `KXBTCD`, ETH `KXETHD`, SOL `KXSOLD`, DOGE `KXDOGED`, XRP `KXXRPD`, BNB `KXBNBD`, HYPE `KXHYPED`, NEAR `KXNEARD`, ZEC `KXZECD`. No Gold / stocks / forex / daily ladders. Do not auto-check HYPE / NEAR / ZEC.
+
+`entry_path`: **`cheap_loop_hourly`**. Protect skips these rows. Window cap 1 does not block. Cycles count **per hourly event** (`KXBTCD-26SEP1406`), not per strike. **One open hourly Cheap loop lot per asset** (any strike). Cooldown is per event.
+
+Stop Off. Take or Flatten only. Same 5s grace / bid IOC as 15m.
+
+TWAP / Last-minute / Spike / Step / Pair stay on **15m** books. They do not first-pick hourly. 15m Cheap loop and Hourly may both hold (different tickers). Shared: max open, daily loss, trades/day.
+
+No open hourly event → sit. Open lot still exits if Hourly toggle later turns Off.
+

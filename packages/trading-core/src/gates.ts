@@ -365,6 +365,10 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'twap lock owns this coin';
     case 'cheap_loop_last_minute_owns':
       return 'last-minute owns new buys';
+    case 'cheap_loop_hourly_no_atm':
+      return 'no unique atm strike';
+    case 'cheap_loop_hourly_no_market':
+      return 'no hourly market';
     case 'cheap_loop_take':
       return 'Cheap loop take';
     case 'cheap_loop_stop':

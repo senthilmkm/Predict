@@ -145,11 +145,271 @@ export function isCheapLoopAssetSelected(assets: unknown, asset: string): boolea
   return normalizeCheapLoopAssets(assets).includes(String(asset));
 }
 
+export const CHEAP_LOOP_HOURLY_START_DEFAULT = 10;
+export const CHEAP_LOOP_HOURLY_MIN_HOLD_DEFAULT = 2;
+export const CHEAP_LOOP_HOURLY_COOLDOWN_DEFAULT = 3;
+export const CHEAP_LOOP_HOURLY_CYCLES_DEFAULT = 2;
+
+/** Kalshi above/below hourly series. Missing key = no hourly chip. */
+export const CHEAP_LOOP_HOURLY_SERIES: Record<string, string> = {
+  BTC: 'KXBTCD',
+  ETH: 'KXETHD',
+  SOL: 'KXSOLD',
+  DOGE: 'KXDOGED',
+  XRP: 'KXXRPD',
+  BNB: 'KXBNBD',
+  HYPE: 'KXHYPED',
+  NEAR: 'KXNEARD',
+  ZEC: 'KXZECD',
+};
+
+export function cheapLoopHourlySeriesTicker(asset: string): string | null {
+  const series = CHEAP_LOOP_HOURLY_SERIES[String(asset || '').trim()];
+  return series || null;
+}
+
+export function cheapLoopHourlyEventKey(ticker: string): string {
+  const t = String(ticker || '').trim();
+  const cut = t.lastIndexOf('-T');
+  return cut > 0 ? t.slice(0, cut) : t;
+}
+
+export function pickUniqueAtmStrike(opts: {
+  live?: unknown;
+  markets: Array<{ ticker?: string; strike?: unknown; floor_strike?: unknown }>;
+}): { ok: true; ticker: string; strike: number } | { ok: false; skip_reason: string } {
+  const live = Number(opts.live);
+  if (!Number.isFinite(live)) return { ok: false, skip_reason: 'cheap_loop_hourly_no_atm' };
+  const rows: Array<{ ticker: string; strike: number; dist: number }> = [];
+  for (const m of opts.markets || []) {
+    const ticker = String(m.ticker || '').trim();
+    const strike = Number(m.strike ?? m.floor_strike);
+    if (!ticker || !Number.isFinite(strike)) continue;
+    rows.push({ ticker, strike, dist: Math.abs(live - strike) });
+  }
+  if (!rows.length) return { ok: false, skip_reason: 'cheap_loop_hourly_no_market' };
+  rows.sort((a, b) => a.dist - b.dist || a.ticker.localeCompare(b.ticker));
+  if (rows.length >= 2 && Math.abs(rows[0].dist - rows[1].dist) < 1e-9) {
+    return { ok: false, skip_reason: 'cheap_loop_hourly_no_atm' };
+  }
+  return { ok: true, ticker: rows[0].ticker, strike: rows[0].strike };
+}
+
+export function normalizeCheapLoopHourlyStartMinutes(raw: unknown): number {
+  return Math.round(clamp(Number(raw ?? CHEAP_LOOP_HOURLY_START_DEFAULT), CHEAP_LOOP_START_MIN, CHEAP_LOOP_START_MAX));
+}
+
+export function normalizeCheapLoopHourlyMinHoldMinutes(raw: unknown): number {
+  return Math.round(
+    clamp(Number(raw ?? CHEAP_LOOP_HOURLY_MIN_HOLD_DEFAULT), CHEAP_LOOP_MIN_HOLD_MIN, CHEAP_LOOP_MIN_HOLD_MAX)
+  );
+}
+
+export function normalizeCheapLoopHourlyCooldownMinutes(raw: unknown): number {
+  return Math.round(
+    clamp(Number(raw ?? CHEAP_LOOP_HOURLY_COOLDOWN_DEFAULT), CHEAP_LOOP_COOLDOWN_MIN, CHEAP_LOOP_COOLDOWN_MAX)
+  );
+}
+
+export function normalizeCheapLoopHourlyCycles(raw: unknown): number {
+  return Math.round(
+    clamp(Number(raw ?? CHEAP_LOOP_HOURLY_CYCLES_DEFAULT), CHEAP_LOOP_CYCLES_MIN, CHEAP_LOOP_CYCLES_MAX)
+  );
+}
+
+export function normalizeCheapLoopHourlyAssets(raw: unknown): string[] {
+  const allowed = new Set(Object.keys(CHEAP_LOOP_HOURLY_SERIES));
+  if (raw == null || !Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    const k = String(item || '').trim();
+    if (allowed.has(k) && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
+export function isCheapLoopHourlyAssetSelected(assets: unknown, asset: string): boolean {
+  return normalizeCheapLoopHourlyAssets(assets).includes(String(asset));
+}
+
+export function isCheapLoopHourlyEntryPath(raw: unknown): boolean {
+  const v = String(raw ?? '')
+    .toLowerCase()
+    .trim();
+  return v === 'cheap_loop_hourly' || v === 'cheaploophourly' || v === 'cheap-loop-hourly';
+}
+
 export function isCheapLoopEntryPath(raw: unknown): boolean {
   const v = String(raw ?? '')
     .toLowerCase()
     .trim();
   return v === 'cheap_loop' || v === 'cheaploop' || v === 'cheap-loop';
+}
+
+export function isAnyCheapLoopEntryPath(raw: unknown): boolean {
+  return isCheapLoopEntryPath(raw) || isCheapLoopHourlyEntryPath(raw);
+}
+
+export function isCheapLoopHourlyEnterPath(opts: {
+  adminEnabled: boolean;
+  userEnabled: boolean;
+  assetEnabled: boolean;
+  asset: string;
+  assets?: unknown;
+}): boolean {
+  return Boolean(
+    opts.adminEnabled &&
+      opts.userEnabled &&
+      opts.assetEnabled &&
+      cheapLoopHourlySeriesTicker(opts.asset) &&
+      isCheapLoopHourlyAssetSelected(opts.assets, opts.asset)
+  );
+}
+
+export function cheapLoopCfgForHourly(cfg: AppConfig): AppConfig {
+  const risk = cfg.risk as AppConfig['risk'] & {
+    cheap_loop_hourly_enabled?: boolean;
+    cheap_loop_hourly_start_minutes?: number;
+    cheap_loop_hourly_flatten_minutes?: number;
+    cheap_loop_hourly_cheap_max_ask_usd?: number;
+    cheap_loop_hourly_min_gap_usd?: number;
+    cheap_loop_hourly_take_usd?: number;
+    cheap_loop_hourly_min_hold_minutes?: number;
+    cheap_loop_hourly_cooldown_minutes?: number;
+    cheap_loop_hourly_cycles?: number;
+    cheap_loop_hourly_lot_count?: number;
+    cheap_loop_hourly_skip_thin_bid?: boolean;
+    cheap_loop_hourly_assets?: string[];
+  };
+  return {
+    ...cfg,
+    risk: {
+      ...cfg.risk,
+      cheap_loop_enabled: risk.cheap_loop_hourly_enabled === true,
+      cheap_loop_start_minutes: normalizeCheapLoopHourlyStartMinutes(risk.cheap_loop_hourly_start_minutes),
+      cheap_loop_flatten_minutes: normalizeCheapLoopFlattenMinutes(risk.cheap_loop_hourly_flatten_minutes),
+      cheap_loop_cheap_max_ask_usd: normalizeCheapLoopCheapMaxAskUsd(risk.cheap_loop_hourly_cheap_max_ask_usd),
+      cheap_loop_min_gap_usd: normalizeCheapLoopMinGapUsd(risk.cheap_loop_hourly_min_gap_usd),
+      cheap_loop_take_usd: normalizeCheapLoopTakeUsd(risk.cheap_loop_hourly_take_usd),
+      cheap_loop_min_hold_minutes: normalizeCheapLoopHourlyMinHoldMinutes(risk.cheap_loop_hourly_min_hold_minutes),
+      cheap_loop_cooldown_minutes: normalizeCheapLoopHourlyCooldownMinutes(
+        risk.cheap_loop_hourly_cooldown_minutes
+      ),
+      cheap_loop_cycles: normalizeCheapLoopHourlyCycles(risk.cheap_loop_hourly_cycles),
+      cheap_loop_lot_count: normalizeCheapLoopLotCount(risk.cheap_loop_hourly_lot_count),
+      cheap_loop_skip_thin_bid: risk.cheap_loop_hourly_skip_thin_bid === true,
+      cheap_loop_assets: normalizeCheapLoopHourlyAssets(risk.cheap_loop_hourly_assets),
+    },
+  };
+}
+
+export function isCheapLoopHourlyCompletedExit(trade: CheapLoopTradeRow): boolean {
+  if (!isCheapLoopHourlyEntryPath(entryOf(trade))) return false;
+  const outcome = String(trade.outcome || '').toLowerCase();
+  if (outcome === 'exited') return true;
+  return Boolean(trade.protectExitOrderId) && String(trade.status || '').toUpperCase() === 'SETTLED';
+}
+
+export function cheapLoopHourlyExitsForEvent(trades: CheapLoopTradeRow[], eventKey: string): number {
+  const key = String(eventKey || '').trim();
+  if (!key) return 0;
+  return (trades || []).filter(
+    (t) => cheapLoopHourlyEventKey(tickerOf(t)) === key && isCheapLoopHourlyCompletedExit(t)
+  ).length;
+}
+
+export function cheapLoopHourlyLastExitAt(trades: CheapLoopTradeRow[], eventKey: string): Date | null {
+  const key = String(eventKey || '').trim();
+  if (!key) return null;
+  let latest = 0;
+  for (const t of trades || []) {
+    if (cheapLoopHourlyEventKey(tickerOf(t)) !== key || !isCheapLoopHourlyCompletedExit(t)) continue;
+    const raw = t.settledAt ?? t.executedAt ?? (t as { at?: unknown }).at;
+    const ms = raw instanceof Date ? raw.getTime() : Date.parse(String(raw || ''));
+    if (Number.isFinite(ms) && ms > latest) latest = ms;
+  }
+  return latest > 0 ? new Date(latest) : null;
+}
+
+export function cheapLoopHourlyCooldownRemainingSec(opts: {
+  trades: CheapLoopTradeRow[];
+  eventKey: string;
+  cooldownMinutes?: unknown;
+  now?: Date;
+}): number {
+  const last = cheapLoopHourlyLastExitAt(opts.trades, opts.eventKey);
+  if (!last) return 0;
+  const coolMs = normalizeCheapLoopHourlyCooldownMinutes(opts.cooldownMinutes) * 60_000;
+  const now = (opts.now || new Date()).getTime();
+  return Math.max(0, Math.ceil((last.getTime() + coolMs - now) / 1000));
+}
+
+export function isCheapLoopHourlyCooldown(opts: {
+  trades: CheapLoopTradeRow[];
+  eventKey: string;
+  cooldownMinutes?: unknown;
+  now?: Date;
+}): boolean {
+  return cheapLoopHourlyCooldownRemainingSec(opts) > 0;
+}
+
+export function assetHasOpenCheapLoopHourly(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>,
+  asset: string
+): boolean {
+  const a = String(asset || '').trim();
+  if (!a) return false;
+  return (trades || []).some(
+    (t) =>
+      String((t as { asset?: string }).asset || '').trim() === a &&
+      isCheapLoopHourlyEntryPath(entryOf(t)) &&
+      isOpenLiveFill(t)
+  );
+}
+
+export function openCheapLoopHourlyAssets(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>
+): string[] {
+  const out: string[] = [];
+  for (const t of trades || []) {
+    if (!isCheapLoopHourlyEntryPath(entryOf(t)) || !isOpenLiveFill(t)) continue;
+    const a = String((t as { asset?: string }).asset || '').trim();
+    if (a && !out.includes(a)) out.push(a);
+  }
+  return out;
+}
+
+export function openCheapLoopHourlyTickerForAsset(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>,
+  asset: string
+): string | null {
+  const a = String(asset || '').trim();
+  if (!a) return null;
+  for (const t of trades || []) {
+    if (String((t as { asset?: string }).asset || '').trim() !== a) continue;
+    if (!isCheapLoopHourlyEntryPath(entryOf(t)) || !isOpenLiveFill(t)) continue;
+    const ticker = tickerOf(t);
+    if (ticker) return ticker;
+  }
+  return null;
+}
+
+export function tickerHasOpenCheapLoopHourly(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>,
+  marketTicker: string
+): boolean {
+  return openFillsForTicker(trades, marketTicker).some((t) =>
+    isCheapLoopHourlyEntryPath(t.entryPath ?? t.entry_path)
+  );
+}
+
+export function tickerHasOpenOtherThanCheapLoopHourly(
+  trades: Array<CheapLoopTradeRow & Parameters<typeof isOpenLiveFill>[0]>,
+  marketTicker: string
+): boolean {
+  return openFillsForTicker(trades, marketTicker).some(
+    (t) => !isCheapLoopHourlyEntryPath(t.entryPath ?? t.entry_path)
+  );
 }
 
 export function isCheapLoopEnterPath(opts: {
@@ -218,6 +478,7 @@ export function pickCheapLoopSide(opts: {
 type CheapLoopTradeRow = {
   ticker?: string;
   market_ticker?: string;
+  asset?: string;
   entryPath?: unknown;
   entry_path?: unknown;
   outcome?: unknown;

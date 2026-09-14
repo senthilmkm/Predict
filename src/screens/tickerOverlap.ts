@@ -35,6 +35,7 @@ const SITTER_ORDER: OverlapPathId[] = [
   'spike_fade',
   'pair_lock',
   'cheap_loop',
+  'cheap_loop_hourly',
 ];
 
 export const OVERLAP_PATH_LABEL: Record<OverlapPathId, string> = {
@@ -48,6 +49,7 @@ export const OVERLAP_PATH_LABEL: Record<OverlapPathId, string> = {
   spike_fade: 'Spike fade',
   pair_lock: 'Pair lock',
   cheap_loop: 'Cheap loop',
+  cheap_loop_hourly: 'Cheap loop hourly',
 };
 
 const HOLDING_LINE: Record<OverlapPathId, string> = {
@@ -61,6 +63,7 @@ const HOLDING_LINE: Record<OverlapPathId, string> = {
   spike_fade: 'spike fade is holding this ticket',
   pair_lock: 'pair lock is holding this ticket',
   cheap_loop: 'cheap loop is holding this ticket',
+  cheap_loop_hourly: 'cheap loop hourly is holding this ticket',
 };
 
 export function joinOverlapNames(labels: string[]): string {

@@ -14,7 +14,7 @@ import { sendPushNotification } from './notifications';
 
 export function orderPlacedPathTag(
   raw: unknown
-): 'Home' | 'Cushion lean' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | 'Step buy' | 'Spike fade' | 'Pair lock' | 'Pair lock hedge' | 'Cheap loop' | null {
+): 'Home' | 'Cushion lean' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | 'Step buy' | 'Spike fade' | 'Pair lock' | 'Pair lock hedge' | 'Cheap loop' | 'Cheap loop hourly' | null {
   const alias = String(raw ?? '')
     .toLowerCase()
     .trim();
@@ -30,6 +30,7 @@ export function orderPlacedPathTag(
   if (parsed === 'spike_fade') return 'Spike fade';
   if (parsed === 'pair_lock') return 'Pair lock';
   if (parsed === 'cheap_loop') return 'Cheap loop';
+  if (parsed === 'cheap_loop_hourly') return 'Cheap loop hourly';
   return null;
 }
 

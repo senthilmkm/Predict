@@ -276,6 +276,18 @@ export interface RiskConfig {
   cheap_loop_lot_count?: number;
   cheap_loop_skip_thin_bid?: boolean;
   cheap_loop_assets?: string[];
+  cheap_loop_hourly_enabled?: boolean;
+  cheap_loop_hourly_start_minutes?: number;
+  cheap_loop_hourly_flatten_minutes?: number;
+  cheap_loop_hourly_cheap_max_ask_usd?: number;
+  cheap_loop_hourly_min_gap_usd?: number;
+  cheap_loop_hourly_take_usd?: number;
+  cheap_loop_hourly_min_hold_minutes?: number;
+  cheap_loop_hourly_cooldown_minutes?: number;
+  cheap_loop_hourly_cycles?: number;
+  cheap_loop_hourly_lot_count?: number;
+  cheap_loop_hourly_skip_thin_bid?: boolean;
+  cheap_loop_hourly_assets?: string[];
 }
 
 export interface AlertPref {
@@ -466,6 +478,18 @@ export function defaultAppConfig(): AppConfig {
       cheap_loop_lot_count: 1,
       cheap_loop_skip_thin_bid: false,
       cheap_loop_assets: [],
+      cheap_loop_hourly_enabled: false,
+      cheap_loop_hourly_start_minutes: 10,
+      cheap_loop_hourly_flatten_minutes: 5,
+      cheap_loop_hourly_cheap_max_ask_usd: 0.4,
+      cheap_loop_hourly_min_gap_usd: 0.1,
+      cheap_loop_hourly_take_usd: 0.05,
+      cheap_loop_hourly_min_hold_minutes: 2,
+      cheap_loop_hourly_cooldown_minutes: 3,
+      cheap_loop_hourly_cycles: 2,
+      cheap_loop_hourly_lot_count: 1,
+      cheap_loop_hourly_skip_thin_bid: false,
+      cheap_loop_hourly_assets: [],
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

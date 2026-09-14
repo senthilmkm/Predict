@@ -2,6 +2,7 @@ import {
   buildCheapLoopSellOrder,
   evaluateCheapLoopExit,
   isCheapLoopEntryPath,
+  isCheapLoopHourlyEntryPath,
 } from '../../../../packages/trading-core/src/cheapLoop';
 import { isOpenLiveFill } from '../../../../packages/trading-core/src/cashOut';
 import { TradeRecordDoc, claimProtectSell, updateTradeRecord } from './firestore';
@@ -27,6 +28,20 @@ export function pendingCheapLoopTradesForMarket(
     (t) =>
       String(t.ticker || '').trim() === tkr &&
       isCheapLoopEntryPath(t.entryPath) &&
+      isOpenLiveFill(t) &&
+      !t.protectExitOrderId
+  );
+}
+
+export function pendingCheapLoopHourlyTradesForMarket(
+  trades: TradeRecordDoc[],
+  marketTicker: string
+): TradeRecordDoc[] {
+  const tkr = String(marketTicker || '').trim();
+  return (trades || []).filter(
+    (t) =>
+      String(t.ticker || '').trim() === tkr &&
+      isCheapLoopHourlyEntryPath(t.entryPath) &&
       isOpenLiveFill(t) &&
       !t.protectExitOrderId
   );
@@ -62,6 +77,7 @@ export async function runCloudCheapLoopExits(opts: {
   slippageUsd: number;
   dryRun: boolean;
   now?: Date;
+  hourly?: boolean;
   place: CheapLoopPlaceFn;
 }): Promise<{
   exited: number;
@@ -75,7 +91,9 @@ export async function runCloudCheapLoopExits(opts: {
   let exited = 0;
   let placed = 0;
 
-  const held = pendingCheapLoopTradesForMarket(opts.trades, opts.ticker);
+  const held = opts.hourly
+    ? pendingCheapLoopHourlyTradesForMarket(opts.trades, opts.ticker)
+    : pendingCheapLoopTradesForMarket(opts.trades, opts.ticker);
   for (const trade of held) {
     if (trade.protectExitOrderId) {
       skipped.push('already_exited_on_kalshi');
@@ -172,12 +190,19 @@ export async function runCloudCheapLoopExits(opts: {
       exitPayPrice,
     });
     exited += 1;
+    const hourly = opts.hourly === true;
     const title =
       evalRes.kind === 'cheap_loop_take'
-        ? 'Cheap loop take'
+        ? hourly
+          ? 'Cheap loop hourly take'
+          : 'Cheap loop take'
         : evalRes.kind === 'cheap_loop_stop'
-          ? 'Cheap loop stop'
-          : 'Cheap loop flatten';
+          ? hourly
+            ? 'Cheap loop hourly stop'
+            : 'Cheap loop stop'
+          : hourly
+            ? 'Cheap loop hourly flatten'
+            : 'Cheap loop flatten';
     alerts.push({
       tradeId: trade.tradeId,
       title,

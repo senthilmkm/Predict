@@ -520,6 +520,17 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-cheap_loop_cycles').props.children).toBe('1');
     expect(s.getByTestId('cheap-loop-asset-BTC')).toBeTruthy();
     expect(s.getByTestId('path-info-cheapLoop')).toBeTruthy();
+    expect(s.getByTestId('risk-toggle-cheap_loop_hourly_enabled').props.value).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-cheap_loop_hourly_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.cheap_loop_hourly_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-cheap_loop_hourly_start_minutes').props.children).toBe('10 min');
+    expect(s.getByTestId('risk-value-auto-cheap_loop_hourly_flatten_minutes').props.children).toBe('5 min');
+    expect(s.getByTestId('risk-value-auto-cheap_loop_hourly_cycles').props.children).toBe('2');
+    expect(s.getByTestId('cheap-loop-hourly-asset-BTC')).toBeTruthy();
+    expect(s.getByTestId('cheap-loop-hourly-asset-HYPE')).toBeTruthy();
+    expect(s.queryByTestId('cheap-loop-hourly-asset-Gold')).toBeNull();
+    expect(s.getByTestId('path-info-cheapLoopHourly')).toBeTruthy();
+    expect(useConfigStore.getState().config.risk.cheap_loop_hourly_assets).toEqual([]);
     await openFocusedPath(s, 'lastMinute');
     await fireEvent.press(s.getByTestId('last-minute-side-both'));
     await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_side).toBe('both'));

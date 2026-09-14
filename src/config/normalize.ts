@@ -101,6 +101,11 @@ import {
   normalizeCheapLoopStartMinutes,
   normalizeCheapLoopStopUsd,
   normalizeCheapLoopTakeUsd,
+  normalizeCheapLoopHourlyAssets,
+  normalizeCheapLoopHourlyCooldownMinutes,
+  normalizeCheapLoopHourlyCycles,
+  normalizeCheapLoopHourlyMinHoldMinutes,
+  normalizeCheapLoopHourlyStartMinutes,
 } from '../../packages/trading-core/src/cheapLoop';
 import {
   configForHomeBuy as mergeHomeBuyRisk,
@@ -371,6 +376,38 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     cheap_loop_skip_thin_bid: r.cheap_loop_skip_thin_bid === true,
     cheap_loop_assets: normalizeCheapLoopAssets(
       r.cheap_loop_assets !== undefined ? r.cheap_loop_assets : d.cheap_loop_assets
+    ),
+    cheap_loop_hourly_enabled: r.cheap_loop_hourly_enabled === true,
+    cheap_loop_hourly_start_minutes: normalizeCheapLoopHourlyStartMinutes(
+      r.cheap_loop_hourly_start_minutes ?? d.cheap_loop_hourly_start_minutes
+    ),
+    cheap_loop_hourly_flatten_minutes: normalizeCheapLoopFlattenMinutes(
+      r.cheap_loop_hourly_flatten_minutes ?? d.cheap_loop_hourly_flatten_minutes
+    ),
+    cheap_loop_hourly_cheap_max_ask_usd: normalizeCheapLoopCheapMaxAskUsd(
+      r.cheap_loop_hourly_cheap_max_ask_usd ?? d.cheap_loop_hourly_cheap_max_ask_usd
+    ),
+    cheap_loop_hourly_min_gap_usd: normalizeCheapLoopMinGapUsd(
+      r.cheap_loop_hourly_min_gap_usd ?? d.cheap_loop_hourly_min_gap_usd
+    ),
+    cheap_loop_hourly_take_usd: normalizeCheapLoopTakeUsd(
+      r.cheap_loop_hourly_take_usd ?? d.cheap_loop_hourly_take_usd
+    ),
+    cheap_loop_hourly_min_hold_minutes: normalizeCheapLoopHourlyMinHoldMinutes(
+      r.cheap_loop_hourly_min_hold_minutes ?? d.cheap_loop_hourly_min_hold_minutes
+    ),
+    cheap_loop_hourly_cooldown_minutes: normalizeCheapLoopHourlyCooldownMinutes(
+      r.cheap_loop_hourly_cooldown_minutes ?? d.cheap_loop_hourly_cooldown_minutes
+    ),
+    cheap_loop_hourly_cycles: normalizeCheapLoopHourlyCycles(
+      r.cheap_loop_hourly_cycles ?? d.cheap_loop_hourly_cycles
+    ),
+    cheap_loop_hourly_lot_count: normalizeCheapLoopLotCount(
+      r.cheap_loop_hourly_lot_count ?? d.cheap_loop_hourly_lot_count
+    ),
+    cheap_loop_hourly_skip_thin_bid: r.cheap_loop_hourly_skip_thin_bid === true,
+    cheap_loop_hourly_assets: normalizeCheapLoopHourlyAssets(
+      r.cheap_loop_hourly_assets !== undefined ? r.cheap_loop_hourly_assets : d.cheap_loop_hourly_assets
     ),
   };
   const targets = reconcileCashOutTargets(

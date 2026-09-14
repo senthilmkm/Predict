@@ -114,6 +114,17 @@ describe('summarizeTodayPathBuys', () => {
     expect(summary.autoTotal).toBe(0);
     expect(formatHomePathBuyLines(summary)).toEqual(['Cheap loop  SOL 1']);
   });
+
+  test('counts Cheap loop hourly fills on their own line', () => {
+    const summary = summarizeTodayPathBuys(
+      [rec({ id: 'h', asset: 'BTC', entry_path: 'cheap_loop_hourly' })],
+      NOW
+    );
+    expect(summary.cheapLoopHourlyTotal).toBe(1);
+    expect(summary.cheapLoopTotal).toBe(0);
+    expect(summary.autoTotal).toBe(0);
+    expect(formatHomePathBuyLines(summary)).toEqual(['Cheap loop hourly  BTC 1']);
+  });
 });
 
 describe('history trade display', () => {
@@ -128,6 +139,7 @@ describe('history trade display', () => {
     expect(entryPathChipLabel('spike_fade')).toBe('Spike fade');
     expect(entryPathChipLabel('pair_lock')).toBe('Pair lock');
     expect(entryPathChipLabel('cheap_loop')).toBe('Cheap loop');
+    expect(entryPathChipLabel('cheap_loop_hourly')).toBe('Cheap loop hourly');
     expect(entryPathChipLabel('pair_lock', 1)).toBe('Pair lock 1');
     expect(entryPathChipLabel('pair_lock', 2)).toBe('Pair lock 2');
     expect(entryPathChipLabel('pair_lock_hedge')).toBe('PL hedge');

@@ -14,6 +14,7 @@ export type TradeStreamEntryLabel =
   | 'Pair lock'
   | 'Pair lock hedge'
   | 'Cheap loop'
+  | 'Cheap loop hourly'
   | '—';
 
 /** Admin stream label. Legacy rows with no path stay blank — do not guess. */
@@ -34,6 +35,7 @@ export function tradeStreamEntryLabel(raw: unknown): TradeStreamEntryLabel {
   if (parsed === 'spike_fade') return 'Spike fade';
   if (parsed === 'pair_lock') return 'Pair lock';
   if (parsed === 'cheap_loop') return 'Cheap loop';
+  if (parsed === 'cheap_loop_hourly') return 'Cheap loop hourly';
   return '—';
 }
 
@@ -89,7 +91,7 @@ export const TRADE_STREAM_DISPLAY_MAX = 500;
 export interface TradeStreamFilters {
   asset?: string;
   status?: string;
-  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'cheap_loop';
+  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'cheap_loop' | 'cheap_loop_hourly';
   userId?: string;
   fromMs?: number;
   toMs?: number;

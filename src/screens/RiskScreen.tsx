@@ -10,6 +10,7 @@ import {
   SPIKE_FADE_RISK_FIELD_KEYS,
   PAIR_LOCK_RISK_FIELD_KEYS,
   CHEAP_LOOP_RISK_FIELD_KEYS,
+  CHEAP_LOOP_HOURLY_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
   TWAP_LOCK_RISK_FIELD_KEYS,
   PROTECT_RISK_FIELD_KEYS,
@@ -30,7 +31,11 @@ import {
 import { normalizeStepBuyAssets } from '../../packages/trading-core/src/stepBuy';
 import { normalizeSpikeFadeAssets } from '../../packages/trading-core/src/spikeFade';
 import { normalizePairLockAssets } from '../../packages/trading-core/src/pairLock';
-import { normalizeCheapLoopAssets } from '../../packages/trading-core/src/cheapLoop';
+import {
+  CHEAP_LOOP_HOURLY_SERIES,
+  normalizeCheapLoopAssets,
+  normalizeCheapLoopHourlyAssets,
+} from '../../packages/trading-core/src/cheapLoop';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PATH_INFO } from '../content/pathInfo';
 import { PathFocusId } from '../content/pathCatalog';
@@ -1005,6 +1010,7 @@ function CheapLoopFields() {
   const config = useConfigStore((s) => s.config);
   const setRiskField = useConfigStore((s) => s.setRiskField);
   const on = Boolean(config.risk.cheap_loop_enabled);
+  const hourlyOn = Boolean(config.risk.cheap_loop_hourly_enabled);
   return (
     <>
       <View style={styles.field} testID="risk-field-auto-cheap_loop_enabled">
@@ -1091,6 +1097,98 @@ function CheapLoopFields() {
             falling ticket holds until Take or Flatten. Flatten in the last Flatten left minutes.
             Then Cooldown. Cycles is how many exits this ticker this window. Always dumps. Spike
             fade / Step buy / Pair lock still take first pick.
+          </Text>
+        </View>
+      ) : null}
+      <View style={styles.field} testID="risk-field-auto-cheap_loop_hourly_enabled">
+        <View style={styles.toggleRow}>
+          <View style={styles.labelWithInfo}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Hourly</Text>
+            <PathInfoIcon
+              title={PATH_INFO.cheapLoopHourly.title}
+              body={PATH_INFO.cheapLoopHourly.body}
+              testID="path-info-cheapLoopHourly"
+            />
+          </View>
+          <Switch
+            testID="risk-toggle-cheap_loop_hourly_enabled"
+            value={hourlyOn}
+            onValueChange={(v) => setRiskField('cheap_loop_hourly_enabled', v)}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        {hourlyOn ? (
+          <Text style={styles.hint}>
+            ATM strike on Kalshi hourly above/below. Same take-or-flatten. Own clocks. Not the 15m
+            book.
+          </Text>
+        ) : null}
+      </View>
+      {hourlyOn ? (
+        <View style={styles.pathInner}>
+          <SkipThinBidRow
+            testID="risk-toggle-cheap_loop_hourly_skip_thin_bid"
+            value={Boolean(config.risk.cheap_loop_hourly_skip_thin_bid)}
+            onChange={(v) => setRiskField('cheap_loop_hourly_skip_thin_bid', v)}
+          />
+          {metaFor(CHEAP_LOOP_HOURLY_RISK_FIELD_KEYS)
+            .filter((meta) => meta.key !== 'cheap_loop_hourly_enabled')
+            .map((meta) => {
+              const start = meta.key === 'cheap_loop_hourly_start_minutes';
+              const flatten = meta.key === 'cheap_loop_hourly_flatten_minutes';
+              const hold = meta.key === 'cheap_loop_hourly_min_hold_minutes';
+              const cool = meta.key === 'cheap_loop_hourly_cooldown_minutes';
+              return (
+                <RiskStepper
+                  key={meta.key}
+                  meta={meta}
+                  value={config.risk[meta.key]}
+                  testPrefix="auto"
+                  displayOverride={
+                    start
+                      ? `${Math.round(Number(config.risk.cheap_loop_hourly_start_minutes) || 0)} min`
+                      : flatten
+                        ? `${Math.round(Number(config.risk.cheap_loop_hourly_flatten_minutes) || 0)} min`
+                        : hold
+                          ? `${Math.round(Number(config.risk.cheap_loop_hourly_min_hold_minutes) || 0)} min`
+                          : cool
+                            ? `${Math.round(Number(config.risk.cheap_loop_hourly_cooldown_minutes) || 0)} min`
+                            : undefined
+                  }
+                  onChange={(next) => setRiskField(meta.key, next as never)}
+                />
+              );
+            })}
+          <View style={styles.field} testID="risk-field-auto-cheap_loop_hourly_assets">
+            <Text style={styles.label}>Hourly assets</Text>
+            <Text style={styles.hint}>
+              Hourly above/below only. Also On in Cushions. Empty means no hourly buys.
+            </Text>
+            <View style={styles.tifRow}>
+              {Object.keys(CHEAP_LOOP_HOURLY_SERIES).map((key) => {
+                const selected = normalizeCheapLoopHourlyAssets(config.risk.cheap_loop_hourly_assets).includes(
+                  key
+                );
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`cheap-loop-hourly-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizeCheapLoopHourlyAssets(config.risk.cheap_loop_hourly_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('cheap_loop_hourly_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={styles.hint} testID="cheap-loop-hourly-hint">
+            Buys the cheaper YES or NO on the unique ATM strike. Hold that ticker until Take or
+            Flatten. Does not hop strikes. Cycles are per hour event. One open hourly lot per coin.
           </Text>
         </View>
       ) : null}

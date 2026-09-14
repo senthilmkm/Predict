@@ -421,5 +421,8 @@ describe('Admin trade stream HTML', () => {
     expect(html).toContain("v === 'cheap_loop'");
     expect(html).toContain('value="cheap_loop"');
     expect(html).toMatch(/label: 'Cheap loop'/);
+    expect(html).toContain("v === 'cheap_loop_hourly'");
+    expect(html).toContain('value="cheap_loop_hourly"');
+    expect(html).toMatch(/label: 'Cheap loop hourly'/);
   });
 });

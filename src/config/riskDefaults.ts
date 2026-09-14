@@ -115,6 +115,18 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   cheap_loop_lot_count: 1,
   cheap_loop_skip_thin_bid: false,
   cheap_loop_assets: [],
+  cheap_loop_hourly_enabled: false,
+  cheap_loop_hourly_start_minutes: 10,
+  cheap_loop_hourly_flatten_minutes: 5,
+  cheap_loop_hourly_cheap_max_ask_usd: 0.4,
+  cheap_loop_hourly_min_gap_usd: 0.1,
+  cheap_loop_hourly_take_usd: 0.05,
+  cheap_loop_hourly_min_hold_minutes: 2,
+  cheap_loop_hourly_cooldown_minutes: 3,
+  cheap_loop_hourly_cycles: 2,
+  cheap_loop_hourly_lot_count: 1,
+  cheap_loop_hourly_skip_thin_bid: false,
+  cheap_loop_hourly_assets: [],
 };
 
 export type RiskFieldGroup = 'size' | 'caps' | 'timing';
@@ -832,6 +844,88 @@ export const RISK_FIELD_META: {
     min: 1,
     max: 5,
   },
+  { key: 'cheap_loop_hourly_enabled', label: 'Hourly', group: 'timing', kind: 'toggle', step: 1, min: 0, max: 1 },
+  {
+    key: 'cheap_loop_hourly_start_minutes',
+    label: 'Start after',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 1,
+    max: 20,
+  },
+  {
+    key: 'cheap_loop_hourly_flatten_minutes',
+    label: 'Flatten left',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 3,
+    max: 10,
+  },
+  {
+    key: 'cheap_loop_hourly_cheap_max_ask_usd',
+    label: 'Cheap max ask',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.25,
+    max: 0.45,
+  },
+  {
+    key: 'cheap_loop_hourly_min_gap_usd',
+    label: 'Min gap',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.08,
+    max: 0.2,
+  },
+  {
+    key: 'cheap_loop_hourly_take_usd',
+    label: 'Take',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0.03,
+    max: 0.08,
+  },
+  {
+    key: 'cheap_loop_hourly_min_hold_minutes',
+    label: 'Min hold',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 1,
+    max: 8,
+  },
+  {
+    key: 'cheap_loop_hourly_cooldown_minutes',
+    label: 'Cooldown',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 1,
+    max: 10,
+  },
+  {
+    key: 'cheap_loop_hourly_cycles',
+    label: 'Cycles',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 1,
+    max: 5,
+  },
+  {
+    key: 'cheap_loop_hourly_lot_count',
+    label: 'Lot contracts',
+    group: 'timing',
+    kind: 'int',
+    step: 1,
+    min: 1,
+    max: 5,
+  },
 ];
 
 export const TIME_IN_FORCE_OPTIONS: { value: TimeInForce; label: string }[] = [
@@ -966,6 +1060,19 @@ export const CHEAP_LOOP_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'cheap_loop_lot_count',
 ];
 
+export const CHEAP_LOOP_HOURLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
+  'cheap_loop_hourly_enabled',
+  'cheap_loop_hourly_start_minutes',
+  'cheap_loop_hourly_flatten_minutes',
+  'cheap_loop_hourly_cheap_max_ask_usd',
+  'cheap_loop_hourly_min_gap_usd',
+  'cheap_loop_hourly_take_usd',
+  'cheap_loop_hourly_min_hold_minutes',
+  'cheap_loop_hourly_cooldown_minutes',
+  'cheap_loop_hourly_cycles',
+  'cheap_loop_hourly_lot_count',
+];
+
 export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   ...SMART_BUY_RISK_FIELD_KEYS,
   ...PROTECT_RISK_FIELD_KEYS,
@@ -977,6 +1084,7 @@ export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   ...SPIKE_FADE_RISK_FIELD_KEYS,
   ...PAIR_LOCK_RISK_FIELD_KEYS,
   ...CHEAP_LOOP_RISK_FIELD_KEYS,
+  ...CHEAP_LOOP_HOURLY_RISK_FIELD_KEYS,
 ];
 
 export function cloneDefaultRisk(): RiskConfig {

@@ -1,8 +1,13 @@
 import {
+  assetHasOpenCheapLoopHourly,
+  cheapLoopCfgForHourly,
   cheapLoopCooldownOwnsTicker,
   cheapLoopCooldownWatchText,
   cheapLoopExitsForTicker,
   cheapLoopHoldingWatchText,
+  cheapLoopHourlyEventKey,
+  cheapLoopHourlyExitsForEvent,
+  cheapLoopHourlySeriesTicker,
   evaluateCheapLoopEnter,
   evaluateCheapLoopExit,
   isCheapLoopEnterPath,
@@ -10,12 +15,16 @@ import {
   normalizeCheapLoopAssets,
   normalizeCheapLoopCheapMaxAskUsd,
   normalizeCheapLoopCycles,
+  normalizeCheapLoopHourlyAssets,
+  normalizeCheapLoopHourlyCycles,
+  normalizeCheapLoopHourlyStartMinutes,
   normalizeCheapLoopLotCount,
   normalizeCheapLoopMinGapUsd,
   normalizeCheapLoopStartMinutes,
   normalizeCheapLoopStopUsd,
   normalizeCheapLoopTakeUsd,
   pickCheapLoopSide,
+  pickUniqueAtmStrike,
   reconcileCheapLoopTakeStop,
   tickerHasOpenCheapLoop,
   tickerHasOpenOtherThanCheapLoop,
@@ -339,5 +348,88 @@ describe('Cheap loop path', () => {
         now: new Date('2026-09-14T00:01:00Z'),
       })
     ).toBe(true);
+  });
+
+  test('hourly ATM pick, event cycles, cfg map, one lot per asset', () => {
+    expect(pickUniqueAtmStrike({
+      live: 67000,
+      markets: [
+        { ticker: 'KXBTCD-26SEP1406-T66999.99', floor_strike: 66999.99 },
+        { ticker: 'KXBTCD-26SEP1406-T67100', floor_strike: 67100 },
+      ],
+    })).toEqual({
+      ok: true,
+      ticker: 'KXBTCD-26SEP1406-T66999.99',
+      strike: 66999.99,
+    });
+    expect(
+      pickUniqueAtmStrike({
+        live: 67050,
+        markets: [
+          { ticker: 'A-T66900', floor_strike: 66900 },
+          { ticker: 'B-T67200', floor_strike: 67200 },
+        ],
+      }).ok
+    ).toBe(false);
+    expect(cheapLoopHourlyEventKey('KXBTCD-26SEP1406-T67099.99')).toBe('KXBTCD-26SEP1406');
+    expect(cheapLoopHourlySeriesTicker('BTC')).toBe('KXBTCD');
+    expect(cheapLoopHourlySeriesTicker('Gold')).toBeNull();
+    expect(normalizeCheapLoopHourlyAssets(['BTC', 'Gold', 'HYPE', 'BTC'])).toEqual(['BTC', 'HYPE']);
+    expect(normalizeCheapLoopHourlyStartMinutes(10)).toBe(10);
+    expect(normalizeCheapLoopHourlyCycles(9)).toBe(5);
+    const hourly = cheapLoopCfgForHourly({
+      ...cfg(),
+      risk: {
+        ...cfg().risk,
+        cheap_loop_hourly_enabled: true,
+        cheap_loop_hourly_start_minutes: 10,
+        cheap_loop_hourly_assets: ['BTC'],
+        twap_lock_enabled: true,
+        twap_lock_assets: ['BTC', 'ETH'],
+      },
+    });
+    expect(hourly.risk.cheap_loop_enabled).toBe(true);
+    expect(hourly.risk.cheap_loop_start_minutes).toBe(10);
+    expect(hourly.risk.cheap_loop_assets).toEqual(['BTC']);
+    const twapBlocked = evaluateCheapLoopEnter({
+      lean: lean({ market_ticker: 'KXBTCD-26SEP1406-T67099.99', minutes_elapsed: 12, minutes_left: 40 }),
+      cfg: hourly,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      lastMinuteOwnsNewBuys: false,
+    });
+    expect(twapBlocked.ok).toBe(true);
+    const eventTrades = [
+      {
+        ticker: 'KXBTCD-26SEP1406-T67099.99',
+        entryPath: 'cheap_loop_hourly',
+        outcome: 'exited',
+        settledAt: '2026-09-14T00:00:00Z',
+      },
+      {
+        ticker: 'KXBTCD-26SEP1406-T67199.99',
+        entryPath: 'cheap_loop_hourly',
+        outcome: 'exited',
+        settledAt: '2026-09-14T00:10:00Z',
+      },
+    ];
+    expect(cheapLoopHourlyExitsForEvent(eventTrades, 'KXBTCD-26SEP1406')).toBe(2);
+    expect(
+      assetHasOpenCheapLoopHourly(
+        [
+          {
+            ticker: 'KXBTCD-26SEP1406-T67099.99',
+            asset: 'BTC',
+            entryPath: 'cheap_loop_hourly',
+            dryRun: false,
+            status: 'FILLED',
+            fillCount: 1,
+            outcome: 'pending',
+          },
+        ],
+        'BTC'
+      )
+    ).toBe(true);
+    expect(PATH_INFO.cheapLoopHourly.title).toBe('Cheap loop hourly');
   });
 });

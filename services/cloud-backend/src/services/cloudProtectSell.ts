@@ -53,6 +53,7 @@ export function openProtectWatchAssets(trades: TradeRecordDoc[], now = new Date(
       t.entryPath === 'step_buy' ||
       t.entryPath === 'spike_fade' ||
       t.entryPath === 'cheap_loop' ||
+      t.entryPath === 'cheap_loop_hourly' ||
       isPairLockEntryPath(t.entryPath)
     ) {
       continue;
@@ -79,6 +80,7 @@ export function pendingProtectTradesForMarket(
       t.entryPath !== 'step_buy' &&
       t.entryPath !== 'spike_fade' &&
       t.entryPath !== 'cheap_loop' &&
+      t.entryPath !== 'cheap_loop_hourly' &&
       !isPairLockEntryPath(t.entryPath) &&
       isOpenProtectCandidate(t, now)
   );

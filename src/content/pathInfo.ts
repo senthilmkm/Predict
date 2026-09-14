@@ -316,6 +316,26 @@ export const PATH_INFO = {
       '• Spike fade, Step buy, and Pair lock take first pick for a new buy when they want the ticker\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Home tap or any other open fill blocks a new Cheap loop buy\n' +
-      '• Protect skips Cheap loop rows',
+      '• Protect skips Cheap loop rows\n' +
+      '• Hourly is a second switch on this tile. It trades Kalshi above/below ATM strikes (KXBTCD, …), not the 15m book. Own chips, clocks, and Cycles per hour event. One open hourly lot per coin. 15m and Hourly may both hold. TWAP / Last-minute / Spike / Step / Pair stay on 15m',
+  },
+  cheapLoopHourly: {
+    title: 'Cheap loop hourly',
+    body:
+      'Uses\n' +
+      '• Hourly switch and hourly asset chips. Empty chips = no hourly buys. Asset must be On in Cushions\n' +
+      '• Unique ATM strike on Kalshi above/below (KXBTCD, KXETHD, …). Tie sits out\n' +
+      '• Start after / Flatten left (hourly defaults: after 10 minutes, dump with 5 minutes left)\n' +
+      '• Cheap max, Min gap, Take, Min hold, Cooldown, Cycles per hour event, Lot contracts. Stop is Off\n' +
+      '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block\n\n' +
+      'Does not use\n' +
+      '• The 15m Cheap loop chips or clocks\n' +
+      '• 15m tickers (KXBTC15M, …)\n' +
+      '• TWAP / Last-minute / Spike / Step / Pair (those stay on 15m)\n\n' +
+      'Isolation\n' +
+      '• After fill, hold that strike until Take or Flatten. Do not hop ATM\n' +
+      '• One open hourly lot per coin. 15m Cheap loop may also hold the 15m book\n' +
+      '• Open lot still exits if Hourly is later turned Off\n' +
+      '• Protect skips cheap_loop_hourly rows',
   },
 } as const;
