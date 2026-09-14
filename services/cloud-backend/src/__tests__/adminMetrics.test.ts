@@ -146,12 +146,16 @@ describe('admin overview metrics', () => {
     expect(tradeStreamEntryLabel(undefined)).toBe('—');
     expect(tradeStreamEntryLabel('other')).toBe('—');
     expect(parseTradeStreamQuery({ entryPath: 'cheap_loop' }).entryPath).toBe('cheap_loop');
+    expect(parseTradeStreamQuery({ entryPath: 'cheap_loop_hourly' }).entryPath).toBe('cheap_loop_hourly');
+    expect(parseTradeStreamQuery({ entryPath: 'cheap_loop_weekly' }).entryPath).toBe('cheap_loop_weekly');
 
     const rows = [
       trade({ tradeId: 'h', status: 'FILLED', entryPath: 'home' }),
       trade({ tradeId: 'a', status: 'FILLED', entryPath: 'auto' }),
       trade({ tradeId: 'c', status: 'FILLED', entryPath: 'cash_out' }),
       trade({ tradeId: 'cl', status: 'SETTLED', entryPath: 'cheap_loop' }),
+      trade({ tradeId: 'clh', status: 'FILLED', entryPath: 'cheap_loop_hourly' }),
+      trade({ tradeId: 'clw', status: 'FILLED', entryPath: 'cheap_loop_weekly' }),
       trade({ tradeId: 'legacy', status: 'FILLED' }),
     ];
     const cash = buildTradeStreamResult(rows, { entryPath: 'cash_out' }, 200);
@@ -160,7 +164,16 @@ describe('admin overview metrics', () => {
     const cheap = buildTradeStreamResult(rows, { entryPath: 'cheap_loop' }, 200);
     expect(cheap.matchedCount).toBe(1);
     expect(cheap.trades[0].tradeId).toBe('cl');
-    expect(tradeMatchesFilters(rows[4], { entryPath: 'home' })).toBe(false);
+    expect(cheap.trades[0].entryLabel).toBe('Cheap loop 15m');
+    const hourly = buildTradeStreamResult(rows, { entryPath: 'cheap_loop_hourly' }, 200);
+    expect(hourly.matchedCount).toBe(1);
+    expect(hourly.trades[0].tradeId).toBe('clh');
+    expect(hourly.trades[0].entryLabel).toBe('Cheap loop hourly');
+    const weekly = buildTradeStreamResult(rows, { entryPath: 'cheap_loop_weekly' }, 200);
+    expect(weekly.matchedCount).toBe(1);
+    expect(weekly.trades[0].tradeId).toBe('clw');
+    expect(weekly.trades[0].entryLabel).toBe('Cheap loop weekly');
+    expect(tradeMatchesFilters(rows[6], { entryPath: 'home' })).toBe(false);
   });
 
   test('cash out sell price uses stored exit, else derives from P&L', () => {

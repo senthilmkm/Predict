@@ -430,5 +430,106 @@ describe('Admin trade stream HTML', () => {
     expect(html).toContain('value="cheap_loop_weekly"');
     expect(html).toContain("label: 'Cheap loop weekly'");
     expect(html).toContain('>Cheap loop weekly</option>');
+    expect(html).toContain('Cheap loop 15m, Cheap loop hourly, Cheap loop weekly');
+    expect(html).toContain('/^Cheap loop (15m|hourly|weekly)$/');
+  });
+});
+
+describe('Admin cheap loop Entered via', () => {
+  const ADMIN_SECRET = process.env.ADMIN_SECRET_KEY || 'predict-admin-secret-2026';
+  const userId = 'user_admin_cheap_loop_paths';
+
+  test('GET /admin/api/trades labels 15m, hourly, and weekly Cheap loop separately', async () => {
+    await upsertUserDoc(userId, {
+      userId,
+      cloudTradingEnabled: true,
+      kalshiConfigured: true,
+      state: 'ARMED',
+      lastTickAt: new Date().toISOString(),
+      config: { version: 1, alerts_enabled: true, auto_trade_enabled: true, execution_mode: 'live' },
+    });
+    await saveTradeRecord(userId, {
+      tradeId: 'cl15-admin',
+      userId,
+      ticker: 'KXBTC15M-T',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '1',
+      price: '0.30',
+      notionalUsd: 0.3,
+      dryRun: false,
+      status: 'FILLED',
+      fillCount: 1,
+      entryPath: 'cheap_loop',
+      executedAt: new Date().toISOString(),
+    });
+    await saveTradeRecord(userId, {
+      tradeId: 'clh-admin',
+      userId,
+      ticker: 'KXBTCD-26SEP1406-T67099.99',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '1',
+      price: '0.30',
+      notionalUsd: 0.3,
+      dryRun: false,
+      status: 'FILLED',
+      fillCount: 1,
+      entryPath: 'cheap_loop_hourly',
+      executedAt: new Date().toISOString(),
+    });
+    await saveTradeRecord(userId, {
+      tradeId: 'clw-admin',
+      userId,
+      ticker: 'KXETHD-26SEP1817-T4500',
+      asset: 'ETH',
+      decision: 'NO',
+      count: '1',
+      price: '0.28',
+      notionalUsd: 0.28,
+      dryRun: false,
+      status: 'FILLED',
+      fillCount: 1,
+      entryPath: 'cheap_loop_weekly',
+      executedAt: new Date().toISOString(),
+    });
+
+    const all = await request(app)
+      .get('/admin/api/trades')
+      .query({ userId })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(all.status).toBe(200);
+    expect(all.body.matchedCount).toBe(3);
+    const byId = Object.fromEntries((all.body.trades as any[]).map((t) => [t.tradeId, t]));
+    expect(byId['cl15-admin'].entryPath).toBe('cheap_loop');
+    expect(byId['cl15-admin'].entryLabel).toBe('Cheap loop 15m');
+    expect(byId['clh-admin'].entryPath).toBe('cheap_loop_hourly');
+    expect(byId['clh-admin'].entryLabel).toBe('Cheap loop hourly');
+    expect(byId['clw-admin'].entryPath).toBe('cheap_loop_weekly');
+    expect(byId['clw-admin'].entryLabel).toBe('Cheap loop weekly');
+
+    const hourly = await request(app)
+      .get('/admin/api/trades')
+      .query({ userId, entryPath: 'cheap_loop_hourly' })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(hourly.body.matchedCount).toBe(1);
+    expect(hourly.body.trades[0].tradeId).toBe('clh-admin');
+    expect(hourly.body.trades[0].entryLabel).toBe('Cheap loop hourly');
+
+    const weekly = await request(app)
+      .get('/admin/api/trades')
+      .query({ userId, entryPath: 'cheap_loop_weekly' })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(weekly.body.matchedCount).toBe(1);
+    expect(weekly.body.trades[0].tradeId).toBe('clw-admin');
+    expect(weekly.body.trades[0].entryLabel).toBe('Cheap loop weekly');
+
+    const fifteen = await request(app)
+      .get('/admin/api/trades')
+      .query({ userId, entryPath: 'cheap_loop' })
+      .set('x-admin-key', ADMIN_SECRET);
+    expect(fifteen.body.matchedCount).toBe(1);
+    expect(fifteen.body.trades[0].tradeId).toBe('cl15-admin');
+    expect(fifteen.body.trades[0].entryLabel).toBe('Cheap loop 15m');
   });
 });

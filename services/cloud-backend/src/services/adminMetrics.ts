@@ -174,6 +174,11 @@ export function realizedPnlForDisplay(t: TradeRecordDoc): number | null {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 }
 
+export type TradeStreamRow = TradeRecordDoc & {
+  entryLabel: TradeStreamEntryLabel;
+  sellPriceUsd?: number | null;
+};
+
 export function buildTradeStreamResult(
   trades: TradeRecordDoc[],
   filters: TradeStreamFilters,
@@ -183,7 +188,7 @@ export function buildTradeStreamResult(
   displayedCount: number;
   truncated: boolean;
   totalPnlUsd: number;
-  trades: TradeRecordDoc[];
+  trades: TradeStreamRow[];
 } {
   const matched = trades.filter((t) => tradeMatchesFilters(t, filters));
   matched.sort((a, b) => Date.parse(b.executedAt || '') - Date.parse(a.executedAt || ''));
@@ -191,7 +196,11 @@ export function buildTradeStreamResult(
   const cap = Math.min(TRADE_STREAM_DISPLAY_MAX, Math.max(1, Math.round(limit)));
   const shown = matched.slice(0, cap).map((t) => {
     const sellPriceUsd = tradeStreamSellPriceUsd(t);
-    return sellPriceUsd == null ? t : { ...t, sellPriceUsd };
+    return {
+      ...t,
+      ...(sellPriceUsd == null ? {} : { sellPriceUsd }),
+      entryLabel: tradeStreamEntryLabel(t.entryPath),
+    };
   });
   return {
     matchedCount: matched.length,

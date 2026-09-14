@@ -395,7 +395,7 @@
               <div class="tooltip-wrapper">
                 <button type="button" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:text-white hover:bg-sky-600 flex items-center justify-center text-[10px] font-black shadow-sm transition">i</button>
                 <div class="tooltip-content">
-                  Filters run on the full trade set. Realized P&amp;L is the sum of matching live trades (SETTLED / win / loss / protect-sell exited), not only the rows on this page. Open fills show an em dash. Entered via is the path that bought the ticket (Home, Auto, Cash out, Gold fade, TWAP, Last-minute, Step buy, Spike fade, Pair lock, Pair lock hedge, Cheap loop 15m, Cheap loop hourly). A dash means the row predates path tagging. Cash out sells add “sold @” under the buy price. TWAP, Last-minute, Step buy, Spike fade, Pair lock, and Cheap loop watcher chips are live last-70s status, not table rows.
+                  Filters run on the full trade set. Realized P&amp;L is the sum of matching live trades (SETTLED / win / loss / protect-sell exited), not only the rows on this page. Open fills show an em dash. Entered via is the path that bought the ticket (Home, Auto, Cash out, Gold fade, TWAP, Last-minute, Step buy, Spike fade, Pair lock, Pair lock hedge, Cheap loop 15m, Cheap loop hourly, Cheap loop weekly). A dash means the row predates path tagging. Cash out sells add “sold @” under the buy price. TWAP, Last-minute, Step buy, Spike fade, Pair lock, and Cheap loop watcher chips are live last-70s status, not table rows.
                 </div>
               </div>
             </h3>
@@ -2076,6 +2076,10 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
           else if (t.status === 'CANCELLED') badgeClass = 'bg-slate-500/20 text-slate-300 border-slate-500/30';
           const sideColor = t.decision === 'YES' ? 'text-emerald-400' : 'text-rose-400';
           const pathChip = tradeStreamEntryChip(t.entryPath);
+          const pathLabel =
+            typeof t.entryLabel === 'string' && /^Cheap loop (15m|hourly|weekly)$/.test(t.entryLabel)
+              ? t.entryLabel
+              : pathChip.label;
           const execTime = t.executedAt ? new Date(t.executedAt).toLocaleString() : 'N/A';
           const hasRealized = t.status === 'SETTLED' || t.outcome === 'win' || t.outcome === 'loss' || t.outcome === 'exited';
           const rowPnl = hasRealized ? formatPnl(t.pnlUsd) : { text: '—', cls: 'text-slate-500' };
@@ -2091,7 +2095,7 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
               <td class="py-3 px-4 font-bold text-white font-mono text-xs">${tradeId}</td>
               <td class="py-3 px-4 text-slate-300 font-mono text-[11px]">${userId}</td>
               <td class="py-3 px-4"><div class="font-bold text-amber-400">${asset}</div><div class="text-[10px] text-slate-400">${ticker}</div></td>
-              <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold border ${pathChip.cls}">${escapeHtml(pathChip.label)}</span></td>
+              <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold border ${pathChip.cls}">${escapeHtml(pathLabel)}</span></td>
               <td class="py-3 px-4 font-bold ${sideColor}">${escapeHtml(t.decision || 'N/A')}</td>
               <td class="py-3 px-4">${escapeHtml(t.count || 0)} ctr @ $${priceLabel}${sellLine}</td>
               <td class="py-3 px-4 font-bold text-white">$${(Number.isFinite(notional) ? notional : 0).toFixed(2)}</td>
