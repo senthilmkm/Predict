@@ -256,8 +256,8 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Pair lock asset chips, and that asset On (Cushions tab on/off). Empty chips = no Pair lock buys\n' +
       '• Start after / Until minute (default minutes 2–10 of the 15m window)\n' +
-      '• Runner max ask, Min lock, Flatten unmatched, Runner stop, Lot contracts, Add new pair\n' +
-      '• Lock first checkbox (default On). Off = buy the runner at/under Runner max without the opposite already locking\n' +
+      '• Runner max ask, Min lock, Flatten unmatched, Recover wait, Runner stop, Lot contracts, Add new pair\n' +
+      '• Lock first checkbox (default On). Off = more first legs at/under Runner max without the opposite already locking\n' +
       '• Auto lean for the runner only. Hedge is always the other side\n' +
       '• Shared: max open, trades/day, daily loss stop, window cap 1 on the runner\n' +
       '• IOC. 1-second watcher from the runner fill for hedge / runner stop / flatten unmatched. After both legs lock, that watcher stays on if Add new pair > 0 and can fire YES+NO on the hedge-fill pulse and every 1s\n\n' +
@@ -269,14 +269,16 @@ export const PATH_INFO = {
       '• Skip thin bid unless you turn that checkbox On (default Off). On = fail closed on buys; unmatched flatten can dump if the bid pile is thinner than you hold\n\n' +
       'Isolation\n' +
       '• Own path. Default Off. Admin must enable the block first\n' +
-      '• Example: YES 52¢ and NO 18¢ already lock → buy YES, then NO. Spent 70¢. Settlement pays $1. Locked +30¢\n' +
-      '• Lock first On: first buy only if opposite ask already locks at least Min lock (default 5¢). 52¢ + 48¢ sits out. 50¢ + 50¢ sits out\n' +
-      '• Lock first Off: first buy if runner ask ≤ Runner max. Hedge still needs Min lock. Flatten unmatched and Runner stop dump leftovers\n' +
+      '• Example: YES 52¢ and NO 18¢ already lock → YES and NO IOC together. Spent 70¢. Settlement pays $1. Locked +30¢\n' +
+      '• Lock first On: first buy only if opposite ask already locks at least Min lock (default 5¢). Then YES and NO IOC together. 52¢ + 48¢ sits out. 50¢ + 50¢ sits out\n' +
+      '• Lock first Off: first buy if runner ask ≤ Runner max. If the other ask already locks Min lock, still both IOC together. Else runner only\n' +
+      '• Atomic one-leg miss: dump that fill now. Do not wait Recover wait\n' +
+      '• Hedge when runner fill + opposite ask ≤ $1 − Min lock. Hedge count matches the runner. Window cap 1 blocks the runner only\n' +
+      '• Recover wait (default 20s, 10–60): after a sequential unmatched runner, if Min lock hedge is gone: buy the dog if fill + ask ≤ $1, else sell the runner if bid ≥ fill + 2¢, else finish vs dump the smaller hole\n' +
+      '• Hedge right after the runner fill. 5s grace is for flatten / runner stop / recover take so your own print does not dump you\n' +
       '• Add new pair 0–3 (default 0 = first pair only). 3 = 3 more pairs after the first (4 total)\n' +
       '• After both first-pair legs fill, if Add new pair > 0 and live YES+NO asks still sum to $1 or less, Cloud fires YES and NO together on that pulse and every 1s\n' +
       '• If only one stacked side fills, compare finish vs dump and take the smaller loss. Do not sit unmatched\n' +
-      '• Hedge when runner fill + opposite ask ≤ $1 − Min lock. Hedge count matches the runner. Window cap 1 blocks the runner only\n' +
-      '• Hedge right after the runner fill. 5s grace is for flatten / runner stop so your own print does not dump you\n' +
       '• Pair complete → hold both to $1. Flatten unmatched: minutes left ≤ Flatten unmatched, or window end, and only if the second leg is missing\n' +
       '• Runner stop (default 10¢, $0 = off): unmatched only, after 5s grace, and only if the hedge still cannot lock. Sells when live runner ask ≤ fill − Runner stop. Sell is bid IOC — the book can gap past 10¢. After that sell we do not buy the other leg on this ticket\n' +
       '• After Until minute, no new runner. An open runner may still hedge until flatten\n' +
@@ -295,6 +297,7 @@ export const PATH_INFO = {
       '• Cheap loop asset chips, and that asset On (Cushions tab on/off). Empty chips = no Cheap loop buys\n' +
       '• Start after / Flatten left (15m defaults: after 2 minutes, dump with 5 minutes left)\n' +
       '• Cheap max ask, Min gap — buy only the cheaper YES or NO\n' +
+      '• 15m hard band: cheap ask 20–40¢ and the other ask ≤ 80¢. 11¢ / 90¢ sits. Hourly and Weekly do not use this band\n' +
       '• Min live % — |live − strike| must be at least this % of that coin’s Cushions $ (15m only; 0 = off). Not one dollar for every chip\n' +
       '• Take (bid ≥ fill + Take), Stop (default Off; On = bid ≤ fill − Stop after Min hold), Min hold, Cooldown, Cycles, Lot contracts\n' +
       '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block this path — Cycles is the cap\n' +
@@ -308,6 +311,7 @@ export const PATH_INFO = {
       'Isolation\n' +
       '• Own path. Default Off. Admin must enable the block first\n' +
       '• Example: YES 30¢ and NO 70¢ → buy YES. After Min hold, sell if the YES bid is fill + Take. Then cooldown. Then buy whichever side is cheaper\n' +
+      '• 22¢ / 76¢ buys. 11¢ / 90¢ sits (dog already dead). 28¢ / 82¢ sits (favorite already decided)\n' +
       '• Cycles = completed exits this ticker this window. A miss or a sit-out does not burn a cycle\n' +
       '• Always dumps. Never both sides. Never hold to $1\n' +
       '• 5s grace after fill so your own print does not take you. Flatten and a $1 ask still dump during grace\n' +

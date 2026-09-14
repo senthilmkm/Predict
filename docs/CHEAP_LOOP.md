@@ -90,6 +90,7 @@ Shipped defaults are **15m trial**. Hourly numbers stay in this table for a late
 - **Stop default Off** — leftover `cheap_loop_stop_usd` is ignored until the Stop switch is On
 - Do not copy Auto $, Smart buy, chase, Auto TIF, Cash out / Gold fade / Pair lock / Last-minute knobs
 - Do not auto-check HYPE / NEAR / ZEC onto chips
+- **15m alive band (hard-coded, no UI):** cheaper ask **≥ 20¢** and the other ask **≤ 80¢**. Do not loosen. Hourly / Weekly mapper sets `cheap_loop_alive_band: false` so they keep Cheap max + Min gap only.
 
 Normalize: `cheap_loop_enabled === true`; clamp / snap like other chase + int fields. Missing `cheap_loop_skip_thin_bid` → **false**. Persist via `POST /me/status` risk merge.
 
@@ -100,6 +101,7 @@ Normalize: `cheap_loop_enabled === true`; clamp / snap like other chase + int fi
 - Stop default **Off**. When On, Take must stay strictly below Stop (cut Take; never raise Stop). When Off, Take clamps to 3–8¢ only.
 - Cheap max **≤ $0.45**. 55¢ is a favorite, not a scalp.
 - Min gap **≥ 8¢**. No 50/50 churn.
+- 15m cheap floor **20¢** and favorite cap **80¢**. 11¢ / 90¢ sits. Do not drop the floor or raise the cap to chase fills.
 
 ---
 
@@ -120,11 +122,12 @@ All must pass:
 11. Cheaper ask = min(YES ask, NO ask). Tie → skip `cheap_loop_no_cheap_side`
 12. Cheaper ask ≤ Cheap max (`cheap_loop_ask_rich`)
 13. \|YES − NO\| ≥ Min gap (`cheap_loop_no_favorite`)
-14. \|live − strike\| ≥ Min live % of that coin’s Cushions $ (`cheap_loop_below_min_live`). Missing live gap fail closed. 0% = off. Cushion ≤ 0 with % On fail closed. Hourly maps this to 0
-15. Shared static gate: lot size, max open, daily loss, Auto armed. **Window cap 1 does not block this path** — Cycles is the cap. Place lock uses `existingBuys + 1` so a second cycle is not window-capped, but an in-flight order still blocks a double submit.
-16. Skip thin bid On: fail closed if bid size unknown or `<` lots
-17. TWAP lock On for BTC/ETH → those two stay with TWAP (`cheap_loop_twap_owns`)
-18. Last-minute in its buy window with no Cheap loop lot → Last-minute owns new buys (`cheap_loop_last_minute_owns`)
+14. **15m only:** cheaper ask ≥ 20¢ (`cheap_loop_too_cheap`) and the other ask ≤ 80¢ (`cheap_loop_favorite_rich`). Hourly / Weekly skip this band.
+15. \|live − strike\| ≥ Min live % of that coin’s Cushions $ (`cheap_loop_below_min_live`). Missing live gap fail closed. 0% = off. Cushion ≤ 0 with % On fail closed. Hourly maps this to 0
+16. Shared static gate: lot size, max open, daily loss, Auto armed. **Window cap 1 does not block this path** — Cycles is the cap. Place lock uses `existingBuys + 1` so a second cycle is not window-capped, but an in-flight order still blocks a double submit.
+17. Skip thin bid On: fail closed if bid size unknown or `<` lots
+18. TWAP lock On for BTC/ETH → those two stay with TWAP (`cheap_loop_twap_owns`)
+19. Last-minute in its buy window with no Cheap loop lot → Last-minute owns new buys (`cheap_loop_last_minute_owns`)
 
 `entry_path`: **`cheap_loop`**.
 
@@ -227,6 +230,8 @@ Window ends mid-cooldown → stop. Cycle store is the trade book for that market
 | `cheap_loop_cycles` | cheap loop cycles used |
 | `cheap_loop_cooldown` | cheap loop cooldown |
 | `cheap_loop_ask_rich` | cheap side not cheap |
+| `cheap_loop_too_cheap` | cheap side already decided |
+| `cheap_loop_favorite_rich` | favorite already decided |
 | `cheap_loop_no_favorite` | no cheap-side gap |
 | `cheap_loop_no_cheap_side` | no cheaper side |
 | `cheap_loop_no_ask` | no ask |
@@ -252,6 +257,7 @@ Watch line in cooldown: `Cheap loop cooldown · 80s`.
 ## 11. Tests
 
 - Cheap gate: 30/70 buys YES; 49/51 sits; 52/48 sits (favorite, not cheap); equal sits.
+- 15m alive band: 22/76 and 20/80 buy; 11/90 sits `cheap_loop_too_cheap`; 22/85 sits `cheap_loop_favorite_rich`. Hourly mapper `aliveBand: false` still buys 11/90.
 - Min hold blocks take and stop. Bid dump during min hold does **not** sell.
 - Flatten / $1 ask during grace still sells.
 - Stop Off: leftover `stopUsd` 0.06 with bid 0.20 vs fill 0.30 **holds**.
@@ -277,7 +283,7 @@ Watch line in cooldown: `Cheap loop cooldown · 80s`.
 4. Admin feature flag
 5. Hourly ATM Cheap loop (this ship): own toggle under 15 min, `KX*D` series, `entry_path: cheap_loop_hourly`
 
-Do not auto-check HYPE/NEAR/ZEC onto chips. Do not loosen Cheap max or Min gap. Stop default Off. Do not point 15m knobs at hourly tickers.
+Do not auto-check HYPE/NEAR/ZEC onto chips. Do not loosen Cheap max, Min gap, or the 15m 20¢ / 80¢ alive band. Stop default Off. Do not point 15m knobs at hourly tickers.
 
 ---
 
@@ -310,7 +316,7 @@ Hourly series map (chips only if listed): BTC `KXBTCD`, ETH `KXETHD`, SOL `KXSOL
 
 `entry_path`: **`cheap_loop_hourly`**. Protect skips these rows. Window cap 1 does not block. Cycles count **per hourly event** (`KXBTCD-26SEP1406`), not per strike. **One open hourly Cheap loop lot per asset** (any strike). Cooldown is per event.
 
-Stop default Off. Same 5s grace / bid IOC as 15m. Does **not** use 15m Min live % (ATM is already close to live).
+Stop default Off. Same 5s grace / bid IOC as 15m. Does **not** use 15m Min live % (ATM is already close to live). Does **not** use the 15m 20¢ / 80¢ alive band.
 
 TWAP / Last-minute / Spike / Step / Pair stay on **15m** books. They do not first-pick hourly. 15m Cheap loop and Hourly may both hold (different tickers). Shared: max open, daily loss, trades/day.
 
@@ -322,7 +328,7 @@ No open hourly event → sit. Open lot still exits if Hourly toggle later turns 
 
 Status: **shipping**. Same Admin flag `cheapLoop`. Own user toggle **Weekly** under Hourly. Default Off. Empty weekly chips = no weekly buys.
 
-Same `KX*D` series as Hourly. Cloud picks the live event whose open→close is **4–10 days** (~7d). Hourly is fail-closed to **20 min–3 h** so a weekend with only a weekly book cannot buy a week as “hourly.” No daily / monthly / annual this pass.
+Same `KX*D` series as Hourly. Cloud picks the live event whose open→close is **4–10 days** (~7d). Hourly is fail-closed to **20 min–3 h** so a weekend with only a weekly book cannot buy a week as “hourly.” No daily / monthly / annual this pass. Does **not** use the 15m 20¢ / 80¢ alive band.
 
 Loop: buy cheap ATM → wait until **bid ≥ fill + Take** (or Stop On and **bid ≤ fill − Stop**) → sell → **Cooldown minutes** → hunt ATM again (ATM may move) → repeat until **Flatten left** minutes of that weekly window. Flatten: no new buys; dump if holding. Stop default Off. Never both sides. Never hold to $1. One open weekly lot per asset.
 

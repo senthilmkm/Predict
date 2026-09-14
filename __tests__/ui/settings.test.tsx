@@ -495,6 +495,7 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-pair_lock_runner_max_ask_usd').props.children).toMatch(/\$0\.60/);
     expect(s.getByTestId('risk-value-auto-pair_lock_min_lock_usd').props.children).toMatch(/\$0\.05/);
     expect(s.getByTestId('risk-value-auto-pair_lock_flatten_minutes').props.children).toBe('3 min');
+    expect(s.getByTestId('risk-value-auto-pair_lock_recover_seconds').props.children).toBe('20s');
     expect(s.getByTestId('risk-value-auto-pair_lock_runner_stop_usd').props.children).toMatch(/\$0\.10/);
     expect(s.getByTestId('risk-value-auto-pair_lock_lot_count').props.children).toBe('1');
     expect(s.getByTestId('risk-value-auto-pair_lock_add_pairs').props.children).toBe('0');

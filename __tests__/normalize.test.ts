@@ -374,6 +374,7 @@ describe('normalize / cushions', () => {
     expect(d.pair_lock_lot_count).toBe(1);
     expect(d.pair_lock_add_pairs).toBe(0);
     expect(d.pair_lock_lock_first).toBe(true);
+    expect(d.pair_lock_recover_seconds).toBe(20);
     expect(d.pair_lock_skip_thin_bid).toBe(false);
     expect(normalizeAppConfig({ risk: { pair_lock_assets: [] } } as any).risk.pair_lock_assets).toEqual([]);
     const pairOn = normalizeAppConfig({

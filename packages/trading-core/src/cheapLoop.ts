@@ -20,6 +20,10 @@ export const CHEAP_LOOP_FLATTEN_MAX = 10;
 export const CHEAP_LOOP_CHEAP_MAX_DEFAULT = 0.4;
 export const CHEAP_LOOP_CHEAP_MAX_MIN = 0.25;
 export const CHEAP_LOOP_CHEAP_MAX_MAX = 0.45;
+/** 15m only. Sit dogs cheaper than this (11¢ knives). Hourly/weekly do not use this. */
+export const CHEAP_LOOP_CHEAP_MIN_USD = 0.2;
+/** 15m only. Sit when the other ask is already this rich. Hourly/weekly do not use this. */
+export const CHEAP_LOOP_FAVORITE_MAX_USD = 0.8;
 export const CHEAP_LOOP_MIN_GAP_DEFAULT = 0.1;
 export const CHEAP_LOOP_MIN_GAP_MIN = 0.08;
 export const CHEAP_LOOP_MIN_GAP_MAX = 0.2;
@@ -434,6 +438,7 @@ export function cheapLoopCfgForHourly(cfg: AppConfig): AppConfig {
       cheap_loop_skip_thin_bid: risk.cheap_loop_hourly_skip_thin_bid === true,
       cheap_loop_assets: normalizeCheapLoopHourlyAssets(risk.cheap_loop_hourly_assets),
       cheap_loop_min_live_cushion_pct: 0,
+      cheap_loop_alive_band: false,
     },
   };
 }
@@ -614,6 +619,7 @@ export function cheapLoopCfgForWeekly(cfg: AppConfig): AppConfig {
       cheap_loop_skip_thin_bid: risk.cheap_loop_weekly_skip_thin_bid === true,
       cheap_loop_assets: normalizeCheapLoopWeeklyAssets(risk.cheap_loop_weekly_assets),
       cheap_loop_min_live_cushion_pct: 0,
+      cheap_loop_alive_band: false,
     },
   };
 }
@@ -773,6 +779,8 @@ export function pickCheapLoopSide(opts: {
   noAsk?: unknown;
   cheapMaxAskUsd?: unknown;
   minGapUsd?: unknown;
+  /** 15m default On. Hourly/weekly pass false. */
+  aliveBand?: boolean;
 }): { ok: true; decision: CheapLoopSide; cheapAsk: number } | { ok: false; skip_reason: string } {
   const yes = ticketUsd(opts.yesAsk);
   const no = ticketUsd(opts.noAsk);
@@ -787,6 +795,15 @@ export function pickCheapLoopSide(opts: {
   const decision: CheapLoopSide = yes < no ? 'YES' : 'NO';
   const cheapAsk = decision === 'YES' ? yes : no;
   if (cheapAsk > cheapMax + 1e-9) return { ok: false, skip_reason: 'cheap_loop_ask_rich' };
+  if (opts.aliveBand !== false) {
+    const favoriteAsk = decision === 'YES' ? no : yes;
+    if (cheapAsk + 1e-9 < CHEAP_LOOP_CHEAP_MIN_USD) {
+      return { ok: false, skip_reason: 'cheap_loop_too_cheap' };
+    }
+    if (favoriteAsk > CHEAP_LOOP_FAVORITE_MAX_USD + 1e-9) {
+      return { ok: false, skip_reason: 'cheap_loop_favorite_rich' };
+    }
+  }
   return { ok: true, decision, cheapAsk };
 }
 
@@ -979,6 +996,7 @@ export function evaluateCheapLoopEnter(opts: {
     cheap_loop_cycles?: number;
     cheap_loop_assets?: string[];
     cheap_loop_skip_thin_bid?: boolean;
+    cheap_loop_alive_band?: boolean;
     twap_lock_enabled?: boolean;
     twap_lock_assets?: string[];
   };
@@ -1042,6 +1060,7 @@ export function evaluateCheapLoopEnter(opts: {
     noAsk: opts.lean.no_ask,
     cheapMaxAskUsd: risk.cheap_loop_cheap_max_ask_usd,
     minGapUsd: risk.cheap_loop_min_gap_usd,
+    aliveBand: risk.cheap_loop_alive_band !== false,
   });
   if (!picked.ok) return { ok: false, skip_reason: picked.skip_reason };
   const lotCount = normalizeCheapLoopLotCount(risk.cheap_loop_lot_count);

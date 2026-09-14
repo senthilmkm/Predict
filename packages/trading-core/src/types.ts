@@ -260,6 +260,8 @@ export interface RiskConfig {
   pair_lock_add_pairs?: number;
   /** Missing → On. Off = buy runner at/under max without the opposite already locking. */
   pair_lock_lock_first?: boolean;
+  /** Seconds after unmatched runner fill before even-hedge / take / smaller-hole. Missing → 20. */
+  pair_lock_recover_seconds?: number;
   pair_lock_skip_thin_bid?: boolean;
   pair_lock_assets?: string[];
   /** Cheap loop Auto path. Missing → Off. */
@@ -271,6 +273,8 @@ export interface RiskConfig {
   /** Leftover. 15m enter uses min live % of cushion instead. */
   cheap_loop_min_abs_gap_usd?: number;
   cheap_loop_min_live_cushion_pct?: number;
+  /** Runtime 15m alive band. Missing → On. Hourly/weekly mapper sets false. Do not persist. */
+  cheap_loop_alive_band?: boolean;
   cheap_loop_take_usd?: number;
   cheap_loop_stop_enabled?: boolean;
   cheap_loop_stop_usd?: number;
@@ -483,6 +487,7 @@ export function defaultAppConfig(): AppConfig {
       pair_lock_lot_count: 1,
       pair_lock_add_pairs: 0,
       pair_lock_lock_first: true,
+      pair_lock_recover_seconds: 20,
       pair_lock_skip_thin_bid: false,
       pair_lock_assets: AssetRegistry.getDefaultPathAssets(),
       cheap_loop_enabled: false,

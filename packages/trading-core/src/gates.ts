@@ -324,6 +324,16 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Pair lock runner stop';
     case 'pair_lock_hedge':
       return 'Pair lock hedge';
+    case 'pair_lock_even_hedge':
+      return 'Pair lock even hedge';
+    case 'pair_lock_runner_take':
+      return 'Pair lock runner take';
+    case 'pair_lock_atomic_dump':
+      return 'Pair lock unmatched dump';
+    case 'pair_lock_smaller_dump':
+      return 'Pair lock recover dump';
+    case 'pair_lock_smaller_finish':
+      return 'Pair lock recover finish';
     case 'pair_lock_add_off':
       return 'Pair lock add pair off';
     case 'pair_lock_stack_max':
@@ -349,6 +359,10 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'cheap loop cooldown';
     case 'cheap_loop_ask_rich':
       return 'cheap side not cheap';
+    case 'cheap_loop_too_cheap':
+      return 'cheap side already decided';
+    case 'cheap_loop_favorite_rich':
+      return 'favorite already decided';
     case 'cheap_loop_no_favorite':
       return 'no cheap-side gap';
     case 'cheap_loop_below_min_live':

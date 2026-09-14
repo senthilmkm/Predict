@@ -135,6 +135,52 @@ describe('Cheap loop path', () => {
     });
   });
 
+  test('15m alive band: 20–40¢ cheap and favorite ≤ 80¢; knives and decided books sit', () => {
+    expect(pickCheapLoopSide({ yesAsk: 0.22, noAsk: 0.76, cheapMaxAskUsd: 0.4, minGapUsd: 0.1 })).toEqual({
+      ok: true,
+      decision: 'YES',
+      cheapAsk: 0.22,
+    });
+    expect(pickCheapLoopSide({ yesAsk: 0.28, noAsk: 0.78, cheapMaxAskUsd: 0.4, minGapUsd: 0.1 })).toEqual({
+      ok: true,
+      decision: 'YES',
+      cheapAsk: 0.28,
+    });
+    expect(pickCheapLoopSide({ yesAsk: 0.3, noAsk: 0.8, cheapMaxAskUsd: 0.4, minGapUsd: 0.1 })).toEqual({
+      ok: true,
+      decision: 'YES',
+      cheapAsk: 0.3,
+    });
+    expect(pickCheapLoopSide({ yesAsk: 0.2, noAsk: 0.8, cheapMaxAskUsd: 0.4, minGapUsd: 0.1 })).toEqual({
+      ok: true,
+      decision: 'YES',
+      cheapAsk: 0.2,
+    });
+    expect(pickCheapLoopSide({ yesAsk: 0.11, noAsk: 0.9, cheapMaxAskUsd: 0.4, minGapUsd: 0.1 })).toMatchObject({
+      ok: false,
+      skip_reason: 'cheap_loop_too_cheap',
+    });
+    expect(pickCheapLoopSide({ yesAsk: 0.18, noAsk: 0.8, cheapMaxAskUsd: 0.4, minGapUsd: 0.1 })).toMatchObject({
+      ok: false,
+      skip_reason: 'cheap_loop_too_cheap',
+    });
+    expect(pickCheapLoopSide({ yesAsk: 0.22, noAsk: 0.85, cheapMaxAskUsd: 0.4, minGapUsd: 0.1 })).toMatchObject({
+      ok: false,
+      skip_reason: 'cheap_loop_favorite_rich',
+    });
+    expect(formatSkipReason('cheap_loop_too_cheap')).toBe('cheap side already decided');
+    expect(formatSkipReason('cheap_loop_favorite_rich')).toBe('favorite already decided');
+    expect(
+      pickCheapLoopSide({
+        yesAsk: 0.11,
+        noAsk: 0.9,
+        cheapMaxAskUsd: 0.4,
+        minGapUsd: 0.1,
+        aliveBand: false,
+      })
+    ).toEqual({ ok: true, decision: 'YES', cheapAsk: 0.11 });
+  });
+
   test('enter 30/70 YES; window cap does not block; other path blocks', () => {
     const c = cfg();
     const ok = evaluateCheapLoopEnter({
@@ -161,6 +207,50 @@ describe('Cheap loop path', () => {
     expect(other.ok).toBe(false);
     expect(other.skip_reason).toBe('cheap_loop_holding_other_path');
     expect(formatSkipReason('cheap_loop_holding_other_path')).toBe('another path already holding');
+  });
+
+  test('15m enter sits 11/90; hourly still buys that dog', () => {
+    const c = cfg();
+    const knife = evaluateCheapLoopEnter({
+      lean: lean({ yes_ask: 0.11, no_ask: 0.9 }),
+      cfg: c,
+      adminEnabled: true,
+    });
+    expect(knife.ok).toBe(false);
+    expect(knife.skip_reason).toBe('cheap_loop_too_cheap');
+
+    const decided = evaluateCheapLoopEnter({
+      lean: lean({ yes_ask: 0.28, no_ask: 0.82 }),
+      cfg: c,
+      adminEnabled: true,
+    });
+    expect(decided.ok).toBe(false);
+    expect(decided.skip_reason).toBe('cheap_loop_favorite_rich');
+
+    const hourly = cheapLoopCfgForHourly({
+      ...cfg(),
+      risk: {
+        ...cfg().risk,
+        cheap_loop_hourly_enabled: true,
+        cheap_loop_hourly_assets: ['BTC'],
+      },
+    });
+    expect(hourly.risk.cheap_loop_alive_band).toBe(false);
+    const hourlyKnife = evaluateCheapLoopEnter({
+      lean: lean({
+        market_ticker: 'KXBTCD-26SEP1406-T67099.99',
+        minutes_elapsed: 12,
+        minutes_left: 40,
+        yes_ask: 0.11,
+        no_ask: 0.9,
+      }),
+      cfg: hourly,
+      adminEnabled: true,
+      twapAdminEnabled: false,
+      lastMinuteOwnsNewBuys: false,
+    });
+    expect(hourlyKnife.ok).toBe(true);
+    expect(hourlyKnife.decision).toBe('YES');
   });
 
   test('Min live % uses that coin’s cushion; 0% turns the floor off', () => {

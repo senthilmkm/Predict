@@ -925,8 +925,8 @@ function PairLockFields() {
         {on ? (
           <Text style={styles.hint}>
             {config.risk.pair_lock_lock_first !== false
-              ? 'Lock first On: buy the lean side only if the opposite ask already locks Min lock. Then hedge that other side.'
-              : 'Lock first Off: buy the lean side at or under Runner max, then hope the hedge locks. Flatten unmatched and Runner stop dump leftovers.'}{' '}
+              ? 'Lock first On: buy both sides together only if they already lock Min lock. One-leg miss dumps now.'
+              : 'Lock first Off: more first legs at/under Runner max. If the book already locks Min lock, both IOC together. Else buy the runner, then Recover wait (even hedge ≤ $1, or take +2¢, or smaller-hole). Flatten unmatched and Runner stop still dump leftovers.'}{' '}
             Add new pair 0 = first pair only; 3 = 3 more after the first. A locked pair holds to
             settlement.
           </Text>
@@ -951,6 +951,7 @@ function PairLockFields() {
               const start = meta.key === 'pair_lock_start_minutes';
               const until = meta.key === 'pair_lock_until_minutes';
               const flatten = meta.key === 'pair_lock_flatten_minutes';
+              const recover = meta.key === 'pair_lock_recover_seconds';
               return (
                 <RiskStepper
                   key={meta.key}
@@ -964,7 +965,9 @@ function PairLockFields() {
                         ? `${Math.round(Number(config.risk.pair_lock_until_minutes) || 0)}`
                         : flatten
                           ? `${Math.round(Number(config.risk.pair_lock_flatten_minutes) || 0)} min`
-                          : undefined
+                          : recover
+                            ? `${Math.round(Number(config.risk.pair_lock_recover_seconds) || 0)}s`
+                            : undefined
                   }
                   onChange={(next) => setRiskField(meta.key, next as never)}
                 />
@@ -997,11 +1000,12 @@ function PairLockFields() {
             After Start after and before Until minute. Auto lean and Runner max ask
             {config.risk.pair_lock_lock_first !== false
               ? ', and only if the opposite ask already locks at least Min lock'
-              : ''}{' '}
-            → buy that side. Hedge the other side when runner fill + opposite ask ≤ $1 − Min lock.
-            After both first-pair legs fill, Add new pair can fire on that pulse and every 1s. Add
-            new pair 0–3 extra pairs after the first lock (0 = none). Flatten unmatched with Flatten
-            unmatched. A completed pair holds to $1.
+              : ''}
+            . If both sides already lock Min lock → YES and NO IOC together. One fill dumps now. Lock
+            first Off can buy the runner alone. Hedge at Min lock every 1s. After Recover wait, buy
+            the other side if fill + ask ≤ $1, else take +2¢ on the runner bid, else finish vs dump
+            the smaller hole. Add new pair 0–3 extra after the first lock. Flatten unmatched with
+            Flatten unmatched. A completed pair holds to $1.
           </Text>
         </View>
       ) : null}
@@ -1113,13 +1117,14 @@ function CheapLoopFields() {
             </View>
           </View>
           <Text style={styles.hint} testID="cheap-loop-hint">
-            After Start after and before Flatten left. Cheaper ask ≤ Cheap max, |YES − NO| ≥ Min
-            gap, and |live − strike| ≥ Min live % of that coin’s Cushions $ → buy that side. Same %
-            for every chip; BTC and SOL use their own cushion. 0% = off. After Min hold, take when
-            that bid ≥ fill + Take. Stop default Off — On sells bid IOC when that bid ≤ fill −
-            Stop. Flatten in the last Flatten left minutes. Then Cooldown. Cycles is how many
-            exits this ticker this window. Always dumps. History Sell dumps a pending 15m fill now
-            (bid IOC). Spike fade / Step buy / Pair lock still take first pick.
+            After Start after and before Flatten left. Cheaper ask 20¢–Cheap max (default 40¢),
+            other ask ≤ 80¢, |YES − NO| ≥ Min gap, and |live − strike| ≥ Min live % of that coin’s
+            Cushions $ → buy that side. 11¢ / 90¢ sits. Same % for every chip; BTC and SOL use
+            their own cushion. 0% = off. After Min hold, take when that bid ≥ fill + Take. Stop
+            default Off — On sells bid IOC when that bid ≤ fill − Stop. Flatten in the last Flatten
+            left minutes. Then Cooldown. Cycles is how many exits this ticker this window. Always
+            dumps. History Sell dumps a pending 15m fill now (bid IOC). Spike fade / Step buy /
+            Pair lock still take first pick.
           </Text>
         </View>
       ) : null}

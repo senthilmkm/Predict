@@ -51,6 +51,8 @@ export interface TradeRecordDoc {
   sellPriceUsd?: number | null;
   /** How the fill was opened. Protect / Home sell / Cash out must not overwrite. */
   entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'pair_lock_hedge' | 'cheap_loop' | 'cheap_loop_hourly' | 'cheap_loop_weekly';
+  /** Pair lock enter fired YES+NO together. One-leg leftover dumps now. */
+  pairLockAtomic?: boolean;
   stepLotIndex?: number | null;
 }
 
