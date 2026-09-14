@@ -585,7 +585,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Paths → Cheap loop. Default Off. Empty chips mean no buys. The asset must also be On in Cushions.\n\n' +
             'After Start after and before Flatten left, Cloud buys the cheaper YES or NO if that ask is at or under Cheap max and the YES/NO gap is at least Min gap. Size is Lot contracts × live ask — not Auto $5. Example: YES 30¢ and NO 70¢ → buy YES. 49¢ / 51¢ sits out.\n\n' +
-            'After Min hold, it sells IOC at the bid when that bid is fill + Take. Stop can dump earlier if the ask falls fill − Stop (after a 5s grace). Flatten dumps in the last Flatten left minutes or at window end. Then Cooldown, then it looks again until Cycles exits are done. Always dumps. Never both sides. Never hold to $1.\n\n' +
+            'After Min hold, it sells IOC at the bid when that bid is fill + Take. There is no Stop — a ticket that falls still holds until Take or Flatten. Flatten dumps in the last Flatten left minutes or at window end. Then Cooldown, then it looks again until Cycles exits are done. Always dumps. Never both sides. Never hold to $1.\n\n' +
             'Window cap 1 does not block this path — Cycles is the cap. Spike fade, Step buy, and Pair lock still take first pick. TWAP still owns BTC/ETH. Last-minute owns new buys if Cheap loop has no lot. Protect skips these rows. Home tap or any other open fill blocks a new Cheap loop buy.',
         },
         {
@@ -605,7 +605,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What does Skip thin bid do on each path?',
           a:
             'Each Cloud path has its own Skip thin bid checkbox (default Off), shown only when that path is On. Home Buy does not use it.\n\n' +
-            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The paths do not share one switch — Cash out, Gold fade, Spike fade, and Pair lock can sell when the book thins (Pair lock only dumps an unmatched runner); TWAP lock, Last-minute, Step buy, and Cheap loop only skip the buy (Step buy still runs its ask stop; Cheap loop still take / stop / flatten).',
+            'Cloud looks at how many contracts sit on the best bid versus the contracts you are about to buy, or already hold. The paths do not share one switch — Cash out, Gold fade, Spike fade, and Pair lock can sell when the book thins (Pair lock only dumps an unmatched runner); TWAP lock, Last-minute, Step buy, and Cheap loop only skip the buy (Step buy still runs its ask stop; Cheap loop still take / flatten).',
           table: {
             headers: ['Path', 'If thin', 'If book size unknown'],
             rows: [
@@ -646,7 +646,7 @@ export function getFaqCategories(): FaqCategory[] {
               ],
               [
                 'Cheap loop',
-                'Skip the buy only. Open lots still take / stop / flatten.',
+                'Skip the buy only. Open lots still take / flatten.',
                 'Fail closed — no buy',
               ],
             ],

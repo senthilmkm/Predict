@@ -101,7 +101,6 @@ import {
   normalizeCheapLoopStartMinutes,
   normalizeCheapLoopStopUsd,
   normalizeCheapLoopTakeUsd,
-  reconcileCheapLoopTakeStop,
 } from '../../packages/trading-core/src/cheapLoop';
 import {
   configForHomeBuy as mergeHomeBuyRisk,
@@ -399,12 +398,6 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
   });
   risk.pair_lock_start_minutes = pairWin.startMinutes;
   risk.pair_lock_until_minutes = pairWin.untilMinutes;
-  const cheapTakeStop = reconcileCheapLoopTakeStop({
-    takeUsd: risk.cheap_loop_take_usd,
-    stopUsd: risk.cheap_loop_stop_usd,
-  });
-  risk.cheap_loop_take_usd = cheapTakeStop.takeUsd;
-  risk.cheap_loop_stop_usd = cheapTakeStop.stopUsd;
   if (risk.fixed_dollars_per_trade > risk.max_dollars_per_trade) {
     risk.fixed_dollars_per_trade = risk.max_dollars_per_trade;
   }

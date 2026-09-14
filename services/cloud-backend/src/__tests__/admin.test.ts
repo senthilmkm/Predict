@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 import { app } from '../index';
 import { upsertUserDoc, saveTradeRecord, setSystemConfig } from '../services/firestore';
@@ -410,5 +412,14 @@ describe('Predict Admin Web Portal API Suite', () => {
       .query({ from: '2099-01-01T00:00:00.000Z', userId: testUserId })
       .set('x-admin-key', ADMIN_SECRET);
     expect(future.body.matchedCount).toBe(0);
+  });
+});
+
+describe('Admin trade stream HTML', () => {
+  test('Entered via chip and filter include Cheap loop', () => {
+    const html = fs.readFileSync(path.join(__dirname, '../../public/admin/index.html'), 'utf8');
+    expect(html).toContain("v === 'cheap_loop'");
+    expect(html).toContain('value="cheap_loop"');
+    expect(html).toMatch(/label: 'Cheap loop'/);
   });
 });

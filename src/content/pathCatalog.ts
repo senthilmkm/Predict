@@ -42,7 +42,7 @@ export const PATH_TILES: PathTileDef[] = [
   { id: 'stepBuy', title: 'Step buy', sub: 'Add if lean holds', adminFlag: 'stepBuyFeatureOn' },
   { id: 'spikeFade', title: 'Spike fade', sub: 'Buy cheap side', adminFlag: 'spikeFadeFeatureOn' },
   { id: 'pairLock', title: 'Pair lock', sub: 'Both sides under $1', adminFlag: 'pairLockFeatureOn' },
-  { id: 'cheapLoop', title: 'Cheap loop', sub: 'Cheap side, take, repeat', adminFlag: 'cheapLoopFeatureOn' },
+  { id: 'cheapLoop', title: 'Cheap loop', sub: 'Cheap side, take or flatten', adminFlag: 'cheapLoopFeatureOn' },
 ];
 
 export function isPathFocusId(raw: unknown): raw is PathFocusId {

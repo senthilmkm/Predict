@@ -133,7 +133,7 @@ describe('Cheap loop path', () => {
     expect(formatSkipReason('cheap_loop_holding_other_path')).toBe('another path already holding');
   });
 
-  test('min hold blocks take; stop during min hold still sells', () => {
+  test('min hold blocks take; dumped ask during min hold holds (Stop Off)', () => {
     const filledAt = new Date('2026-09-14T00:00:00Z');
     const duringHold = new Date(filledAt.getTime() + 20_000);
     const take = evaluateCheapLoopExit({
@@ -150,7 +150,7 @@ describe('Cheap loop path', () => {
     });
     expect(take.sell).toBe(false);
 
-    const stop = evaluateCheapLoopExit({
+    const dumped = evaluateCheapLoopExit({
       heldSide: 'YES',
       quotes: { yes_bid: 0.2, yes_ask: 0.22, no_bid: 0.78, no_ask: 0.8 },
       fillUsd: 0.3,
@@ -162,10 +162,10 @@ describe('Cheap loop path', () => {
       filledAt,
       now: new Date(filledAt.getTime() + 6_000),
     });
-    expect(stop).toMatchObject({ sell: true, kind: 'cheap_loop_stop' });
+    expect(dumped).toMatchObject({ sell: false, kind: 'none', reason: 'cheap_loop_hold' });
   });
 
-  test('flatten and $1 ask beat grace; stop beats take on a broken book', () => {
+  test('flatten and $1 ask beat grace; dumped ask without take holds', () => {
     const filledAt = new Date('2026-09-14T00:00:00Z');
     const now = new Date(filledAt.getTime() + 1_000);
     const flat = evaluateCheapLoopExit({
@@ -198,7 +198,7 @@ describe('Cheap loop path', () => {
 
     const broken = evaluateCheapLoopExit({
       heldSide: 'YES',
-      quotes: { yes_bid: 0.4, yes_ask: 0.22, no_bid: 0.6, no_ask: 0.78 },
+      quotes: { yes_bid: 0.2, yes_ask: 0.22, no_bid: 0.78, no_ask: 0.8 },
       fillUsd: 0.3,
       takeUsd: 0.05,
       stopUsd: 0.06,
@@ -208,7 +208,7 @@ describe('Cheap loop path', () => {
       filledAt,
       now: new Date(filledAt.getTime() + 70_000),
     });
-    expect(broken).toMatchObject({ sell: true, kind: 'cheap_loop_stop' });
+    expect(broken).toMatchObject({ sell: false, kind: 'none', reason: 'cheap_loop_hold' });
   });
 
   test('take after min hold when bid still at fill + take', () => {

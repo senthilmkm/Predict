@@ -516,7 +516,7 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-cheap_loop_flatten_minutes').props.children).toBe('5 min');
     expect(s.getByTestId('risk-value-auto-cheap_loop_cheap_max_ask_usd').props.children).toMatch(/\$0\.40/);
     expect(s.getByTestId('risk-value-auto-cheap_loop_take_usd').props.children).toMatch(/\$0\.05/);
-    expect(s.getByTestId('risk-value-auto-cheap_loop_stop_usd').props.children).toMatch(/\$0\.06/);
+    expect(s.queryByTestId('risk-value-auto-cheap_loop_stop_usd')).toBeNull();
     expect(s.getByTestId('risk-value-auto-cheap_loop_cycles').props.children).toBe('1');
     expect(s.getByTestId('cheap-loop-asset-BTC')).toBeTruthy();
     expect(s.getByTestId('path-info-cheapLoop')).toBeTruthy();

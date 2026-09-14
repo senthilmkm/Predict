@@ -750,7 +750,7 @@ export const RISK_FIELD_META: {
     min: 0,
     max: 3,
   },
-  { key: 'cheap_loop_enabled', label: 'Cheap loop', group: 'timing', kind: 'toggle', step: 1, min: 0, max: 1 },
+  { key: 'cheap_loop_enabled', label: '15 min', group: 'timing', kind: 'toggle', step: 1, min: 0, max: 1 },
   {
     key: 'cheap_loop_start_minutes',
     label: 'Start after',
@@ -795,15 +795,6 @@ export const RISK_FIELD_META: {
     step: 0.01,
     min: 0.03,
     max: 0.08,
-  },
-  {
-    key: 'cheap_loop_stop_usd',
-    label: 'Stop',
-    group: 'timing',
-    kind: 'chase',
-    step: 0.01,
-    min: 0.05,
-    max: 0.12,
   },
   {
     key: 'cheap_loop_min_hold_minutes',
@@ -969,7 +960,6 @@ export const CHEAP_LOOP_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'cheap_loop_cheap_max_ask_usd',
   'cheap_loop_min_gap_usd',
   'cheap_loop_take_usd',
-  'cheap_loop_stop_usd',
   'cheap_loop_min_hold_minutes',
   'cheap_loop_cooldown_minutes',
   'cheap_loop_cycles',

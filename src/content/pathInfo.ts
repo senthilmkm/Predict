@@ -295,9 +295,9 @@ export const PATH_INFO = {
       '• Cheap loop asset chips, and that asset On (Cushions tab on/off). Empty chips = no Cheap loop buys\n' +
       '• Start after / Flatten left (15m defaults: after 2 minutes, dump with 5 minutes left)\n' +
       '• Cheap max ask, Min gap — buy only the cheaper YES or NO\n' +
-      '• Take (bid ≥ fill + Take), Stop (ask ≤ fill − Stop), Min hold, Cooldown, Cycles, Lot contracts\n' +
+      '• Take (bid ≥ fill + Take), Min hold, Cooldown, Cycles, Lot contracts. Stop is Off\n' +
       '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block this path — Cycles is the cap\n' +
-      '• IOC. 1-second watcher from fill for take / stop / flatten, then cooldown re-entry\n\n' +
+      '• IOC. 1-second watcher from fill for take / flatten, then cooldown re-entry\n\n' +
       'Does not use\n' +
       '• Auto $ per trade (size is Lot contracts × live ask)\n' +
       '• Auto max ask, Smart buy, chase, Auto TIF, Auto lean\n' +
@@ -309,8 +309,8 @@ export const PATH_INFO = {
       '• Example: YES 30¢ and NO 70¢ → buy YES. After Min hold, sell if the YES bid is fill + Take. Then cooldown. Then buy whichever side is cheaper\n' +
       '• Cycles = completed exits this ticker this window. A miss or a sit-out does not burn a cycle\n' +
       '• Always dumps. Never both sides. Never hold to $1\n' +
-      '• 5s grace after fill so your own print does not stop you out. Flatten and a $1 ask still dump during grace\n' +
-      '• Stop may fire during Min hold. Take cannot\n' +
+      '• 5s grace after fill so your own print does not take you. Flatten and a $1 ask still dump during grace\n' +
+      '• Stop is Off. A ticket that prints well below fill holds until Take or Flatten\n' +
       '• While On for that chip and inside Start after…Flatten left with Cycles left, Auto / Cash out / Gold fade do not enter that ticker\n' +
       '• Open Cheap loop, or cooldown with cycles left: Spike fade / Step buy / Pair lock sit out. Last-minute still owns new buys if Cheap loop has no lot\n' +
       '• Spike fade, Step buy, and Pair lock take first pick for a new buy when they want the ticker\n' +

@@ -423,7 +423,7 @@ describe('normalize / cushions', () => {
       },
     } as any).risk;
     expect(cheapOn.cheap_loop_enabled).toBe(true);
-    expect(cheapOn.cheap_loop_take_usd).toBe(0.04);
+    expect(cheapOn.cheap_loop_take_usd).toBe(0.08);
     expect(cheapOn.cheap_loop_stop_usd).toBe(0.05);
     expect(cheapOn.cheap_loop_cheap_max_ask_usd).toBe(0.45);
     expect(cheapOn.cheap_loop_assets).toEqual(['BTC', 'HYPE']);

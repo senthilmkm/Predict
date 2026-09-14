@@ -143,17 +143,22 @@ describe('admin overview metrics', () => {
     expect(tradeStreamEntryLabel('cheap_loop')).toBe('Cheap loop');
     expect(tradeStreamEntryLabel(undefined)).toBe('—');
     expect(tradeStreamEntryLabel('other')).toBe('—');
+    expect(parseTradeStreamQuery({ entryPath: 'cheap_loop' }).entryPath).toBe('cheap_loop');
 
     const rows = [
       trade({ tradeId: 'h', status: 'FILLED', entryPath: 'home' }),
       trade({ tradeId: 'a', status: 'FILLED', entryPath: 'auto' }),
       trade({ tradeId: 'c', status: 'FILLED', entryPath: 'cash_out' }),
+      trade({ tradeId: 'cl', status: 'SETTLED', entryPath: 'cheap_loop' }),
       trade({ tradeId: 'legacy', status: 'FILLED' }),
     ];
     const cash = buildTradeStreamResult(rows, { entryPath: 'cash_out' }, 200);
     expect(cash.matchedCount).toBe(1);
     expect(cash.trades[0].tradeId).toBe('c');
-    expect(tradeMatchesFilters(rows[3], { entryPath: 'home' })).toBe(false);
+    const cheap = buildTradeStreamResult(rows, { entryPath: 'cheap_loop' }, 200);
+    expect(cheap.matchedCount).toBe(1);
+    expect(cheap.trades[0].tradeId).toBe('cl');
+    expect(tradeMatchesFilters(rows[4], { entryPath: 'home' })).toBe(false);
   });
 
   test('cash out sell price uses stored exit, else derives from P&L', () => {

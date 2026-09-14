@@ -1,15 +1,17 @@
 # Cheap loop — locked design
 
-Status: **locked for 15m trial**. Admin + user default Off. Empty chips = no buys.
+Status: **locked for 15m**. Stop **Off**. Hold until **Take or Flatten**. Admin + user default Off. Empty chips = no buys.
 
 Product name: **Cheap loop**  
 Firestore / code keys: `cheapLoop` (admin), `cheap_loop_*` (user risk), `entry_path: 'cheap_loop'`
 
-Ping-pong **cheap-side scalp**: buy the cheaper ticket → wait → sell a few cents up → cooldown → buy whichever side is cheaper now → repeat up to **Cycles**. Always dump. Never hold to $1. Never hold YES and NO at once.
+Path tile: **15 min** toggle + knobs (this spec). **Hourly** toggle + own knobs is a later ship — do not place hourly until that catalog + lean exists.
 
-Predict today only lists **15m** series. Shipped defaults are the **15m trial** clocks (Cycles **1**). Hourly needs a catalog + lean change before this path can place on hourly tickers. Same math either way.
+**Cheap-side hold for take**: buy the cheaper ticket → wait → sell when that side’s **bid ≥ fill + Take** → cooldown → look again up to **Cycles**. If Take never prints, **Flatten** dumps. **No Stop.** Always dump. Never hold to $1. Never hold YES and NO at once.
 
-Goal: **small locked-in takes**, fail closed. Not Pair lock. Not Cash out. Not Spike fade (one lot).
+Predict today only lists **15m** series. Shipped defaults are the **15m** clocks (Cycles **1**). Hourly is a separate toggle and clock set after 15m ships.
+
+Goal: **small locked-in takes**, or flatten. Fail closed. Not Pair lock. Not Cash out. Not Spike fade (one lot).
 
 ---
 
@@ -19,9 +21,9 @@ Goal: **small locked-in takes**, fail closed. Not Pair lock. Not Cash out. Not S
 2. **Min hold** must pass, then if that side’s **bid ≥ fill + Take ¢** → sell bid IOC.
 3. **Cooldown** minutes (no buy).
 4. Look again. Cheaper may still be YES, or now NO. If cheap gate passes and **Cycles** remain → buy.
-5. In the last **Flatten left** minutes: no new buys. If holding, sell bid IOC.
+5. In the last **Flatten left** minutes: no new buys. If holding, sell bid IOC. No Stop dump before that.
 
-**Cycles** = completed **exits** (take, stop, or flatten) on this **market ticker**. Sitting out does not burn a cycle. A buy IOC miss does not burn a cycle. Cycle count resets when the 15m ticker changes.
+**Cycles** = completed **exits** (take or flatten) on this **market ticker**. Sitting out does not burn a cycle. A buy IOC miss does not burn a cycle. Cycle count resets when the 15m ticker changes.
 
 ---
 
@@ -43,7 +45,7 @@ Open `cheap_loop` lots still **exit** if Admin, user master, chip, Cushions, or 
 |---|---|
 | Tile id | `cheapLoop` |
 | Title | Cheap loop |
-| Sub | Cheap side, take, repeat |
+| Sub | Cheap side, take or flatten |
 | Admin flag | `cheapLoopFeatureOn` / `featureFlags.cheapLoop` |
 | Hidden when | Admin Cheap loop is Off (tile does not show) |
 | Tap | Opens **only** the Cheap loop block (toggle + knobs + asset chips) |
@@ -62,13 +64,13 @@ Shipped defaults are **15m trial**. Hourly numbers stay in this table for a late
 
 | Risk key | UI label | Kind | 15m shipped | Hourly later | Range | Notes |
 |---|---|---|---|---|---|---|
-| `cheap_loop_enabled` | Cheap loop | toggle | **false** | false | — | User master |
+| `cheap_loop_enabled` | 15 min | toggle | **false** | — | — | 15m master. Hourly gets its own toggle later |
 | `cheap_loop_start_minutes` | Start after | int | **2** | 10 | 1–20 | No buys until this many minutes elapsed |
 | `cheap_loop_flatten_minutes` | Flatten left | int | **5** | 5 | 3–10 | No new buys; dump if holding |
 | `cheap_loop_cheap_max_ask_usd` | Cheap max ask | chase | **0.40** | 0.40 | 0.25–0.45 | Cheaper ask must be ≤ this |
 | `cheap_loop_min_gap_usd` | Min gap | chase | **0.10** | 0.10 | 0.08–0.20 | \|YES ask − NO ask\| |
-| `cheap_loop_take_usd` | Take | chase | **0.05** | 0.05 | 0.03–0.08 | Sell when held **bid** ≥ fill + this |
-| `cheap_loop_stop_usd` | Stop | chase | **0.06** | 0.06 | 0.05–0.12 | Sell when held **ask** ≤ fill − this (after 5s grace) |
+| `cheap_loop_take_usd` | Take | chase | **0.05** | 0.05 | 0.03–0.08 | Sell when held **bid** ≥ fill + this. Minimum trigger, not a cap |
+| `cheap_loop_stop_usd` | *(unused)* | — | unused | — | — | **Stop Off.** Do not show. Do not sell on ask ≤ fill − Stop. Leftover Firestore value is ignored |
 | `cheap_loop_min_hold_minutes` | Min hold | int | **1** | 2 | 1–8 | After buy, take cannot fire until this elapses |
 | `cheap_loop_cooldown_minutes` | Cooldown | int | **2** | 3 | 1–10 | After an exit, no new buy |
 | `cheap_loop_cycles` | Cycles | int | **1** | 2 | 1–5 | Max exits this ticker this window |
@@ -79,20 +81,21 @@ Shipped defaults are **15m trial**. Hourly numbers stay in this table for a late
 **Hard-coded, no UI:**
 
 - IOC only
-- 5s grace after fill (own print must not Stop)
-- Sell is **bid IOC** (take / stop / flatten)
+- 5s grace after fill (own print must not Take)
+- Sell is **bid IOC** (take / flatten)
 - One open Cheap loop lot per ticker
 - Never YES and NO at once
+- **Stop Off** — leftover `cheap_loop_stop_usd` is ignored
 - Do not copy Auto $, Smart buy, chase, Auto TIF, Cash out / Gold fade / Pair lock / Last-minute knobs
 - Do not auto-check HYPE / NEAR / ZEC onto chips
 
 Normalize: `cheap_loop_enabled === true`; clamp / snap like other chase + int fields. Missing `cheap_loop_skip_thin_bid` → **false**. Persist via `POST /me/status` risk merge.
 
-**Live knobs while holding:** Take / Stop / Min hold / Flatten use the **current** saved config (same as the Home watch line).
+**Live knobs while holding:** Take / Min hold / Flatten use the **current** saved config (same as the Home watch line). Stop is unused.
 
 **Profit clamps (do not loosen in code):**
 
-- Take **<** Stop. If Save would make Take ≥ Stop, **cut Take** to Stop − 1¢ (do not raise Stop).
+- Stop is **Off**. Do not cut Take against a leftover Stop field.
 - Cheap max **≤ $0.45**. 55¢ is a favorite, not a scalp.
 - Min gap **≥ 8¢**. No 50/50 churn.
 
@@ -148,14 +151,13 @@ Cheap loop’s enter gate is common. It must not sit above Spike or Pair lock.
 **Same-tick priority (locked):**
 
 1. Window ended, or minutes left ≤ Flatten, or held ask ≥ $0.995 → **flatten** (even in the 5s grace)
-2. Else still in 5s grace → **hold** (blocks Stop and Take)
-3. Else held **ask** ≤ fill − Stop → **stop** (may fire during Min hold)
-4. Else Min hold elapsed **and** held **bid** ≥ fill + Take → **take**
-5. Else hold
+2. Else still in 5s grace → **hold** (blocks Take)
+3. Else Min hold elapsed **and** held **bid** ≥ fill + Take → **take**
+4. Else hold
 
-**Min hold vs Stop:** Stop may fire during Min hold (after 5s). A 30¢ ticket that prints 22¢ must not wait 2 minutes to die.
+**Stop is Off.** A 30¢ ticket that prints 22¢ **holds** until Take or Flatten. Do not dump on ask ≤ fill − 6¢.
 
-**Min hold vs Take:** Take cannot fire before Min hold. If the bid jumped through Take during Min hold, sell after Min hold **if the bid is still ≥ fill + Take**. If it faded, wait for Take, Stop, or Flatten.
+**Min hold vs Take:** Take cannot fire before Min hold. If the bid jumped through Take during Min hold, sell after Min hold **if the bid is still ≥ fill + Take**. If it faded, wait for Take or Flatten.
 
 Sell with no bid / thin bid: skip this pulse and retry every 1s. Skip-thin is **buy-only**. Do not invent a dump.
 
@@ -204,9 +206,9 @@ Window ends mid-cooldown → stop. Cycle store is the trade book for that market
 | Admin / user / chip / Cushions / Auto Off with open lot | Continue exits only; no next cycle |
 | Manual / Home tap lot | `cheap_loop_holding_other_path` |
 | In-flight place | Place lock; re-read + re-gate |
-| Take ≥ Stop on Save | Cut Take to Stop − 1¢ |
-| 15m window | Same math; shipped Cycles 1, Start after 2 |
-| Hourly window | Needs hourly series in catalog + Cloud lean. Do not point 15m knobs at hourly tickers |
+| Take ≥ Stop on Save | Ignored — Stop is Off. Take clamps to 3–8¢ only |
+| 15m window | Shipped. Cycles 1, Start after 2, Stop Off, take or flatten |
+| Hourly window | Own toggle + clocks after 15m ships. Needs hourly series in catalog + Cloud lean. Do not point 15m knobs at hourly tickers |
 
 ---
 
@@ -238,7 +240,7 @@ Watch line in cooldown: `Cheap loop cooldown · 80s`.
 ## 10. Alerts
 
 - Fill: `Cheap loop · {asset} {YES\|NO} · {n} ctr @ $x.xx`
-- Take / stop / flatten: same pattern as Spike fade dump (`sold @`)
+- Take / flatten: same pattern as Spike fade dump (`sold @`)
 - IOC miss: existing miss title with `entryPath: 'cheap_loop'`
 
 ---
@@ -246,9 +248,9 @@ Watch line in cooldown: `Cheap loop cooldown · 80s`.
 ## 11. Tests
 
 - Cheap gate: 30/70 buys YES; 49/51 sits; 52/48 sits (favorite, not cheap); equal sits.
-- Min hold blocks take; Stop during min hold (after 5s) still sells.
+- Min hold blocks take. Ask dump during min hold does **not** sell (Stop Off).
 - Flatten / $1 ask during grace still sells.
-- Stop before Take on a broken book.
+- Broken book (ask well below fill, bid not at Take) **holds**.
 - Take after min hold when bid still ≥ fill + Take.
 - Cooldown blocks re-entry; same-side re-entry allowed after cooldown.
 - Cycles 1: second exit skipped. Cycles 2: third exit skipped.
@@ -257,7 +259,7 @@ Watch line in cooldown: `Cheap loop cooldown · 80s`.
 - Protect skips `cheap_loop` rows.
 - TWAP owns BTC/ETH.
 - Home tap blocks enter.
-- Normalize clamps + Take ≥ Stop cuts Take + missing skip-thin is Off.
+- Normalize clamps Take independently of leftover Stop + missing skip-thin is Off.
 - Config persist `/me/status` + Admin flag default Off.
 
 ---
@@ -270,4 +272,4 @@ Watch line in cooldown: `Cheap loop cooldown · 80s`.
 4. Admin feature flag
 5. Hourly series **only if** we are shipping hourly
 
-Do not auto-check HYPE/NEAR/ZEC onto chips. Do not loosen Take/Stop/Cheap max math in code.
+Do not auto-check HYPE/NEAR/ZEC onto chips. Do not loosen Cheap max or Min gap. Stop stays Off.

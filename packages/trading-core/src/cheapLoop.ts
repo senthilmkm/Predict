@@ -4,7 +4,6 @@ import {
   CashOutQuotes,
   isOpenLiveFill,
   openFillsForTicker,
-  sideAskOf,
   sideBidOf,
   ticketUsd,
 } from './cashOut';
@@ -494,12 +493,11 @@ export function evaluateCheapLoopExit(opts: {
   now?: Date;
 }): { sell: boolean; kind: CheapLoopExitKind; reason: string } {
   const held = String(opts.heldSide || '').toUpperCase() === 'NO' ? 'NO' : 'YES';
-  const bands = reconcileCheapLoopTakeStop({ takeUsd: opts.takeUsd, stopUsd: opts.stopUsd });
+  const takeUsd = normalizeCheapLoopTakeUsd(opts.takeUsd);
   const flatten = normalizeCheapLoopFlattenMinutes(opts.flattenMinutes);
   const minHoldMs = normalizeCheapLoopMinHoldMinutes(opts.minHoldMinutes) * 60_000;
   const fill = ticketUsd(opts.fillUsd);
   const bid = sideBidOf(held, opts.quotes);
-  const ask = sideAskOf(held, opts.quotes);
   const rawAsk = Number(held === 'NO' ? opts.quotes.no_ask : opts.quotes.yes_ask);
   const left = goldFadeMinutesLeft(opts.lean);
   if (
@@ -518,13 +516,10 @@ export function evaluateCheapLoopExit(opts: {
   ) {
     return { sell: false, kind: 'none', reason: 'grace_after_fill' };
   }
-  if (fill != null && ask != null && ask <= fill - bands.stopUsd + 1e-9) {
-    return { sell: true, kind: 'cheap_loop_stop', reason: 'cheap_loop_stop' };
-  }
   const filledAt = opts.filledAt instanceof Date ? opts.filledAt.getTime() : Date.parse(String(opts.filledAt || ''));
   const nowMs = (opts.now || new Date()).getTime();
   const minHoldDone = Number.isFinite(filledAt) ? nowMs - filledAt >= minHoldMs : true;
-  if (minHoldDone && fill != null && bid != null && bid + 1e-9 >= fill + bands.takeUsd) {
+  if (minHoldDone && fill != null && bid != null && bid + 1e-9 >= fill + takeUsd) {
     return { sell: true, kind: 'cheap_loop_take', reason: 'cheap_loop_take' };
   }
   return { sell: false, kind: 'none', reason: 'cheap_loop_hold' };
@@ -546,7 +541,7 @@ export function buildCheapLoopSellOrder(opts: {
 }
 
 export function cheapLoopHoldingWatchText(takeUsd?: unknown): string {
-  const take = reconcileCheapLoopTakeStop({ takeUsd, stopUsd: CHEAP_LOOP_STOP_DEFAULT }).takeUsd;
+  const take = normalizeCheapLoopTakeUsd(takeUsd);
   return `Cheap loop holding · take +${Math.round(take * 100)}¢`;
 }
 

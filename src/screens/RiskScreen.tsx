@@ -1010,7 +1010,7 @@ function CheapLoopFields() {
       <View style={styles.field} testID="risk-field-auto-cheap_loop_enabled">
         <View style={styles.toggleRow}>
           <View style={styles.labelWithInfo}>
-            <Text style={[styles.label, { marginBottom: 0 }]}>Cheap loop</Text>
+            <Text style={[styles.label, { marginBottom: 0 }]}>15 min</Text>
             <PathInfoIcon title={PATH_INFO.cheapLoop.title} body={PATH_INFO.cheapLoop.body} testID="path-info-cheapLoop" />
           </View>
           <Switch
@@ -1022,8 +1022,8 @@ function CheapLoopFields() {
         </View>
         {on ? (
           <Text style={styles.hint}>
-            Buy the cheaper ticket, take a few cents, cooldown, repeat. Always dumps. Never both
-            sides. Never hold to $1.
+            Buy the cheaper 15m ticket. Hold until Take or Flatten. No Stop. Never both sides.
+            Never hold to $1.
           </Text>
         ) : null}
       </View>
@@ -1035,7 +1035,7 @@ function CheapLoopFields() {
             onChange={(v) => setRiskField('cheap_loop_skip_thin_bid', v)}
           />
           {metaFor(CHEAP_LOOP_RISK_FIELD_KEYS)
-            .filter((meta) => meta.key !== 'cheap_loop_enabled')
+            .filter((meta) => meta.key !== 'cheap_loop_enabled' && meta.key !== 'cheap_loop_stop_usd')
             .map((meta) => {
               const start = meta.key === 'cheap_loop_start_minutes';
               const flatten = meta.key === 'cheap_loop_flatten_minutes';
@@ -1087,9 +1087,10 @@ function CheapLoopFields() {
           </View>
           <Text style={styles.hint} testID="cheap-loop-hint">
             After Start after and before Flatten left. Cheaper ask ≤ Cheap max and |YES − NO| ≥ Min
-            gap → buy that side. Take when that bid ≥ fill + Take, after Min hold. Stop when that
-            ask ≤ fill − Stop (after 5s). Then Cooldown. Cycles is how many exits this ticker this
-            window. Always dumps. Spike fade / Step buy / Pair lock still take first pick.
+            gap → buy that side. After Min hold, take when that bid ≥ fill + Take. No Stop — a
+            falling ticket holds until Take or Flatten. Flatten in the last Flatten left minutes.
+            Then Cooldown. Cycles is how many exits this ticker this window. Always dumps. Spike
+            fade / Step buy / Pair lock still take first pick.
           </Text>
         </View>
       ) : null}
