@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme/tokens';
 import {
@@ -159,7 +160,10 @@ export function SettingsScreen({
     setCredsHelpOpen(false);
   }
   const insets = useSafeAreaInsets();
-  const sheetLift = Math.max(insets.bottom, 8) + 64;
+  const tabBarHeight = React.useContext(BottomTabBarHeightContext);
+  const [hubH, setHubH] = useState(0);
+  const sheetLift =
+    (typeof tabBarHeight === 'number' ? tabBarHeight : Math.max(insets.bottom, 8) + 64) + 12;
 
   useEffect(() => {
     void hasCredentials().then(setHasCreds);
@@ -493,7 +497,11 @@ export function SettingsScreen({
 
   return (
     <View style={styles.root} testID="screen-settings">
-      <View style={styles.hubDock} testID="settings-hub-dock">
+      <View
+        style={styles.hubDock}
+        testID="settings-hub-dock"
+        onLayout={(e) => setHubH(Math.round(e.nativeEvent.layout.height))}
+      >
         <View style={styles.statusCard} testID="settings-mode">
           <View style={styles.statusTop}>
             <View style={styles.controlCopy}>
@@ -931,6 +939,7 @@ export function SettingsScreen({
       <PathsPickerSheet
         visible={pathsOpen}
         lift={sheetLift}
+        topInset={Math.max(hubH, 24)}
         onClose={() => showHubSheet(null)}
         onOpenPath={(id) => {
           showHubSheet(null);

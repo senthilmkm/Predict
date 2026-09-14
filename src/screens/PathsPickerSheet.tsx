@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { PathInfoIcon } from '../components/PathInfoIcon';
 import { PathFocusId, PATH_TILES, PathTileDef } from '../content/pathCatalog';
@@ -17,7 +17,7 @@ import { formatSharedChipOverlapNote } from './tickerOverlap';
 const PATHS_HELP =
   'Tap a name to edit only that path. Star pins it on Home (three max). Unpin by starring again. Admin-off paths stay hidden.';
 
-/** Empty overlay above the sheet. Lower = sheet stretches up so Cheap loop is not clipped. */
+/** Fallback if hub height has not been measured yet. */
 export const PATHS_PICKER_OVERLAY_PAD_TOP = 24;
 
 export function PathsPickerSheet({
@@ -26,12 +26,14 @@ export function PathsPickerSheet({
   onOpenPath,
   onOpenGuide,
   lift = 0,
+  topInset = PATHS_PICKER_OVERLAY_PAD_TOP,
 }: {
   visible: boolean;
   onClose: () => void;
   onOpenPath: (id: PathFocusId) => void;
   onOpenGuide?: () => void;
   lift?: number;
+  topInset?: number;
 }) {
   const pinned = usePinnedPathsStore((s) => s.ids);
   const hydrate = usePinnedPathsStore((s) => s.hydrate);
@@ -45,9 +47,7 @@ export function PathsPickerSheet({
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
   const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const config = useConfigStore((s) => s.config);
-  const { height: windowHeight } = useWindowDimensions();
-  const sheetMaxHeight = Math.max(280, windowHeight - lift - PATHS_PICKER_OVERLAY_PAD_TOP);
-  const scrollMaxHeight = Math.max(160, sheetMaxHeight - 132);
+  const padTop = Math.max(PATHS_PICKER_OVERLAY_PAD_TOP, topInset);
 
   useEffect(() => {
     if (visible) void hydrate();
@@ -112,11 +112,11 @@ export function PathsPickerSheet({
   return (
     <View
       testID="modal-paths-picker"
-      style={[styles.overlay, { paddingBottom: lift, paddingTop: PATHS_PICKER_OVERLAY_PAD_TOP }]}
+      style={[styles.overlay, { paddingBottom: lift, paddingTop: padTop }]}
       pointerEvents="auto"
     >
       <Pressable style={styles.scrim} onPress={onClose} testID="paths-picker-scrim" />
-      <View style={[styles.sheet, { maxHeight: sheetMaxHeight }]}>
+      <View style={styles.sheet} testID="paths-picker-sheet">
         <View style={styles.grab} />
         <View style={styles.head}>
           <View style={styles.headLeft}>
@@ -135,7 +135,7 @@ export function PathsPickerSheet({
         ) : null}
         <ScrollView
           testID="paths-picker-scroll"
-          style={[styles.scroll, { maxHeight: scrollMaxHeight }]}
+          style={styles.scroll}
           contentContainerStyle={styles.scrollInner}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
@@ -194,23 +194,24 @@ export function PathsPickerSheet({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
     overflow: 'hidden',
   },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: {
+    flex: 1,
+    minHeight: 0,
     backgroundColor: '#151c25',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 12,
-    paddingBottom: 4,
+    paddingBottom: 8,
     paddingTop: 8,
     overflow: 'hidden',
   },
-  scroll: { flexGrow: 0 },
-  scrollInner: { paddingBottom: 28, flexGrow: 0 },
+  scroll: { flex: 1, minHeight: 0 },
+  scrollInner: { paddingBottom: 24, flexGrow: 1 },
   grab: {
     width: 36,
     height: 4,

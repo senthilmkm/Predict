@@ -755,10 +755,12 @@ describe('Settings credentials', () => {
     const cheapWrap = StyleSheet.flatten(s.getByTestId('path-tile-wrap-cheapLoop').props.style);
     expect(cheapWrap.width).toBe('100%');
     const overlayStyle = StyleSheet.flatten(s.getByTestId('modal-paths-picker').props.style);
-    expect(overlayStyle.paddingTop).toBe(24);
-    expect(overlayStyle.paddingBottom).toBeGreaterThan(0);
+    expect(overlayStyle.paddingTop).toBeGreaterThanOrEqual(24);
+    expect(overlayStyle.paddingBottom).toBeGreaterThanOrEqual(64);
+    const sheetStyle = StyleSheet.flatten(s.getByTestId('paths-picker-sheet').props.style);
+    expect(sheetStyle.flex).toBe(1);
     const scrollStyle = StyleSheet.flatten(s.getByTestId('paths-picker-scroll').props.style);
-    expect(Number(scrollStyle.maxHeight)).toBeGreaterThan(160);
+    expect(scrollStyle.flex).toBe(1);
   });
 
   test('Risk Show opens the Risk screen; Back returns to Settings', async () => {
