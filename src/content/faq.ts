@@ -585,7 +585,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Paths → Cheap loop. Default Off. Empty chips mean no buys. The asset must also be On in Cushions.\n\n' +
             'After Start after and before Flatten left, Cloud buys the cheaper YES or NO if that ask is at or under Cheap max, the YES/NO gap is at least Min gap, and |live − strike| is at least Min live % of that coin’s Cushions $ (default 15%; 0 = off). BTC, SOL, and DOGE each use their own cushion — you do not pick a dollar per coin. Size is Lot contracts × live ask — not Auto $5. Example: YES 30¢ and NO 70¢ → buy YES. 49¢ / 51¢ sits out. A tiny BTC drift that is still well under 15% of your BTC cushion also sits.\n\n' +
-            'After Min hold, it sells IOC at the bid when that bid is fill + Take. There is no Stop — a ticket that falls still holds until Take or Flatten. Flatten dumps in the last Flatten left minutes or at window end. Then Cooldown, then it looks again until Cycles exits are done. Always dumps. Never both sides. Never hold to $1.\n\n' +
+            'After Min hold, it sells IOC at the bid when that bid is fill + Take. Stop is Off unless you turn it On — then after Min hold it dumps bid IOC when that bid is fill − Stop (default 6¢, 5–12¢). Flatten dumps in the last Flatten left minutes or at window end. Then Cooldown, then it looks again until Cycles exits are done. Always dumps. Never both sides. Never hold to $1.\n\n' +
             'Window cap 1 does not block this path — Cycles is the cap. Spike fade, Step buy, and Pair lock still take first pick. TWAP still owns BTC/ETH. Last-minute owns new buys if Cheap loop has no lot. Protect skips these rows. Home tap or any other open fill blocks a new Cheap loop buy.',
         },
         {
@@ -593,22 +593,22 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Cheap loop Hourly?',
           a:
             'A second switch on the Cheap loop tile (same Admin flag). Default Off. Empty hourly chips mean no hourly buys.\n\n' +
-            'Kalshi hourly is above/below strike ladders (KXBTCD, KXETHD, …), not the 15m up/down book. Cloud picks the unique ATM strike closest to live. A tie sits out. After a fill it holds that ticker until Take or Flatten — it does not hop strikes. Cycles count per hour event (default 2, max 10). One open hourly lot per coin.\n\n' +
-            'Start after default 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Min hold 2, Cooldown 3, Cycles 2 (max 10). Stop is Off. Window cap 1 does not block. TWAP / Last-minute / Spike / Step / Pair stay on 15m. 15m Cheap loop and Hourly may both hold. Protect skips these rows.',
+            'Kalshi hourly is above/below strike ladders (KXBTCD, KXETHD, …), not the 15m up/down book. Cloud picks the unique ATM strike closest to live. A tie sits out. After a fill it holds that ticker until Take, Stop (if On), or Flatten — it does not hop strikes. Cycles count per hour event (default 2, max 10). One open hourly lot per coin.\n\n' +
+            'Start after default 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Stop Off (On = 6¢, 5–12¢), Min hold 2, Cooldown 3, Cycles 2 (max 10). Window cap 1 does not block. TWAP / Last-minute / Spike / Step / Pair stay on 15m. 15m Cheap loop and Hourly may both hold. Protect skips these rows.',
         },
         {
           id: 'what-is-cheap-loop-weekly',
           q: 'What is Cheap loop Weekly?',
           a:
             'A third switch on the Cheap loop tile (same Admin flag). Default Off. Empty weekly chips mean no weekly buys.\n\n' +
-            'Same Kalshi above/below series as Hourly (KXBTCD, …). Cloud picks the live event that lasts about a week (4–10 days), not the hour or the day. Unique ATM strike. After a fill it holds that ticker until Take, Flatten, or you tap History Sell. Then Cooldown (minutes), then it looks for the cheaper ATM side again. Cycles count exits this weekly event (default 10, max 50). One open weekly lot per coin.\n\n' +
-            'Start after 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Min hold 2, Cooldown 3. Stop is Off. 15m, Hourly, and Weekly may all hold. Protect skips these rows.',
+            'Same Kalshi above/below series as Hourly (KXBTCD, …). Cloud picks the live event that lasts about a week (4–10 days), not the hour or the day. Unique ATM strike. After a fill it holds that ticker until Take, Stop (if On), Flatten, or you tap History Sell. Then Cooldown (minutes), then it looks for the cheaper ATM side again. Cycles count exits this weekly event (default 10, max 50). One open weekly lot per coin.\n\n' +
+            'Start after 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Stop Off (On = 6¢, 5–12¢), Min hold 2, Cooldown 3. 15m, Hourly, and Weekly may all hold. Protect skips these rows.',
         },
         {
           id: 'cheap-loop-history-sell',
           q: 'What does History Sell do on Cheap loop?',
           a:
-            'On a pending Cheap loop hourly or Cheap loop weekly fill, History shows Sell. Tap sells that contract now on Kalshi’s book (bid IOC). It does not wait for Take, Flatten, or Friday.\n\n' +
+            'On a pending Cheap loop hourly or Cheap loop weekly fill, History shows Sell. Tap sells that contract now on Kalshi’s book (bid IOC). It does not wait for Take, Stop, Flatten, or Friday.\n\n' +
             'A confirm dialog, then Placing… so a double tap cannot fire twice. If IOC misses, the fill stays pending. If Cloud’s 1s watcher already sold it, you get “already sold.” Success counts as a Cheap loop exit (cycle + cooldown, then hunt again).\n\n' +
             'Works with Auto Off and with Kill switch (emergency dump). It does not use Home Buy/Sell or 15m lean. 15m Cheap loop and other paths do not show this button.',
         },

@@ -270,6 +270,7 @@ export interface RiskConfig {
   cheap_loop_min_abs_gap_usd?: number;
   cheap_loop_min_live_cushion_pct?: number;
   cheap_loop_take_usd?: number;
+  cheap_loop_stop_enabled?: boolean;
   cheap_loop_stop_usd?: number;
   cheap_loop_min_hold_minutes?: number;
   cheap_loop_cooldown_minutes?: number;
@@ -283,6 +284,8 @@ export interface RiskConfig {
   cheap_loop_hourly_cheap_max_ask_usd?: number;
   cheap_loop_hourly_min_gap_usd?: number;
   cheap_loop_hourly_take_usd?: number;
+  cheap_loop_hourly_stop_enabled?: boolean;
+  cheap_loop_hourly_stop_usd?: number;
   cheap_loop_hourly_min_hold_minutes?: number;
   cheap_loop_hourly_cooldown_minutes?: number;
   cheap_loop_hourly_cycles?: number;
@@ -295,6 +298,8 @@ export interface RiskConfig {
   cheap_loop_weekly_cheap_max_ask_usd?: number;
   cheap_loop_weekly_min_gap_usd?: number;
   cheap_loop_weekly_take_usd?: number;
+  cheap_loop_weekly_stop_enabled?: boolean;
+  cheap_loop_weekly_stop_usd?: number;
   cheap_loop_weekly_min_hold_minutes?: number;
   cheap_loop_weekly_cooldown_minutes?: number;
   cheap_loop_weekly_cycles?: number;
@@ -490,6 +495,7 @@ export function defaultAppConfig(): AppConfig {
       cheap_loop_min_gap_usd: 0.1,
       cheap_loop_min_live_cushion_pct: 15,
       cheap_loop_take_usd: 0.05,
+      cheap_loop_stop_enabled: false,
       cheap_loop_stop_usd: 0.06,
       cheap_loop_min_hold_minutes: 1,
       cheap_loop_cooldown_minutes: 2,
@@ -503,6 +509,8 @@ export function defaultAppConfig(): AppConfig {
       cheap_loop_hourly_cheap_max_ask_usd: 0.4,
       cheap_loop_hourly_min_gap_usd: 0.1,
       cheap_loop_hourly_take_usd: 0.05,
+      cheap_loop_hourly_stop_enabled: false,
+      cheap_loop_hourly_stop_usd: 0.06,
       cheap_loop_hourly_min_hold_minutes: 2,
       cheap_loop_hourly_cooldown_minutes: 3,
       cheap_loop_hourly_cycles: 2,
@@ -515,6 +523,8 @@ export function defaultAppConfig(): AppConfig {
       cheap_loop_weekly_cheap_max_ask_usd: 0.4,
       cheap_loop_weekly_min_gap_usd: 0.1,
       cheap_loop_weekly_take_usd: 0.05,
+      cheap_loop_weekly_stop_enabled: false,
+      cheap_loop_weekly_stop_usd: 0.06,
       cheap_loop_weekly_min_hold_minutes: 2,
       cheap_loop_weekly_cooldown_minutes: 3,
       cheap_loop_weekly_cycles: 10,

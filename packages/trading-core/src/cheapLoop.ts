@@ -97,13 +97,23 @@ export function normalizeCheapLoopStopUsd(raw: unknown): number {
   return snap(clamp(Number(raw ?? CHEAP_LOOP_STOP_DEFAULT), CHEAP_LOOP_STOP_MIN, CHEAP_LOOP_STOP_MAX), 0.01);
 }
 
-/** Take must stay strictly below Stop. Cut Take; never raise Stop. */
+/** 0 = Stop Off. Do not clamp 0 up to CHEAP_LOOP_STOP_MIN. */
+export function cheapLoopActiveStopUsd(enabled: unknown, stopUsd?: unknown): number {
+  if (enabled !== true) return 0;
+  return normalizeCheapLoopStopUsd(stopUsd);
+}
+
+/** Take must stay strictly below Stop when Stop is On. Cut Take; never raise Stop. Off = Take 3–8¢ only. */
 export function reconcileCheapLoopTakeStop(opts: {
   takeUsd?: unknown;
   stopUsd?: unknown;
+  stopEnabled?: unknown;
 }): { takeUsd: number; stopUsd: number } {
   const stopUsd = normalizeCheapLoopStopUsd(opts.stopUsd);
   let takeUsd = normalizeCheapLoopTakeUsd(opts.takeUsd);
+  if (opts.stopEnabled !== true) {
+    return { takeUsd, stopUsd };
+  }
   if (takeUsd + 1e-9 >= stopUsd) {
     takeUsd = snap(clamp(stopUsd - 0.01, CHEAP_LOOP_TAKE_MIN, CHEAP_LOOP_TAKE_MAX), 0.01);
     if (takeUsd + 1e-9 >= stopUsd) {
@@ -395,6 +405,8 @@ export function cheapLoopCfgForHourly(cfg: AppConfig): AppConfig {
     cheap_loop_hourly_cheap_max_ask_usd?: number;
     cheap_loop_hourly_min_gap_usd?: number;
     cheap_loop_hourly_take_usd?: number;
+    cheap_loop_hourly_stop_enabled?: boolean;
+    cheap_loop_hourly_stop_usd?: number;
     cheap_loop_hourly_min_hold_minutes?: number;
     cheap_loop_hourly_cooldown_minutes?: number;
     cheap_loop_hourly_cycles?: number;
@@ -412,6 +424,7 @@ export function cheapLoopCfgForHourly(cfg: AppConfig): AppConfig {
       cheap_loop_cheap_max_ask_usd: normalizeCheapLoopCheapMaxAskUsd(risk.cheap_loop_hourly_cheap_max_ask_usd),
       cheap_loop_min_gap_usd: normalizeCheapLoopMinGapUsd(risk.cheap_loop_hourly_min_gap_usd),
       cheap_loop_take_usd: normalizeCheapLoopTakeUsd(risk.cheap_loop_hourly_take_usd),
+      cheap_loop_stop_usd: cheapLoopActiveStopUsd(risk.cheap_loop_hourly_stop_enabled, risk.cheap_loop_hourly_stop_usd),
       cheap_loop_min_hold_minutes: normalizeCheapLoopHourlyMinHoldMinutes(risk.cheap_loop_hourly_min_hold_minutes),
       cheap_loop_cooldown_minutes: normalizeCheapLoopHourlyCooldownMinutes(
         risk.cheap_loop_hourly_cooldown_minutes
@@ -572,6 +585,8 @@ export function cheapLoopCfgForWeekly(cfg: AppConfig): AppConfig {
     cheap_loop_weekly_cheap_max_ask_usd?: number;
     cheap_loop_weekly_min_gap_usd?: number;
     cheap_loop_weekly_take_usd?: number;
+    cheap_loop_weekly_stop_enabled?: boolean;
+    cheap_loop_weekly_stop_usd?: number;
     cheap_loop_weekly_min_hold_minutes?: number;
     cheap_loop_weekly_cooldown_minutes?: number;
     cheap_loop_weekly_cycles?: number;
@@ -589,6 +604,7 @@ export function cheapLoopCfgForWeekly(cfg: AppConfig): AppConfig {
       cheap_loop_cheap_max_ask_usd: normalizeCheapLoopCheapMaxAskUsd(risk.cheap_loop_weekly_cheap_max_ask_usd),
       cheap_loop_min_gap_usd: normalizeCheapLoopMinGapUsd(risk.cheap_loop_weekly_min_gap_usd),
       cheap_loop_take_usd: normalizeCheapLoopTakeUsd(risk.cheap_loop_weekly_take_usd),
+      cheap_loop_stop_usd: cheapLoopActiveStopUsd(risk.cheap_loop_weekly_stop_enabled, risk.cheap_loop_weekly_stop_usd),
       cheap_loop_min_hold_minutes: normalizeCheapLoopHourlyMinHoldMinutes(risk.cheap_loop_weekly_min_hold_minutes),
       cheap_loop_cooldown_minutes: normalizeCheapLoopHourlyCooldownMinutes(
         risk.cheap_loop_weekly_cooldown_minutes
@@ -1100,6 +1116,17 @@ export function evaluateCheapLoopExit(opts: {
   const minHoldDone = Number.isFinite(filledAt) ? nowMs - filledAt >= minHoldMs : true;
   if (minHoldDone && fill != null && bid != null && bid + 1e-9 >= fill + takeUsd) {
     return { sell: true, kind: 'cheap_loop_take', reason: 'cheap_loop_take' };
+  }
+  const stopUsd = Number(opts.stopUsd);
+  if (
+    minHoldDone &&
+    fill != null &&
+    bid != null &&
+    Number.isFinite(stopUsd) &&
+    stopUsd > 0 &&
+    bid <= fill - stopUsd + 1e-9
+  ) {
+    return { sell: true, kind: 'cheap_loop_stop', reason: 'cheap_loop_stop' };
   }
   return { sell: false, kind: 'none', reason: 'cheap_loop_hold' };
 }

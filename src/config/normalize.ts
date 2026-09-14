@@ -102,6 +102,7 @@ import {
   normalizeCheapLoopStartMinutes,
   normalizeCheapLoopStopUsd,
   normalizeCheapLoopTakeUsd,
+  reconcileCheapLoopTakeStop,
   normalizeCheapLoopHourlyAssets,
   normalizeCheapLoopHourlyCooldownMinutes,
   normalizeCheapLoopHourlyCycles,
@@ -370,6 +371,7 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
       r.cheap_loop_min_live_cushion_pct ?? d.cheap_loop_min_live_cushion_pct
     ),
     cheap_loop_take_usd: normalizeCheapLoopTakeUsd(r.cheap_loop_take_usd ?? d.cheap_loop_take_usd),
+    cheap_loop_stop_enabled: r.cheap_loop_stop_enabled === true,
     cheap_loop_stop_usd: normalizeCheapLoopStopUsd(r.cheap_loop_stop_usd ?? d.cheap_loop_stop_usd),
     cheap_loop_min_hold_minutes: normalizeCheapLoopMinHoldMinutes(
       r.cheap_loop_min_hold_minutes ?? d.cheap_loop_min_hold_minutes
@@ -398,6 +400,10 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     ),
     cheap_loop_hourly_take_usd: normalizeCheapLoopTakeUsd(
       r.cheap_loop_hourly_take_usd ?? d.cheap_loop_hourly_take_usd
+    ),
+    cheap_loop_hourly_stop_enabled: r.cheap_loop_hourly_stop_enabled === true,
+    cheap_loop_hourly_stop_usd: normalizeCheapLoopStopUsd(
+      r.cheap_loop_hourly_stop_usd ?? d.cheap_loop_hourly_stop_usd
     ),
     cheap_loop_hourly_min_hold_minutes: normalizeCheapLoopHourlyMinHoldMinutes(
       r.cheap_loop_hourly_min_hold_minutes ?? d.cheap_loop_hourly_min_hold_minutes
@@ -430,6 +436,10 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     ),
     cheap_loop_weekly_take_usd: normalizeCheapLoopTakeUsd(
       r.cheap_loop_weekly_take_usd ?? d.cheap_loop_weekly_take_usd
+    ),
+    cheap_loop_weekly_stop_enabled: r.cheap_loop_weekly_stop_enabled === true,
+    cheap_loop_weekly_stop_usd: normalizeCheapLoopStopUsd(
+      r.cheap_loop_weekly_stop_usd ?? d.cheap_loop_weekly_stop_usd
     ),
     cheap_loop_weekly_min_hold_minutes: normalizeCheapLoopHourlyMinHoldMinutes(
       r.cheap_loop_weekly_min_hold_minutes ?? d.cheap_loop_weekly_min_hold_minutes
@@ -473,6 +483,27 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
   });
   risk.pair_lock_start_minutes = pairWin.startMinutes;
   risk.pair_lock_until_minutes = pairWin.untilMinutes;
+  const cheap15 = reconcileCheapLoopTakeStop({
+    takeUsd: risk.cheap_loop_take_usd,
+    stopUsd: risk.cheap_loop_stop_usd,
+    stopEnabled: risk.cheap_loop_stop_enabled,
+  });
+  risk.cheap_loop_take_usd = cheap15.takeUsd;
+  risk.cheap_loop_stop_usd = cheap15.stopUsd;
+  const cheapHourly = reconcileCheapLoopTakeStop({
+    takeUsd: risk.cheap_loop_hourly_take_usd,
+    stopUsd: risk.cheap_loop_hourly_stop_usd,
+    stopEnabled: risk.cheap_loop_hourly_stop_enabled,
+  });
+  risk.cheap_loop_hourly_take_usd = cheapHourly.takeUsd;
+  risk.cheap_loop_hourly_stop_usd = cheapHourly.stopUsd;
+  const cheapWeekly = reconcileCheapLoopTakeStop({
+    takeUsd: risk.cheap_loop_weekly_take_usd,
+    stopUsd: risk.cheap_loop_weekly_stop_usd,
+    stopEnabled: risk.cheap_loop_weekly_stop_enabled,
+  });
+  risk.cheap_loop_weekly_take_usd = cheapWeekly.takeUsd;
+  risk.cheap_loop_weekly_stop_usd = cheapWeekly.stopUsd;
   if (risk.fixed_dollars_per_trade > risk.max_dollars_per_trade) {
     risk.fixed_dollars_per_trade = risk.max_dollars_per_trade;
   }

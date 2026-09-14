@@ -34,6 +34,7 @@ import {
   pickCheapLoopSide,
   pickSoonestLiveLadderEvent,
   pickUniqueAtmStrike,
+  cheapLoopActiveStopUsd,
   reconcileCheapLoopTakeStop,
   tickerHasOpenCheapLoop,
   tickerHasOpenOtherThanCheapLoop,
@@ -96,11 +97,18 @@ describe('Cheap loop path', () => {
     expect(normalizeCheapLoopTakeUsd(0.05)).toBe(0.05);
     expect(normalizeCheapLoopTakeUsd(0.01)).toBe(0.03);
     expect(normalizeCheapLoopStopUsd(0.2)).toBe(0.12);
+    expect(cheapLoopActiveStopUsd(false, 0.06)).toBe(0);
+    expect(cheapLoopActiveStopUsd(undefined, 0.06)).toBe(0);
+    expect(cheapLoopActiveStopUsd(true, 0.06)).toBe(0.06);
     expect(normalizeCheapLoopCycles(9)).toBe(5);
     expect(normalizeCheapLoopLotCount(0)).toBe(1);
     expect(normalizeCheapLoopAssets(undefined)).toEqual([]);
     expect(normalizeCheapLoopAssets(['BTC', 'HYPE', 'BTC'])).toEqual(['BTC', 'HYPE']);
     expect(reconcileCheapLoopTakeStop({ takeUsd: 0.08, stopUsd: 0.05 })).toEqual({
+      takeUsd: 0.08,
+      stopUsd: 0.05,
+    });
+    expect(reconcileCheapLoopTakeStop({ takeUsd: 0.08, stopUsd: 0.05, stopEnabled: true })).toEqual({
       takeUsd: 0.04,
       stopUsd: 0.05,
     });
@@ -228,7 +236,7 @@ describe('Cheap loop path', () => {
     expect(atm.ok).toBe(true);
   });
 
-  test('min hold blocks take; dumped ask during min hold holds (Stop Off)', () => {
+  test('min hold blocks take and stop; Stop Off leftover 0.06 holds after min hold', () => {
     const filledAt = new Date('2026-09-14T00:00:00Z');
     const duringHold = new Date(filledAt.getTime() + 20_000);
     const take = evaluateCheapLoopExit({
@@ -245,7 +253,7 @@ describe('Cheap loop path', () => {
     });
     expect(take.sell).toBe(false);
 
-    const dumped = evaluateCheapLoopExit({
+    const dumpedDuringHold = evaluateCheapLoopExit({
       heldSide: 'YES',
       quotes: { yes_bid: 0.2, yes_ask: 0.22, no_bid: 0.78, no_ask: 0.8 },
       fillUsd: 0.3,
@@ -257,10 +265,10 @@ describe('Cheap loop path', () => {
       filledAt,
       now: new Date(filledAt.getTime() + 6_000),
     });
-    expect(dumped).toMatchObject({ sell: false, kind: 'none', reason: 'cheap_loop_hold' });
+    expect(dumpedDuringHold).toMatchObject({ sell: false, kind: 'none', reason: 'cheap_loop_hold' });
   });
 
-  test('flatten and $1 ask beat grace; dumped ask without take holds', () => {
+  test('flatten and $1 ask beat grace; Stop Off leftover 0.06 holds; Stop On dumps after min hold', () => {
     const filledAt = new Date('2026-09-14T00:00:00Z');
     const now = new Date(filledAt.getTime() + 1_000);
     const flat = evaluateCheapLoopExit({
@@ -291,7 +299,35 @@ describe('Cheap loop path', () => {
     });
     expect(ceiling).toMatchObject({ sell: true, kind: 'cheap_loop_flatten' });
 
-    const broken = evaluateCheapLoopExit({
+    const brokenOff = evaluateCheapLoopExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.2, yes_ask: 0.22, no_bid: 0.78, no_ask: 0.8 },
+      fillUsd: 0.3,
+      takeUsd: 0.05,
+      stopUsd: 0,
+      flattenMinutes: 5,
+      minHoldMinutes: 1,
+      lean: { phase: 'live', minutes_left: 10 },
+      filledAt,
+      now: new Date(filledAt.getTime() + 70_000),
+    });
+    expect(brokenOff).toMatchObject({ sell: false, kind: 'none', reason: 'cheap_loop_hold' });
+
+    const leftoverIgnored = evaluateCheapLoopExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.2, yes_ask: 0.22, no_bid: 0.78, no_ask: 0.8 },
+      fillUsd: 0.3,
+      takeUsd: 0.05,
+      stopUsd: cheapLoopActiveStopUsd(false, 0.06),
+      flattenMinutes: 5,
+      minHoldMinutes: 1,
+      lean: { phase: 'live', minutes_left: 10 },
+      filledAt,
+      now: new Date(filledAt.getTime() + 70_000),
+    });
+    expect(leftoverIgnored).toMatchObject({ sell: false, kind: 'none', reason: 'cheap_loop_hold' });
+
+    const stopped = evaluateCheapLoopExit({
       heldSide: 'YES',
       quotes: { yes_bid: 0.2, yes_ask: 0.22, no_bid: 0.78, no_ask: 0.8 },
       fillUsd: 0.3,
@@ -303,7 +339,7 @@ describe('Cheap loop path', () => {
       filledAt,
       now: new Date(filledAt.getTime() + 70_000),
     });
-    expect(broken).toMatchObject({ sell: false, kind: 'none', reason: 'cheap_loop_hold' });
+    expect(stopped).toMatchObject({ sell: true, kind: 'cheap_loop_stop', reason: 'cheap_loop_stop' });
   });
 
   test('take after min hold when bid still at fill + take', () => {
@@ -321,6 +357,24 @@ describe('Cheap loop path', () => {
       now: new Date(filledAt.getTime() + 61_000),
     });
     expect(res).toMatchObject({ sell: true, kind: 'cheap_loop_take' });
+  });
+
+  test('grace blocks stop; flatten still dumps during grace', () => {
+    const filledAt = new Date('2026-09-14T00:00:00Z');
+    const now = new Date(filledAt.getTime() + 1_000);
+    const graceStop = evaluateCheapLoopExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.2, yes_ask: 0.22, no_bid: 0.78, no_ask: 0.8 },
+      fillUsd: 0.3,
+      takeUsd: 0.05,
+      stopUsd: 0.06,
+      flattenMinutes: 5,
+      minHoldMinutes: 1,
+      lean: { phase: 'live', minutes_left: 10 },
+      filledAt,
+      now,
+    });
+    expect(graceStop).toMatchObject({ sell: false, kind: 'none', reason: 'grace_after_fill' });
   });
 
   test('cooldown and cycles; same-side re-entry allowed after cooldown', () => {
@@ -528,6 +582,18 @@ describe('Cheap loop path', () => {
         cheap_loop_hourly_assets: ['BTC'],
       },
     });
+    expect(hourly10.risk.cheap_loop_stop_usd).toBe(0);
+    const hourlyStopOn = cheapLoopCfgForHourly({
+      ...cfg(),
+      risk: {
+        ...cfg().risk,
+        cheap_loop_hourly_enabled: true,
+        cheap_loop_hourly_stop_enabled: true,
+        cheap_loop_hourly_stop_usd: 0.06,
+        cheap_loop_hourly_assets: ['BTC'],
+      },
+    });
+    expect(hourlyStopOn.risk.cheap_loop_stop_usd).toBe(0.06);
     const sixHourly = evaluateCheapLoopEnter({
       lean: lean({ market_ticker: 'KXBTCD-26SEP1406-T67099.99', minutes_elapsed: 12, minutes_left: 40 }),
       cfg: hourly10,

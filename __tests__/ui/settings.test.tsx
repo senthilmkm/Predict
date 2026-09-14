@@ -517,7 +517,11 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-cheap_loop_cheap_max_ask_usd').props.children).toMatch(/\$0\.40/);
     expect(s.getByTestId('risk-value-auto-cheap_loop_min_live_cushion_pct').props.children).toBe('15%');
     expect(s.getByTestId('risk-value-auto-cheap_loop_take_usd').props.children).toMatch(/\$0\.05/);
+    expect(s.getByTestId('risk-toggle-cheap_loop_stop_enabled').props.value).toBe(false);
     expect(s.queryByTestId('risk-value-auto-cheap_loop_stop_usd')).toBeNull();
+    await fireEvent(s.getByTestId('risk-toggle-cheap_loop_stop_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.cheap_loop_stop_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-cheap_loop_stop_usd').props.children).toMatch(/\$0\.06/);
     expect(s.getByTestId('risk-value-auto-cheap_loop_cycles').props.children).toBe('1');
     expect(s.getByTestId('cheap-loop-asset-BTC')).toBeTruthy();
     expect(s.getByTestId('path-info-cheapLoop')).toBeTruthy();
@@ -527,6 +531,8 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-cheap_loop_hourly_start_minutes').props.children).toBe('10 min');
     expect(s.getByTestId('risk-value-auto-cheap_loop_hourly_flatten_minutes').props.children).toBe('5 min');
     expect(s.getByTestId('risk-value-auto-cheap_loop_hourly_cycles').props.children).toBe('2');
+    expect(s.getByTestId('risk-toggle-cheap_loop_hourly_stop_enabled').props.value).toBe(false);
+    expect(s.queryByTestId('risk-value-auto-cheap_loop_hourly_stop_usd')).toBeNull();
     expect(s.getByTestId('cheap-loop-hourly-asset-BTC')).toBeTruthy();
     expect(s.getByTestId('cheap-loop-hourly-asset-HYPE')).toBeTruthy();
     expect(s.queryByTestId('cheap-loop-hourly-asset-Gold')).toBeNull();
@@ -538,6 +544,8 @@ describe('Settings credentials', () => {
     expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_start_minutes').props.children).toBe('10 min');
     expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_flatten_minutes').props.children).toBe('5 min');
     expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_cycles').props.children).toBe('10');
+    expect(s.getByTestId('risk-toggle-cheap_loop_weekly_stop_enabled').props.value).toBe(false);
+    expect(s.queryByTestId('risk-value-auto-cheap_loop_weekly_stop_usd')).toBeNull();
     expect(s.getByTestId('cheap-loop-weekly-asset-BTC')).toBeTruthy();
     expect(s.getByTestId('path-info-cheapLoopWeekly')).toBeTruthy();
     expect(useConfigStore.getState().config.risk.cheap_loop_weekly_assets).toEqual([]);

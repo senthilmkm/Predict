@@ -194,6 +194,7 @@ import {
   assetHasOpenCheapLoopWeekly,
   cheapLoopCfgForHourly,
   cheapLoopCfgForWeekly,
+  cheapLoopActiveStopUsd,
   cheapLoopCooldownOwnsTicker,
   cheapLoopExitsForTicker,
   cheapLoopHourlyEventKey,
@@ -1706,7 +1707,10 @@ async function runOneTick() {
                   },
                   trades: userTrades,
                   takeUsd: cfg.risk?.cheap_loop_take_usd,
-                  stopUsd: cfg.risk?.cheap_loop_stop_usd,
+                  stopUsd: cheapLoopActiveStopUsd(
+                    cfg.risk?.cheap_loop_stop_enabled,
+                    cfg.risk?.cheap_loop_stop_usd
+                  ),
                   flattenMinutes: cfg.risk?.cheap_loop_flatten_minutes,
                   minHoldMinutes: cfg.risk?.cheap_loop_min_hold_minutes,
                   slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
@@ -4425,7 +4429,10 @@ export async function runCheapLoopWatchTick(
               },
               trades: userTrades,
               takeUsd: cfg.risk?.cheap_loop_take_usd,
-              stopUsd: cfg.risk?.cheap_loop_stop_usd,
+              stopUsd: cheapLoopActiveStopUsd(
+                cfg.risk?.cheap_loop_stop_enabled,
+                cfg.risk?.cheap_loop_stop_usd
+              ),
               flattenMinutes: cfg.risk?.cheap_loop_flatten_minutes,
               minHoldMinutes: cfg.risk?.cheap_loop_min_hold_minutes,
               slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
@@ -4837,6 +4844,10 @@ async function runCheapLoopAtmLadderWatchTick(
                 },
                 trades: userTrades,
                 takeUsd,
+                stopUsd: cheapLoopActiveStopUsd(
+                  weekly ? cfg.risk?.cheap_loop_weekly_stop_enabled : cfg.risk?.cheap_loop_hourly_stop_enabled,
+                  weekly ? cfg.risk?.cheap_loop_weekly_stop_usd : cfg.risk?.cheap_loop_hourly_stop_usd
+                ),
                 flattenMinutes,
                 minHoldMinutes,
                 slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),

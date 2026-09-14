@@ -1032,8 +1032,8 @@ function CheapLoopFields() {
         </View>
         {on ? (
           <Text style={styles.hint}>
-            Buy the cheaper 15m ticket. Hold until Take or Flatten. No Stop. Never both sides.
-            Never hold to $1.
+            Buy the cheaper 15m ticket. Hold until Take, Stop (if On), or Flatten. Never both
+            sides. Never hold to $1.
           </Text>
         ) : null}
       </View>
@@ -1045,14 +1045,14 @@ function CheapLoopFields() {
             onChange={(v) => setRiskField('cheap_loop_skip_thin_bid', v)}
           />
           {metaFor(CHEAP_LOOP_RISK_FIELD_KEYS)
-            .filter((meta) => meta.key !== 'cheap_loop_enabled' && meta.key !== 'cheap_loop_stop_usd')
+            .filter((meta) => meta.key !== 'cheap_loop_enabled')
             .map((meta) => {
               const start = meta.key === 'cheap_loop_start_minutes';
               const flatten = meta.key === 'cheap_loop_flatten_minutes';
               const hold = meta.key === 'cheap_loop_min_hold_minutes';
               const cool = meta.key === 'cheap_loop_cooldown_minutes';
               const livePct = meta.key === 'cheap_loop_min_live_cushion_pct';
-              return (
+              const stepper = (
                 <RiskStepper
                   key={meta.key}
                   meta={meta}
@@ -1073,6 +1073,20 @@ function CheapLoopFields() {
                   }
                   onChange={(next) => setRiskField(meta.key, next as never)}
                 />
+              );
+              if (meta.key !== 'cheap_loop_take_usd') return stepper;
+              return (
+                <React.Fragment key={meta.key}>
+                  {stepper}
+                  <CheapLoopStopBlock
+                    enabledKey="cheap_loop_stop_enabled"
+                    usdKey="cheap_loop_stop_usd"
+                    enabled={config.risk.cheap_loop_stop_enabled === true}
+                    usd={Number(config.risk.cheap_loop_stop_usd)}
+                    onEnabled={(v) => setRiskField('cheap_loop_stop_enabled', v)}
+                    onUsd={(next) => setRiskField('cheap_loop_stop_usd', next)}
+                  />
+                </React.Fragment>
               );
             })}
           <View style={styles.field} testID="risk-field-auto-cheap_loop_assets">
@@ -1102,9 +1116,10 @@ function CheapLoopFields() {
             After Start after and before Flatten left. Cheaper ask ≤ Cheap max, |YES − NO| ≥ Min
             gap, and |live − strike| ≥ Min live % of that coin’s Cushions $ → buy that side. Same %
             for every chip; BTC and SOL use their own cushion. 0% = off. After Min hold, take when
-            that bid ≥ fill + Take. No Stop — a falling ticket holds until Take or Flatten. Flatten
-            in the last Flatten left minutes. Then Cooldown. Cycles is how many exits this ticker
-            this window. Always dumps. Spike fade / Step buy / Pair lock still take first pick.
+            that bid ≥ fill + Take. Stop default Off — On sells bid IOC when that bid ≤ fill −
+            Stop. Flatten in the last Flatten left minutes. Then Cooldown. Cycles is how many
+            exits this ticker this window. Always dumps. Spike fade / Step buy / Pair lock still
+            take first pick.
           </Text>
         </View>
       ) : null}
@@ -1127,8 +1142,8 @@ function CheapLoopFields() {
         </View>
         {hourlyOn ? (
           <Text style={styles.hint}>
-            ATM strike on Kalshi hourly above/below. Same take-or-flatten. Own clocks. Not the 15m
-            book.
+            ATM strike on Kalshi hourly above/below. Take, optional Stop, or Flatten. Own clocks.
+            Not the 15m book.
           </Text>
         ) : null}
       </View>
@@ -1146,7 +1161,7 @@ function CheapLoopFields() {
               const flatten = meta.key === 'cheap_loop_hourly_flatten_minutes';
               const hold = meta.key === 'cheap_loop_hourly_min_hold_minutes';
               const cool = meta.key === 'cheap_loop_hourly_cooldown_minutes';
-              return (
+              const stepper = (
                 <RiskStepper
                   key={meta.key}
                   meta={meta}
@@ -1165,6 +1180,20 @@ function CheapLoopFields() {
                   }
                   onChange={(next) => setRiskField(meta.key, next as never)}
                 />
+              );
+              if (meta.key !== 'cheap_loop_hourly_take_usd') return stepper;
+              return (
+                <React.Fragment key={meta.key}>
+                  {stepper}
+                  <CheapLoopStopBlock
+                    enabledKey="cheap_loop_hourly_stop_enabled"
+                    usdKey="cheap_loop_hourly_stop_usd"
+                    enabled={config.risk.cheap_loop_hourly_stop_enabled === true}
+                    usd={Number(config.risk.cheap_loop_hourly_stop_usd)}
+                    onEnabled={(v) => setRiskField('cheap_loop_hourly_stop_enabled', v)}
+                    onUsd={(next) => setRiskField('cheap_loop_hourly_stop_usd', next)}
+                  />
+                </React.Fragment>
               );
             })}
           <View style={styles.field} testID="risk-field-auto-cheap_loop_hourly_assets">
@@ -1195,9 +1224,9 @@ function CheapLoopFields() {
             </View>
           </View>
           <Text style={styles.hint} testID="cheap-loop-hourly-hint">
-            Buys the cheaper YES or NO on the unique ATM strike. Hold that ticker until Take or
-            Flatten. Does not hop strikes. Cycles are per hour event (max 10). One open hourly lot
-            per coin.
+            Buys the cheaper YES or NO on the unique ATM strike. Hold that ticker until Take, Stop
+            (if On), or Flatten. Does not hop strikes. Cycles are per hour event (max 10). One open
+            hourly lot per coin.
           </Text>
         </View>
       ) : null}
@@ -1220,8 +1249,8 @@ function CheapLoopFields() {
         </View>
         {weeklyOn ? (
           <Text style={styles.hint}>
-            Same KX*D series as Hourly. Picks the ~7 day event by duration. Buy cheap ATM, take,
-            cooldown, look again until Flatten.
+            Same KX*D series as Hourly. Picks the ~7 day event by duration. Buy cheap ATM, take or
+            stop, cooldown, look again until Flatten.
           </Text>
         ) : null}
       </View>
@@ -1239,7 +1268,7 @@ function CheapLoopFields() {
               const flatten = meta.key === 'cheap_loop_weekly_flatten_minutes';
               const hold = meta.key === 'cheap_loop_weekly_min_hold_minutes';
               const cool = meta.key === 'cheap_loop_weekly_cooldown_minutes';
-              return (
+              const stepper = (
                 <RiskStepper
                   key={meta.key}
                   meta={meta}
@@ -1258,6 +1287,20 @@ function CheapLoopFields() {
                   }
                   onChange={(next) => setRiskField(meta.key, next as never)}
                 />
+              );
+              if (meta.key !== 'cheap_loop_weekly_take_usd') return stepper;
+              return (
+                <React.Fragment key={meta.key}>
+                  {stepper}
+                  <CheapLoopStopBlock
+                    enabledKey="cheap_loop_weekly_stop_enabled"
+                    usdKey="cheap_loop_weekly_stop_usd"
+                    enabled={config.risk.cheap_loop_weekly_stop_enabled === true}
+                    usd={Number(config.risk.cheap_loop_weekly_stop_usd)}
+                    onEnabled={(v) => setRiskField('cheap_loop_weekly_stop_enabled', v)}
+                    onUsd={(next) => setRiskField('cheap_loop_weekly_stop_usd', next)}
+                  />
+                </React.Fragment>
               );
             })}
           <View style={styles.field} testID="risk-field-auto-cheap_loop_weekly_assets">
@@ -1289,12 +1332,53 @@ function CheapLoopFields() {
             </View>
           </View>
           <Text style={styles.hint} testID="cheap-loop-weekly-hint">
-            Buys the cheaper YES or NO on unique ATM. After Take, Cooldown minutes, then hunt ATM
-            again. Cycles are exits this weekly event (default 10, max 50). One open weekly lot per
-            coin.
-            History Sell dumps now without waiting for Take or Flatten.
+            Buys the cheaper YES or NO on unique ATM. After Take or Stop, Cooldown minutes, then
+            hunt ATM again. Cycles are exits this weekly event (default 10, max 50). One open
+            weekly lot per coin.
+            History Sell dumps now without waiting for Take, Stop, or Flatten.
           </Text>
         </View>
+      ) : null}
+    </>
+  );
+}
+
+function CheapLoopStopBlock({
+  enabledKey,
+  usdKey,
+  enabled,
+  usd,
+  onEnabled,
+  onUsd,
+}: {
+  enabledKey: string;
+  usdKey: keyof RiskConfig;
+  enabled: boolean;
+  usd: number;
+  onEnabled: (next: boolean) => void;
+  onUsd: (next: number) => void;
+}) {
+  const meta = RISK_FIELD_META.find((m) => m.key === usdKey);
+  return (
+    <>
+      <View style={styles.field} testID={`risk-field-auto-${enabledKey}`}>
+        <View style={styles.toggleRow}>
+          <Text style={[styles.label, { marginBottom: 0 }]}>Stop</Text>
+          <Switch
+            testID={`risk-toggle-${enabledKey}`}
+            value={enabled}
+            onValueChange={onEnabled}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        <Text style={styles.hint}>
+          {enabled
+            ? 'After Min hold, sell bid IOC if that bid is fill − Stop (5–12¢).'
+            : 'Off. A falling ticket holds until Take or Flatten.'}
+        </Text>
+      </View>
+      {enabled && meta ? (
+        <RiskStepper meta={meta} value={usd} testPrefix="auto" onChange={onUsd} />
       ) : null}
     </>
   );

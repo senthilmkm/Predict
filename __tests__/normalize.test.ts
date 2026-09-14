@@ -411,6 +411,7 @@ describe('normalize / cushions', () => {
     expect(d.cheap_loop_min_gap_usd).toBe(0.1);
     expect(d.cheap_loop_min_live_cushion_pct).toBe(15);
     expect(d.cheap_loop_take_usd).toBe(0.05);
+    expect(d.cheap_loop_stop_enabled).toBe(false);
     expect(d.cheap_loop_stop_usd).toBe(0.06);
     expect(d.cheap_loop_cycles).toBe(1);
     expect(d.cheap_loop_assets).toEqual([]);
@@ -423,6 +424,8 @@ describe('normalize / cushions', () => {
     expect(d.cheap_loop_hourly_cooldown_minutes).toBe(3);
     expect(d.cheap_loop_hourly_assets).toEqual([]);
     expect(d.cheap_loop_hourly_skip_thin_bid).toBe(false);
+    expect(d.cheap_loop_hourly_stop_enabled).toBe(false);
+    expect(d.cheap_loop_hourly_stop_usd).toBe(0.06);
     expect(d.cheap_loop_weekly_enabled).toBe(false);
     expect(d.cheap_loop_weekly_start_minutes).toBe(10);
     expect(d.cheap_loop_weekly_flatten_minutes).toBe(5);
@@ -431,6 +434,8 @@ describe('normalize / cushions', () => {
     expect(d.cheap_loop_weekly_cooldown_minutes).toBe(3);
     expect(d.cheap_loop_weekly_assets).toEqual([]);
     expect(d.cheap_loop_weekly_skip_thin_bid).toBe(false);
+    expect(d.cheap_loop_weekly_stop_enabled).toBe(false);
+    expect(d.cheap_loop_weekly_stop_usd).toBe(0.06);
     const cheapOn = normalizeAppConfig({
       risk: {
         cheap_loop_enabled: true,
@@ -445,6 +450,16 @@ describe('normalize / cushions', () => {
     expect(cheapOn.cheap_loop_stop_usd).toBe(0.05);
     expect(cheapOn.cheap_loop_cheap_max_ask_usd).toBe(0.45);
     expect(cheapOn.cheap_loop_assets).toEqual(['BTC', 'HYPE']);
+    const cheapStopOn = normalizeAppConfig({
+      risk: {
+        cheap_loop_stop_enabled: true,
+        cheap_loop_take_usd: 0.08,
+        cheap_loop_stop_usd: 0.05,
+      },
+    } as any).risk;
+    expect(cheapStopOn.cheap_loop_stop_enabled).toBe(true);
+    expect(cheapStopOn.cheap_loop_take_usd).toBe(0.04);
+    expect(cheapStopOn.cheap_loop_stop_usd).toBe(0.05);
     const split = normalizeAppConfig({
       risk: { cash_out_skip_thin_bid: true, gold_fade_skip_thin_bid: false },
     } as any).risk;

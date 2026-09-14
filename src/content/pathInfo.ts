@@ -296,7 +296,7 @@ export const PATH_INFO = {
       '• Start after / Flatten left (15m defaults: after 2 minutes, dump with 5 minutes left)\n' +
       '• Cheap max ask, Min gap — buy only the cheaper YES or NO\n' +
       '• Min live % — |live − strike| must be at least this % of that coin’s Cushions $ (15m only; 0 = off). Not one dollar for every chip\n' +
-      '• Take (bid ≥ fill + Take), Min hold, Cooldown, Cycles, Lot contracts. Stop is Off\n' +
+      '• Take (bid ≥ fill + Take), Stop (default Off; On = bid ≤ fill − Stop after Min hold), Min hold, Cooldown, Cycles, Lot contracts\n' +
       '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block this path — Cycles is the cap\n' +
       '• IOC. 1-second watcher from fill for take / flatten, then cooldown re-entry\n\n' +
       'Does not use\n' +
@@ -311,7 +311,7 @@ export const PATH_INFO = {
       '• Cycles = completed exits this ticker this window. A miss or a sit-out does not burn a cycle\n' +
       '• Always dumps. Never both sides. Never hold to $1\n' +
       '• 5s grace after fill so your own print does not take you. Flatten and a $1 ask still dump during grace\n' +
-      '• Stop is Off. A ticket that prints well below fill holds until Take or Flatten\n' +
+      '• Stop default Off. On: after Min hold, dump bid IOC when that bid ≤ fill − Stop (5–12¢). Flatten and a $1 ask still dump during grace\n' +
       '• While On for that chip and inside Start after…Flatten left with Cycles left, Auto / Cash out / Gold fade do not enter that ticker\n' +
       '• Open Cheap loop, or cooldown with cycles left: Spike fade / Step buy / Pair lock sit out. Last-minute still owns new buys if Cheap loop has no lot\n' +
       '• Spike fade, Step buy, and Pair lock take first pick for a new buy when they want the ticker\n' +
@@ -327,14 +327,14 @@ export const PATH_INFO = {
       '• Hourly switch and hourly asset chips. Empty chips = no hourly buys. Asset must be On in Cushions\n' +
       '• Unique ATM strike on Kalshi above/below (KXBTCD, KXETHD, …). Tie sits out\n' +
       '• Start after / Flatten left (hourly defaults: after 10 minutes, dump with 5 minutes left)\n' +
-      '• Cheap max, Min gap, Take, Min hold, Cooldown, Cycles per hour event, Lot contracts. Stop is Off\n' +
+      '• Cheap max, Min gap, Take, Stop (default Off), Min hold, Cooldown, Cycles per hour event, Lot contracts\n' +
       '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block\n\n' +
       'Does not use\n' +
       '• The 15m Cheap loop chips or clocks\n' +
       '• 15m tickers (KXBTC15M, …)\n' +
       '• TWAP / Last-minute / Spike / Step / Pair (those stay on 15m)\n\n' +
       'Isolation\n' +
-      '• After fill, hold that strike until Take or Flatten. Do not hop ATM\n' +
+      '• After fill, hold that strike until Take, Stop (if On), or Flatten. Do not hop ATM\n' +
       '• One open hourly lot per coin. 15m Cheap loop may also hold the 15m book\n' +
       '• History Sell on a pending hourly fill dumps that ticker now (bid IOC). Allowed with Auto Off and Kill switch\n' +
       '• Open lot still exits if Hourly is later turned Off\n' +
@@ -347,7 +347,7 @@ export const PATH_INFO = {
       '• Weekly switch and weekly asset chips. Empty chips = no weekly buys. Asset must be On in Cushions\n' +
       '• Same KX*D series as Hourly. Cloud picks the live event whose open→close is 4–10 days (~7d week)\n' +
       '• Unique ATM strike. After fill, hold that ticker until Take, Flatten, or History Sell\n' +
-      '• Start after / Flatten left / Cheap max / Min gap / Take / Min hold / Cooldown (minutes). Cycles default 10 (max 50) per weekly event. Stop is Off\n' +
+      '• Start after / Flatten left / Cheap max / Min gap / Take / Stop (default Off) / Min hold / Cooldown (minutes). Cycles default 10 (max 50) per weekly event\n' +
       '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block\n\n' +
       'Does not use\n' +
       '• 15m or hourly Cheap loop chips or clocks\n' +
