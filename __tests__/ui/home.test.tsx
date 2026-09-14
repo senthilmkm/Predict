@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppState } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { fireEvent, render, waitFor, cleanup } from './test-utils';
 import { cancelScheduledPersist } from '../../src/storage/configPersistence';
 import {
@@ -13,6 +13,7 @@ import { resetPinnedPathsStoreForTests, usePinnedPathsStore } from '../../src/st
 import { defaultAppConfig } from '../../src/config/types';
 import { HomeScreen } from '../../src/screens/HomeScreen';
 import { heldOpenFillForTicker } from '../../src/screens/lastSignalsManual';
+import { colors } from '../../src/theme/tokens';
 
 const homeBuyReadyLean = {
   asset: 'BTC',
@@ -195,7 +196,34 @@ describe('HomeScreen', () => {
       leanAt: { BTC: new Date().toISOString() },
     });
     const s = await render(<HomeScreen />);
-    expect(s.getByTestId('signal-ask-BTC').props.children).toBe('YES $0.42 · NO $0.59');
+    expect(s.getByTestId('signal-ask-BTC').props.children).toMatch(/^YES 42¢ · NO 59¢ · \d+s$/);
+  });
+
+  test('Last signals keeps Cloud 1s YES/NO ask after 8s instead of the 10s lean', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        assets_enabled: { BTC: true } as any,
+      },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      refreshLiveAsks: async () => {},
+      liveAsksAt: new Date(Date.now() - 20_000).toISOString(),
+      liveAsks: { BTC: { yes_ask: 0.42, no_ask: 0.59 } },
+      leans: {
+        BTC: {
+          ...homeBuyReadyLean,
+          yes_ask: 0.55,
+          no_ask: 0.46,
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('signal-ask-BTC').props.children).toMatch(/^YES 42¢ · NO 59¢ · 2\d+s$/);
   });
 
   test('SKIP with a large gap on an upcoming window is not below cushion', async () => {
@@ -411,6 +439,31 @@ describe('HomeScreen', () => {
     expect(on.getByText('Buy YES')).toBeTruthy();
     expect(on.getByTestId('signal-gap-BTC').props.children).toBe('\u25B2 $400.00 (gap)');
     expect(on.getByTestId('home-buy-sell-label')).toBeTruthy();
+    expect(StyleSheet.flatten(on.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
+      colors.buyDeep
+    );
+  });
+
+  test('Buy stays mint when gap is over cushion but under 25% extra', async () => {
+    useConfigStore.setState({
+      config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
+      cloudKillSwitch: false,
+      leans: {
+        BTC: { ...homeBuyReadyLean, live: 300, strike: 100, abs_gap: 200 },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+    });
+    const s = await render(<HomeScreen />);
+    expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
+    expect(StyleSheet.flatten(s.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
+      colors.win
+    );
   });
 
   test('feature flag off hides Buy YES', async () => {

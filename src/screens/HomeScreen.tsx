@@ -38,6 +38,7 @@ import {
   pickLiveAsk,
   heldOpenFillForTicker,
   homeBuySkipReason,
+  homeBuyGapBeatsCushion,
   formatLastMinuteWatchLine,
   formatStepBuyWatchLine,
   formatSpikeFadeWatchLine,
@@ -556,7 +557,20 @@ export function HomeScreen({
       }),
     });
     const offerKind = lastSignalOfferKind(manualKind, tapSkipReason);
-    return { ...row, held, manualKind: offerKind, placing: Boolean(placing[row.asset]), extraLine };
+    const strongBuy =
+      offerKind === 'buy' &&
+      homeBuyGapBeatsCushion({
+        absGap: row.gap,
+        cushionUsd: config.cushions[row.asset],
+      });
+    return {
+      ...row,
+      held,
+      manualKind: offerKind,
+      placing: Boolean(placing[row.asset]),
+      extraLine,
+      strongBuy,
+    };
   });
   const actionRows = decoratedRows.filter((r) => r.manualKind === 'buy' || r.manualKind === 'sell');
   const otherRows = decoratedRows.filter((r) => r.manualKind === 'none');
@@ -767,8 +781,9 @@ export function HomeScreen({
             or Sell. A tap places now on Cloud Run (this phone never talks to Kalshi). If Auto-trade
             is On and its Risk tab also passes, Cloud can buy that same lean too, as long as shared
             caps allow (max trades / asset / 15m window, max trades / day, max open, daily loss).
-            Ask too rich and other Home skips hide Buy. Kill-Switch and the Last signals Buy / Sell
-            flag hide these buttons.
+            Ask too rich and other Home skips hide Buy. A dark green Buy means live is at least 25%
+            past that coin’s Cushion. Kill-Switch and the Last signals Buy / Sell flag hide these
+            buttons.
           </Text>
         ) : autoTradeOn ? (
           <Text style={styles.tradeHint}>
@@ -979,6 +994,7 @@ function LastSignalRow({
       failed?: boolean;
     } | null;
     askLine?: string;
+    strongBuy?: boolean;
   };
   onPlace: (action: 'buy' | 'sell', origin?: { x: number; y: number }) => void;
 }) {
@@ -1094,7 +1110,11 @@ function LastSignalRow({
           collapsable={false}
           style={[
             styles.manualBtn,
-            row.manualKind === 'sell' ? styles.manualBtnSell : styles.manualBtnBuy,
+            row.manualKind === 'sell'
+              ? styles.manualBtnSell
+              : row.strongBuy
+                ? styles.manualBtnBuyDeep
+                : styles.manualBtnBuy,
             row.placing && styles.manualBtnBusy,
           ]}
           onPress={firePlace}
@@ -1308,6 +1328,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   manualBtnBuy: { backgroundColor: colors.win },
+  manualBtnBuyDeep: { backgroundColor: colors.buyDeep },
   manualBtnSell: { backgroundColor: colors.warn },
   manualBtnBusy: { opacity: 0.72 },
   manualBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },

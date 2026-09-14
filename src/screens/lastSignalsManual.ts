@@ -207,6 +207,16 @@ function openLiveFills(
   }).length;
 }
 
+/** Home Buy turns dark green when |live − strike| is at least this × that coin’s Cushions $. */
+export const HOME_BUY_STRONG_GAP_MULT = 1.25;
+
+export function homeBuyGapBeatsCushion(opts: { absGap?: unknown; cushionUsd?: unknown }): boolean {
+  const gap = Number(opts.absGap);
+  const cushion = Number(opts.cushionUsd);
+  if (!Number.isFinite(gap) || !Number.isFinite(cushion) || cushion <= 0) return false;
+  return gap + 1e-9 >= cushion * HOME_BUY_STRONG_GAP_MULT;
+}
+
 /** Home Buy gate skip, or null if the tap would place. */
 export function homeBuySkipReason(opts: {
   cfg: AppConfig;

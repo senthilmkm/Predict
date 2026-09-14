@@ -17,6 +17,9 @@ import { formatSharedChipOverlapNote } from './tickerOverlap';
 const PATHS_HELP =
   'Tap a name to edit only that path. Star pins it on Home (three max). Unpin by starring again. Admin-off paths stay hidden.';
 
+/** Empty overlay above the sheet. Lower = sheet stretches up so Cheap loop is not clipped. */
+export const PATHS_PICKER_OVERLAY_PAD_TOP = 24;
+
 export function PathsPickerSheet({
   visible,
   onClose,
@@ -43,7 +46,8 @@ export function PathsPickerSheet({
   const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const config = useConfigStore((s) => s.config);
   const { height: windowHeight } = useWindowDimensions();
-  const sheetMaxHeight = Math.max(280, windowHeight - lift - 96);
+  const sheetMaxHeight = Math.max(280, windowHeight - lift - PATHS_PICKER_OVERLAY_PAD_TOP);
+  const scrollMaxHeight = Math.max(160, sheetMaxHeight - 132);
 
   useEffect(() => {
     if (visible) void hydrate();
@@ -108,7 +112,7 @@ export function PathsPickerSheet({
   return (
     <View
       testID="modal-paths-picker"
-      style={[styles.overlay, { paddingBottom: lift, paddingTop: 56 }]}
+      style={[styles.overlay, { paddingBottom: lift, paddingTop: PATHS_PICKER_OVERLAY_PAD_TOP }]}
       pointerEvents="auto"
     >
       <Pressable style={styles.scrim} onPress={onClose} testID="paths-picker-scrim" />
@@ -131,9 +135,10 @@ export function PathsPickerSheet({
         ) : null}
         <ScrollView
           testID="paths-picker-scroll"
-          style={styles.scroll}
+          style={[styles.scroll, { maxHeight: scrollMaxHeight }]}
           contentContainerStyle={styles.scrollInner}
           keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
           showsVerticalScrollIndicator
           bounces
         >
@@ -202,9 +207,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 4,
     paddingTop: 8,
+    overflow: 'hidden',
   },
   scroll: { flexGrow: 0 },
-  scrollInner: { paddingBottom: 18, flexGrow: 0 },
+  scrollInner: { paddingBottom: 28, flexGrow: 0 },
   grab: {
     width: 36,
     height: 4,

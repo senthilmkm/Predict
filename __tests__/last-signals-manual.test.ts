@@ -13,6 +13,7 @@ import {
   formatTwapWatchLine,
   heldOpenFillForTicker,
   homeBuySkipReason,
+  homeBuyGapBeatsCushion,
   lastSignalExtraLine,
   lastSignalManualKind,
   lastSignalOfferKind,
@@ -552,6 +553,16 @@ describe('last signal extra line', () => {
         phase: 'ended',
       })
     ).toEqual({ testID: 'skip-reason', text: 'window ended' });
+  });
+});
+
+describe('homeBuyGapBeatsCushion', () => {
+  test('needs live at least 25% past that coin’s cushion', () => {
+    expect(homeBuyGapBeatsCushion({ absGap: 218.75, cushionUsd: 175 })).toBe(true);
+    expect(homeBuyGapBeatsCushion({ absGap: 218, cushionUsd: 175 })).toBe(false);
+    expect(homeBuyGapBeatsCushion({ absGap: 0.625, cushionUsd: 0.5 })).toBe(true);
+    expect(homeBuyGapBeatsCushion({ absGap: 0.5, cushionUsd: 0.5 })).toBe(false);
+    expect(homeBuyGapBeatsCushion({ absGap: 400, cushionUsd: 0 })).toBe(false);
   });
 });
 
