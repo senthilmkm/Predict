@@ -855,7 +855,30 @@
               </span>
             </span>
           </label>
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagKalshiWsQuotes" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">Kalshi WebSocket quotes</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                Shared orderbook socket for live asks and bid size. Default Off = REST GET /markets
+                and GET /orderbook as today. On uses the reconstructed book when healthy; seq gap,
+                stale, or missing snapshot falls back to REST. Orders stay REST. Needs platform
+                Kalshi key in Secret Manager.
+              </span>
+            </span>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagKalshiWsFills" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">Kalshi WebSocket fills</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                After REST place, race fill / user_orders vs GET /order. Default Off. REST wins if
+                fill counts disagree. Independent of quotes.
+              </span>
+            </span>
+          </label>
         </div>
+        <p id="kalshiWsHealthLine" class="text-[11px] text-slate-500 font-mono">Kalshi WS quotes · down · fill disagree 0</p>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p id="featureUnsavedHint" class="hidden text-[11px] text-amber-400 font-semibold">Unsaved changes — click Save feature configs.</p>
           <button type="button" onclick="saveFeatureSettings()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl border border-sky-400">
@@ -1530,6 +1553,10 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       if (pairLock) pairLock.checked = flags.pairLock === true;
       const cheapLoop = document.getElementById('flagCheapLoop');
       if (cheapLoop) cheapLoop.checked = flags.cheapLoop === true;
+      const wsQuotes = document.getElementById('flagKalshiWsQuotes');
+      if (wsQuotes) wsQuotes.checked = flags.kalshiWsQuotes === true;
+      const wsFills = document.getElementById('flagKalshiWsFills');
+      if (wsFills) wsFills.checked = flags.kalshiWsFills === true;
     }
     async function saveFeatureSettings() {
       const status = document.getElementById('featureStatusMsg');
@@ -1551,6 +1578,8 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
               spikeFade: document.getElementById('flagSpikeFade').checked,
               pairLock: document.getElementById('flagPairLock').checked,
               cheapLoop: document.getElementById('flagCheapLoop').checked,
+              kalshiWsQuotes: document.getElementById('flagKalshiWsQuotes').checked,
+              kalshiWsFills: document.getElementById('flagKalshiWsFills').checked,
             },
           }),
         });
@@ -1869,6 +1898,13 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
             if (!cheapChip) continue;
             cheapChip.textContent = cheapLoopLabel;
             cheapChip.className = cheapLoopClass;
+          }
+          const ws = data.kalshiWs || {};
+          const wsLine = document.getElementById('kalshiWsHealthLine');
+          if (wsLine) {
+            const age = ws.lastSeqAgeMs == null ? 'n/a' : `${ws.lastSeqAgeMs}ms`;
+            const err = ws.lastError || ws.fallbackReason || 'ok';
+            wsLine.innerText = `Kalshi WS quotes · ${ws.status || 'down'} · tickers ${ws.tickers || 0} · seq age ${age} · ${err} · fill disagree ${ws.fillDisagree || 0}`;
           }
         }
         if (data.ok && data.metrics) {

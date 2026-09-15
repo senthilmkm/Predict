@@ -259,6 +259,11 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('Bid check (seconds)');
     expect(res.text).toContain('flagCashOut');
     expect(res.text).toContain('flagLastSignalsManualTrade');
+    expect(res.text).toContain('flagKalshiWsQuotes');
+    expect(res.text).toContain('flagKalshiWsFills');
+    expect(res.text).toContain('Kalshi WebSocket quotes');
+    expect(res.text).toContain('Kalshi WebSocket fills');
+    expect(res.text).toContain('kalshiWsHealthLine');
     expect(res.text).toContain('saveFeatureSettings');
     expect(res.text).toContain('Broadcast');
     expect(res.text).toContain('openBroadcastModal');
@@ -307,6 +312,8 @@ describe('Predict Admin Web Portal API Suite', () => {
       .set('x-admin-key', ADMIN_SECRET);
     expect(overviewRes.body.worker.tickIntervalSeconds).toBe(15);
     expect(overviewRes.body.worker.subTicksPerMinute).toBe(4);
+    expect(overviewRes.body.kalshiWs.status).toBe('down');
+    expect(overviewRes.body.kalshiWs.fillDisagree).toBe(0);
   });
 
   test('11b. POST /admin/api/config nested-merges kalshiRetry without wiping tick interval', async () => {
@@ -353,6 +360,8 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.systemConfig.featureFlags.spikeFade).toBe(false);
     expect(res.body.systemConfig.featureFlags.pairLock).toBe(false);
     expect(res.body.systemConfig.featureFlags.cheapLoop).toBe(false);
+    expect(res.body.systemConfig.featureFlags.kalshiWsQuotes).toBe(false);
+    expect(res.body.systemConfig.featureFlags.kalshiWsFills).toBe(false);
   });
 
   test('12. GET /admin/api/trades filters by asset, status, user, and reports realized P&L', async () => {

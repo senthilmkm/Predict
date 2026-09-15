@@ -6,6 +6,7 @@ import { workerRouter } from './routes/worker';
 import { adminRouter } from './routes/admin';
 import { peekAskTickers, refreshLiveAskBookShared } from './services/liveAskRefresh';
 import { peekLiveAsksByAsset } from './services/liveAsks';
+import { pumpKalshiWsQuotesFromConfig } from './services/kalshiWsPump';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8080;
@@ -38,6 +39,10 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`Predict GCP Cloud Backend running on 0.0.0.0:${PORT}`);
   });
   setInterval(() => {
+    const tickers = Object.values(peekAskTickers());
+    void pumpKalshiWsQuotesFromConfig(tickers).catch(() => {
+      /* next beat */
+    });
     const assets = Object.keys(peekAskTickers());
     const peek = Object.keys(peekLiveAsksByAsset());
     const list = assets.length ? assets : peek;

@@ -4,7 +4,6 @@ import {
   computeLean,
   defaultAppConfig,
   getMarketQuote,
-  KalshiClient,
   KalshiPlaceResult,
 } from 'trading-core';
 import { isCheapLoopHistorySellableTrade } from '../../../../packages/trading-core/src/cheapLoop';
@@ -36,6 +35,7 @@ import {
   writeAuditLog,
 } from './firestore';
 import { getUserSecret } from './secretManager';
+import { cloudKalshi } from './cloudKalshi';
 import { tryAcquirePlaceLock, releasePlaceLock } from './placeLock';
 import { isCloudKalshiPaused, noteTransientKalshiFailure } from './kalshiPause';
 import { economicPayPrice, fillCountOf, liveCloudTradesToday, cloudDailyRealizedPnl } from './settlement';
@@ -229,7 +229,7 @@ async function executeCheapLoopHistorySell(opts: {
     return fail(userId, 409, 'no_client', 'no_client', { asset, action: 'sell', tradeId, ticker });
   }
   const cfg = user?.config || defaultAppConfig();
-  const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+  const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
   const place = deps.placeOrderFn
     ? deps.placeOrderFn
     : (input: Parameters<PlaceOrderFn>[0]) => client.placeOrder(input);
@@ -550,7 +550,7 @@ async function executeManualBuy(opts: {
     const place =
       opts.placeOrderFn ||
       ((input) =>
-        new KalshiClient(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo').placeOrder(input));
+        cloudKalshi(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo').placeOrder(input));
     const placeRes = await place({
       ticker,
       side: gate.side || 'bid',
@@ -808,7 +808,7 @@ async function executeManualSell(opts: {
     const place =
       opts.placeOrderFn ||
       ((input) =>
-        new KalshiClient(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo').placeOrder(input));
+        cloudKalshi(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo').placeOrder(input));
     const placeRes = await place({
       ticker,
       side: order.side,

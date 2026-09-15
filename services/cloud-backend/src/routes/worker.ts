@@ -19,6 +19,9 @@ import {
 import { isGoodTillCanceled, resolvedPlaceFillCount } from '../../../../packages/trading-core/src/orderFill';
 import { LastTradeAction } from '../../../../packages/trading-core/src/types';
 import { getCfbApiCredentials, getUserSecret } from '../services/secretManager';
+import { cloudKalshi } from '../services/cloudKalshi';
+import { setKalshiWsFillsEnabled } from '../services/kalshiWsFills';
+import { readWsAskBid, readWsBestBidSize } from '../services/kalshiWsQuotes';
 import {
   getEnrolledActiveUsers,
   upsertUserDoc,
@@ -417,7 +420,7 @@ async function ingestCfbPrintsForAssets(watchAssets: AssetKey[], now: Date): Pro
     for (const userId of userIds) {
       const secret = await getUserSecret(userId);
       if (secret?.privateKeyPem && secret.keyId) {
-        sharedKalshi = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        sharedKalshi = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
         break;
       }
     }
@@ -507,6 +510,14 @@ async function overlayWatchLean(
 ): Promise<any> {
   if (snapshot) return leanWithSnapshotQuote(lean, snapshot.quotes);
   const next = { ...lean };
+  const ws = readWsAskBid(String(next.market_ticker || ''));
+  if (ws) {
+    if (ws.yes_ask != null) next.yes_ask = ws.yes_ask;
+    if (ws.no_ask != null) next.no_ask = ws.no_ask;
+    if (ws.yes_bid != null) next.yes_bid = ws.yes_bid;
+    if (ws.no_bid != null) next.no_bid = ws.no_bid;
+    return next;
+  }
   try {
     const quote = await getMarketQuote(next.market_ticker, fetch, { skipCache: true });
     if (quote?.yes_ask_dollars != null) next.yes_ask = Number(quote.yes_ask_dollars);
@@ -526,6 +537,8 @@ async function cashOutBestBidSize(
 ): Promise<number | null> {
   if (!enabled) return null;
   if (side !== 'YES' && side !== 'NO') return null;
+  const wsSize = readWsBestBidSize(ticker, side);
+  if (wsSize != null) return wsSize;
   try {
     const book = await getMarketOrderbook(ticker);
     return bestBidSizeOnBook(side, book);
@@ -829,7 +842,7 @@ async function runLastMinuteFlipIfNeeded(opts: {
   if (normalizeLastMinuteFlipSellUsd(opts.cfg.risk?.last_minute_flip_sell_usd) <= 0) return 0;
   if (pendingLastMinuteTradesForMarket(opts.userTrades, opts.marketTicker).length === 0) return 0;
   if (!opts.secret?.privateKeyPem || !opts.secret.keyId) return 0;
-  const client = new KalshiClient(opts.secret.keyId, opts.secret.privateKeyPem, 'production');
+  const client = cloudKalshi(opts.secret.keyId, opts.secret.privateKeyPem, 'production');
   const flipRes = await runCloudLastMinuteFlipExits({
     userId: opts.userId,
     asset: opts.asset,
@@ -887,6 +900,7 @@ async function runOneTick() {
   const now = new Date();
   const sysConfig = await getSystemConfig();
   const featureFlags = normalizeFeatureFlags(sysConfig?.featureFlags);
+  setKalshiWsFillsEnabled(featureFlags.kalshiWsFills);
   setActiveKalshiRetryPolicy(sysConfig?.kalshiRetry);
   if (isCloudKalshiPaused()) {
     return {
@@ -1163,7 +1177,7 @@ async function runOneTick() {
             ) {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
               if (cachedSecret?.privateKeyPem && cachedSecret.keyId) {
-                const stopClient = new KalshiClient(
+                const stopClient = cloudKalshi(
                   cachedSecret.keyId,
                   cachedSecret.privateKeyPem,
                   'production'
@@ -1387,7 +1401,7 @@ async function runOneTick() {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
               const secret = cachedSecret;
               if (secret?.privateKeyPem && secret.keyId) {
-                const client = new KalshiClient(
+                const client = cloudKalshi(
                   secret.keyId,
                   secret.privateKeyPem,
                   'production'
@@ -1459,7 +1473,7 @@ async function runOneTick() {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
               const secret = cachedSecret;
               if (secret?.privateKeyPem && secret.keyId) {
-                const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+                const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
                 const cashOutRes = await runCloudCashOutExits({
                   userId,
                   asset,
@@ -1536,7 +1550,7 @@ async function runOneTick() {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
               const secret = cachedSecret;
               if (secret?.privateKeyPem && secret.keyId) {
-                const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+                const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
                 const heldFade = pendingGoldFadeTradesForMarket(userTrades, marketTicker)[0];
                 const fadeSkipThin = resolveSkipThinBid(cfg.risk, 'gold_fade');
                 const fadeRes = await runCloudGoldFadeExits({
@@ -1617,7 +1631,7 @@ async function runOneTick() {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
               const secret = cachedSecret;
               if (secret?.privateKeyPem && secret.keyId) {
-                const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+                const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
                 const heldSpike = pendingSpikeFadeTradesForMarket(userTrades, marketTicker)[0];
                 const spikeSkipThin = resolveSkipThinBid(cfg.risk, 'spike_fade');
                 const spikeRes = await runCloudSpikeFadeExits({
@@ -1694,7 +1708,7 @@ async function runOneTick() {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
               const secret = cachedSecret;
               if (secret?.privateKeyPem && secret.keyId) {
-                const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+                const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
                 const cheapRes = await runCloudCheapLoopExits({
                   userId,
                   asset,
@@ -1771,7 +1785,7 @@ async function runOneTick() {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
               const secret = cachedSecret;
               if (secret?.privateKeyPem && secret.keyId) {
-                const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+                const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
                 const pairSkipThin = resolveSkipThinBid(cfg.risk, 'pair_lock');
                 const quotes = {
                   yes_bid: lean.yes_bid,
@@ -2183,7 +2197,7 @@ async function runOneTick() {
               if (cachedSecret === undefined) cachedSecret = await getUserSecret(userId);
               const twapClient =
                 cachedSecret?.privateKeyPem && cachedSecret.keyId
-                  ? new KalshiClient(cachedSecret.keyId, cachedSecret.privateKeyPem, 'production')
+                  ? cloudKalshi(cachedSecret.keyId, cachedSecret.privateKeyPem, 'production')
                   : null;
               const samples = await fetchCfbRtiPrints(asset, { now, kalshi: twapClient });
               ingestRecentCfbPrints(asset, samples, now);
@@ -2447,7 +2461,7 @@ async function runOneTick() {
               continue;
             }
 
-            const client = new KalshiClient(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo');
+            const client = cloudKalshi(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo');
             let pairLockRunnerFilled = false;
             try {
               if (entryPath === 'pair_lock') {
@@ -3148,7 +3162,7 @@ export async function runTwapLockWatchTick(
       for (const userId of twapLockWatchUsers.keys()) {
         const secret = await getUserSecret(userId);
         if (secret?.privateKeyPem && secret.keyId) {
-          sharedKalshi = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+          sharedKalshi = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
           break;
         }
       }
@@ -3277,7 +3291,7 @@ export async function runTwapLockWatchTick(
           lastTradeAction[asset] = skippedTradeAction(claimed.reason, tickIso);
           continue;
         }
-        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
         try {
           const recheck = evaluateTwapLockEnter({
             lean: leanForGate,
@@ -3608,7 +3622,7 @@ export async function runLastMinuteWatchTick(
           lastTradeAction[asset] = skippedTradeAction(claimed.reason, tickIso);
           continue;
         }
-        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
         const placeDecision = gate.decision || pickedSide;
         try {
           const placeRes = await client.placeOrder({
@@ -3815,7 +3829,7 @@ export async function runStepBuyWatchTick(
         if (stepBuyLots.count > 0) {
           const secret = await getUserSecret(userId);
           if (secret?.privateKeyPem && secret.keyId) {
-            const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+            const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
             const stopRes = await runCloudStepBuyStops({
               userId,
               asset,
@@ -3947,7 +3961,7 @@ export async function runStepBuyWatchTick(
           existingBuys: stepBuyLots.count > 0 ? stepBuyLots.count : existingBuys,
         });
         if (!claimed.ok) continue;
-        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
         const placeDecision = gate.decision || lean.decision;
         try {
           const freshTrades = await getTradeRecords(userId);
@@ -4171,7 +4185,7 @@ export async function runSpikeFadeWatchTick(
         if (pendingSpikeFadeTradesForMarket(userTrades, marketTicker).length > 0) {
           const secret = await getUserSecret(userId);
           if (secret?.privateKeyPem && secret.keyId) {
-            const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+            const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
             const heldSpike = pendingSpikeFadeTradesForMarket(userTrades, marketTicker)[0];
             const spikeSkipThin = resolveSkipThinBid(cfg.risk, 'spike_fade');
             const spikeRes = await runCloudSpikeFadeExits({
@@ -4313,7 +4327,7 @@ export async function runSpikeFadeWatchTick(
           existingBuys,
         });
         if (!claimed.ok) continue;
-        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
         const placeDecision = gate.decision || lean.decision;
         try {
           const freshTrades = await getTradeRecords(userId);
@@ -4508,7 +4522,7 @@ export async function runCheapLoopWatchTick(
         if (pendingCheapLoopTradesForMarket(userTrades, marketTicker).length > 0) {
           const secret = await getUserSecret(userId);
           if (secret?.privateKeyPem && secret.keyId) {
-            const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+            const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
             const cheapRes = await runCloudCheapLoopExits({
               userId,
               asset,
@@ -4651,7 +4665,7 @@ export async function runCheapLoopWatchTick(
           existingBuys,
         });
         if (!claimed.ok) continue;
-        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
         const placeDecision = gate.decision || lean.decision;
         try {
           const freshTrades = await getTradeRecords(userId);
@@ -4923,7 +4937,7 @@ async function runCheapLoopAtmLadderWatchTick(
             const secret = await getUserSecret(userId);
             if (secret?.privateKeyPem && secret.keyId) {
               const quoted = await overlayHourlyTickerLean(heldTicker, now, snapshot);
-              const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+              const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
               const cheapRes = await runCloudCheapLoopExits({
                 userId,
                 asset,
@@ -5092,7 +5106,7 @@ async function runCheapLoopAtmLadderWatchTick(
           existingBuys,
         });
         if (!claimed.ok) continue;
-        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
         const placeDecision = gate.decision || 'YES';
         try {
           const freshTrades = await getTradeRecords(userId);
@@ -5541,7 +5555,7 @@ export async function runPairLockWatchTick(
         ) {
           const secret = await getUserSecret(userId);
           if (secret?.privateKeyPem && secret.keyId) {
-            const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+            const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
             const watch = evaluatePairLockWatch({
               lots,
               quotes: {
@@ -5923,7 +5937,7 @@ export async function runPairLockWatchTick(
           existingBuys,
         });
         if (!claimed.ok) continue;
-        const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+        const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
         const placeDecision = gate.decision || lean.decision;
         let runnerFilled = false;
         try {
@@ -6167,7 +6181,7 @@ export async function runCashOutBidWatchTick(
       if (cachedSecretMissing(user)) continue;
       const secret = await getUserSecret(userId);
       if (!secret?.privateKeyPem || !secret.keyId) continue;
-      const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+      const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
       for (const asset of assets) {
         const rawLean = sharedLeans[asset];
         if (!rawLean?.market_ticker) continue;
@@ -6263,7 +6277,7 @@ export async function runCashOutBidWatchTick(
       if (cachedSecretMissing(user)) continue;
       const secret = await getUserSecret(userId);
       if (!secret?.privateKeyPem || !secret.keyId) continue;
-      const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+      const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
       const fadeSkipThin = resolveSkipThinBid(cfg.risk, 'gold_fade');
       for (const asset of assets) {
         const rawLean = sharedLeans[asset];
@@ -6391,7 +6405,7 @@ export async function runProtectWatchTick(
       if (cachedSecretMissing(user)) continue;
       const secret = await getUserSecret(userId);
       if (!secret?.privateKeyPem || !secret.keyId) continue;
-      const client = new KalshiClient(secret.keyId, secret.privateKeyPem, 'production');
+      const client = cloudKalshi(secret.keyId, secret.privateKeyPem, 'production');
       const userTokens = [...(user.pushTokens || []), ...(user.fcmTokens || [])].filter(
         (t, i, arr) => t && arr.indexOf(t) === i
       );

@@ -24,6 +24,8 @@ describe('feature flags', () => {
     expect(normalizeFeatureFlags(null).spikeFade).toBe(false);
     expect(normalizeFeatureFlags(null).pairLock).toBe(false);
     expect(normalizeFeatureFlags(null).cheapLoop).toBe(false);
+    expect(normalizeFeatureFlags(null).kalshiWsQuotes).toBe(false);
+    expect(normalizeFeatureFlags(null).kalshiWsFills).toBe(false);
     expect(normalizeFeatureFlags({}).cashOutBidCheckSeconds).toBe(3);
     expect(normalizeFeatureFlags({ cashOut: true, cashOutBidCheckSeconds: 1 }).cashOut).toBe(true);
     expect(normalizeFeatureFlags({ cashOutBidCheckSeconds: 1 }).cashOutBidCheckSeconds).toBe(2);
@@ -47,6 +49,10 @@ describe('feature flags', () => {
     expect(keepCash.spikeFade).toBe(true);
     expect(keepCash.pairLock).toBe(true);
     expect(keepCash.cheapLoop).toBe(true);
+    const keepWs = mergeFeatureFlags({ kalshiWsQuotes: true, kalshiWsFills: true }, { cheapLoop: true });
+    expect(keepWs.kalshiWsQuotes).toBe(true);
+    expect(keepWs.kalshiWsFills).toBe(true);
+    expect(keepWs.cheapLoop).toBe(true);
   });
 
   test('merge does not flip unspecified flags off', () => {
@@ -120,6 +126,8 @@ describe('systemConfig nested merge', () => {
         spikeFade: false,
         pairLock: false,
         cheapLoop: false,
+        kalshiWsQuotes: false,
+        kalshiWsFills: false,
       },
       broadcast: { templates: [{ id: 'system_maintenance', show: true, message: 'Hi' } as any] },
     });

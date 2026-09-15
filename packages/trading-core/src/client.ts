@@ -3,13 +3,15 @@ import { getActiveKalshiRetryPolicy, nextImmediateRetryWaitMs } from './kalshiRe
 import { ASSETS_CATALOG } from './types';
 import {
   extractKalshiOrderFields,
-  KalshiOrderFields,
+  type KalshiOrderFields,
   orderFillIsTerminal,
   placeFillConfirmWaitMsList,
   placeFillLooksComplete,
   preferOrderFields,
   sleepMs,
 } from './orderFill';
+
+export type { KalshiOrderFields };
 
 export type KalshiEnv = 'production' | 'demo';
 
@@ -56,12 +58,19 @@ export interface KalshiPlaceResult {
 }
 
 export class KalshiClient {
+  /** Cloud may race fill WS vs REST. Unset → REST GET /order poll only. */
+  fillConfirmOverride?: (initial: KalshiOrderFields) => Promise<KalshiOrderFields>;
+
   constructor(
     private readonly keyId: string,
     private readonly privateKeyPem: string,
     private readonly env: KalshiEnv = 'production',
     private readonly fetchImpl: typeof fetch = fetch
   ) {}
+
+  get credentials(): { keyId: string; privateKeyPem: string; env: KalshiEnv } {
+    return { keyId: this.keyId, privateKeyPem: this.privateKeyPem, env: this.env };
+  }
 
   get base(): string {
     return kalshiBaseUrl(this.env);
@@ -235,7 +244,7 @@ export class KalshiClient {
     };
   }
 
-  private async confirmPlaceFill(initial: KalshiOrderFields): Promise<KalshiOrderFields> {
+  async restConfirmPlaceFill(initial: KalshiOrderFields): Promise<KalshiOrderFields> {
     let fields = initial;
     const orderId = fields.order_id;
     if (!orderId) return fields;
@@ -252,6 +261,11 @@ export class KalshiClient {
       }
     }
     return fields;
+  }
+
+  private async confirmPlaceFill(initial: KalshiOrderFields): Promise<KalshiOrderFields> {
+    if (this.fillConfirmOverride) return this.fillConfirmOverride(initial);
+    return this.restConfirmPlaceFill(initial);
   }
 
   /**

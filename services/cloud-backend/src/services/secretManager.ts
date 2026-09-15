@@ -162,7 +162,55 @@ export function resetCfbApiCredentialsCacheForTests(): void {
   cfbCredsCache = null;
 }
 
-export { parseCfbSecretPayload };
+export const PLATFORM_KALSHI_SECRET_ID = 'predict-platform-kalshi-key';
+
+let platformKalshiCache: { at: number; value: UserKalshiSecret | null } | null = null;
+const PLATFORM_KALSHI_TTL_MS = 60_000;
+
+function parsePlatformKalshiPayload(raw: string): UserKalshiSecret | null {
+  const text = String(raw || '').trim();
+  if (!text || text === 'UNSET') return null;
+  try {
+    const obj = JSON.parse(text) as Record<string, unknown>;
+    const keyId = String(obj.keyId ?? obj.key_id ?? obj.id ?? '').trim();
+    const privateKeyPem = String(obj.privateKeyPem ?? obj.private_key_pem ?? obj.pem ?? '').trim();
+    if (!keyId || !privateKeyPem.includes('PRIVATE KEY')) return null;
+    return { keyId, privateKeyPem };
+  } catch {
+    return null;
+  }
+}
+
+/** Env wins. Else Secret Manager predict-platform-kalshi-key. Cached 60s. */
+export async function getPlatformKalshiSecret(): Promise<UserKalshiSecret | null> {
+  const envId = String(process.env.KALSHI_PLATFORM_KEY_ID || '').trim();
+  const envPem = String(process.env.KALSHI_PLATFORM_PEM || '').trim();
+  if (envId && envPem.includes('PRIVATE KEY')) return { keyId: envId, privateKeyPem: envPem };
+  if (platformKalshiCache && Date.now() - platformKalshiCache.at < PLATFORM_KALSHI_TTL_MS) {
+    return platformKalshiCache.value;
+  }
+  const sm = getClient();
+  if (!sm) {
+    platformKalshiCache = { at: Date.now(), value: localSecretStore.get('platform') || null };
+    return platformKalshiCache.value;
+  }
+  try {
+    const name = `projects/${projectId()}/secrets/${PLATFORM_KALSHI_SECRET_ID}/versions/latest`;
+    const [version] = await sm.accessSecretVersion({ name });
+    const parsed = parsePlatformKalshiPayload(version.payload?.data?.toString() || '');
+    platformKalshiCache = { at: Date.now(), value: parsed };
+    return parsed;
+  } catch {
+    platformKalshiCache = { at: Date.now(), value: null };
+    return null;
+  }
+}
+
+export function resetPlatformKalshiSecretCacheForTests(): void {
+  platformKalshiCache = null;
+}
+
+export { parseCfbSecretPayload, parsePlatformKalshiPayload };
 
 export async function deleteUserSecret(userId: string): Promise<void> {
   localSecretStore.delete(userId);

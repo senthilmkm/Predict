@@ -29,6 +29,8 @@ import { formatStepBuyWatcherChip, getStepBuyWatcherSnapshot } from '../services
 import { formatSpikeFadeWatcherChip, getSpikeFadeWatcherSnapshot } from '../services/spikeFadeWatcher';
 import { formatPairLockWatcherChip, getPairLockWatcherSnapshot } from '../services/pairLockWatcher';
 import { formatCheapLoopWatcherChip, getCheapLoopWatcherSnapshot } from '../services/cheapLoopWatcher';
+import { kalshiWsFillDisagreeCount } from '../services/kalshiWsFills';
+import { kalshiWsQuotesHealth } from '../services/kalshiWsQuotes';
 import { mergeBroadcastConfig, type BroadcastConfig } from '../services/broadcast';
 import { cloudDailyRealizedPnl, liveCloudTradesToday } from '../services/settlement';
 import {
@@ -145,6 +147,10 @@ adminRouter.get('/overview', async (req: Request, res: Response) => {
         ...cheapLoopWatcher,
         label: formatCheapLoopWatcherChip(cheapLoopWatcher),
       },
+      kalshiWs: {
+        ...kalshiWsQuotesHealth(),
+        fillDisagree: kalshiWsFillDisagreeCount(),
+      },
     });
   } catch (err: any) {
     console.error('admin overview error', err?.message || err);
@@ -231,6 +237,12 @@ function parseAdminFeatureFlagsPatch(raw: unknown): Partial<FeatureFlags> | unde
   }
   if (body.cheapLoop !== undefined) {
     patch.cheapLoop = body.cheapLoop === true;
+  }
+  if (body.kalshiWsQuotes !== undefined) {
+    patch.kalshiWsQuotes = body.kalshiWsQuotes === true;
+  }
+  if (body.kalshiWsFills !== undefined) {
+    patch.kalshiWsFills = body.kalshiWsFills === true;
   }
   return Object.keys(patch).length ? patch : undefined;
 }

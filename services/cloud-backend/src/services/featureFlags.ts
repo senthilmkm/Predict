@@ -23,6 +23,10 @@ export interface FeatureFlags {
   pairLock: boolean;
   /** Cheap loop Auto path. Default Off — Admin must enable. */
   cheapLoop: boolean;
+  /** Shared Kalshi orderbook WebSocket. Missing → Off (REST GET /markets). */
+  kalshiWsQuotes: boolean;
+  /** After REST place, race fill WS vs GET /order. REST wins on disagree. Missing → Off. */
+  kalshiWsFills: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -37,6 +41,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   spikeFade: false,
   pairLock: false,
   cheapLoop: false,
+  kalshiWsQuotes: false,
+  kalshiWsFills: false,
 };
 
 export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): FeatureFlags {
@@ -52,6 +58,8 @@ export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): Featu
     spikeFade: raw?.spikeFade === true,
     pairLock: raw?.pairLock === true,
     cheapLoop: raw?.cheapLoop === true,
+    kalshiWsQuotes: raw?.kalshiWsQuotes === true,
+    kalshiWsFills: raw?.kalshiWsFills === true,
   };
 }
 

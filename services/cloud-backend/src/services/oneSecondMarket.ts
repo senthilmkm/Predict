@@ -1,4 +1,5 @@
 import { AssetKey } from 'trading-core';
+import { readWsAskBid } from './kalshiWsQuotes';
 
 export type OneSecondAskQuote = {
   yes_ask?: number;
@@ -191,6 +192,11 @@ export async function fetchAskQuotesOnce(
   await Promise.all(
     uniq.map(async (ticker) => {
       try {
+        const ws = readWsAskBid(ticker);
+        if (ws) {
+          quotes.set(ticker, ws);
+          return;
+        }
         const raw = await fetchQuote(ticker);
         quotes.set(ticker, quoteFromMarket(raw));
       } catch {
