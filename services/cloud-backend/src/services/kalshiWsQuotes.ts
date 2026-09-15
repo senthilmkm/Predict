@@ -36,6 +36,30 @@ export type OpenKalshiWs = (url: string, headers: Record<string, string>) => Kal
 
 const OPEN = 1;
 
+/** `ws` delivers Buffer; tests inject parsed objects or JSON strings. */
+export function parseKalshiWsPayload(raw: unknown): any | null {
+  if (raw == null) return null;
+  if (typeof raw === 'object' && !Buffer.isBuffer(raw) && !ArrayBuffer.isView(raw) && !Array.isArray(raw)) {
+    return raw;
+  }
+  try {
+    let text = '';
+    if (typeof raw === 'string') text = raw;
+    else if (Buffer.isBuffer(raw)) text = raw.toString('utf8');
+    else if (raw instanceof ArrayBuffer) text = Buffer.from(raw).toString('utf8');
+    else if (ArrayBuffer.isView(raw)) {
+      const view = raw as ArrayBufferView;
+      text = Buffer.from(view.buffer, view.byteOffset, view.byteLength).toString('utf8');
+    } else if (Array.isArray(raw) && raw.every((part) => Buffer.isBuffer(part))) {
+      text = Buffer.concat(raw).toString('utf8');
+    } else text = String(raw);
+    if (!text) return null;
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function defaultOpen(url: string, headers: Record<string, string>): KalshiWsSocket {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const WS = require('ws');
@@ -160,12 +184,7 @@ function sendCmd(sess: QuotesSession, body: Record<string, unknown>): void {
 }
 
 function handleMessage(sess: QuotesSession, raw: unknown): void {
-  let data: any;
-  try {
-    data = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  } catch {
-    return;
-  }
+  const data = parseKalshiWsPayload(raw);
   if (!data || typeof data !== 'object') return;
   const type = String(data.type || '');
   const nowMs = Date.now();

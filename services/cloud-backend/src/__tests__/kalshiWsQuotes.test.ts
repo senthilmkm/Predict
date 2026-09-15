@@ -91,6 +91,16 @@ describe('kalshiWsQuotes session', () => {
     expect(readWsAskBid('KXBTC15M')?.yes_bid).toBe(0.61);
     expect(readWsBestBidSize('KXBTC15M', 'NO')).toBe(8);
     expect(kalshiWsQuotesHealth().status).toBe('up');
+    injectKalshiWsMessageForTests(
+      Buffer.from(
+        JSON.stringify({
+          type: 'orderbook_snapshot',
+          seq: 1,
+          msg: { market_ticker: 'KXGOLD15M', yes: [['0.22', 1]], no: [['0.77', 2]] },
+        })
+      )
+    );
+    expect(readWsAskBid('KXGOLD15M')?.yes_bid).toBe(0.22);
     injectKalshiWsMessageForTests({
       type: 'orderbook_delta',
       seq: 3,

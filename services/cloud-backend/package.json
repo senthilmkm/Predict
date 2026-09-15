@@ -7,7 +7,7 @@
     "start": "node dist/bundle.js",
     "dev": "tsx watch src/index.ts",
     "test": "jest --runInBand",
-    "deploy": "npm run build && gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --region us-east1 --allow-unauthenticated"
+    "deploy": "npm run build && gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --region us-east1 --allow-unauthenticated --min-instances 1 --no-cpu-throttling"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.11.0",

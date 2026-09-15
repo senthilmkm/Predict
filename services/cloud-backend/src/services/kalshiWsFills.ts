@@ -10,6 +10,7 @@ import {
   kalshiWsAuthHeaders,
   kalshiWsUrl,
   openDefaultKalshiWs,
+  parseKalshiWsPayload,
   type KalshiWsSocket,
 } from './kalshiWsQuotes';
 
@@ -100,12 +101,8 @@ export async function confirmPlaceFillWsOrRest(
     }
     let acc: KalshiOrderFields | null = null;
     const onMsg = (raw: unknown) => {
-      let data: any;
-      try {
-        data = typeof raw === 'string' ? JSON.parse(String(raw)) : raw;
-      } catch {
-        return;
-      }
+      const data = parseKalshiWsPayload(raw);
+      if (!data) return;
       const type = String(data?.type || '');
       const msg = (data?.msg && typeof data.msg === 'object' ? data.msg : data) as Record<string, unknown>;
       if (type !== 'fill' && type !== 'user_order' && type !== 'user_orders') return;
