@@ -2,6 +2,7 @@ import { defaultAppConfig } from '../src/config/types';
 import { isNewerOrSameLiveAsksAt } from '../src/services/cloud/cloudClient';
 import {
   formatGapDisplay,
+  mergeCloudHomeLean,
   formatLiveAskAgeSec,
   formatLiveAskLine,
   pickLiveAsk,
@@ -9,6 +10,7 @@ import {
   formatStepBuyWatchLine,
   formatSpikeFadeWatchLine,
   formatPairLockWatchLine,
+  formatCapLockWatchLine,
   formatCheapLoopWatchLine,
   formatTwapWatchLine,
   heldOpenFillForTicker,
@@ -120,6 +122,20 @@ describe('last signals manual kind', () => {
     ).toEqual({ text: 'with you $7.20 (gap)', tone: 'with' });
   });
 
+  test('Cloud 1s lean updates gap and applies this user cushion to YES/SKIP', () => {
+    const next = mergeCloudHomeLean(
+      { ok: true, asset: 'Gold', decision: 'SKIP', phase: 'live', live: 3680, strike: 3680, abs_gap: 0 },
+      { asset: 'Gold', live: 3687.2, strike: 3680, phase: 'live', market_ticker: 'KXGOLD15M-T' },
+      4
+    );
+    expect(next?.abs_gap).toBe(7.2);
+    expect(next?.decision).toBe('YES');
+    expect(next?.live).toBe(3687.2);
+    const below = mergeCloudHomeLean(next, { live: 3682, strike: 3680, phase: 'live' }, 4);
+    expect(below?.abs_gap).toBe(2);
+    expect(below?.decision).toBe('SKIP');
+  });
+
   test('feature off or kill hides buttons', () => {
     expect(lastSignalManualKind({ featureOn: false, killSwitch: false, row: yesRow })).toBe('none');
     expect(lastSignalManualKind({ featureOn: true, killSwitch: true, row: yesRow })).toBe('none');
@@ -158,9 +174,9 @@ describe('last signals manual kind', () => {
     expect(
       heldOpenFillForTicker(
         [
-          { market_ticker: ticker, dry_run: true, outcome: 'pending', fill_count: 2, side: 'YES' },
-          { market_ticker: ticker, dry_run: false, outcome: 'miss', fill_count: 0, side: 'YES' },
-          { market_ticker: ticker, dry_run: false, outcome: 'pending', fill_count: 3, side: 'NO' },
+          { market_ticker: ticker, dry_run: true, outcome: 'pending', fill_count: 2, side: 'YES', entry_path: 'auto' },
+          { market_ticker: ticker, dry_run: false, outcome: 'miss', fill_count: 0, side: 'YES', entry_path: 'auto' },
+          { market_ticker: ticker, dry_run: false, outcome: 'pending', fill_count: 3, side: 'NO', entry_path: 'auto' },
         ],
         ticker
       )?.side
@@ -297,7 +313,33 @@ describe('last signal extra line', () => {
         startMinutes: 5,
         secondsLeft: 400,
       })
-    ).toBe('Step buy watching · 400s left');
+    ).toBeNull();
+    expect(
+      formatStepBuyWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 6,
+        startMinutes: 5,
+        secondsLeft: 400,
+        autoStatus: 'skipped',
+        autoDetail: 'skipped · Step buy cushion % not reached',
+      })
+    ).toBe('Step buy watching · Step buy cushion % not reached');
+    expect(
+      formatStepBuyWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 6,
+        startMinutes: 5,
+        secondsLeft: 400,
+        autoStatus: 'skipped',
+        autoDetail: 'skipped · ask too rich',
+      })
+    ).toBeNull();
     expect(
       formatStepBuyWatchLine({
         adminEnabled: true,
@@ -330,7 +372,21 @@ describe('last signal extra line', () => {
         untilMinutes: 6,
         secondsLeft: 600,
       })
-    ).toBe('Spike fade watching · 600s left');
+    ).toBeNull();
+    expect(
+      formatSpikeFadeWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 8,
+        startMinutes: 2,
+        untilMinutes: 6,
+        secondsLeft: 400,
+        autoStatus: 'skipped',
+        autoDetail: 'skipped · Spike fade outside window',
+      })
+    ).toBeNull();
     expect(
       lastSignalExtraLine({
         manualKind: 'none',
@@ -352,7 +408,7 @@ describe('last signal extra line', () => {
         untilMinutes: 10,
         secondsLeft: 600,
       })
-    ).toBe('Pair lock watching · 600s left');
+    ).toBeNull();
     expect(
       formatPairLockWatchLine({
         adminEnabled: true,
@@ -391,6 +447,73 @@ describe('last signal extra line', () => {
         pairLockHolding: true,
       })
     ).toEqual({ testID: 'skip-reason', text: 'pair lock is holding this ticket' });
+    expect(
+      formatCapLockWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 0.5,
+        minutesRemaining: 14.5,
+        windowOpenSeconds: 90,
+        allowLater: true,
+        secondsLeft: 870,
+      })
+    ).toBeNull();
+    expect(
+      formatCapLockWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 0.5,
+        minutesRemaining: 14.5,
+        windowOpenSeconds: 90,
+        allowLater: true,
+        secondsLeft: 870,
+        autoStatus: 'skipped',
+        autoDetail: 'skipped · asks too rich to lock',
+      })
+    ).toBe('Cap lock · asks too rich to lock');
+    expect(
+      formatCapLockWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        minutesElapsed: 15,
+        minutesRemaining: 0,
+        windowOpenSeconds: 90,
+        allowLater: true,
+        secondsLeft: 1,
+        autoStatus: 'skipped',
+        autoDetail: 'skipped · window ended',
+      })
+    ).toBeNull();
+    expect(
+      formatCapLockWatchLine({
+        adminEnabled: true,
+        userEnabled: true,
+        assetEnabled: true,
+        asset: 'Gold',
+        secondsLeft: 800,
+        holding: true,
+        lots: {
+          yesCount: 1,
+          noCount: 1,
+          yesFillUsd: 0.48,
+          noFillUsd: 0.48,
+          yesFilledAt: '2026-09-15T10:00:00.000Z',
+          noFilledAt: '2026-09-15T10:00:01.000Z',
+          matchedCount: 1,
+          extraSide: null,
+          extraCount: 0,
+          attempted: true,
+          locked: true,
+        },
+        lockedPnlUsd: -0.04,
+      })
+    ).toBe('Cap lock holding · locked −$0.04');
     expect(
       formatCheapLoopWatchLine({
         adminEnabled: true,
@@ -565,6 +688,42 @@ describe('last signal extra line', () => {
         phase: 'ended',
       })
     ).toEqual({ testID: 'skip-reason', text: 'window ended' });
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        autoDetail: 'Cap lock · window ended',
+        autoStatus: 'skipped',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        phase: 'live',
+      })
+    ).toBeNull();
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        autoDetail: 'skipped · window ended',
+        autoStatus: 'skipped',
+        decision: 'SKIP',
+        isOpen: true,
+        noMarket: false,
+        phase: 'ended',
+      })
+    ).toEqual({ testID: 'skip-reason', text: 'window ended' });
+    expect(
+      lastSignalExtraLine({
+        manualKind: 'none',
+        autoTradeOn: true,
+        autoDetail: 'Pair lock watching · 600s left',
+        autoStatus: 'skipped',
+        decision: 'YES',
+        isOpen: true,
+        noMarket: false,
+        phase: 'live',
+      })
+    ).toBeNull();
   });
 });
 

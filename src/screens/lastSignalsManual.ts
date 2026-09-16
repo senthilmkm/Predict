@@ -1,3 +1,4 @@
+import { decideLean, LeanResult } from '../services/lean/lean';
 import { TradeRecord } from '../storage/repos';
 import { AppConfig, AssetRegistry } from '../config/types';
 import { configForHomeBuy } from '../config/normalize';
@@ -18,6 +19,12 @@ import {
 import { isStepBuyEnterPath, normalizeStepBuyStartMinutes } from '../../packages/trading-core/src/stepBuy';
 import { isSpikeFadeEnterPath, isSpikeFadeEnterWindow } from '../../packages/trading-core/src/spikeFade';
 import { isPairLockEnterPath, isPairLockEnterWindow } from '../../packages/trading-core/src/pairLock';
+import {
+  capLockHoldingWatchText,
+  isCapLockEnterPath,
+  isCapLockEnterWindow,
+  type CapLockLotState,
+} from '../../packages/trading-core/src/capLock';
 import {
   cheapLoopCooldownWatchText,
   cheapLoopHoldingWatchText,
@@ -82,6 +89,44 @@ export function formatGapDisplay(opts: {
   if (dir === 'above') return { text: `\u25B2 ${amt} (gap)`, tone: 'neutral' };
   if (dir === 'below') return { text: `\u25BC ${amt} (gap)`, tone: 'neutral' };
   return { text: `${amt} (gap)`, tone: 'neutral' };
+}
+
+/** Overlay Cloud 1s live/strike/gap onto a Home row. Decision still uses this user's Cushion. */
+export function mergeCloudHomeLean(
+  prev: LeanResult | undefined,
+  incoming: Record<string, unknown> | null | undefined,
+  cushion: number
+): LeanResult | undefined {
+  if (!incoming || typeof incoming !== 'object') return prev;
+  const live = Number(incoming.live);
+  const strike = Number(incoming.strike);
+  if (!Number.isFinite(live) || !Number.isFinite(strike)) return prev;
+  const phase = String(incoming.phase || prev?.phase || 'live') as LeanResult['phase'];
+  const decided = decideLean(phase || 'live', live, strike, Number(cushion) || 0);
+  return {
+    ...(prev || { ok: true, asset: String(incoming.asset || ''), decision: 'SKIP', phase: 'live' }),
+    ok: true,
+    asset: (String(incoming.asset || prev?.asset || '') || prev?.asset) as LeanResult['asset'],
+    market_ticker: String(incoming.market_ticker || prev?.market_ticker || '') || prev?.market_ticker,
+    event_ticker: String(incoming.event_ticker || prev?.event_ticker || '') || prev?.event_ticker,
+    live,
+    strike,
+    abs_gap: decided.abs_gap,
+    decision: decided.decision,
+    phase: phase || prev?.phase || 'live',
+    yes_ask: Number.isFinite(Number(incoming.yes_ask)) ? Number(incoming.yes_ask) : prev?.yes_ask,
+    no_ask: Number.isFinite(Number(incoming.no_ask)) ? Number(incoming.no_ask) : prev?.no_ask,
+    yes_bid: Number.isFinite(Number(incoming.yes_bid)) ? Number(incoming.yes_bid) : prev?.yes_bid,
+    no_bid: Number.isFinite(Number(incoming.no_bid)) ? Number(incoming.no_bid) : prev?.no_bid,
+    minutes_left: Number.isFinite(Number(incoming.minutes_left))
+      ? Number(incoming.minutes_left)
+      : prev?.minutes_left,
+    minutes_remaining: Number.isFinite(Number(incoming.minutes_remaining))
+      ? Number(incoming.minutes_remaining)
+      : prev?.minutes_remaining,
+    close_utc: incoming.close_utc != null ? String(incoming.close_utc) : prev?.close_utc,
+    price_source: incoming.price_source != null ? String(incoming.price_source) : prev?.price_source,
+  };
 }
 
 export type LiveAskQuote = {
@@ -277,6 +322,84 @@ export function skipSignalReason(phase?: string | null): string {
   return 'below cushion';
 }
 
+type PathWatchId = 'twap' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'cap_lock' | 'cheap_loop';
+
+const PATH_NAME_RE =
+  /\b(TWAP|Last-minute|last-minute|Step buy|Spike fade|Pair lock|Cap lock|Cheap loop|Gold fade|gold fade|Cash out|cash out|Protect)\b/i;
+
+const PATH_OWNED_RE: Record<PathWatchId, RegExp> = {
+  twap: /\btwap\b|not locked|lock feed|not last minute/i,
+  last_minute: /last[- ]?minute/i,
+  step_buy: /step buy/i,
+  spike_fade: /spike fade|no spike in band|cheap side off band/i,
+  pair_lock: /pair lock/i,
+  cap_lock: /cap lock|too rich to lock|first leg missed|waiting for second leg|holding leftover/i,
+  cheap_loop:
+    /cheap loop|cheap side already decided|favorite already decided|no cheap-side gap|live too close to strike|no unique atm|no hourly market|no weekly market|cheap side not cheap/i,
+};
+
+export function stripLastActionPrefix(detail: string): string {
+  return String(detail || '')
+    .replace(/^(skipped|failed)\s*·\s*/i, '')
+    .trim();
+}
+
+/** Idle / closed-window copy that should not sit on Last signals. */
+export function isIdleWindowLastSignalCopy(detail?: string | null): boolean {
+  const raw = String(detail || '').trim();
+  if (!raw) return true;
+  const reason = stripLastActionPrefix(raw);
+  if (/^(window ended|window_ended|next window|window not live)$/i.test(reason)) return true;
+  if (/\bwatching\s*·\s*\d+\s*s\s*left\b/i.test(raw) || /\bwatching\s*·\s*\d+\s*s\s*left\b/i.test(reason)) {
+    return true;
+  }
+  return false;
+}
+
+export function lastSignalCopyPathLabel(detail?: string | null): string | null {
+  const reason = stripLastActionPrefix(String(detail || ''));
+  const match = reason.match(PATH_NAME_RE);
+  return match ? match[1] : null;
+}
+
+function pathOwnedWatchReason(
+  path: PathWatchId,
+  autoStatus?: string | null,
+  autoDetail?: string | null
+): string | null {
+  const status = String(autoStatus || '').toLowerCase();
+  if (status !== 'skipped' && status !== 'failed') return null;
+  const raw = String(autoDetail || '').trim();
+  if (!raw || isIdleWindowLastSignalCopy(raw)) return null;
+  const reason = stripLastActionPrefix(raw);
+  if (!reason) return null;
+  const otherPath = lastSignalCopyPathLabel(reason);
+  const own = PATH_OWNED_RE[path];
+  if (otherPath && !own.test(otherPath) && !own.test(reason)) return null;
+  if (!own.test(reason)) return null;
+  return reason;
+}
+
+/** Cloud lastTradeAction on the row when no path watch/hold line applies. */
+export function homeAutoLastActionCopy(opts: {
+  autoDetail?: string | null;
+  autoStatus?: string | null;
+  phase?: string | null;
+}): string | null {
+  const detail = String(opts.autoDetail || '').trim();
+  if (!detail) return null;
+  const status = String(opts.autoStatus || '').toLowerCase();
+  const isPlace = status === 'placed' || /^placed\b/i.test(detail) || /^resting\b/i.test(detail);
+  if (isPlace) return detail;
+  const phase = String(opts.phase || 'live').toLowerCase();
+  if (phase && phase !== 'live') return null;
+  if (isIdleWindowLastSignalCopy(detail)) return null;
+  if (lastSignalCopyPathLabel(detail)) return null;
+  const reason = stripLastActionPrefix(detail);
+  if (/too rich to lock|^not locked$/i.test(reason)) return null;
+  return detail;
+}
+
 /** Last ~70s on a TWAP coin. Stays on the row even if Home Buy is showing. */
 export function formatTwapWatchLine(opts: {
   adminEnabled: boolean;
@@ -303,16 +426,8 @@ export function formatTwapWatchLine(opts: {
   }
   const status = String(opts.autoStatus || '');
   if (status === 'placed') return null;
-  if (status === 'skipped') {
-    const reason = String(opts.autoDetail || '')
-      .replace(/^skipped\s*·\s*/i, '')
-      .trim();
-    if (reason) return `TWAP watching · ${reason}`;
-  }
-  if (status === 'failed') {
-    const detail = String(opts.autoDetail || '').trim();
-    if (detail) return `TWAP watching · ${detail}`;
-  }
+  const owned = pathOwnedWatchReason('twap', opts.autoStatus, opts.autoDetail);
+  if (owned) return `TWAP watching · ${owned}`;
   return `TWAP watching · ${Math.round(left)}s left`;
 }
 
@@ -346,16 +461,8 @@ export function formatLastMinuteWatchLine(opts: {
   }
   const status = String(opts.autoStatus || '');
   if (status === 'placed') return null;
-  if (status === 'skipped') {
-    const reason = String(opts.autoDetail || '')
-      .replace(/^skipped\s*·\s*/i, '')
-      .trim();
-    if (reason) return `Last-minute watching · ${reason}`;
-  }
-  if (status === 'failed') {
-    const detail = String(opts.autoDetail || '').trim();
-    if (detail) return `Last-minute watching · ${detail}`;
-  }
+  const owned = pathOwnedWatchReason('last_minute', opts.autoStatus, opts.autoDetail);
+  if (owned) return `Last-minute watching · ${owned}`;
   return `Last-minute watching · ${Math.round(left)}s left`;
 }
 
@@ -391,17 +498,9 @@ export function formatStepBuyWatchLine(opts: {
   if (!started) return null;
   const status = String(opts.autoStatus || '');
   if (status === 'placed') return null;
-  if (status === 'skipped') {
-    const reason = String(opts.autoDetail || '')
-      .replace(/^skipped\s*·\s*/i, '')
-      .trim();
-    if (reason) return `Step buy watching · ${reason}`;
-  }
-  if (status === 'failed') {
-    const detail = String(opts.autoDetail || '').trim();
-    if (detail) return `Step buy watching · ${detail}`;
-  }
-  return `Step buy watching · ${Math.round(left)}s left`;
+  const owned = pathOwnedWatchReason('step_buy', opts.autoStatus, opts.autoDetail);
+  if (owned) return `Step buy watching · ${owned}`;
+  return null;
 }
 
 export function formatSpikeFadeWatchLine(opts: {
@@ -441,17 +540,9 @@ export function formatSpikeFadeWatchLine(opts: {
   if (!inWindow) return null;
   const status = String(opts.autoStatus || '');
   if (status === 'placed') return null;
-  if (status === 'skipped') {
-    const reason = String(opts.autoDetail || '')
-      .replace(/^skipped\s*·\s*/i, '')
-      .trim();
-    if (reason) return `Spike fade watching · ${reason}`;
-  }
-  if (status === 'failed') {
-    const detail = String(opts.autoDetail || '').trim();
-    if (detail) return `Spike fade watching · ${detail}`;
-  }
-  return `Spike fade watching · ${Math.round(left)}s left`;
+  const owned = pathOwnedWatchReason('spike_fade', opts.autoStatus, opts.autoDetail);
+  if (owned) return `Spike fade watching · ${owned}`;
+  return null;
 }
 
 export function formatPairLockWatchLine(opts: {
@@ -491,17 +582,56 @@ export function formatPairLockWatchLine(opts: {
   if (!inWindow) return null;
   const status = String(opts.autoStatus || '');
   if (status === 'placed') return null;
-  if (status === 'skipped') {
-    const reason = String(opts.autoDetail || '')
-      .replace(/^skipped\s*·\s*/i, '')
-      .trim();
-    if (reason) return `Pair lock watching · ${reason}`;
+  const owned = pathOwnedWatchReason('pair_lock', opts.autoStatus, opts.autoDetail);
+  if (owned) return `Pair lock watching · ${owned}`;
+  return null;
+}
+
+export function formatCapLockWatchLine(opts: {
+  adminEnabled: boolean;
+  userEnabled: boolean;
+  assetEnabled: boolean;
+  asset: string;
+  assets?: unknown;
+  secondsLeft: number | null;
+  minutesElapsed?: number | null;
+  minutesRemaining?: number | null;
+  windowOpenSeconds?: unknown;
+  allowLater?: unknown;
+  holding?: boolean;
+  lots?: CapLockLotState | null;
+  lockedPnlUsd?: number | null;
+  autoDetail?: string | null;
+  autoStatus?: string | null;
+}): string | null {
+  if (
+    !isCapLockEnterPath({
+      adminEnabled: opts.adminEnabled,
+      userEnabled: opts.userEnabled,
+      assetEnabled: opts.assetEnabled,
+      asset: opts.asset,
+      assets: opts.assets,
+    })
+  ) {
+    return null;
   }
-  if (status === 'failed') {
-    const detail = String(opts.autoDetail || '').trim();
-    if (detail) return `Pair lock watching · ${detail}`;
-  }
-  return `Pair lock watching · ${Math.round(left)}s left`;
+  const left = opts.secondsLeft;
+  if (left == null || !Number.isFinite(left) || left <= 0) return null;
+  const inWindow =
+    opts.holding === true ||
+    isCapLockEnterWindow({
+      minutesElapsed: opts.minutesElapsed,
+      minutesRemaining: opts.minutesRemaining,
+      windowOpenSeconds: opts.windowOpenSeconds,
+      allowLater: opts.allowLater,
+    });
+  if (!inWindow) return null;
+  if (opts.lots) return capLockHoldingWatchText(opts.lots, opts.lockedPnlUsd);
+  const status = String(opts.autoStatus || '');
+  if (status === 'placed') return null;
+  const owned = pathOwnedWatchReason('cap_lock', opts.autoStatus, opts.autoDetail);
+  if (owned) return `Cap lock · ${owned}`;
+  return null;
 }
 
 export function formatCheapLoopWatchLine(opts: {
@@ -548,16 +678,8 @@ export function formatCheapLoopWatchLine(opts: {
   }
   const status = String(opts.autoStatus || '');
   if (status === 'placed') return null;
-  if (status === 'skipped') {
-    const reason = String(opts.autoDetail || '')
-      .replace(/^skipped\s*·\s*/i, '')
-      .trim();
-    if (reason) return `Cheap loop watching · ${reason}`;
-  }
-  if (status === 'failed') {
-    const detail = String(opts.autoDetail || '').trim();
-    if (detail) return `Cheap loop watching · ${detail}`;
-  }
+  const owned = pathOwnedWatchReason('cheap_loop', opts.autoStatus, opts.autoDetail);
+  if (owned) return `Cheap loop watching · ${owned}`;
   return null;
 }
 
@@ -573,7 +695,7 @@ export function twapWatchSecondsLeft(closeUtc: unknown, nowMs: number): number |
  * TWAP last-minute watch stays on the coin even if Home Buy is showing.
  * Home Buy skip → that skip only (never Auto-trade's skip), even if Buy is hidden.
  * Sell showing → Cloud place/resting detail only (never Auto skip).
- * No Home skip and no button → Auto-trade last action, or the SKIP reason for this phase.
+ * No Home skip and no button → Auto last action (not a closed path's leftover), or the SKIP reason for this phase.
  */
 export function lastSignalExtraLine(opts: {
   manualKind: 'buy' | 'sell' | 'none';
@@ -593,12 +715,14 @@ export function lastSignalExtraLine(opts: {
   stepBuyHolding?: boolean;
   spikeFadeHolding?: boolean;
   pairLockHolding?: boolean;
+  capLockHolding?: boolean;
   cheapLoopHolding?: boolean;
   twapWatchText?: string | null;
   lastMinuteWatchText?: string | null;
   stepBuyWatchText?: string | null;
   spikeFadeWatchText?: string | null;
   pairLockWatchText?: string | null;
+  capLockWatchText?: string | null;
   cheapLoopWatchText?: string | null;
   overlapText?: string | null;
 }): { testID: 'trade-action' | 'skip-reason'; text: string; placed?: boolean; failed?: boolean } | null {
@@ -630,6 +754,9 @@ export function lastSignalExtraLine(opts: {
   if (opts.pairLockHolding) {
     return { testID: 'skip-reason', text: 'pair lock is holding this ticket' };
   }
+  if (opts.capLockHolding) {
+    return { testID: 'skip-reason', text: 'cap lock is holding this ticket' };
+  }
   if (opts.cheapLoopHolding) {
     return { testID: 'skip-reason', text: 'cheap loop is holding this ticket' };
   }
@@ -654,6 +781,9 @@ export function lastSignalExtraLine(opts: {
   if (opts.pairLockWatchText) {
     return { testID: 'skip-reason', text: opts.pairLockWatchText };
   }
+  if (opts.capLockWatchText) {
+    return { testID: 'skip-reason', text: opts.capLockWatchText };
+  }
   if (opts.cheapLoopWatchText) {
     return { testID: 'skip-reason', text: opts.cheapLoopWatchText };
   }
@@ -671,13 +801,20 @@ export function lastSignalExtraLine(opts: {
     }
     return null;
   }
-  if (opts.autoTradeOn && opts.autoDetail) {
-    return {
-      testID: 'trade-action',
-      text: opts.autoDetail,
-      placed: opts.autoStatus === 'placed',
-      failed: opts.autoStatus === 'failed',
-    };
+  if (opts.autoTradeOn) {
+    const copy = homeAutoLastActionCopy({
+      autoDetail: opts.autoDetail,
+      autoStatus: opts.autoStatus,
+      phase: opts.phase,
+    });
+    if (copy) {
+      return {
+        testID: 'trade-action',
+        text: copy,
+        placed: opts.autoStatus === 'placed',
+        failed: opts.autoStatus === 'failed',
+      };
+    }
   }
   if (opts.decision === 'SKIP') {
     return { testID: 'skip-reason', text: skipSignalReason(opts.phase) };
