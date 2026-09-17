@@ -1,4 +1,4 @@
-import { iocKalshiPrice, refreshIocPayForPlace } from '../packages/trading-core/src/iocPlace';
+import { iocKalshiPrice, refreshIocPayForPlace, homeBuyPayFromLiveAsk } from '../packages/trading-core/src/iocPlace';
 
 describe('refreshIocPayForPlace', () => {
   const quotes = { yes_ask: 0.52, no_ask: 0.41 };
@@ -92,5 +92,23 @@ describe('iocKalshiPrice', () => {
         existingPayUsd: 0.4,
       })
     ).toEqual({ side: 'ask', price: '0.42' });
+  });
+});
+
+describe('homeBuyPayFromLiveAsk', () => {
+  test('pays live ask + chase capped by max entry', () => {
+    expect(
+      homeBuyPayFromLiveAsk({ liveAskUsd: 0.5, chaseUsd: 0.02, maxEntryAskUsd: 0.9 })
+    ).toEqual({ ok: true, payUsd: 0.52 });
+    expect(
+      homeBuyPayFromLiveAsk({ liveAskUsd: 0.89, chaseUsd: 0.02, maxEntryAskUsd: 0.9 })
+    ).toEqual({ ok: true, payUsd: 0.9 });
+    expect(
+      homeBuyPayFromLiveAsk({ liveAskUsd: 0.91, chaseUsd: 0.02, maxEntryAskUsd: 0.9 })
+    ).toEqual({ ok: false, skip_reason: 'ask_moved' });
+    expect(homeBuyPayFromLiveAsk({ liveAskUsd: null, chaseUsd: 0.02 })).toEqual({
+      ok: false,
+      skip_reason: 'ask_unavailable',
+    });
   });
 });

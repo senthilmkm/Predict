@@ -67,11 +67,12 @@ export function orderFillIsTerminal(fields: KalshiOrderFields): boolean {
   return false;
 }
 
-/** Production: ~4s of GET /order after place. Tests: no sleep, still poll. */
+/** Production: short GET /order polls after place (~1.5s). Tests: no sleep. */
 export function placeFillConfirmWaitMsList(): number[] {
   const test = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
   if (test) return [0, 0, 0];
-  return [600, 900, 1200, 1500];
+  // Prefer place ASAP; Kalshi usually has fill_count on the place response.
+  return [250, 500, 750];
 }
 
 export function isGoodTillCanceled(tif: unknown): boolean {

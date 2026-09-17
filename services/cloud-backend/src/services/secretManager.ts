@@ -7,6 +7,8 @@ export interface UserKalshiSecret {
 
 // In-memory fallback for local dry-run tests when GCP Secret Manager is offline
 const localSecretStore = new Map<string, UserKalshiSecret>();
+const USER_SECRET_TTL_MS = 60_000;
+const userSecretCache = new Map<string, { secret: UserKalshiSecret; at: number }>();
 
 let client: SecretManagerServiceClient | null = null;
 function getClient(): SecretManagerServiceClient | null {
@@ -43,6 +45,8 @@ export async function saveUserSecret(
   if (!sm) {
     console.warn('[SECRET_MANAGER_FALLBACK_MEMORY]', { userId });
     localSecretStore.set(userId, { keyId, privateKeyPem });
+    invalidateUserSecretCache(userId);
+    userSecretCache.set(userId, { secret: { keyId, privateKeyPem }, at: Date.now() });
     return;
   }
 
@@ -80,25 +84,49 @@ export async function saveUserSecret(
     },
   });
   console.log('[SECRET_MANAGER_VERSION_ADDED]', { version: v.name });
+  invalidateUserSecretCache(userId);
+  userSecretCache.set(userId, { secret: { keyId, privateKeyPem }, at: Date.now() });
 }
 
 export async function getUserSecret(userId: string): Promise<UserKalshiSecret | null> {
+  const id = String(userId || '').trim();
+  if (!id) return null;
+  const hit = userSecretCache.get(id);
+  if (hit && Date.now() - hit.at < USER_SECRET_TTL_MS) {
+    return hit.secret;
+  }
+
   const sm = getClient();
   const projectId = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'predict-trading-0904';
 
   if (!sm) {
-    return localSecretStore.get(userId) || null;
+    const local = localSecretStore.get(id) || null;
+    if (local) userSecretCache.set(id, { secret: local, at: Date.now() });
+    return local;
   }
 
   try {
-    const name = `${secretName(projectId, userId)}/versions/latest`;
+    const name = `${secretName(projectId, id)}/versions/latest`;
     const [version] = await sm.accessSecretVersion({ name });
     const payloadStr = version.payload?.data?.toString();
     if (!payloadStr) return null;
-    return JSON.parse(payloadStr) as UserKalshiSecret;
+    const secret = JSON.parse(payloadStr) as UserKalshiSecret;
+    userSecretCache.set(id, { secret, at: Date.now() });
+    return secret;
   } catch {
-    return localSecretStore.get(userId) || null;
+    const local = localSecretStore.get(id) || null;
+    if (local) userSecretCache.set(id, { secret: local, at: Date.now() });
+    return local;
   }
+}
+
+/** Drop cached PEM after a key rotate / save so the next place uses the new secret. */
+export function invalidateUserSecretCache(userId?: string): void {
+  if (userId == null || userId === '') {
+    userSecretCache.clear();
+    return;
+  }
+  userSecretCache.delete(String(userId).trim());
 }
 
 export const CFB_API_KEY_SECRET_ID = 'predict-cfb-api-key';

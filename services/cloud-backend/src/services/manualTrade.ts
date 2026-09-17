@@ -13,6 +13,7 @@ import {
   countWindowBuysForTicker,
   evaluateStaticGate,
   formatSkipReason,
+  GateResult,
   windowBuyCap,
 } from '../../../../packages/trading-core/src/gates';
 import {
@@ -21,6 +22,11 @@ import {
 } from '../../../../packages/trading-core/src/protectSell';
 import { setActiveKalshiRetryPolicy } from '../../../../packages/trading-core/src/kalshiRetry';
 import { isGoodTillCanceled, resolvedPlaceFillCount } from '../../../../packages/trading-core/src/orderFill';
+import {
+  homeBuyPayFromLiveAsk,
+  iocKalshiPrice,
+  liveAskForDecision,
+} from '../../../../packages/trading-core/src/iocPlace';
 import { configForHomeBuy } from '../../../../packages/trading-core/src/pathRisk';
 import { isMarketOpen } from './marketHours';
 import {
@@ -57,7 +63,8 @@ import {
   protectAlertId,
 } from './cloudAlerts';
 import { fillCollapseId } from './leanAlerts';
-
+import { leanFromSharedCache } from './leanSignalCache';
+import { readWsAskBid } from './kalshiWsQuotes';
 export type ManualTradeAction = 'buy' | 'sell';
 
 export interface ManualOrderInput {
@@ -118,6 +125,71 @@ async function auditError(
   details: Record<string, unknown>
 ): Promise<void> {
   await writeAuditLog(userId, 'ERROR', details);
+}
+
+/** Live yes/no ask for Home Buy — WS book first, else one REST market GET. */
+async function freshManualBuyAsks(
+  ticker: string,
+  lean: { yes_ask?: number | null; no_ask?: number | null },
+  quoteFn: typeof getMarketQuote
+): Promise<{ yes_ask?: number | null; no_ask?: number | null }> {
+  const ws = readWsAskBid(String(ticker || ''));
+  if (ws && (ws.yes_ask != null || ws.no_ask != null)) {
+    return {
+      yes_ask: ws.yes_ask ?? lean.yes_ask ?? null,
+      no_ask: ws.no_ask ?? lean.no_ask ?? null,
+    };
+  }
+  try {
+    const market = await quoteFn(ticker, fetch, { skipCache: true });
+    return {
+      yes_ask:
+        market?.yes_ask_dollars != null
+          ? Number(market.yes_ask_dollars)
+          : lean.yes_ask ?? null,
+      no_ask:
+        market?.no_ask_dollars != null ? Number(market.no_ask_dollars) : lean.no_ask ?? null,
+    };
+  } catch {
+    return { yes_ask: lean.yes_ask ?? null, no_ask: lean.no_ask ?? null };
+  }
+}
+
+/** Reprice gate at send: live ask + Home chase, capped by max entry ask. */
+function repriceHomeBuyGate(
+  gate: GateResult,
+  decision: 'YES' | 'NO',
+  quotes: { yes_ask?: number | null; no_ask?: number | null },
+  cfg: ReturnType<typeof defaultAppConfig>
+): GateResult {
+  if (!gate.ok) return gate;
+  const liveAsk = liveAskForDecision(decision, quotes);
+  const priced = homeBuyPayFromLiveAsk({
+    liveAskUsd: liveAsk,
+    chaseUsd: cfg.risk?.chase_above_ask_usd,
+    maxEntryAskUsd: cfg.risk?.max_entry_ask_usd,
+  });
+  if (!priced.ok) {
+    // No live ask → keep gate pay (already ask+chase from evaluateStaticGate).
+    if (priced.skip_reason === 'ask_unavailable') return gate;
+    return { ok: false, skip_reason: priced.skip_reason };
+  }
+  const px = iocKalshiPrice({
+    decision,
+    payUsd: priced.payUsd,
+    existingSide: gate.side,
+    existingPrice: gate.price,
+    existingPayUsd: gate.pay_price,
+  });
+  const count = Math.max(0, Number(gate.count) || 0);
+  return {
+    ...gate,
+    decision,
+    pay_price: priced.payUsd,
+    price: px.price,
+    side: px.side,
+    notional_usd: count > 0 ? Math.round(count * priced.payUsd * 100) / 100 : gate.notional_usd,
+  };
 }
 
 function heldOpenFill(
@@ -373,6 +445,7 @@ export async function executeManualOrder(
   const leanFn = deps.computeLeanFn || computeLean;
   const secretFn = deps.getUserSecretFn || getUserSecret;
   const hoursFn = deps.isMarketOpenFn || isMarketOpen;
+  const quoteFn = deps.getMarketQuoteFn || getMarketQuote;
 
   const [user, sys] = await Promise.all([getUser(userId), getSys()]);
   setActiveKalshiRetryPolicy(sys?.kalshiRetry);
@@ -406,9 +479,23 @@ export async function executeManualOrder(
     return fail(userId, 409, 'asset_disabled', 'asset_disabled', { asset, action });
   }
 
+  // Lean + trades + secret in parallel. Prefer the 1s shared lean (WS asks) so we place ASAP.
   let lean: Awaited<ReturnType<typeof computeLean>>;
+  const leanPromise = (async () => {
+    if (!deps.computeLeanFn) {
+      const cached = leanFromSharedCache(asset, now);
+      if (cached?.market_ticker && cached.ok !== false) {
+        return { ...cached, ok: true, asset } as Awaited<ReturnType<typeof computeLean>>;
+      }
+    }
+    return leanFn(asset, 0, fetch, now);
+  })();
+
+  let leanResult: Awaited<ReturnType<typeof computeLean>>;
+  let rawTrades: TradeRecordDoc[];
   try {
-    lean = await leanFn(asset, 0, fetch, now);
+    [leanResult, rawTrades] = await Promise.all([leanPromise, getTrades(userId)]);
+    lean = leanResult;
   } catch (err) {
     noteTransientKalshiFailure(err);
     return fail(userId, 502, 'lean_failed', undefined, {
@@ -427,7 +514,6 @@ export async function executeManualOrder(
     });
   }
 
-  const rawTrades = await getTrades(userId);
   const sellDecision =
     action === 'sell' && (input.decision === 'YES' || input.decision === 'NO')
       ? input.decision
@@ -463,6 +549,7 @@ export async function executeManualOrder(
     rawTrades,
     secretFn,
     placeOrderFn: deps.placeOrderFn,
+    getMarketQuoteFn: quoteFn,
     decision: input.decision === 'NO' ? 'NO' : input.decision === 'YES' ? 'YES' : undefined,
   });
 }
@@ -480,6 +567,7 @@ async function executeManualBuy(opts: {
   rawTrades: TradeRecordDoc[];
   secretFn: typeof getUserSecret;
   placeOrderFn?: PlaceOrderFn;
+  getMarketQuoteFn?: typeof getMarketQuote;
   decision?: 'YES' | 'NO';
 }): Promise<ManualOrderResult> {
   const { userId, asset, requestId, now, cfg, user, lean, ticker, held, rawTrades } = opts;
@@ -608,11 +696,6 @@ async function executeManualBuy(opts: {
     });
   }
 
-  const secret = await opts.secretFn(userId);
-  if (!secret?.privateKeyPem || !secret.keyId) {
-    return fail(userId, 409, 'no_client', 'no_client', { asset, action: 'buy', ticker });
-  }
-
   const lock = await tryAcquirePlaceLock({
     userId,
     ticker,
@@ -624,18 +707,36 @@ async function executeManualBuy(opts: {
     return fail(userId, 409, lock.reason, lock.reason, { asset, action: 'buy', ticker });
   }
 
-  const isLive = user?.state !== 'KILL_SWITCH';
+  // Fresh ask (WS first, else REST) + Home chase, then place ASAP.
   try {
+    const [secret, liveQuotes] = await Promise.all([
+      opts.secretFn(userId),
+      freshManualBuyAsks(ticker, lean, opts.getMarketQuoteFn || getMarketQuote),
+    ]);
+    if (!secret?.privateKeyPem || !secret.keyId) {
+      return fail(userId, 409, 'no_client', 'no_client', { asset, action: 'buy', ticker });
+    }
+
+    const buyGate = repriceHomeBuyGate(gate, buyDecision, liveQuotes, cfg);
+    if (!buyGate.ok || !buyGate.price || !buyGate.count) {
+      return fail(userId, 409, 'gate_skip', buyGate.skip_reason || 'ask_moved', {
+        asset,
+        action: 'buy',
+        ticker,
+      });
+    }
+
+    const isLive = user?.state !== 'KILL_SWITCH';
     const place =
       opts.placeOrderFn ||
       ((input) =>
         cloudKalshi(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo').placeOrder(input));
     const placeRes = await place({
       ticker,
-      side: gate.side || 'bid',
-      count: gate.count,
-      price: gate.price,
-      time_in_force: gate.time_in_force,
+      side: buyGate.side || 'bid',
+      count: buyGate.count,
+      price: buyGate.price,
+      time_in_force: buyGate.time_in_force,
       dry_run: !isLive,
       client_order_id: requestId.slice(0, 64),
     });
@@ -645,8 +746,8 @@ async function executeManualBuy(opts: {
       noteTransientKalshiFailure(rawErr);
       const lowBal = /insufficient[_ ]balance/i.test(rawErr);
       const need =
-        gate.notional_usd != null && Number.isFinite(Number(gate.notional_usd))
-          ? ` Home Buy sized ~$${Number(gate.notional_usd).toFixed(2)}.`
+        buyGate.notional_usd != null && Number.isFinite(Number(buyGate.notional_usd))
+          ? ` Home Buy sized ~$${Number(buyGate.notional_usd).toFixed(2)}.`
           : '';
       const message = lowBal
         ? rawErr.includes(':')
@@ -661,15 +762,15 @@ async function executeManualBuy(opts: {
       });
     }
 
-    const tif = placeRes.payload?.time_in_force || gate.time_in_force;
+    const tif = placeRes.payload?.time_in_force || buyGate.time_in_force;
     const gtcResting = isGoodTillCanceled(tif);
     const { fillCount, filled } = resolvedPlaceFillCount({
       dryRun: Boolean(placeRes.dry_run) || !isLive,
       fillCount: placeRes.fill_count,
-      intendedCount: gate.count,
+      intendedCount: buyGate.count,
     });
     const accepted = filled || (gtcResting && Boolean(placeRes.order_id));
-    const payPrice = Number(gate.pay_price ?? 0) || null;
+    const payPrice = Number(buyGate.pay_price ?? 0) || null;
     const tradeId = `trade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const tradeDoc: TradeRecordDoc = {
       tradeId,
@@ -677,10 +778,10 @@ async function executeManualBuy(opts: {
       ticker,
       asset,
       decision: buyDecision,
-      count: filled ? String(fillCount) : String(gate.count || 0),
-      price: gate.price,
+      count: filled ? String(fillCount) : String(buyGate.count || 0),
+      price: buyGate.price,
       notionalUsd:
-        filled && payPrice ? Math.round(fillCount * payPrice * 100) / 100 : gate.notional_usd || 0,
+        filled && payPrice ? Math.round(fillCount * payPrice * 100) / 100 : buyGate.notional_usd || 0,
       dryRun: !isLive,
       status: filled ? 'FILLED' : accepted ? 'SUBMITTED' : 'CANCELLED',
       leanDiff: absGap,
@@ -695,7 +796,8 @@ async function executeManualBuy(opts: {
       entryPath: 'home',
     };
     await saveTradeRecord(userId, tradeDoc);
-    await writeAuditLog(userId, 'TRADE_TRIGGERED', {
+    const priceVal = parseFloat(String(buyGate.price || 0));
+    void writeAuditLog(userId, 'TRADE_TRIGGERED', {
       source: 'manual_buy',
       tradeId,
       ticker,
@@ -704,9 +806,8 @@ async function executeManualBuy(opts: {
       mode: isLive ? 'live' : 'demo',
       filled,
       accepted,
-    });
-    const priceVal = parseFloat(String(gate.price || 0));
-    await upsertUserDoc(userId, {
+    }).catch(() => undefined);
+    void upsertUserDoc(userId, {
       lastTradeAction: {
         ...(user as any)?.lastTradeAction,
         [asset]: filled
@@ -723,14 +824,14 @@ async function executeManualBuy(opts: {
               }
             : { status: 'failed', detail: 'IOC no fill', at: now.toISOString() },
       },
-    } as any);
+    } as any).catch(() => undefined);
 
+    const userTokens = [
+      ...((user as { pushTokens?: string[] })?.pushTokens || []),
+      ...((user as { fcmTokens?: string[] })?.fcmTokens || []),
+    ].filter((t, i, arr) => t && arr.indexOf(t) === i);
     if (filled) {
-      const userTokens = [
-        ...((user as { pushTokens?: string[] })?.pushTokens || []),
-        ...((user as { fcmTokens?: string[] })?.fcmTokens || []),
-      ].filter((t, i, arr) => t && arr.indexOf(t) === i);
-      await emitCloudAlert({
+      void emitCloudAlert({
         userId,
         alertId: fillAlertId(tradeId),
         kind: 'order_filled',
@@ -749,27 +850,22 @@ async function executeManualBuy(opts: {
         tradeId,
         decision: buyDecision,
         at: now.toISOString(),
-      });
+      }).catch(() => undefined);
     }
 
     if (!filled && !accepted) {
-      const userTokens = [
-        ...((user as { pushTokens?: string[] })?.pushTokens || []),
-        ...((user as { fcmTokens?: string[] })?.fcmTokens || []),
-      ].filter((t, i, arr) => t && arr.indexOf(t) === i);
-      const missBody = iocMissAlertBody({
-        asset,
-        decision: buyDecision,
-        entryPath: 'home',
-        price: priceVal,
-        count: gate.count,
-      });
-      await emitCloudAlert({
+      void emitCloudAlert({
         userId,
         alertId: missAlertId(tradeId),
         kind: 'ioc_miss',
         title: iocMissAlertTitle('home'),
-        body: missBody,
+        body: iocMissAlertBody({
+          asset,
+          decision: buyDecision,
+          entryPath: 'home',
+          price: priceVal,
+          count: buyGate.count,
+        }),
         cfg,
         tokens: userTokens,
         asset,
@@ -777,15 +873,15 @@ async function executeManualBuy(opts: {
         tradeId,
         decision: buyDecision,
         at: now.toISOString(),
-      });
+      }).catch(() => undefined);
       const ticket = Number.isFinite(priceVal) && priceVal > 0 ? ` at $${priceVal.toFixed(2)}` : '';
-      await auditError(userId, {
+      void auditError(userId, {
         source: 'manual_buy',
         error: 'ioc_miss',
         ticker,
         asset,
         message: `IOC no fill${ticket}`,
-      });
+      }).catch(() => undefined);
       return {
         ok: false,
         httpStatus: 409,

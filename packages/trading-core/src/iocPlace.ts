@@ -63,3 +63,23 @@ export function iocKalshiPrice(opts: {
   if (yes) return { side: 'bid', price: pay.toFixed(2) };
   return { side: 'ask', price: pay.toFixed(2) };
 }
+
+/**
+ * Home Buy limit at send: live ask + chase, capped by max entry ask.
+ * Prefer this over a stale gate pay so the IOC hits the book ASAP at the right ticket.
+ */
+export function homeBuyPayFromLiveAsk(opts: {
+  liveAskUsd?: unknown;
+  chaseUsd?: unknown;
+  maxEntryAskUsd?: unknown;
+}):
+  | { ok: true; payUsd: number }
+  | { ok: false; skip_reason: 'ask_unavailable' | 'ask_moved' } {
+  const ask = ticketUsd(opts.liveAskUsd);
+  if (ask == null || !(ask > 0)) return { ok: false, skip_reason: 'ask_unavailable' };
+  const chase = Math.max(0, Math.min(0.05, Number(opts.chaseUsd) || 0));
+  const maxEntry = ticketUsd(opts.maxEntryAskUsd) ?? 0.99;
+  if (ask > maxEntry + 1e-9) return { ok: false, skip_reason: 'ask_moved' };
+  const pay = Math.min(0.99, maxEntry, snapCent(ask + chase));
+  return { ok: true, payUsd: pay };
+}
