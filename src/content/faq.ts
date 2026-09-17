@@ -214,10 +214,17 @@ export function getFaqCategories(): FaqCategory[] {
             'If Auto-trade is On and its Risk tab also passes, Cloud Run can still buy that same lean on the worker tick — even while Home shows Buy. Shared caps apply to both paths (max open, max trades / day, max trades / asset / 15m window, daily loss). If the 15m window cap is 1, the first fill (Home or Auto) uses the slot.\n\n' +
             'One tap tells Cloud Run to place now. The phone never talks to Kalshi. There is no confirm sheet.\n\n' +
             'Purpose: trade without Auto-trade, or take a contract you see while the app is open even if Auto-trade is On.\n\n' +
-            'A tap uses Settings → Risk → Home Buy: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, and chase. Shared limits (max open, trades/day, 15m window, daily loss) and cushions apply to both Home Buy and Auto-trade. Auto-trade uses the Auto-trade tab, including Protect money.\n\n' +
+            'A tap uses Settings → Risk → Home Buy: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, chase, and Enter when gap ≥ cushion ×. Shared limits (max open, trades/day, 15m window, daily loss) and cushions apply to both Home Buy and Auto-trade. Auto-trade uses the Auto-trade tab, including Protect money.\n\n' +
             'Last signals shows one extra line. If the same coin is on more than one path, that line names who is holding or who already filled this window, and who sits out (for example “Spike fade already filled this window — Last-minute sits out”). Otherwise a Home Buy skip stays on that YES/NO row (Buy is hidden). Auto-trade skips are not shown on that row. If there is no Home skip and no Buy/Sell, Auto-trade’s last skip/place can show.\n\n' +
             'Success shows a gold “Gold buy success” chip flying up from the button — not a popup. Failures show an error popup.\n\n' +
             'You can lose the full amount of that order. GTC can rest on the book. IOC can miss. If the Admin flag Last signals Buy / Sell is Off, buttons disappear and Cloud rejects taps.',
+        },
+        {
+          id: 'home-enter-cushion',
+          q: 'What does Home Buy “Enter when gap ≥ cushion ×” mean?',
+          a:
+            'Settings → Risk → Home Buy. Scales the Buy tap’s cushion check without changing Cushions $.\n\n' +
+            'Default 1× = full cushion (same as before). 0.8× = Buy can light earlier (80% of cushion). Cushion lean has its own Enter × and ignores this one.',
         },
         {
           id: 'home-sell-at',

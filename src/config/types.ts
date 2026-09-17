@@ -164,6 +164,11 @@ export interface RiskConfig {
    */
   protect_sell_grace_seconds: number;
   /**
+   * Home Buy only. Buy when live gap ≥ cushion × this.
+   * Default 1. Range 0.5–1.5. Missing → 1. Cushion lean ignores it.
+   */
+  home_enter_cushion_mult?: number;
+  /**
    * Home Buy only. Dump when held mark ≥ entry × (1 + pct/100). 0 = Off.
    * Default 0. Range 0.5–100 step 0.5. Independent of Protect money flip.
    */
@@ -461,6 +466,7 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_enabled: false,
       protect_sell_gap_ratio: 1,
       protect_sell_grace_seconds: 45,
+      home_enter_cushion_mult: 1,
       home_sell_at_pct: 0,
       cushion_lean_sell_at_pct: 0,
       cushion_lean_enabled: true,

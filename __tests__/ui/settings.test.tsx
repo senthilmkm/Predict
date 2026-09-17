@@ -605,6 +605,18 @@ describe('Settings credentials', () => {
     expect(useConfigStore.getState().config.risk.min_minutes_left).toBe(2);
   });
 
+  test('Home Buy enter mult stepper updates × cushion', async () => {
+    const s = await render(<SettingsHost />);
+    await openFocusedPath(s, 'home');
+    expect(s.getByTestId('risk-field-home-home_enter_cushion_mult')).toBeTruthy();
+    expect(useConfigStore.getState().config.risk.home_enter_cushion_mult).toBe(1);
+    await fireEvent.press(s.getByTestId('risk-down-home-home_enter_cushion_mult'));
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.risk.home_enter_cushion_mult).toBe(0.95)
+    );
+    expect(useConfigStore.getState().config.risk.cushion_lean_enter_mult).toBe(1);
+  });
+
   test('Cheap loop Weekly Take + raises Stop when Stop is in the way', async () => {
     const s = await render(<SettingsHost />);
     await waitFor(() => {

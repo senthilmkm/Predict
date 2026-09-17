@@ -239,6 +239,10 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     protect_sell_grace_seconds: Math.round(
       snap(clamp(Number(r.protect_sell_grace_seconds ?? d.protect_sell_grace_seconds), 0, 120), 15)
     ),
+    home_enter_cushion_mult: snap(
+      clamp(Number(r.home_enter_cushion_mult ?? d.home_enter_cushion_mult ?? 1), 0.5, 1.5),
+      0.05
+    ),
     home_sell_at_pct: normalizeSellAtPct(r.home_sell_at_pct ?? d.home_sell_at_pct ?? 0),
     cushion_lean_sell_at_pct: normalizeSellAtPct(
       r.cushion_lean_sell_at_pct ?? d.cushion_lean_sell_at_pct ?? 0

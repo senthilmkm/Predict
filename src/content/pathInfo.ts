@@ -28,15 +28,17 @@ export const PATH_INFO = {
       '• This tab’s $ per trade / min / max\n' +
       '• Minutes left and elapsed\n' +
       '• Home max entry ask, TIF, chase\n' +
+      '• Enter when gap ≥ cushion × (default 1×; Home-only scale of Cushions $)\n' +
       '• Sell at % take-profit (0 = Off; 1s mark watch; Protect wait/grace)\n' +
       '• Shared limits\n' +
       '• Cushions $ gap and asset on/off (Cushions tab)\n\n' +
       'Does not use\n' +
       '• Auto max ask, Auto TIF, Auto chase\n' +
-      '• Smart buy\n' +
+      '• Smart buy / Cushion lean Enter × or Skip ×\n' +
       '• Cash out / Gold fade / TWAP lock / Last-minute fields\n\n' +
       'Isolation\n' +
       '• A tap still spends real money even if Auto-trade is Off\n' +
+      '• Enter × scales this tab only — Cushion lean keeps its own Enter ×\n' +
       '• Will not buy a ticker Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, Pair lock, or Cheap loop already holds\n' +
       '• A Home fill counts toward window cap 1 (Last-minute first clip then sits out)\n' +
       '• Protect money can later sell a Home fill (if Protect is On)\n' +

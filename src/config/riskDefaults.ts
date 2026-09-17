@@ -22,6 +22,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   protect_sell_enabled: false,
   protect_sell_gap_ratio: 1,
   protect_sell_grace_seconds: 45,
+  home_enter_cushion_mult: 1,
   home_sell_at_pct: 0,
   cushion_lean_sell_at_pct: 0,
   cushion_lean_enabled: true,
@@ -285,6 +286,15 @@ export const RISK_FIELD_META: {
     step: 15,
     min: 0,
     max: 120,
+  },
+  {
+    key: 'home_enter_cushion_mult',
+    label: 'Enter when gap ≥ cushion ×',
+    group: 'timing',
+    kind: 'ratio',
+    step: 0.05,
+    min: 0.5,
+    max: 1.5,
   },
   {
     key: 'home_sell_at_pct',
@@ -1342,6 +1352,9 @@ export const CUSHION_LEAN_ENTER_FIELD_KEYS: (keyof RiskConfig)[] = ['cushion_lea
 export const CUSHION_LEAN_MAX_GAP_FIELD_KEYS: (keyof RiskConfig)[] = [
   'cushion_lean_max_gap_mult',
 ];
+
+/** Home Buy enter × cushion. Restore with Home Buy tab. */
+export const HOME_ENTER_CUSHION_FIELD_KEYS: (keyof RiskConfig)[] = ['home_enter_cushion_mult'];
 
 /** Home Buy take-profit %. Restore with Home Buy tab. */
 export const HOME_SELL_AT_RISK_FIELD_KEYS: (keyof RiskConfig)[] = ['home_sell_at_pct'];

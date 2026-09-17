@@ -743,10 +743,13 @@ export function evaluateStaticGate(
 
   if (!opts?.skipCushion) {
     const cushion = Number(cfg.cushions[lean.asset]);
-    const enterNeed =
-      opts?.applyCushionLeanMaxGap && cushion > 0
-        ? cushion * normalizeCushionLeanEnterMult(cfg.risk.cushion_lean_enter_mult)
-        : cushion;
+    let enterMult = 1;
+    if (opts?.applyCushionLeanMaxGap) {
+      enterMult = normalizeCushionLeanEnterMult(cfg.risk.cushion_lean_enter_mult);
+    } else if (opts?.allowWhenAutoTradeOff) {
+      enterMult = normalizeCushionLeanEnterMult(cfg.risk.home_enter_cushion_mult);
+    }
+    const enterNeed = cushion > 0 ? cushion * enterMult : cushion;
     if (lean.abs_gap + 1e-9 < enterNeed) {
       return { ok: false, skip_reason: 'below_cushion' };
     }

@@ -17,6 +17,7 @@ import {
   PATH_RISK_FIELD_KEYS,
   CUSHION_LEAN_ENTER_FIELD_KEYS,
   CUSHION_LEAN_MAX_GAP_FIELD_KEYS,
+  HOME_ENTER_CUSHION_FIELD_KEYS,
   HOME_SELL_AT_RISK_FIELD_KEYS,
   CUSHION_LEAN_SELL_AT_RISK_FIELD_KEYS,
   TWAP_LOCK_RISK_FIELD_KEYS,
@@ -194,6 +195,19 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
             testPrefix="home"
             onChange={(key, value) => setManualRiskField(key, value)}
           />
+          {metaFor(HOME_ENTER_CUSHION_FIELD_KEYS).map((meta) => (
+            <RiskStepper
+              key={meta.key}
+              meta={meta}
+              value={config.risk[meta.key]}
+              testPrefix="home"
+              onChange={(next) => setRiskField(meta.key, next as never)}
+            />
+          ))}
+          <Text style={styles.hint} testID="risk-home-enter-cushion-hint">
+            Home Buy only. Buy when the live gap is at least this many times the coin’s cushion
+            (default 1× = full cushion). Cushion lean has its own Enter ×.
+          </Text>
           {metaFor(HOME_SELL_AT_RISK_FIELD_KEYS).map((meta) => (
             <RiskStepper
               key={meta.key}
