@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { fireEvent, render, waitFor, cleanup } from './test-utils';
+import { fireEvent, render, waitFor, cleanup, act } from './test-utils';
 import { within } from '@testing-library/react-native';
 import { cancelScheduledPersist } from '../../src/storage/configPersistence';
 import {
@@ -10,7 +10,7 @@ import {
 } from '../../src/platform/storage';
 import { useConfigStore } from '../../src/state/configStore';
 import { resetRuntimeStoreForTests, useRuntimeStore } from '../../src/state/runtimeStore';
-import { defaultAppConfig } from '../../src/config/types';
+import { AssetRegistry, defaultAppConfig } from '../../src/config/types';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { SettingsMoreScreen } from '../../src/screens/SettingsMoreScreen';
 import { RiskScreen } from '../../src/screens/RiskScreen';
@@ -451,6 +451,9 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(useConfigStore.getState().config.risk.step_buy_enabled).toBe(true));
     expect(s.getByTestId('risk-value-auto-step_buy_start_minutes').props.children).toBe('5');
     expect(s.getByTestId('risk-value-auto-step_buy_cushion_pct').props.children).toBe('50%');
+    expect(s.getByTestId('risk-value-auto-step_buy_add_cushion_pct').props.children).toBe('75%');
+    expect(String(s.getByTestId('step-buy-add-cushion-hint').props.children)).toMatch(/Lots 2\+/);
+    expect(s.getByTestId('risk-toggle-step_buy_sell_if_thesis_dies').props.accessibilityState.checked).toBe(true);
     expect(s.getByTestId('risk-value-auto-step_buy_lot_count').props.children).toBe('1');
     expect(s.getByTestId('risk-value-auto-step_buy_add_wait_minutes').props.children).toBe('1 min');
     expect(s.getByTestId('risk-value-auto-step_buy_add_band_usd').props.children).toBe('2¢');
@@ -504,6 +507,25 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(useConfigStore.getState().config.risk.pair_lock_lock_first).toBe(false));
     expect(s.getByTestId('pair-lock-asset-Gold')).toBeTruthy();
     expect(s.getByTestId('path-info-pairLock')).toBeTruthy();
+    expect(s.queryByTestId('risk-toggle-cap_lock_enabled')).toBeNull();
+    await waitFor(() => {
+      useRuntimeStore.setState({ capLockFeatureOn: true });
+    });
+    await openFocusedPath(s, 'capLock');
+    await waitFor(() => expect(s.getByTestId('risk-toggle-cap_lock_enabled')).toBeTruthy());
+    expect(s.getByTestId('risk-toggle-cap_lock_enabled').props.value).toBe(false);
+    await fireEvent(s.getByTestId('risk-toggle-cap_lock_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.cap_lock_enabled).toBe(true));
+    expect(s.getByTestId('risk-value-auto-cap_lock_max_loss_usd').props.children).toMatch(/\$0\.05/);
+    expect(s.getByText('Try first')).toBeTruthy();
+    expect(s.getByTestId('risk-value-auto-cap_lock_window_open_seconds').props.children).toBe('90s');
+    expect(s.getByTestId('risk-value-auto-cap_lock_lot_count').props.children).toBe('1');
+    expect(s.getByTestId('risk-toggle-cap_lock_allow_later').props.accessibilityState.checked).toBe(true);
+    for (const key of AssetRegistry.keys) {
+      expect(s.getByTestId(`cap-lock-asset-${key}`)).toBeTruthy();
+    }
+    expect(s.getByTestId('cap-lock-asset-HYPE')).toBeTruthy();
+    expect(s.getByTestId('path-info-capLock')).toBeTruthy();
     expect(s.queryByTestId('risk-toggle-cheap_loop_enabled')).toBeNull();
     await waitFor(() => {
       useRuntimeStore.setState({ cheapLoopFeatureOn: true });
@@ -543,13 +565,13 @@ describe('Settings credentials', () => {
     await fireEvent(s.getByTestId('risk-toggle-cheap_loop_weekly_enabled'), 'valueChange', true);
     await waitFor(() => expect(useConfigStore.getState().config.risk.cheap_loop_weekly_enabled).toBe(true));
     expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_start_minutes').props.children).toBe('10 min');
-    expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_flatten_minutes').props.children).toBe('5 min');
+    expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_flatten_minutes').props.children).toBe('2 hr');
     expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_cycles').props.children).toBe('10');
-    expect(s.getByTestId('risk-toggle-cheap_loop_weekly_stop_enabled').props.value).toBe(false);
-    expect(s.queryByTestId('risk-value-auto-cheap_loop_weekly_stop_usd')).toBeNull();
+    expect(s.getByTestId('risk-toggle-cheap_loop_weekly_stop_enabled').props.value).toBe(true);
+    expect(s.getByTestId('risk-value-auto-cheap_loop_weekly_stop_usd').props.children).toMatch(/\$0\.12/);
     expect(s.getByTestId('cheap-loop-weekly-asset-BTC')).toBeTruthy();
     expect(s.getByTestId('path-info-cheapLoopWeekly')).toBeTruthy();
-    expect(useConfigStore.getState().config.risk.cheap_loop_weekly_assets).toEqual([]);
+    expect(useConfigStore.getState().config.risk.cheap_loop_weekly_assets).toEqual(['BTC', 'ETH']);
     await openFocusedPath(s, 'lastMinute');
     await fireEvent.press(s.getByTestId('last-minute-side-both'));
     await waitFor(() => expect(useConfigStore.getState().config.risk.last_minute_side).toBe('both'));
@@ -583,19 +605,56 @@ describe('Settings credentials', () => {
     expect(useConfigStore.getState().config.risk.min_minutes_left).toBe(2);
   });
 
+  test('Cheap loop Weekly Take + raises Stop when Stop is in the way', async () => {
+    const s = await render(<SettingsHost />);
+    await waitFor(() => {
+      useRuntimeStore.setState({ cheapLoopFeatureOn: true });
+    });
+    await openFocusedPath(s, 'cheapLoop');
+    await fireEvent(s.getByTestId('risk-toggle-cheap_loop_weekly_enabled'), 'valueChange', true);
+    await waitFor(() => expect(useConfigStore.getState().config.risk.cheap_loop_weekly_enabled).toBe(true));
+    await act(async () => {
+      useConfigStore.getState().setRiskField('cheap_loop_weekly_stop_usd', 0.05);
+      useConfigStore.getState().setRiskField('cheap_loop_weekly_take_usd', 0.04);
+    });
+    await waitFor(() => {
+      expect(useConfigStore.getState().config.risk.cheap_loop_weekly_take_usd).toBe(0.04);
+      expect(useConfigStore.getState().config.risk.cheap_loop_weekly_stop_usd).toBe(0.05);
+    });
+    await fireEvent.press(s.getByTestId('risk-up-auto-cheap_loop_weekly_take_usd'));
+    await waitFor(() => {
+      const r = useConfigStore.getState().config.risk;
+      expect(r.cheap_loop_weekly_take_usd).toBe(0.05);
+      expect(r.cheap_loop_weekly_stop_usd).toBe(0.06);
+    });
+  });
+
   test('Cushion lean Off hides size and Smart buy and keeps Protect', async () => {
     const s = await render(<SettingsHost />);
     await openFocusedPath(s, 'auto');
     expect(s.getByTestId('risk-toggle-cushion_lean_enabled')).toBeTruthy();
+    expect(s.getByTestId('risk-field-auto-cushion_lean_max_gap_mult')).toBeTruthy();
+    expect(useConfigStore.getState().config.risk.cushion_lean_max_gap_mult).toBe(2.5);
     expect(s.getByTestId('risk-toggle-smart_buy_enabled')).toBeTruthy();
     expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy();
     await fireEvent(s.getByTestId('risk-toggle-cushion_lean_enabled'), 'valueChange', false);
     await waitFor(() =>
       expect(useConfigStore.getState().config.risk.cushion_lean_enabled).toBe(false)
     );
+    expect(s.queryByTestId('risk-field-auto-cushion_lean_max_gap_mult')).toBeNull();
     expect(s.queryByTestId('risk-toggle-smart_buy_enabled')).toBeNull();
     expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy();
     expect(s.getByText(/no gap>cushion buys/i)).toBeTruthy();
+  });
+
+  test('Cushion lean max gap stepper updates × cushion', async () => {
+    const s = await render(<SettingsHost />);
+    await openFocusedPath(s, 'auto');
+    expect(s.getByTestId('risk-field-auto-cushion_lean_max_gap_mult')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('risk-up-auto-cushion_lean_max_gap_mult'));
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.risk.cushion_lean_max_gap_mult).toBe(2.75)
+    );
   });
 
   test('test connection shows successful banner', async () => {
@@ -762,7 +821,7 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(s.getByTestId('alerts-sheet-open')).toBeTruthy());
   });
 
-  test('Cheap loop tile is full-width and sits in a scrollable Paths sheet', async () => {
+  test('Cap lock and Cheap loop sit on one row in a scrollable Paths sheet', async () => {
     useRuntimeStore.setState({
       cashOutFeatureOn: true,
       goldFadeFeatureOn: true,
@@ -771,6 +830,7 @@ describe('Settings credentials', () => {
       stepBuyFeatureOn: true,
       spikeFadeFeatureOn: true,
       pairLockFeatureOn: true,
+      capLockFeatureOn: true,
       cheapLoopFeatureOn: true,
     });
     const s = await render(<SettingsHost />);
@@ -778,8 +838,10 @@ describe('Settings credentials', () => {
     await waitFor(() => expect(s.getByTestId('path-tile-cheapLoop')).toBeTruthy());
     expect(s.queryByTestId('settings-hub-dock')).toBeNull();
     expect(s.getByTestId('paths-picker-scroll')).toBeTruthy();
+    const capWrap = StyleSheet.flatten(s.getByTestId('path-tile-wrap-capLock').props.style);
     const cheapWrap = StyleSheet.flatten(s.getByTestId('path-tile-wrap-cheapLoop').props.style);
-    expect(cheapWrap.width).toBe('100%');
+    expect(capWrap.width).toBe('48.5%');
+    expect(cheapWrap.width).toBe('48.5%');
     const overlayStyle = StyleSheet.flatten(s.getByTestId('modal-paths-picker').props.style);
     expect(overlayStyle.flex).toBe(1);
     expect(overlayStyle.paddingTop).toBe(0);
@@ -789,6 +851,7 @@ describe('Settings credentials', () => {
     const scrollStyle = StyleSheet.flatten(s.getByTestId('paths-picker-scroll').props.style);
     expect(scrollStyle.flex).toBe(1);
     expect(s.getByTestId('path-tile-pairLock')).toBeTruthy();
+    expect(s.getByTestId('path-tile-capLock')).toBeTruthy();
     expect(s.getByTestId('path-tile-spikeFade')).toBeTruthy();
   });
 
@@ -817,6 +880,7 @@ describe('Settings credentials', () => {
       await fireEvent.press(s.getByTestId('btn-paths-guide'));
       await waitFor(() => expect(s.getByTestId('screen-paths-guide')).toBeTruthy());
       expect(s.getByTestId('guide-card-pairLock')).toBeTruthy();
+      expect(s.getByTestId('guide-card-capLock')).toBeTruthy();
       expect(s.getByTestId('guide-card-cheapLoop')).toBeTruthy();
       await fireEvent.press(s.getByTestId('btn-guide-back'));
       await waitFor(() => expect(s.queryByTestId('screen-paths-guide')).toBeNull());

@@ -13,6 +13,8 @@ export type TradeEntryPath =
   | 'spike_fade'
   | 'pair_lock'
   | 'pair_lock_hedge'
+  | 'cap_lock'
+  | 'buffer_run'
   | 'cheap_loop'
   | 'cheap_loop_hourly'
   | 'cheap_loop_weekly';
@@ -35,6 +37,12 @@ export function parseEntryPath(raw: unknown): TradeEntryPath | undefined {
   }
   if (v === 'pair_lock' || v === 'pairlock' || v === 'pair-lock') {
     return 'pair_lock';
+  }
+  if (v === 'cap_lock' || v === 'caplock' || v === 'cap-lock' || v === 'completeness_lock') {
+    return 'cap_lock';
+  }
+  if (v === 'buffer_run' || v === 'bufferrun' || v === 'buffer-run') {
+    return 'buffer_run';
   }
   if (v === 'cheap_loop_weekly' || v === 'cheaploopweekly' || v === 'cheap-loop-weekly') {
     return 'cheap_loop_weekly';
@@ -60,6 +68,8 @@ export interface TradeRecord {
   outcome: TradeOutcome;
   dry_run: boolean;
   order_id?: string | null;
+  status?: string | null;
+  protect_exit_order_id?: string | null;
   config_snapshot_json?: string;
   /** Set on new fills. Protect/Home sell keeps the original buy path. */
   entry_path?: TradeEntryPath | null;
@@ -243,7 +253,14 @@ function dollarsPrice(raw: unknown): number | null {
 export function cloudTradesToRecords(cloudTrades: any[]): TradeRecord[] {
   return (cloudTrades || []).filter((ct) => ct && typeof ct === 'object').map((ct) => {
     const economic = dollarsPrice(ct.payPrice ?? ct.pay_price) ?? dollarsPrice(ct.price);
-    const countRaw = ct.fillCount ?? ct.fill_count ?? ct.count;
+    const explicitFill = ct.fillCount ?? ct.fill_count;
+    const status = String(ct.status || '');
+    const countRaw =
+      explicitFill != null && String(explicitFill).trim() !== ''
+        ? explicitFill
+        : status === 'FILLED' || status === 'SETTLED'
+          ? ct.count
+          : null;
     const fillCount =
       countRaw != null && String(countRaw).trim() !== '' && Number.isFinite(Number(countRaw))
         ? Number(countRaw)
@@ -282,6 +299,8 @@ export function cloudTradesToRecords(cloudTrades: any[]): TradeRecord[] {
       outcome,
       dry_run: Boolean(ct.dryRun || ct.dry_run),
       order_id: ct.orderId || ct.order_id || null,
+      status: status || null,
+      protect_exit_order_id: ct.protectExitOrderId || ct.protect_exit_order_id || null,
       entry_path: parseEntryPath(ct.entryPath ?? ct.entry_path) ?? null,
     };
   });

@@ -32,12 +32,27 @@ function cfg(over: Record<string, unknown> = {}) {
 const close = new Date('2026-09-12T10:15:00.000Z');
 const nowLast = new Date(close.getTime() - 20_000);
 
+/** Enough 1m range that a $10 Gold lead clears Late ATR cushion. */
+function atrTicks(center: number, range = 2) {
+  const nowMs = Date.now();
+  const ticks: Array<{ t: number; v: number }> = [];
+  for (let m = 14; m >= 0; m--) {
+    const t0 = nowMs - m * 60_000;
+    ticks.push({ t: t0 / 1000, v: center });
+    ticks.push({ t: (t0 + 20_000) / 1000, v: center + range / 2 });
+    ticks.push({ t: (t0 + 40_000) / 1000, v: center - range / 2 });
+    ticks.push({ t: (t0 + 55_000) / 1000, v: center });
+  }
+  return ticks;
+}
+
 function lean(over: Record<string, unknown> = {}) {
+  const live = Number(over.live ?? 3700);
   return {
     asset: 'Gold' as const,
     market_ticker: 'KXGOLD15M-T',
     decision: 'SKIP' as const,
-    live: 3700,
+    live,
     strike: 3690,
     abs_gap: 10,
     minutes_left: 0,
@@ -49,6 +64,7 @@ function lean(over: Record<string, unknown> = {}) {
     no_ask: 0.07,
     no_bid: 0.05,
     close_utc: close.toISOString(),
+    timeseries: atrTicks(live),
     ...over,
   };
 }
@@ -267,6 +283,7 @@ describe('Last-minute path', () => {
   });
 
   test('i-icon copy names uses, unused settings, and true isolation', () => {
+    expect(PATH_INFO.lastMinute.body).toMatch(/Late ATR cushion/);
     expect(PATH_INFO.lastMinute.body).toMatch(/Does not pull coins off Cash out or Auto/);
     expect(PATH_INFO.lastMinute.body).toMatch(/Window cap 1/);
     expect(PATH_INFO.lastMinute.body).toMatch(/ladder adds are extra/);

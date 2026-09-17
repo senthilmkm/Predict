@@ -2,18 +2,22 @@ import {
   STEP_BUY_STOP_ADD_SEC,
   evaluateStepBuyEnter,
   evaluateStepBuyStops,
+  evaluateStepBuyThesisDie,
   isStepBuyEnterPath,
   isStepBuyStartWindow,
   isStepBuyStopAddWindow,
   nextStepBuyLotIndex,
   normalizeStepBuyAddBandUsd,
+  normalizeStepBuyAddCushionPct,
   normalizeStepBuyAssets,
   normalizeStepBuyCushionPct,
   normalizeStepBuyMaxAskUsd,
   normalizeStepBuyMaxLots,
+  normalizeStepBuySellIfThesisDies,
   normalizeStepBuyStartMinutes,
   normalizeStepBuyStopUsd,
   stepBuyAskInAddBand,
+  stepBuyCushionPctForLots,
   stepBuyLotsForTicker,
   stepBuyNeedGapUsd,
   stepBuyThesisHolds,
@@ -73,6 +77,16 @@ describe('Step buy path', () => {
     expect(normalizeStepBuyStartMinutes(99)).toBe(10);
     expect(normalizeStepBuyCushionPct(10)).toBe(25);
     expect(normalizeStepBuyCushionPct(50)).toBe(50);
+    expect(normalizeStepBuyAddCushionPct(undefined)).toBe(75);
+    expect(normalizeStepBuyAddCushionPct(10)).toBe(25);
+    expect(normalizeStepBuyAddCushionPct(10, 25)).toBe(25);
+    expect(normalizeStepBuyAddCushionPct(50, 80)).toBe(80);
+    expect(normalizeStepBuyAddCushionPct(90, 50)).toBe(90);
+    expect(stepBuyCushionPctForLots(0, { step_buy_cushion_pct: 50, step_buy_add_cushion_pct: 75 })).toBe(50);
+    expect(stepBuyCushionPctForLots(1, { step_buy_cushion_pct: 50, step_buy_add_cushion_pct: 75 })).toBe(75);
+    expect(normalizeStepBuySellIfThesisDies(undefined)).toBe(true);
+    expect(normalizeStepBuySellIfThesisDies(false)).toBe(false);
+    expect(normalizeStepBuySellIfThesisDies(true)).toBe(true);
     expect(normalizeStepBuyAddBandUsd(-1)).toBe(0);
     expect(normalizeStepBuyAddBandUsd(0.024)).toBe(0.02);
     expect(normalizeStepBuyAddBandUsd(0.2)).toBe(0.1);
@@ -130,6 +144,8 @@ describe('Step buy path', () => {
     ).toBe(true);
     expect(formatSkipReason('step_buy_stop_add')).toMatch(/30s/i);
     expect(formatSkipReason('step_buy_holding_other_path')).toMatch(/holding/i);
+    expect(formatSkipReason('step_buy_add_cushion')).toMatch(/add cushion/i);
+    expect(formatSkipReason('step_buy_thesis_died')).toMatch(/thesis died/i);
   });
 
   test('add band 0¢ requires the last fill; 2¢ allows up to last fill + 2¢', () => {
@@ -164,7 +180,7 @@ describe('Step buy path', () => {
     expect(Number(cheap.count)).toBe(1);
   });
 
-  test('every add still needs Cushion % and the same lean side', () => {
+  test('every add still needs Add cushion % and the same lean side', () => {
     const lastLotAt = new Date(nowLive.getTime() - 70_000);
     const flipped = evaluateStepBuyEnter({
       lean: lean({ decision: 'NO', no_ask: 0.72, yes_ask: 0.3 }),
@@ -190,7 +206,28 @@ describe('Step buy path', () => {
       heldSide: 'YES',
     });
     expect(thinThesis.ok).toBe(false);
-    expect(thinThesis.skip_reason).toBe('step_buy_lean_flipped');
+    expect(thinThesis.skip_reason).toBe('step_buy_add_cushion');
+
+    const belowAdd = evaluateStepBuyEnter({
+      lean: lean({ abs_gap: 2.5 }),
+      cfg: cfg(),
+      adminEnabled: true,
+      now: nowLive,
+      stepBuyLots: 1,
+      lastLotAt,
+      lastFill: 0.72,
+      heldSide: 'YES',
+    });
+    expect(belowAdd.ok).toBe(false);
+    expect(belowAdd.skip_reason).toBe('step_buy_add_cushion');
+
+    const lot1Still = evaluateStepBuyEnter({
+      lean: lean({ abs_gap: 2.5 }),
+      cfg: cfg(),
+      adminEnabled: true,
+      now: nowLive,
+    });
+    expect(lot1Still.ok).toBe(true);
 
     const add = evaluateStepBuyEnter({
       lean: lean({ yes_ask: 0.75 }),
@@ -274,6 +311,94 @@ describe('Step buy path', () => {
     expect(laterOnly).toHaveLength(1);
     expect(laterOnly[0].flatten).toBe(false);
     expect(laterOnly[0].trade).toBe(lot2);
+  });
+
+  test('Sell if thesis dies dumps the stack; Off keeps price stops only', () => {
+    const lot1 = {
+      ticker: 'KXGOLD15M-T',
+      entryPath: 'step_buy',
+      status: 'FILLED',
+      fillCount: 1,
+      payPrice: 0.72,
+      decision: 'YES',
+      executedAt: '2026-09-12T10:06:00.000Z',
+      stepLotIndex: 1,
+    };
+    const lot2 = {
+      ...lot1,
+      stepLotIndex: 2,
+      payPrice: 0.73,
+      executedAt: '2026-09-12T10:08:00.000Z',
+    };
+    const now = new Date(close.getTime() - 6 * 60_000);
+    expect(
+      evaluateStepBuyThesisDie({
+        sellIfThesisDies: true,
+        absGap: 1.5,
+        cushionUsd: 4,
+        cushionPct: 50,
+        leanSide: 'YES',
+        heldSide: 'YES',
+        lastFilledAt: lot2.executedAt,
+        now,
+      }).reason
+    ).toBe('step_buy_thesis_died');
+    const faded = evaluateStepBuyStops({
+      trades: [lot1, lot2],
+      marketTicker: 'KXGOLD15M-T',
+      yesAsk: 0.74,
+      stopUsd: 0.03,
+      now,
+      sellIfThesisDies: true,
+      absGap: 1.5,
+      cushionUsd: 4,
+      cushionPct: 50,
+      leanSide: 'YES',
+    });
+    expect(faded).toHaveLength(2);
+    expect(faded.every((h) => h.flatten && h.reason === 'step_buy_thesis_died')).toBe(true);
+
+    const flipped = evaluateStepBuyStops({
+      trades: [lot1, lot2],
+      marketTicker: 'KXGOLD15M-T',
+      yesAsk: 0.74,
+      stopUsd: 0.03,
+      now,
+      sellIfThesisDies: true,
+      absGap: 4,
+      cushionUsd: 4,
+      cushionPct: 50,
+      leanSide: 'NO',
+    });
+    expect(flipped.every((h) => h.flatten && h.reason === 'step_buy_lean_flipped')).toBe(true);
+
+    const off = evaluateStepBuyStops({
+      trades: [lot1, lot2],
+      marketTicker: 'KXGOLD15M-T',
+      yesAsk: 0.74,
+      stopUsd: 0.03,
+      now,
+      sellIfThesisDies: false,
+      absGap: 1.5,
+      cushionUsd: 4,
+      cushionPct: 50,
+      leanSide: 'NO',
+    });
+    expect(off).toHaveLength(0);
+
+    const grace = evaluateStepBuyStops({
+      trades: [{ ...lot1, executedAt: now.toISOString() }],
+      marketTicker: 'KXGOLD15M-T',
+      yesAsk: 0.74,
+      stopUsd: 0.03,
+      now,
+      sellIfThesisDies: true,
+      absGap: 1,
+      cushionUsd: 4,
+      cushionPct: 50,
+      leanSide: 'NO',
+    });
+    expect(grace).toHaveLength(0);
   });
 
   test('isolation: window cap lot 1, other path, Last-minute, TWAP, empty chips', () => {
@@ -390,6 +515,8 @@ describe('Step buy path', () => {
     expect(PATH_INFO.stepBuy.body).toMatch(/Lot contracts/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Add wait/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Add band/);
+    expect(PATH_INFO.stepBuy.body).toMatch(/Add cushion %/);
+    expect(PATH_INFO.stepBuy.body).toMatch(/Sell if thesis dies/);
     expect(PATH_INFO.stepBuy.body).toMatch(/does not chase/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Max lots/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Stop adding with 30s left/);
@@ -399,6 +526,7 @@ describe('Step buy path', () => {
     expect(PATH_INFO.stepBuy.body).toMatch(/Last-minute owns new buys/);
     expect(PATH_INFO.stepBuy.body).toMatch(/Protect skips Step buy/);
     expect(PATH_INFO.stepBuy.body).toMatch(/TWAP lock/);
+    expect(PATH_INFO.stepBuy.body).toMatch(/Hold to settlement unless a stop or thesis dump/);
     expect(PATH_INFO.shared.body).toMatch(/Step buy lot 1/);
     expect(PATH_INFO.protect.body).toMatch(/Skips Step buy/);
   });

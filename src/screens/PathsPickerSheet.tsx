@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 import { PathInfoIcon } from '../components/PathInfoIcon';
-import { PathFocusId, PATH_TILES, PathTileDef } from '../content/pathCatalog';
+import { isPinnedPathVisible, PathFocusId, PATH_TILES, PathTileDef } from '../content/pathCatalog';
 import { usePinnedPathsStore } from '../state/pinnedPathsStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { useConfigStore } from '../state/configStore';
@@ -10,6 +10,8 @@ import { normalizeLastMinuteAssets } from '../../packages/trading-core/src/lastM
 import { normalizeStepBuyAssets } from '../../packages/trading-core/src/stepBuy';
 import { normalizeSpikeFadeAssets } from '../../packages/trading-core/src/spikeFade';
 import { normalizePairLockAssets } from '../../packages/trading-core/src/pairLock';
+import { normalizeCapLockAssets } from '../../packages/trading-core/src/capLock';
+import { normalizeBufferRunAssets } from '../../packages/trading-core/src/bufferRun';
 import { normalizeCheapLoopAssets } from '../../packages/trading-core/src/cheapLoop';
 import { normalizeTwapLockAssets } from '../../packages/trading-core/src/twapLock';
 import { formatSharedChipOverlapNote } from './tickerOverlap';
@@ -37,6 +39,7 @@ export function PathsPickerSheet({
 }) {
   const pinned = usePinnedPathsStore((s) => s.ids);
   const hydrate = usePinnedPathsStore((s) => s.hydrate);
+  const prunePins = usePinnedPathsStore((s) => s.prune);
   const togglePin = usePinnedPathsStore((s) => s.toggle);
   const cashOutFeatureOn = useRuntimeStore((s) => s.cashOutFeatureOn);
   const goldFadeFeatureOn = useRuntimeStore((s) => s.goldFadeFeatureOn);
@@ -45,6 +48,8 @@ export function PathsPickerSheet({
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
+  const capLockFeatureOn = useRuntimeStore((s) => s.capLockFeatureOn);
+  const bufferRunFeatureOn = useRuntimeStore((s) => s.bufferRunFeatureOn);
   const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const config = useConfigStore((s) => s.config);
   const padTop = Math.max(0, topInset);
@@ -62,6 +67,8 @@ export function PathsPickerSheet({
       stepBuyFeatureOn,
       spikeFadeFeatureOn,
       pairLockFeatureOn,
+      capLockFeatureOn,
+      bufferRunFeatureOn,
       cheapLoopFeatureOn,
     }),
     [
@@ -72,6 +79,8 @@ export function PathsPickerSheet({
       stepBuyFeatureOn,
       spikeFadeFeatureOn,
       pairLockFeatureOn,
+      capLockFeatureOn,
+      bufferRunFeatureOn,
       cheapLoopFeatureOn,
     ]
   );
@@ -94,6 +103,12 @@ export function PathsPickerSheet({
       pairLockFeatureOn && config.risk.pair_lock_enabled
         ? { title: 'Pair lock', assets: normalizePairLockAssets(config.risk.pair_lock_assets) }
         : null,
+      capLockFeatureOn && config.risk.cap_lock_enabled
+        ? { title: 'Cap lock', assets: normalizeCapLockAssets(config.risk.cap_lock_assets) }
+        : null,
+      bufferRunFeatureOn && config.risk.buffer_run_enabled
+        ? { title: 'Buffer run', assets: normalizeBufferRunAssets(config.risk.buffer_run_assets) }
+        : null,
       cheapLoopFeatureOn && config.risk.cheap_loop_enabled
         ? { title: 'Cheap loop', assets: normalizeCheapLoopAssets(config.risk.cheap_loop_assets) }
         : null,
@@ -101,6 +116,8 @@ export function PathsPickerSheet({
   );
 
   async function onStar(tile: PathTileDef) {
+    // Admin-off pins are hidden but still stored — prune so they do not block a 3rd visible pin.
+    await prunePins((id) => isPinnedPathVisible(id, flags));
     const result = await togglePin(tile.id);
     if (!result.ok) {
       Alert.alert('Three pins max', 'Unpin one first, then star this path.');
@@ -146,11 +163,12 @@ export function PathsPickerSheet({
             {tiles.map((tile, index) => {
               const starred = pinned.includes(tile.id);
               const lastOdd = tiles.length % 2 === 1 && index === tiles.length - 1;
+              const fullWidth = lastOdd;
               return (
                 <View
                   key={tile.id}
                   testID={`path-tile-wrap-${tile.id}`}
-                  style={[styles.tileWrap, lastOdd && styles.tileWrapFull]}
+                  style={[styles.tileWrap, fullWidth && styles.tileWrapFull]}
                 >
                   <Pressable
                     testID={`path-tile-${tile.id}`}

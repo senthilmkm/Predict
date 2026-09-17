@@ -17,6 +17,7 @@ import {
   snapshotConfig,
 } from '../config/normalize';
 import { cloneDefaultRisk } from '../config/riskDefaults';
+import { bumpCheapLoopStopForTake } from '../../packages/trading-core/src/cheapLoop';
 import { normalizeManualPathRisk } from '../../packages/trading-core/src/pathRisk';
 import { loadPersistedConfig, savePersistedConfig, schedulePersistConfig } from '../storage/configPersistence';
 import {
@@ -120,9 +121,28 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     schedulePersistConfig(config);
   },
   setRiskField: (key, value) => {
+    const prev = get().config.risk;
+    const nextRisk: RiskConfig = { ...prev, [key]: value };
+    const takeStop =
+      key === 'cheap_loop_take_usd'
+        ? { stop: 'cheap_loop_stop_usd' as const, enabled: 'cheap_loop_stop_enabled' as const }
+        : key === 'cheap_loop_hourly_take_usd'
+          ? { stop: 'cheap_loop_hourly_stop_usd' as const, enabled: 'cheap_loop_hourly_stop_enabled' as const }
+          : key === 'cheap_loop_weekly_take_usd'
+            ? { stop: 'cheap_loop_weekly_stop_usd' as const, enabled: 'cheap_loop_weekly_stop_enabled' as const }
+            : null;
+    if (takeStop && nextRisk[takeStop.enabled] === true) {
+      const bumped = bumpCheapLoopStopForTake({
+        takeUsd: value,
+        stopUsd: nextRisk[takeStop.stop],
+        stopEnabled: true,
+      });
+      (nextRisk as Record<string, unknown>)[key] = bumped.takeUsd;
+      nextRisk[takeStop.stop] = bumped.stopUsd;
+    }
     const config = normalizeAppConfig({
       ...get().config,
-      risk: normalizeRiskConfig({ ...get().config.risk, [key]: value }),
+      risk: normalizeRiskConfig(nextRisk),
     });
     set({ config });
     schedulePersistConfig(config);
@@ -183,8 +203,13 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   },
   restoreHomeBuyRiskTab: async () => {
     const defaults = cloneDefaultRisk();
+    const prev = get().config;
     const config = normalizeAppConfig({
-      ...get().config,
+      ...prev,
+      risk: {
+        ...prev.risk,
+        home_sell_at_pct: defaults.home_sell_at_pct ?? 0,
+      },
       manual_risk: normalizeManualPathRisk(undefined, defaults),
     });
     set({ config });

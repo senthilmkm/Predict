@@ -13,6 +13,7 @@ import {
 import { isStepBuyEnterPath, normalizeStepBuyStartMinutes, stepBuyLotsForTicker } from '../../packages/trading-core/src/stepBuy';
 import { isSpikeFadeEnterPath, isSpikeFadeEnterWindow } from '../../packages/trading-core/src/spikeFade';
 import { isPairLockEnterPath, isPairLockEnterWindow } from '../../packages/trading-core/src/pairLock';
+import { isCapLockEnterPath, isCapLockEnterWindow } from '../../packages/trading-core/src/capLock';
 import { isCheapLoopEnterPath, isCheapLoopEnterWindow } from '../../packages/trading-core/src/cheapLoop';
 import { isTwapLockEnterPath } from '../../packages/trading-core/src/twapLock';
 
@@ -34,6 +35,7 @@ const SITTER_ORDER: OverlapPathId[] = [
   'step_buy',
   'spike_fade',
   'pair_lock',
+  'cap_lock',
   'cheap_loop',
   'cheap_loop_hourly',
   'cheap_loop_weekly',
@@ -49,6 +51,7 @@ export const OVERLAP_PATH_LABEL: Record<OverlapPathId, string> = {
   step_buy: 'Step buy',
   spike_fade: 'Spike fade',
   pair_lock: 'Pair lock',
+  cap_lock: 'Cap lock',
   cheap_loop: 'Cheap loop 15m',
   cheap_loop_hourly: 'Cheap loop hourly',
   cheap_loop_weekly: 'Cheap loop weekly',
@@ -64,6 +67,7 @@ const HOLDING_LINE: Record<OverlapPathId, string> = {
   step_buy: 'step buy is holding this ticket',
   spike_fade: 'spike fade is holding this ticket',
   pair_lock: 'pair lock is holding this ticket',
+  cap_lock: 'cap lock is holding this ticket',
   cheap_loop: 'cheap loop 15m is holding this ticket',
   cheap_loop_hourly: 'cheap loop hourly is holding this ticket',
   cheap_loop_weekly: 'cheap loop weekly is holding this ticket',
@@ -176,6 +180,11 @@ export function formatTickerOverlapLine(opts: {
   pairLockAssets?: unknown;
   pairLockStartMinutes?: unknown;
   pairLockUntilMinutes?: unknown;
+  capLockAdmin?: boolean;
+  capLockOn?: boolean;
+  capLockAssets?: unknown;
+  capLockWindowOpenSeconds?: unknown;
+  capLockAllowLater?: unknown;
   cheapLoopAdmin?: boolean;
   cheapLoopOn?: boolean;
   cheapLoopAssets?: unknown;
@@ -247,6 +256,21 @@ export function formatTickerOverlapLine(opts: {
       startMinutes: opts.pairLockStartMinutes,
       untilMinutes: opts.pairLockUntilMinutes,
     });
+  const capOn = isCapLockEnterPath({
+    adminEnabled: Boolean(opts.capLockAdmin),
+    userEnabled: Boolean(opts.capLockOn),
+    assetEnabled,
+    asset,
+    assets: opts.capLockAssets,
+  });
+  const capInWindow =
+    capOn &&
+    isCapLockEnterWindow({
+      minutesElapsed: opts.minutesElapsed,
+      minutesRemaining: opts.minutesLeft,
+      windowOpenSeconds: opts.capLockWindowOpenSeconds,
+      allowLater: opts.capLockAllowLater,
+    });
   const cheapOn = isCheapLoopEnterPath({
     adminEnabled: Boolean(opts.cheapLoopAdmin),
     userEnabled: Boolean(opts.cheapLoopOn),
@@ -294,6 +318,7 @@ export function formatTickerOverlapLine(opts: {
     step_buy: stepStarted,
     spike_fade: spikeInWindow,
     pair_lock: pairInWindow,
+    cap_lock: capInWindow,
     cheap_loop: cheapInWindow,
   };
 
@@ -309,7 +334,7 @@ export function formatTickerOverlapLine(opts: {
     return withSitters(HOLDING_LINE[holding], sittersFor(holding));
   }
 
-  const oneSecond: OverlapPathId[] = ['last_minute', 'step_buy', 'spike_fade', 'pair_lock', 'cheap_loop'];
+  const oneSecond: OverlapPathId[] = ['last_minute', 'step_buy', 'spike_fade', 'pair_lock', 'cap_lock', 'cheap_loop'];
   if (twapOwns) {
     const blocked = sittersFor('twap_lock', oneSecond);
     if (!blocked.length) return null;

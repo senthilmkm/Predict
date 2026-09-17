@@ -21,6 +21,10 @@ export interface FeatureFlags {
   spikeFade: boolean;
   /** Pair lock Auto path. Default Off — Admin must enable. */
   pairLock: boolean;
+  /** Cap lock Auto path. Default Off — Admin must enable. */
+  capLock: boolean;
+  /** Buffer run Auto path. Default Off — Admin must enable. */
+  bufferRun: boolean;
   /** Cheap loop Auto path. Default Off — Admin must enable. */
   cheapLoop: boolean;
   /** Shared Kalshi orderbook WebSocket. Missing → Off (REST GET /markets). */
@@ -40,6 +44,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   stepBuy: false,
   spikeFade: false,
   pairLock: false,
+  capLock: false,
+  bufferRun: false,
   cheapLoop: false,
   kalshiWsQuotes: false,
   kalshiWsFills: false,
@@ -57,6 +63,8 @@ export function normalizeFeatureFlags(raw?: Partial<FeatureFlags> | null): Featu
     stepBuy: raw?.stepBuy === true,
     spikeFade: raw?.spikeFade === true,
     pairLock: raw?.pairLock === true,
+    capLock: raw?.capLock === true,
+    bufferRun: raw?.bufferRun === true,
     cheapLoop: raw?.cheapLoop === true,
     kalshiWsQuotes: raw?.kalshiWsQuotes === true,
     kalshiWsFills: raw?.kalshiWsFills === true,

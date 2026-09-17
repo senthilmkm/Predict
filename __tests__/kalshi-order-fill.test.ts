@@ -2,6 +2,7 @@ import {
   extractKalshiOrderFields,
   isGoodTillCanceled,
   placeFillLooksComplete,
+  placeResultShouldPersist,
   resolvedPlaceFillCount,
 } from '../packages/trading-core/src/orderFill';
 
@@ -48,5 +49,12 @@ describe('Kalshi order fill confirm helpers', () => {
   test('GTC tif detection', () => {
     expect(isGoodTillCanceled('good_till_canceled')).toBe(true);
     expect(isGoodTillCanceled('immediate_or_cancel')).toBe(false);
+  });
+
+  test('persist a place when HTTP failed but Kalshi filled or returned an order id', () => {
+    expect(placeResultShouldPersist({ ok: true })).toBe(true);
+    expect(placeResultShouldPersist({ ok: false, fill_count: '0' })).toBe(false);
+    expect(placeResultShouldPersist({ ok: false, fill_count: '2' })).toBe(true);
+    expect(placeResultShouldPersist({ ok: false, order_id: 'ord-1' })).toBe(true);
   });
 });

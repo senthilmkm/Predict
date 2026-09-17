@@ -2,11 +2,10 @@ import {
   buildCheapLoopSellOrder,
   evaluateCheapLoopExit,
   isCheapLoopEntryPath,
-  isCheapLoopHistorySellableTrade,
   isCheapLoopHourlyEntryPath,
   isCheapLoopWeeklyEntryPath,
 } from '../../../../packages/trading-core/src/cheapLoop';
-import { isOpenLiveFill } from '../../../../packages/trading-core/src/cashOut';
+import { isHistorySellableTrade, isOpenLiveFill } from '../../../../packages/trading-core/src/cashOut';
 import { TradeRecordDoc, claimProtectSell, updateTradeRecord } from './firestore';
 import { economicPayPrice, fillCountOf } from './settlement';
 import { computeProtectSellPnlUsd } from '../../../../packages/trading-core/src/protectSell';
@@ -262,7 +261,7 @@ export async function runCheapLoopForcedBidExit(opts: {
 }> {
   const now = opts.now || new Date();
   const trade = opts.trade;
-  if (!isCheapLoopHistorySellableTrade(trade)) {
+  if (!isHistorySellableTrade(trade)) {
     return { ok: false, skipped: 'not_sellable' };
   }
   if (String(trade.ticker || '').trim() !== String(opts.ticker || '').trim()) {
@@ -336,7 +335,9 @@ export async function runCheapLoopForcedBidExit(opts: {
     ? 'Cheap loop weekly sell'
     : hourly
       ? 'Cheap loop hourly sell'
-      : 'Cheap loop 15m sell';
+      : isCheapLoopEntryPath(trade.entryPath)
+        ? 'Cheap loop 15m sell'
+        : 'History sell';
   return {
     ok: true,
     alert: {

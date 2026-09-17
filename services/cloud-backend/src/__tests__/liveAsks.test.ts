@@ -1,6 +1,10 @@
 import request from 'supertest';
 import { app } from '../index';
-import { resetLeanAlertMemoryForTests, writeLiveAskBookPulse } from '../routes/worker';
+import {
+  resetLeanAlertMemoryForTests,
+  setHomeQuoteAssetsForTests,
+  writeLiveAskBookPulse,
+} from '../routes/worker';
 import {
   getLiveAsksSnapshot,
   idleLiveAsksSnapshot,
@@ -8,11 +12,13 @@ import {
   persistLiveAsksSnapshot,
   resetLiveAsksMemoryForTests,
 } from '../services/liveAsks';
+import { rememberSharedLeans, resetSharedLeanCacheForTests } from '../services/leanSignalCache';
 
 describe('live 1s asks', () => {
   beforeEach(() => {
     resetLiveAsksMemoryForTests();
     resetLeanAlertMemoryForTests();
+    resetSharedLeanCacheForTests();
   });
 
   test('merge keeps last quote when this second missed and drops off-watch assets', () => {
@@ -49,6 +55,18 @@ describe('live 1s asks', () => {
       no_ask: 0.59,
       ticker: 'KXBTC15M',
     });
+    rememberSharedLeans({
+      BTC: {
+        market_ticker: 'KXBTC15M',
+        live: 110_000,
+        strike: 109_900,
+        phase: 'live',
+        close_utc: '2099-01-01T00:00:00.000Z',
+      },
+    });
+    const quotesWithLean = await request(app).get('/me/quotes').set('Authorization', 'Bearer usr_asks');
+    expect(quotesWithLean.body.leans.BTC.abs_gap).toBe(100);
+    expect(quotesWithLean.body.leans.BTC.live).toBe(110_000);
     expect(quotes.body.lastTradeAction).toBeUndefined();
     const status = await request(app).get('/me/status').set('Authorization', 'Bearer usr_asks');
     expect(status.status).toBe(200);
@@ -59,6 +77,7 @@ describe('live 1s asks', () => {
   });
 
   test('ask pulse heartbeats at so Home age does not freeze on last print', async () => {
+    setHomeQuoteAssetsForTests(['BTC']);
     await persistLiveAsksSnapshot({
       at: '2020-01-01T00:00:00.000Z',
       byAsset: { BTC: { yes_ask: 0.4, no_ask: 0.61, ticker: 'KXBTC15M' } },

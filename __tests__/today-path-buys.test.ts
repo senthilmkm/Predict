@@ -105,6 +105,21 @@ describe('summarizeTodayPathBuys', () => {
     expect(formatHomePathBuyLines(summary)).toEqual(['Pair lock  BTC 2']);
   });
 
+  test('counts Cap lock fills on their own line', () => {
+    const summary = summarizeTodayPathBuys(
+      [
+        rec({ id: 'y', asset: 'Gold', entry_path: 'cap_lock' }),
+        rec({ id: 'n', asset: 'Gold', entry_path: 'cap_lock', side: 'NO' }),
+      ],
+      NOW
+    );
+    expect(summary.capLock).toEqual([{ asset: 'Gold', count: 2 }]);
+    expect(summary.capLockTotal).toBe(2);
+    expect(summary.autoTotal).toBe(0);
+    expect(formatHomePathBuyLines(summary)).toEqual(['Cap lock  Gold 2']);
+    expect(formatDashboardPathBuys(summary)).toBe('Cap lock 2');
+  });
+
   test('counts Cheap loop fills on their own line', () => {
     const summary = summarizeTodayPathBuys(
       [rec({ id: 'c', asset: 'SOL', entry_path: 'cheap_loop' })],
@@ -140,7 +155,7 @@ describe('summarizeTodayPathBuys', () => {
 
 describe('history trade display', () => {
   test('chip is Home / Cushion lean or omitted', () => {
-    expect(entryPathChipLabel('home')).toBe('Home');
+    expect(entryPathChipLabel('home')).toBe('Home Buy');
     expect(entryPathChipLabel('auto')).toBe('Cushion lean');
     expect(entryPathChipLabel('cash_out')).toBe('Cash out');
     expect(entryPathChipLabel('gold_fade')).toBe('Gold fade');
@@ -149,6 +164,7 @@ describe('history trade display', () => {
     expect(entryPathChipLabel('step_buy')).toBe('Step buy');
     expect(entryPathChipLabel('spike_fade')).toBe('Spike fade');
     expect(entryPathChipLabel('pair_lock')).toBe('Pair lock');
+    expect(entryPathChipLabel('cap_lock')).toBe('Cap lock');
     expect(entryPathChipLabel('cheap_loop')).toBe('Cheap loop 15m');
     expect(entryPathChipLabel('cheap_loop_hourly')).toBe('Cheap loop hourly');
     expect(entryPathChipLabel('cheap_loop_weekly')).toBe('Cheap loop weekly');
@@ -157,7 +173,7 @@ describe('history trade display', () => {
     expect(entryPathChipLabel('pair_lock_hedge')).toBe('PL hedge');
     expect(entryPathChipLabel('pair_lock_hedge', 1)).toBe('PL hedge 1');
     expect(entryPathChipLabel('pair-lock-hedge', 2)).toBe('PL hedge 2');
-    expect(entryPathChipLabel('manual_buy')).toBe('Home');
+    expect(entryPathChipLabel('manual_buy')).toBe('Home Buy');
     expect(entryPathChipLabel(null)).toBeNull();
     expect(entryPathChipLabel(undefined)).toBeNull();
   });

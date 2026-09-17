@@ -139,7 +139,7 @@ describe('manual buy/sell place-now', () => {
     expect(trades[0].orderId).toBe('ord_manual_1');
     expect(trades[0].entryPath).toBe('home');
     const alerts = await getAlertRecords(uid);
-    expect(alerts.some((a) => a.kind === 'order_filled' && a.title === 'Order Placed · Home · BTC YES')).toBe(
+    expect(alerts.some((a) => a.kind === 'order_filled' && a.title === 'Order Placed · Home Buy · BTC YES')).toBe(
       true
     );
     const logs = await getAuditLogs(uid);
@@ -221,8 +221,8 @@ describe('manual buy/sell place-now', () => {
     expect(res.message).toMatch(/\$0\.\d{2}/);
     const alerts = await getAlertRecords(uid);
     const miss = alerts.find((a) => a.kind === 'ioc_miss');
-    expect(miss?.title).toBe('IOC miss · Home');
-    expect(miss?.body).toMatch(/Home · BTC YES · \d+ ctr @ \$0\.\d{2} · IOC no fill/);
+    expect(miss?.title).toBe('IOC miss · Home Buy');
+    expect(miss?.body).toMatch(/Home Buy · BTC YES · \d+ ctr @ \$0\.\d{2} · IOC no fill/);
   });
 
   test('GTC with no immediate fill is resting, not IOC miss', async () => {
@@ -255,6 +255,132 @@ describe('manual buy/sell place-now', () => {
     expect(res.ok).toBe(true);
     expect(res.filled).toBe(false);
     expect(res.message).toMatch(/resting/i);
+  });
+
+  test('Home Buy NO places ask at pay (not 1−pay)', async () => {
+    const uid = 'usr_manual_no_ask_pay';
+    const cfg = liveCfg();
+    cfg.risk.chase_above_ask_usd = 0;
+    cfg.manual_risk = {
+      ...(defaultAppConfig().manual_risk as NonNullable<typeof cfg.manual_risk>),
+      chase_above_ask_usd: 0,
+      max_entry_ask_usd: 0.99,
+    };
+    await upsertUserDoc(uid, { state: 'DISARMED', kalshiConfigured: true, config: cfg });
+    const place = jest.fn(async () => ({
+      ok: true,
+      http_status: 200,
+      dry_run: false,
+      payload: {},
+      fill_count: '10',
+      order_id: 'ord_no',
+    }));
+    const res = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'buy', decision: 'NO', requestId: 'buy_no' },
+      {
+        computeLeanFn: async () =>
+          richLean({ decision: 'YES', yes_ask: 0.62, no_ask: 0.4, abs_gap: 80 }) as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: place as any,
+      }
+    );
+    expect(res.ok).toBe(true);
+    expect(place).toHaveBeenCalledWith(
+      expect.objectContaining({
+        side: 'ask',
+        price: expect.stringMatching(/^0\.40/),
+      })
+    );
+  });
+
+  test('opposite Home Buy NO skips cushion after a Home YES fill', async () => {
+    const uid = 'usr_manual_opp_no';
+    const cfg = liveCfg();
+    cfg.cushions.BTC = 500;
+    cfg.risk.chase_above_ask_usd = 0;
+    cfg.manual_risk = {
+      ...(defaultAppConfig().manual_risk as NonNullable<typeof cfg.manual_risk>),
+      chase_above_ask_usd: 0,
+      max_entry_ask_usd: 0.99,
+      min_minutes_elapsed: 0,
+      min_minutes_left: 0,
+    };
+    await upsertUserDoc(uid, { state: 'DISARMED', kalshiConfigured: true, config: cfg });
+    await saveTradeRecord(uid, {
+      tradeId: 'trade_yes_home',
+      userId: uid,
+      ticker: 'KXBTC15M-MANUAL',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '5',
+      price: '0.55',
+      notionalUsd: 2.75,
+      dryRun: false,
+      status: 'FILLED',
+      executedAt: new Date().toISOString(),
+      fillCount: 5,
+      payPrice: 0.55,
+      outcome: 'pending',
+      entryPath: 'home',
+    });
+    const place = jest.fn(async () => ({
+      ok: true,
+      http_status: 200,
+      dry_run: false,
+      payload: {},
+      fill_count: '8',
+      order_id: 'ord_opp_no',
+    }));
+    const res = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'buy', decision: 'NO', requestId: 'opp_no' },
+      {
+        computeLeanFn: async () =>
+          richLean({
+            decision: 'YES',
+            live: 100_010,
+            strike: 100_000,
+            abs_gap: 10,
+            yes_ask: 0.55,
+            no_ask: 0.44,
+          }) as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: place as any,
+      }
+    );
+    expect(res.ok).toBe(true);
+    expect(place).toHaveBeenCalledWith(
+      expect.objectContaining({
+        side: 'ask',
+        price: expect.stringMatching(/^0\.44/),
+      })
+    );
+  });
+
+  test('insufficient_balance surfaces Kalshi detail', async () => {
+    const uid = 'usr_manual_low_bal';
+    await upsertUserDoc(uid, { state: 'DISARMED', kalshiConfigured: true, config: liveCfg() });
+    const res = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'buy', requestId: 'low_bal' },
+      {
+        computeLeanFn: async () => richLean() as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: async () =>
+          ({
+            ok: false,
+            http_status: 422,
+            dry_run: false,
+            payload: {},
+            error: 'insufficient_balance: Required: $5.00, Available: $2.10',
+          }) as any,
+      }
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('place_failed');
+    expect(res.message).toMatch(/insufficient_balance/i);
+    expect(res.message).toMatch(/Available: \$2\.10/);
   });
 
   test('gate skip returns message and ERROR audit without placing', async () => {
@@ -361,6 +487,69 @@ describe('manual buy/sell place-now', () => {
     expect(logs.some((l) => l.eventType === 'TRADE_TRIGGERED' && l.details?.source === 'manual_sell')).toBe(
       true
     );
+  });
+
+  test('manual sell with decision sells that side when both YES and NO are held', async () => {
+    const uid = 'usr_manual_sell_pair';
+    await upsertUserDoc(uid, { state: 'DISARMED', kalshiConfigured: true, config: liveCfg() });
+    await saveTradeRecord(uid, {
+      tradeId: 'trade_yes',
+      userId: uid,
+      ticker: 'KXBTC15M-MANUAL',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '4',
+      price: '0.55',
+      notionalUsd: 2.2,
+      dryRun: false,
+      status: 'FILLED',
+      executedAt: new Date().toISOString(),
+      fillCount: 4,
+      payPrice: 0.55,
+      outcome: 'pending',
+      entryPath: 'home',
+    });
+    await saveTradeRecord(uid, {
+      tradeId: 'trade_no',
+      userId: uid,
+      ticker: 'KXBTC15M-MANUAL',
+      asset: 'BTC',
+      decision: 'NO',
+      count: '5',
+      price: '0.40',
+      notionalUsd: 2.0,
+      dryRun: false,
+      status: 'FILLED',
+      executedAt: new Date().toISOString(),
+      fillCount: 5,
+      payPrice: 0.4,
+      outcome: 'pending',
+      entryPath: 'home',
+    });
+    const place = jest.fn(async () => ({
+      ok: true,
+      http_status: 200,
+      dry_run: false,
+      payload: {},
+      fill_count: '5',
+      order_id: 'ord_sell_no',
+    }));
+    const res = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'sell', decision: 'NO', requestId: 'sell_no_only' },
+      {
+        computeLeanFn: async () => richLean() as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: place as any,
+      }
+    );
+    expect(res.ok).toBe(true);
+    expect(place).toHaveBeenCalledTimes(1);
+    const trades = await getTradeRecords(uid);
+    const yes = trades.find((t) => t.tradeId === 'trade_yes');
+    const no = trades.find((t) => t.tradeId === 'trade_no');
+    expect(yes?.outcome).toBe('pending');
+    expect(no?.outcome).toBe('exited');
   });
 
   test('History Sell dumps hourly Cheap loop without Last signals or 15m lean', async () => {
@@ -475,6 +664,59 @@ describe('manual buy/sell place-now', () => {
     const placed = (place.mock.calls[0] as any)?.[0] as { ticker?: string; time_in_force?: string } | undefined;
     expect(placed?.ticker).toBe('KXBTC15M-T');
     expect(placed?.time_in_force).toBe('immediate_or_cancel');
+  });
+
+  test('History Sell dumps Pair lock without Last signals lean', async () => {
+    await setSystemConfig({ featureFlags: { lastSignalsManualTrade: false } });
+    const uid = 'usr_hist_sell_pair';
+    await upsertUserDoc(uid, { state: 'KILL_SWITCH', kalshiConfigured: true, config: liveCfg() });
+    await saveTradeRecord(uid, {
+      tradeId: 'trade_pl',
+      userId: uid,
+      ticker: 'KXBTC15M-PAIR',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '1',
+      price: '0.52',
+      notionalUsd: 0.52,
+      dryRun: false,
+      status: 'FILLED',
+      executedAt: new Date().toISOString(),
+      fillCount: 1,
+      payPrice: 0.52,
+      outcome: 'pending',
+      entryPath: 'pair_lock',
+    });
+    const leanFn = jest.fn();
+    const place = jest.fn(async () => ({
+      ok: true,
+      http_status: 200,
+      dry_run: false,
+      payload: {},
+      fill_count: '1',
+      order_id: 'ord_hist_pair',
+    }));
+    const res = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'sell', requestId: 'hist_pair', tradeId: 'trade_pl' },
+      {
+        computeLeanFn: leanFn as any,
+        getMarketQuoteFn: async () =>
+          ({
+            yes_bid_dollars: 0.55,
+            yes_ask_dollars: 0.56,
+            no_bid_dollars: 0.44,
+            no_ask_dollars: 0.45,
+          }) as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: place as any,
+      }
+    );
+    expect(res.ok).toBe(true);
+    expect(leanFn).not.toHaveBeenCalled();
+    expect(place).toHaveBeenCalledTimes(1);
+    const trades = await getTradeRecords(uid);
+    expect(trades[0].outcome).toBe('exited');
   });
 
   test('History Sell rejects a second claim on the same weekly fill', async () => {

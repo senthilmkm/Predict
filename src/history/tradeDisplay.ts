@@ -18,7 +18,7 @@ export function entryPathChipLabel(
   path: unknown,
   pairNo?: number | null
 ):
-  | 'Home'
+  | 'Home Buy'
   | 'Cushion lean'
   | 'Cash out'
   | 'Gold fade'
@@ -28,10 +28,11 @@ export function entryPathChipLabel(
   | 'Spike fade'
   | 'Pair lock'
   | 'PL hedge'
+  | 'Cap lock'
   | string
   | null {
   const parsed = parseEntryPath(path);
-  if (parsed === 'home') return 'Home';
+  if (parsed === 'home') return 'Home Buy';
   if (parsed === 'auto') return 'Cushion lean';
   if (parsed === 'cash_out') return 'Cash out';
   if (parsed === 'gold_fade') return 'Gold fade';
@@ -39,6 +40,8 @@ export function entryPathChipLabel(
   if (parsed === 'last_minute') return 'Last-minute';
   if (parsed === 'step_buy') return 'Step buy';
   if (parsed === 'spike_fade') return 'Spike fade';
+  if (parsed === 'cap_lock') return 'Cap lock';
+  if (parsed === 'buffer_run') return 'Buffer run';
   if (parsed === 'cheap_loop') return 'Cheap loop 15m';
   if (parsed === 'cheap_loop_hourly') return 'Cheap loop hourly';
   if (parsed === 'cheap_loop_weekly') return 'Cheap loop weekly';

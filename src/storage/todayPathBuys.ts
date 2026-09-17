@@ -14,6 +14,8 @@ export type PathBuyCounts = {
   stepBuy: PathBuyRow[];
   spikeFade: PathBuyRow[];
   pairLock: PathBuyRow[];
+  capLock: PathBuyRow[];
+  bufferRun: PathBuyRow[];
   cheapLoop: PathBuyRow[];
   cheapLoopHourly: PathBuyRow[];
   cheapLoopWeekly: PathBuyRow[];
@@ -25,6 +27,8 @@ export type PathBuyCounts = {
   stepBuyTotal: number;
   spikeFadeTotal: number;
   pairLockTotal: number;
+  capLockTotal: number;
+  bufferRunTotal: number;
   cheapLoopTotal: number;
   cheapLoopHourlyTotal: number;
   cheapLoopWeeklyTotal: number;
@@ -52,6 +56,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   const stepBuy: Record<string, number> = {};
   const spikeFade: Record<string, number> = {};
   const pairLock: Record<string, number> = {};
+  const capLock: Record<string, number> = {};
+  const bufferRun: Record<string, number> = {};
   const cheapLoop: Record<string, number> = {};
   const cheapLoopHourly: Record<string, number> = {};
   const cheapLoopWeekly: Record<string, number> = {};
@@ -69,6 +75,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     else if (path === 'step_buy') stepBuy[asset] = (stepBuy[asset] || 0) + 1;
     else if (path === 'spike_fade') spikeFade[asset] = (spikeFade[asset] || 0) + 1;
     else if (path === 'pair_lock') pairLock[asset] = (pairLock[asset] || 0) + 1;
+    else if (path === 'cap_lock') capLock[asset] = (capLock[asset] || 0) + 1;
+    else if (path === 'buffer_run') bufferRun[asset] = (bufferRun[asset] || 0) + 1;
     else if (path === 'cheap_loop') cheapLoop[asset] = (cheapLoop[asset] || 0) + 1;
     else if (path === 'cheap_loop_hourly') cheapLoopHourly[asset] = (cheapLoopHourly[asset] || 0) + 1;
     else if (path === 'cheap_loop_weekly') cheapLoopWeekly[asset] = (cheapLoopWeekly[asset] || 0) + 1;
@@ -82,6 +90,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
   const stepBuyRows = grouped(stepBuy);
   const spikeFadeRows = grouped(spikeFade);
   const pairLockRows = grouped(pairLock);
+  const capLockRows = grouped(capLock);
+  const bufferRunRows = grouped(bufferRun);
   const cheapLoopRows = grouped(cheapLoop);
   const cheapLoopHourlyRows = grouped(cheapLoopHourly);
   const cheapLoopWeeklyRows = grouped(cheapLoopWeekly);
@@ -94,6 +104,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     stepBuy: stepBuyRows,
     spikeFade: spikeFadeRows,
     pairLock: pairLockRows,
+    capLock: capLockRows,
+    bufferRun: bufferRunRows,
     cheapLoop: cheapLoopRows,
     cheapLoopHourly: cheapLoopHourlyRows,
     cheapLoopWeekly: cheapLoopWeeklyRows,
@@ -105,6 +117,8 @@ export function summarizeTodayPathBuys(trades: TradeRecord[], now = new Date()):
     stepBuyTotal: stepBuyRows.reduce((s, r) => s + r.count, 0),
     spikeFadeTotal: spikeFadeRows.reduce((s, r) => s + r.count, 0),
     pairLockTotal: pairLockRows.reduce((s, r) => s + r.count, 0),
+    capLockTotal: capLockRows.reduce((s, r) => s + r.count, 0),
+    bufferRunTotal: bufferRunRows.reduce((s, r) => s + r.count, 0),
     cheapLoopTotal: cheapLoopRows.reduce((s, r) => s + r.count, 0),
     cheapLoopHourlyTotal: cheapLoopHourlyRows.reduce((s, r) => s + r.count, 0),
     cheapLoopWeeklyTotal: cheapLoopWeeklyRows.reduce((s, r) => s + r.count, 0),
@@ -126,6 +140,8 @@ export function formatHomePathBuyLines(summary: PathBuyCounts): string[] {
   if (summary.stepBuyTotal > 0) lines.push(`Step buy  ${formatAssetCounts(summary.stepBuy)}`);
   if (summary.spikeFadeTotal > 0) lines.push(`Spike fade  ${formatAssetCounts(summary.spikeFade)}`);
   if (summary.pairLockTotal > 0) lines.push(`Pair lock  ${formatAssetCounts(summary.pairLock)}`);
+  if (summary.capLockTotal > 0) lines.push(`Cap lock  ${formatAssetCounts(summary.capLock)}`);
+  if (summary.bufferRunTotal > 0) lines.push(`Buffer run  ${formatAssetCounts(summary.bufferRun)}`);
   if (summary.cheapLoopTotal > 0) lines.push(`Cheap loop 15m  ${formatAssetCounts(summary.cheapLoop)}`);
   if (summary.cheapLoopHourlyTotal > 0) {
     lines.push(`Cheap loop hourly  ${formatAssetCounts(summary.cheapLoopHourly)}`);
@@ -147,6 +163,8 @@ export function formatDashboardPathBuys(summary: PathBuyCounts): string | null {
   if (summary.stepBuyTotal > 0) parts.push(`Step buy ${summary.stepBuyTotal}`);
   if (summary.spikeFadeTotal > 0) parts.push(`Spike fade ${summary.spikeFadeTotal}`);
   if (summary.pairLockTotal > 0) parts.push(`Pair lock ${summary.pairLockTotal}`);
+  if (summary.capLockTotal > 0) parts.push(`Cap lock ${summary.capLockTotal}`);
+  if (summary.bufferRunTotal > 0) parts.push(`Buffer run ${summary.bufferRunTotal}`);
   if (summary.cheapLoopTotal > 0) parts.push(`Cheap loop 15m ${summary.cheapLoopTotal}`);
   if (summary.cheapLoopHourlyTotal > 0) parts.push(`Cheap loop hourly ${summary.cheapLoopHourlyTotal}`);
   if (summary.cheapLoopWeeklyTotal > 0) parts.push(`Cheap loop weekly ${summary.cheapLoopWeeklyTotal}`);

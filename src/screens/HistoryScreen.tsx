@@ -18,7 +18,9 @@ import { LeanResult } from '../services/lean/lean';
 import { TradeRecord } from '../storage/repos';
 import { entryPathChipLabel, formatHistoryTradeSubline, formatSignedUsd, pairLockHistoryPairNumbers } from '../history/tradeDisplay';
 import { useMarkAlertsSeenOnLeave } from '../hooks/useMarkAlertsSeenOnLeave';
-import { cheapLoopLivePnlForTicker, isCheapLoopHistorySellableTrade } from '../../packages/trading-core/src/cheapLoop';
+import { historyLiveProfitForTicker } from '../../packages/trading-core/src/cheapLoop';
+import { isHistorySellableTrade } from '../../packages/trading-core/src/cashOut';
+import { isCapLockHistorySellable } from '../../packages/trading-core/src/capLock';
 import { cloudClient } from '../services/cloud/cloudClient';
 import {
   ALERT_FILTERS,
@@ -51,7 +53,12 @@ export function computeTradeStatusDot(
     return { color: '#ef4444', statusLabel: 'Unfavorable (Settled Loss)', testIDColor: 'red' };
   }
   if (trade.outcome === 'miss') {
-    return { color: '#6b7280', statusLabel: 'IOC Miss (No fill)', testIDColor: 'gray' };
+    const path = entryPathChipLabel(trade.entry_path);
+    return {
+      color: '#6b7280',
+      statusLabel: path ? `IOC Miss · ${path} (No fill)` : 'IOC Miss (No fill)',
+      testIDColor: 'gray',
+    };
   }
 
   // Active / Pending Trades
@@ -87,6 +94,30 @@ function formatWhen(at: unknown): string {
 
 type OpenTradeMenu = 'status' | 'side' | 'asset' | null;
 
+function historySellableFields(trade: TradeRecord) {
+  return {
+    dry_run: trade.dry_run,
+    outcome: trade.outcome,
+    fill_count: trade.fill_count,
+    status: trade.status,
+    protectExitOrderId: trade.protect_exit_order_id,
+    ticker: trade.market_ticker,
+    market_ticker: trade.market_ticker,
+    entryPath: trade.entry_path,
+    entry_path: trade.entry_path,
+    decision: trade.side,
+  };
+}
+
+function historyRowSellable(trade: TradeRecord, all: TradeRecord[]) {
+  if (!isHistorySellableTrade(historySellableFields(trade))) return false;
+  return isCapLockHistorySellable(
+    historySellableFields(trade),
+    all.map((t) => historySellableFields(t)),
+    trade.market_ticker
+  );
+}
+
 export function HistoryScreen() {
   const [tab, setTab] = useState<'trades' | 'alerts'>('trades');
   const [alertFilter, setAlertFilter] = useState<AlertFilter>('all');
@@ -96,6 +127,7 @@ export function HistoryScreen() {
   const tradesRaw = useRuntimeStore((s) => s.trades);
   const leans = useRuntimeStore((s) => s.leans);
   const liveAsks = useRuntimeStore((s) => s.liveAsks);
+  const liveAskTickers = useRuntimeStore((s) => s.liveAskTickers);
   const alertsRaw = useRuntimeStore((s) => s.alerts);
   const refreshCloudSnapshot = useRuntimeStore((s) => s.refreshCloudSnapshot);
   const [refreshing, setRefreshing] = useState(false);
@@ -115,7 +147,11 @@ export function HistoryScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await refreshCloudSnapshot();
+      // Cap wait so a hung Cloud path cannot leave the spinner on forever.
+      await Promise.race([
+        refreshCloudSnapshot(),
+        new Promise<void>((resolve) => setTimeout(resolve, 22_000)),
+      ]);
     } catch {
       /* Keep last known History if the snapshot fails */
     } finally {
@@ -149,32 +185,45 @@ export function HistoryScreen() {
 
   const livePnlFor = useCallback(
     (trade: TradeRecord) => {
-      if (
-        !isCheapLoopHistorySellableTrade({
-          entry_path: trade.entry_path,
-          dry_run: trade.dry_run,
-          outcome: trade.outcome,
-          fill_count: trade.fill_count,
-        })
-      ) {
+      if (!isHistorySellableTrade(historySellableFields(trade))) {
         return null;
       }
       const lean = leans[trade.asset as AssetKey];
-      const ask = liveAsks?.[trade.asset as AssetKey];
-      return cheapLoopLivePnlForTicker({
+      const ask = liveAsks?.[trade.asset as AssetKey] as
+        | { ticker?: string; yes_ask?: number | null; no_ask?: number | null }
+        | undefined;
+      const tickerQuote = trade.market_ticker
+        ? (liveAskTickers?.[trade.market_ticker] as
+            | { yes_ask?: number | null; no_ask?: number | null }
+            | undefined)
+        : undefined;
+      return historyLiveProfitForTicker({
         ticker: trade.market_ticker,
         heldSide: trade.side,
         fillUsd: trade.fill_price,
         fillCount: trade.fill_count,
         quotes: [
-          lean
-            ? { market_ticker: lean.market_ticker, yes_bid: lean.yes_bid, no_bid: lean.no_bid }
+          tickerQuote
+            ? {
+                ticker: trade.market_ticker,
+                yes_ask: tickerQuote.yes_ask,
+                no_ask: tickerQuote.no_ask,
+              }
             : null,
-          ask ? { ticker: ask.ticker, yes_bid: ask.yes_bid, no_bid: ask.no_bid } : null,
+          lean
+            ? {
+                market_ticker: lean.market_ticker,
+                yes_ask: lean.yes_ask,
+                no_ask: lean.no_ask,
+              }
+            : null,
+          ask
+            ? { ticker: ask.ticker, yes_ask: ask.yes_ask, no_ask: ask.no_ask }
+            : null,
         ],
       });
     },
-    [leans, liveAsks]
+    [leans, liveAsks, liveAskTickers]
   );
 
   const sellCheapLoopFill = useCallback(
@@ -220,13 +269,13 @@ export function HistoryScreen() {
 
   const confirmCheapLoopSell = useCallback(
     (trade: TradeRecord) => {
-      const pathLabel = entryPathChipLabel(trade.entry_path) || 'Cheap loop';
+      const pathLabel = entryPathChipLabel(trade.entry_path) || 'this fill';
       const live = livePnlFor(trade);
       const liveLine =
-        live != null ? `\nLive ${formatSignedUsd(live)} if this bid fills.` : '';
+        live != null ? `\nLive profit ${formatSignedUsd(live)} (cost vs current ask).` : '';
       Alert.alert(
         'Sell now?',
-        `${trade.asset} ${trade.side} · ${pathLabel}. Bid IOC on Kalshi’s book. Does not wait for Take, Stop, or Flatten.${liveLine}`,
+        `${trade.asset} ${trade.side} · ${pathLabel}. Bid IOC on Kalshi’s book.${liveLine}`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -342,6 +391,7 @@ export function HistoryScreen() {
             <FlatList
               data={filteredTrades}
               keyExtractor={(i, index) => (i && i.id ? String(i.id) : `trade-${index}`)}
+              initialNumToRender={24}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -356,13 +406,10 @@ export function HistoryScreen() {
                   const cushion = cushions[item.asset as AssetKey];
                   const statusInfo = computeTradeStatusDot(item, lean, cushion);
                   const pathLabel = entryPathChipLabel(item.entry_path, pairLockPairNo.get(item.id));
-                  const sellable = isCheapLoopHistorySellableTrade({
-                    entry_path: item.entry_path,
-                    dry_run: item.dry_run,
-                    outcome: item.outcome,
-                    fill_count: item.fill_count,
-                  });
-                  const livePnl = sellable ? livePnlFor(item) : null;
+                  const sellable = historyRowSellable(item, trades);
+                  const livePnl = isHistorySellableTrade(historySellableFields(item))
+                    ? livePnlFor(item)
+                    : null;
                   return (
                     <View style={styles.row} testID={`trade-row-${item.id}`}>
                       <View style={styles.tradeTitleGroup}>
@@ -389,7 +436,7 @@ export function HistoryScreen() {
                           ]}
                           testID={`trade-live-pnl-${item.id}`}
                         >
-                          Live {formatSignedUsd(livePnl)} at this bid
+                          Live profit {formatSignedUsd(livePnl)}
                         </Text>
                       ) : null}
                       <Text style={styles.time}>{formatWhen(item.at)}</Text>

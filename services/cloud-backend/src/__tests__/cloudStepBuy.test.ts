@@ -134,6 +134,48 @@ describe('Step buy cloud wiring', () => {
     expect(res.alerts[0]?.body).toMatch(/lot 1 flatten/);
   });
 
+  test('thesis die dumps remaining lots at the bid', async () => {
+    const lot1 = filledTrade({ tradeId: 'sb-t1', stepLotIndex: 1, payPrice: 0.72 });
+    const lot2 = filledTrade({
+      tradeId: 'sb-t2',
+      stepLotIndex: 2,
+      payPrice: 0.73,
+      executedAt: '2026-09-12T10:08:00.000Z',
+    });
+    const placed: Array<{ side: string; price: string }> = [];
+    const res = await runCloudStepBuyStops({
+      userId: 'u1',
+      asset: 'Gold',
+      ticker: 'KXGOLD15M-T',
+      lean: {
+        phase: 'live',
+        decision: 'NO',
+        abs_gap: 4,
+        yes_bid: 0.7,
+        yes_ask: 0.72,
+        no_bid: 0.28,
+        no_ask: 0.3,
+      },
+      trades: [lot1, lot2],
+      stopUsd: 0.03,
+      cushionUsd: 4,
+      cushionPct: 50,
+      sellIfThesisDies: true,
+      slippageUsd: 0.02,
+      dryRun: false,
+      now: new Date('2026-09-12T10:14:20.000Z'),
+      place: async (input) => {
+        placed.push({ side: input.side, price: input.price });
+        return { ok: true, fill_count: input.count, order_id: `x-${placed.length}` };
+      },
+    });
+    expect(res.exited).toBe(2);
+    expect(placed).toHaveLength(2);
+    expect(placed[0]?.side).toBe('ask');
+    expect(res.alerts[0]?.title).toBe('Step buy thesis');
+    expect(res.alerts[0]?.body).toMatch(/lean flipped/);
+  });
+
   test('POST /me/status persists Step buy settings; merge keeps Last-minute', async () => {
     const uid = 'user_step_buy_cfg';
     const on = await request(app)
@@ -147,6 +189,8 @@ describe('Step buy cloud wiring', () => {
             step_buy_enabled: true,
             step_buy_start_minutes: 6,
             step_buy_cushion_pct: 40,
+            step_buy_add_cushion_pct: 80,
+            step_buy_sell_if_thesis_dies: false,
             step_buy_lot_count: 2,
             step_buy_add_wait_minutes: 2,
             step_buy_add_band_usd: 0.03,
@@ -164,6 +208,8 @@ describe('Step buy cloud wiring', () => {
     expect(on.body.userDoc.config.risk.step_buy_enabled).toBe(true);
     expect(on.body.userDoc.config.risk.step_buy_start_minutes).toBe(6);
     expect(on.body.userDoc.config.risk.step_buy_cushion_pct).toBe(40);
+    expect(on.body.userDoc.config.risk.step_buy_add_cushion_pct).toBe(80);
+    expect(on.body.userDoc.config.risk.step_buy_sell_if_thesis_dies).toBe(false);
     expect(on.body.userDoc.config.risk.step_buy_lot_count).toBe(2);
     expect(on.body.userDoc.config.risk.step_buy_add_wait_minutes).toBe(2);
     expect(on.body.userDoc.config.risk.step_buy_add_band_usd).toBe(0.03);

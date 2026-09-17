@@ -1,14 +1,17 @@
 import {
   collectHomeQuoteAssets,
+  intersectCushionAssets,
   collectWatchAssets,
   fetchAskQuotesOnce,
   leanWithSnapshotQuote,
   liveAsksByAsset,
   liveAsksFromTickers,
+  quotesByTicker,
   rememberTickersFromLeans,
   resolveAskTickers,
   unionAssetKeys,
   uniqueTickersFromLeans,
+  wsQuotesForTickers,
 } from '../services/oneSecondMarket';
 
 describe('one-second market snapshot', () => {
@@ -41,6 +44,8 @@ describe('one-second market snapshot', () => {
       ]).sort()
     ).toEqual(['BTC', 'ETH', 'NEAR', 'SOL']);
     expect(unionAssetKeys(['BTC', 'SOL'], ['ETH', 'BTC'], []).sort()).toEqual(['BTC', 'ETH', 'SOL']);
+    expect(intersectCushionAssets(['BTC', 'Gold', 'HYPE'], ['BTC', 'ETH'])).toEqual(['BTC']);
+    expect(intersectCushionAssets(['Gold', 'HYPE'], [])).toEqual([]);
     expect(
       rememberTickersFromLeans({ BTC: 'OLD' }, { BTC: { market_ticker: 'KXBTC15M' }, ETH: {} })
     ).toEqual({ BTC: 'KXBTC15M' });
@@ -57,6 +62,22 @@ describe('one-second market snapshot', () => {
         new Map([['KXBTC15M', { yes_ask: 0.4, no_ask: 0.61 }]])
       )
     ).toEqual({ BTC: { yes_ask: 0.4, no_ask: 0.61, ticker: 'KXBTC15M' } });
+    expect(
+      quotesByTicker(
+        new Map([
+          ['KXBTCD-WEEK', { yes_bid: 0.41, no_bid: 0.58, yes_ask: 0.42, no_ask: 0.59 }],
+          ['', { yes_bid: 0.1 }],
+        ])
+      )
+    ).toEqual({
+      'KXBTCD-WEEK': {
+        yes_bid: 0.41,
+        no_bid: 0.58,
+        yes_ask: 0.42,
+        no_ask: 0.59,
+        ticker: 'KXBTCD-WEEK',
+      },
+    });
   });
 
   test('fetches each ticker once even if many leans share it', async () => {
@@ -88,6 +109,10 @@ describe('one-second market snapshot', () => {
     expect(next).not.toBe(raw);
     raw.yes_ask = 0.11;
     expect(next.yes_ask).toBe(0.77);
+  });
+
+  test('wsQuotesForTickers never invents a REST quote', () => {
+    expect(wsQuotesForTickers(['KXBTC15M', 'KXBTC15M', ''])).toEqual(new Map());
   });
 
   test('uniqueTickersFromLeans drops empty tickers', () => {

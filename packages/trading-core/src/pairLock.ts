@@ -82,7 +82,7 @@ export type PairLockTrade = {
   dry_run?: boolean;
   status?: string;
   outcome?: string | null;
-  /** True when enter fired YES+NO together. One-leg leftover dumps now. */
+  /** True when enter fired YES+NO together. One-leg leftover waits Recover wait. */
   pairLockAtomic?: boolean;
 };
 
@@ -219,13 +219,13 @@ export function pairLockRecoverElapsed(opts: {
   return nowMs - filledMs + 1e-9 >= waitMs;
 }
 
-/** After Recover wait: buy the dog if runner fill + ask still ≤ $1. */
+/** After Recover wait: buy the dog only if settlement still pays at least 1¢. */
 export function canPairLockEvenHedge(opts: { runnerFillUsd?: unknown; hedgeAskUsd?: unknown }): boolean {
   const fill = ticketUsd(opts.runnerFillUsd);
   const ask = ticketUsd(opts.hedgeAskUsd);
   if (fill == null || ask == null) return false;
   if (ask >= 0.995) return false;
-  return fill + ask <= 1 + 1e-9;
+  return fill + ask <= 0.99 + 1e-9;
 }
 
 export function canPairLockRunnerTake(opts: {
@@ -335,13 +335,15 @@ export function canPairLockHedge(opts: {
   return ask <= limit + 1e-9;
 }
 
-/** Add-pair: both live asks still under $1 and not richer than $1 combined. */
-export function canPairLockStackAsks(opts: { yesAskUsd?: unknown; noAskUsd?: unknown }): boolean {
+/** Add-pair: both live asks still lock Min lock (missing → 1¢ so $1.00 books sit). */
+export function canPairLockStackAsks(opts: { yesAskUsd?: unknown; noAskUsd?: unknown; minLockUsd?: unknown }): boolean {
   const yes = ticketUsd(opts.yesAskUsd);
   const no = ticketUsd(opts.noAskUsd);
   if (yes == null || no == null) return false;
   if (yes >= 0.995 || no >= 0.995) return false;
-  return yes + no <= 1 + 1e-9;
+  const minLock =
+    opts.minLockUsd == null ? 0.01 : normalizePairLockMinLockUsd(opts.minLockUsd);
+  return yes + no <= 1 - minLock + 1e-9;
 }
 
 /** Live runner ask at or under this → unmatched stop, if the hedge still cannot lock. */
@@ -794,7 +796,7 @@ export function evaluatePairLockStackAdd(opts: {
   const yesAsk = sideAskOf('YES', opts.quotes);
   const noAsk = sideAskOf('NO', opts.quotes);
   if (yesAsk == null || noAsk == null) return fail('pair_lock_no_ask');
-  if (!canPairLockStackAsks({ yesAskUsd: yesAsk, noAskUsd: noAsk })) {
+  if (!canPairLockStackAsks({ yesAskUsd: yesAsk, noAskUsd: noAsk, minLockUsd: opts.minLockUsd })) {
     return fail('pair_lock_min_lock');
   }
   if (opts.skipThinBid) {
@@ -843,7 +845,9 @@ export function evaluatePairLockStackRecover(opts: {
     oppAsk != null &&
     oppAsk < 0.995 &&
     finishLossUsd != null &&
-    (dumpLossUsd == null || finishLossUsd <= dumpLossUsd + 1e-9);
+    (finishLossUsd <= 1e-9
+      ? true
+      : dumpLossUsd != null && finishLossUsd + 1e-9 < dumpLossUsd);
   if (canFinish) {
     if (opts.skipThinBid) {
       if (opts.bidSize == null || !Number.isFinite(Number(opts.bidSize)) || Number(opts.bidSize) < extra) {
@@ -1055,15 +1059,6 @@ export function evaluatePairLockWatch(opts: {
       reason: flatten.reason,
       hedge,
       flatten,
-    };
-  }
-
-  if (opts.lots.atomicUnmatched) {
-    return {
-      kind: 'atomic_dump',
-      reason: 'pair_lock_atomic_dump',
-      hedge,
-      flatten: { sell: true, kind: 'pair_lock_atomic_dump', reason: 'pair_lock_atomic_dump' },
     };
   }
 

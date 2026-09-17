@@ -1,4 +1,10 @@
-import { normalizePinnedPathIds, pathTileById, PINNED_PATHS_MAX } from '../src/content/pathCatalog';
+import {
+  isPinnedPathVisible,
+  normalizePinnedPathIds,
+  pathTileById,
+  PINNED_PATHS_MAX,
+  visiblePinnedPathIds,
+} from '../src/content/pathCatalog';
 
 describe('normalizePinnedPathIds', () => {
   test('drops unknown ids, duplicates, and caps at three', () => {
@@ -11,6 +17,18 @@ describe('normalizePinnedPathIds', () => {
     expect(normalizePinnedPathIds(null)).toEqual([]);
     expect(normalizePinnedPathIds('auto')).toEqual([]);
     expect(pathTileById('auto').title).toBe('Cushion lean');
-    expect(pathTileById('auto').sub).toBe('Gap > cushion');
+    expect(pathTileById('auto').sub).toBe('Cushion < gap ≤ cushion×');
+  });
+
+  test('admin-off pins do not count as visible toward the Home row', () => {
+    const flags = {
+      bufferRunFeatureOn: true,
+      cheapLoopFeatureOn: false,
+      capLockFeatureOn: false,
+    };
+    expect(isPinnedPathVisible('home', flags)).toBe(true);
+    expect(isPinnedPathVisible('bufferRun', flags)).toBe(true);
+    expect(isPinnedPathVisible('cheapLoop', flags)).toBe(false);
+    expect(visiblePinnedPathIds(['home', 'auto', 'cheapLoop'], flags)).toEqual(['home', 'auto']);
   });
 });

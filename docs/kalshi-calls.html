@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Predict — Kalshi calls, purpose, and frequency</title>
+  <meta name="description" content="Every Kalshi REST and WebSocket call Predict makes: purpose, frequency, and which trading path uses it." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B0E14;
+      --bg-card: rgba(22, 29, 39, 0.82);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #F2F5F7;
+      --muted: #94A3B8;
+      --dim: #64748B;
+      --accent: #3DB8A0;
+      --gold: #C6A75E;
+      --rose: #F07178;
+      --amber: #FFAB00;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    .glow {
+      position: fixed; top: -180px; left: 50%; transform: translateX(-50%);
+      width: 1100px; height: 640px;
+      background: radial-gradient(ellipse at center, rgba(61,184,160,.16) 0%, rgba(198,167,94,.07) 42%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+    header {
+      padding: 22px 0; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: rgba(11,14,20,.9); backdrop-filter: blur(16px); z-index: 20;
+    }
+    .nav { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .mark {
+      width: 34px; height: 34px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--gold), var(--accent));
+      color: #0B0E14; font-weight: 800; display: grid; place-items: center;
+    }
+    .brand-name { color: var(--gold); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 14px 18px; justify-content: flex-end; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; }
+    .nav-links a:hover { color: var(--text); }
+    .hero { padding: 56px 0 28px; }
+    .kicker { color: var(--gold); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; letter-spacing: -0.03em; margin: 12px 0 16px; max-width: 22ch; }
+    .lede { font-size: 18px; color: var(--muted); max-width: 760px; }
+    .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 28px 0 8px; }
+    .note {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px;
+    }
+    .note h3 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+    .note p { font-size: 14px; color: var(--muted); }
+    section { padding: 40px 0 12px; }
+    h2 { font-size: 26px; letter-spacing: -0.03em; margin-bottom: 8px; }
+    .sub { color: var(--muted); max-width: 820px; margin-bottom: 20px; }
+    .table-wrap {
+      overflow: auto; border: 1px solid var(--border); border-radius: 18px;
+      background: var(--bg-card); margin-bottom: 12px; max-height: 78vh;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 860px; }
+    thead th {
+      position: sticky; top: 0; z-index: 2;
+      background: #121821; text-align: left; font-size: 11px; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--dim); padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top;
+      font-size: 14px; color: var(--muted);
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover td { background: rgba(255,255,255,.025); }
+    td.path { color: var(--text); font-weight: 700; white-space: nowrap; }
+    code, .mono {
+      font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px; color: #D7E3EA;
+    }
+    .call { font-weight: 600; color: var(--text); }
+    .kind {
+      display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .06em;
+      text-transform: uppercase; padding: 3px 7px; border-radius: 999px; white-space: nowrap;
+    }
+    .kind-rest { color: #8BB4F7; background: rgba(139,180,247,.12); }
+    .kind-ws { color: var(--accent); background: rgba(61,184,160,.14); }
+    .kind-phone { color: var(--gold); background: rgba(198,167,94,.14); }
+    .kind-other { color: var(--amber); background: rgba(255,171,0,.12); }
+    .freq { color: var(--text); font-weight: 700; white-space: nowrap; }
+    .foot { color: var(--dim); font-size: 13px; margin: 8px 0 28px; }
+    footer { padding: 28px 0 48px; color: var(--dim); font-size: 13px; border-top: 1px solid var(--border); margin-top: 24px; }
+    @media (max-width: 720px) {
+      .nav-links { display: none; }
+      h1 { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+  <header>
+    <div class="wrap nav">
+      <a class="brand" href="./index.html"><span class="mark">P</span><span class="brand-name">Predict</span></a>
+      <nav class="nav-links">
+        <a href="#catalog">All calls</a>
+        <a href="#by-path">By path</a>
+        <a href="./paths.html">Paths</a>
+        <a href="./disclaimer.html">Risk</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <div class="kicker">Cloud Run · Kalshi production API</div>
+      <h1>What we call, why, and how often.</h1>
+      <p class="lede">
+        Live trading is Cloud. The phone Last signals card reads Cloud every 1s for asks and gap.
+        Cushions-On coins only for lean and the quotes WebSocket. Empty Cushions list means no lean calls.
+        Admin Tick interval (usually 10s) is user walk + ticker reconcile — not a 1s REST flood.
+      </p>
+      <div class="notes">
+        <div class="note">
+          <h3>Lean (gap)</h3>
+          <p>Once per second per On coin: Kalshi <code>live_data</code>. Full <code>/events</code> only on miss or window end.</p>
+        </div>
+        <div class="note">
+          <h3>Ask / bid</h3>
+          <p>One quotes WebSocket, <code>orderbook_delta</code>, Cushions-On tickers. Pump every 1s; book updates as Kalshi pushes.</p>
+        </div>
+        <div class="note">
+          <h3>Orders</h3>
+          <p>Signed <code>POST /portfolio/events/orders</code> only when a path or Home Buy actually places. Then short fill confirm.</p>
+        </div>
+        <div class="note">
+          <h3>Not Kalshi</h3>
+          <p>Pyth Hermes is a spot fallback if <code>live_data</code> is empty. CF Benchmarks is the TWAP official index (or Kalshi proxy).</p>
+        </div>
+      </div>
+    </div>
+
+    <section id="catalog">
+      <h2>1. Every Kalshi call</h2>
+      <p class="sub">Catalog of REST and WebSocket. Frequency is what Cloud does in production with Admin tick at 10s and Cushions-On coins. Phone rows are labeled.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Call</th>
+              <th>Kind</th>
+              <th>Purpose</th>
+              <th>Frequency</th>
+              <th>Who / scope</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="call">GET /events</span><br><span class="mono">?series_ticker=&amp;limit=8&amp;status=open</span></td>
+              <td><span class="kind kind-rest">REST public</span></td>
+              <td>Find the live 15m market: ticker, strike, open/close. Shared across users.</td>
+              <td class="freq">On miss or window end; also each Admin tick (cached 20s)</td>
+              <td>Cushions-On coins only. One in-flight per coin.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /events</span><br><span class="mono">?series_ticker=&amp;limit=50</span></td>
+              <td><span class="kind kind-rest">REST public</span></td>
+              <td>Hourly / weekly Cheap loop event + ATM strike ladder.</td>
+              <td class="freq">Admin tick when that Cheap loop variant is watching / entering (cached 20s)</td>
+              <td>Cheap loop hourly or weekly On, those assets only.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /live_data/events/{event}</span><br><span class="mono">?range=15min</span></td>
+              <td><span class="kind kind-rest">REST public</span></td>
+              <td>Official Kalshi chart last print. Live vs strike = gap and YES/NO lean.</td>
+              <td class="freq">Once per second per Cushions-On coin (1s cache + single-flight)</td>
+              <td>Always-on 1s beat. Last signals gap on iOS uses this.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /live_data/events/{event}</span><br><span class="mono">?range=60min then 15min</span></td>
+              <td><span class="kind kind-rest">REST public</span></td>
+              <td>Spot for hourly/weekly ATM pick when Cheap loop needs a new strike.</td>
+              <td class="freq">Admin tick / enter for hourly or weekly, not the 1s 15m lean loop</td>
+              <td>Cheap loop hourly / weekly only.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /markets/{ticker}</span></td>
+              <td><span class="kind kind-rest">REST public</span></td>
+              <td>REST yes/no ask/bid and close clock. Used to seed ticker/strike, settle result, or fill clock if WS has no book.</td>
+              <td class="freq">Cached 5s. Not on the 1s beat when WS is healthy. Settlement when a lot is due.</td>
+              <td>Shared. Settlement once per pending ticker per tick.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /markets/{ticker}/orderbook</span></td>
+              <td><span class="kind kind-rest">REST public</span></td>
+              <td>Best bid size when Cash out needs depth and WS size is missing.</td>
+              <td class="freq">On dump eval only if WS best-bid size is null (WS size cached ~3s on REST fallback)</td>
+              <td>Cash out (and similar bid-size checks). Not every 1s.</td>
+            </tr>
+            <tr>
+              <td><span class="call">WS quotes</span><br><span class="mono">wss://…/trade-api/ws/v2<br>channel orderbook_delta</span></td>
+              <td><span class="kind kind-ws">WebSocket</span></td>
+              <td>Live yes/no bid/ask for Cushions-On 15m tickers. One socket for the process. Snapshot then deltas.</td>
+              <td class="freq">Socket stays open. Subscribe/sync every 1s. Book updates when Kalshi pushes (sub-second).</td>
+              <td>Admin flag Kalshi WS quotes On + platform key. Tickers = Cushions-On only.</td>
+            </tr>
+            <tr>
+              <td><span class="call">WS fills</span><br><span class="mono">user_orders / fill channel<br>~4.2s race vs REST</span></td>
+              <td><span class="kind kind-ws">WebSocket</span></td>
+              <td>See fill_count faster after a place. REST GET order still runs; REST wins if counts disagree.</td>
+              <td class="freq">Once per live place, only while confirming that order. Not a 1s loop.</td>
+              <td>Admin flag Kalshi WS fills On. Per user keys on that place.</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST /portfolio/events/orders</span></td>
+              <td><span class="kind kind-rest">REST signed</span></td>
+              <td>Place IOC (or path TIF) buy or sell.</td>
+              <td class="freq">Only when a path or Home Buy sends. Not on a timer.</td>
+              <td>That user’s Kalshi key. Place lock per ticker.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /portfolio/orders/{id}</span></td>
+              <td><span class="kind kind-rest">REST signed</span></td>
+              <td>Confirm fill after place (Kalshi often returns fill_count 0 on the POST).</td>
+              <td class="freq">Up to 4 polls over ~4s (600 / 900 / 1200 / 1500 ms) per place, until complete</td>
+              <td>Same place. Skipped early if the POST already looks filled.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /portfolio/fills</span><br><span class="mono">?limit=100</span></td>
+              <td><span class="kind kind-rest">REST signed</span></td>
+              <td>Pull Kalshi fills into Cloud History if a place was missed locally.</td>
+              <td class="freq">Once per user per Admin tick when the trade book is loaded</td>
+              <td>Enrolled users with keys. Not 1s.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /cfbenchmarks/values</span><br><span class="mono">?id=BRTI or ETHUSD_RTI</span></td>
+              <td><span class="kind kind-rest">REST signed</span></td>
+              <td>Official CF Benchmarks 1s index history for TWAP lock (Kalshi proxy if no CFB key).</td>
+              <td class="freq">At most once per BTC/ETH per 10s (one pull already has ~3600 1s rows)</td>
+              <td>TWAP lock watching those coins. Not used for Last signals gap.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /portfolio/balance</span></td>
+              <td><span class="kind kind-phone">Phone REST</span></td>
+              <td>Cash + predictions cards on Home. Not used by Cloud path ticks.</td>
+              <td class="freq">Phone poller (Admin tick interval, min 10s) and pull-to-refresh</td>
+              <td>Phone, that user’s key.</td>
+            </tr>
+            <tr>
+              <td><span class="call">Phone GET /events + /live_data + /markets</span></td>
+              <td><span class="kind kind-phone">Phone REST</span></td>
+              <td>Fallback lean if Cloud 1s quotes have no fresh gap (&gt;8s old).</td>
+              <td class="freq">Skipped when Cloud lean is &lt; 8s old. Otherwise phone poller (~10–20s), staggered 350ms per coin</td>
+              <td>Cushions-On on the phone. Prefer Cloud.</td>
+            </tr>
+            <tr>
+              <td><span class="call">Hermes Pyth</span><br><span class="mono">not Kalshi</span></td>
+              <td><span class="kind kind-other">Other HTTP</span></td>
+              <td>Spot if Kalshi live_data has no last print.</td>
+              <td class="freq">Only inside a full computeLean (miss / window end / Admin tick), not every 1s</td>
+              <td>Same coin as that computeLean.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="foot">Public REST host: <span class="mono">api.elections.kalshi.com/trade-api/v2</span>. Signed REST: <span class="mono">api.elections.kalshi.com</span> (demo uses <span class="mono">external-api.demo.kalshi.co</span>). Quotes WS: <span class="mono">wss://api.elections.kalshi.com/trade-api/ws/v2</span>.</p>
+    </section>
+
+    <section id="by-path">
+      <h2>2. By path</h2>
+      <p class="sub">Ownership order on Cloud: TWAP → Last-minute → Spike → Step → Cap lock → Pair lock → Cheap loop → Gold fade → Cash out → Auto. A coin On for Cap lock skips Cushion Auto lean. Shared 1s lean + WS book feed every path; the rows below are extra calls that path makes.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Kalshi call</th>
+              <th>Purpose</th>
+              <th>Frequency</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="path" rowspan="4">Shared 1s market<br><span class="mono" style="font-weight:500;color:var(--dim)">All paths + Last signals</span></td>
+              <td><span class="call">WS quotes · orderbook_delta</span></td>
+              <td>Live ask/bid for Cushions-On 15m tickers. Home ask line. Path IOC pay.</td>
+              <td class="freq">Always-on. Sync 1s. Pushes as they happen.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /live_data/events/…?range=15min</span></td>
+              <td>Live vs strike gap. Last signals gap. Lean YES/NO (cushion applied on the phone / per user gate).</td>
+              <td class="freq">1s per Cushions-On coin</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /events?limit=8</span></td>
+              <td>15m ticker + strike + close when cache is empty or the window ended.</td>
+              <td class="freq">Miss / window end; Admin tick also reconciles (20s events cache)</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /markets/{ticker}</span></td>
+              <td>Seed book/clock if WS is down; settlement result when a lot is due.</td>
+              <td class="freq">Not 1s when WS is up. Settlement on Admin tick if pending.</td>
+            </tr>
+            <tr>
+              <td class="path">Home Buy</td>
+              <td><span class="call">POST orders</span> + <span class="call">GET order</span> + optional <span class="call">WS fills</span></td>
+              <td>Your tap. Size from Home knobs. Uses the 1s book at send.</td>
+              <td class="freq">On tap only. Fill confirm ~4s after that place.</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Cushion lean (Auto)</td>
+              <td><span class="call">Shared 1s lean + WS quotes</span></td>
+              <td>Enter if gap ≥ that coin’s Cushion $ and ask fits Auto max.</td>
+              <td class="freq">Read every 1s. Place only when the gate fires (Admin tick / 1s watch).</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Buy the lean side. Skipped if Cap lock (or a higher path) owns the coin.</td>
+              <td class="freq">On enter only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="3">TWAP lock</td>
+              <td><span class="call">GET /cfbenchmarks/values</span> (or CFB direct)</td>
+              <td>1s official index prints for the TWAP sum vs strike.</td>
+              <td class="freq">≤1 pull per BTC/ETH per 10s</td>
+            </tr>
+            <tr>
+              <td><span class="call">Shared WS quotes + 1s lean</span></td>
+              <td>Ask at buy; 1s last-minute watch is hardcoded on this path.</td>
+              <td class="freq">1s while watching</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Buy Yes if the official 1s sum can still win; hold to $1.</td>
+              <td class="freq">On enter / last-minute add only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Last-minute</td>
+              <td><span class="call">Shared WS quotes + 1s lean</span></td>
+              <td>Last 60s Yes buy if ask ≤ max.</td>
+              <td class="freq">1s in the last minute</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Yes IOC.</td>
+              <td class="freq">On enter only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Spike fade</td>
+              <td><span class="call">Shared WS quotes + 1s lean</span></td>
+              <td>See a spike on the 1s book, buy the fade side.</td>
+              <td class="freq">1s while watching</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Enter / dump per Spike knobs.</td>
+              <td class="freq">On signal only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Step buy</td>
+              <td><span class="call">Shared WS quotes + 1s lean</span></td>
+              <td>Lot 1 and adds; 1s watcher for stop and “sell if thesis dies” (bid IOC).</td>
+              <td class="freq">1s after first fill</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Each lot buy or flatten.</td>
+              <td class="freq">On lot / dump only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Cap lock</td>
+              <td><span class="call">Shared WS quotes</span> (asks, not cushion lean)</td>
+              <td>YES+NO same ticker if live asks + fees fit $1 + max lock loss. Richer first, then second = first fill.</td>
+              <td class="freq">1s in Try first / allow-later window. No extra live_data of its own.</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> ×2 sequential + fill confirm each</td>
+              <td>Two IOC legs. Second waits on first fill. Flatten leftover uses WS bid.</td>
+              <td class="freq">On attempt / flatten only. Admin Cap lock flag Off until you turn it on.</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Pair lock</td>
+              <td><span class="call">Shared WS quotes + 1s lean</span></td>
+              <td>Runner at live lean; hedge the other side. Legs can POST together.</td>
+              <td class="freq">1s watch after a fill; enter on tick/watch</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> (both legs) + fill confirm</td>
+              <td>Lock pair. Unmatched dump on 1s book.</td>
+              <td class="freq">On enter / dump only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Cheap loop 15m</td>
+              <td><span class="call">Shared WS quotes + 1s lean</span></td>
+              <td>Cheap side ATM scalp on the 15m book.</td>
+              <td class="freq">1s while a lot is open or watching</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Buy cheap / take / stop / flatten.</td>
+              <td class="freq">On those actions only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="3">Cheap loop hourly / weekly</td>
+              <td><span class="call">GET /events?limit=50</span></td>
+              <td>Find the live hourly or weekly event and ATM strike.</td>
+              <td class="freq">Admin tick / enter (20s events cache). Not 1s.</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /live_data … 60min then 15min</span> + <span class="call">GET /markets/{atm}</span></td>
+              <td>Spot for ATM pick; REST quote if WS has no hourly/weekly book.</td>
+              <td class="freq">On enter. 1s watch overlays WS/snapshot if subscribed; no REST every second.</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Same scalp loop on that longer market.</td>
+              <td class="freq">On buy / take / stop / flatten</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Gold fade</td>
+              <td><span class="call">Shared WS quotes</span></td>
+              <td>Cheap Gold ticket; take/stop/flatten on 1s bid/ask. Skips Cap lock lots.</td>
+              <td class="freq">1s while a fade lot is open</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Buy / sell / dump.</td>
+              <td class="freq">On those actions only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="3">Cash out</td>
+              <td><span class="call">Shared WS quotes</span></td>
+              <td>Bid for dump. Skips Cap lock matched lots.</td>
+              <td class="freq">1s while a Cash out lot is open</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /markets/{ticker}/orderbook</span></td>
+              <td>Best bid size if WS size is missing.</td>
+              <td class="freq">That dump eval only</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Bid IOC dump.</td>
+              <td class="freq">On dump only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Protect money</td>
+              <td><span class="call">Shared WS quotes</span></td>
+              <td>1s dump quote for Auto / Home lots. Skips Cap lock / several path lots by design.</td>
+              <td class="freq">1s while Protect is On and a watched lot is open</td>
+            </tr>
+            <tr>
+              <td><span class="call">POST orders</span> + fill confirm</td>
+              <td>Protect sell at bid.</td>
+              <td class="freq">On dump only</td>
+            </tr>
+            <tr>
+              <td class="path" rowspan="2">Every live place<br><span class="mono" style="font-weight:500;color:var(--dim)">All paths + Home</span></td>
+              <td><span class="call">WS fills</span> (if Admin On)</td>
+              <td>Hear fill_count on the order just placed.</td>
+              <td class="freq">~4.2s window after that POST, then socket done</td>
+            </tr>
+            <tr>
+              <td><span class="call">GET /portfolio/orders/{id}</span></td>
+              <td>Authoritative fill. Wins if WS disagrees.</td>
+              <td class="freq">Up to 4 times over ~4s after that place</td>
+            </tr>
+            <tr>
+              <td class="path">History / settlement</td>
+              <td><span class="call">GET /portfolio/fills</span> + <span class="call">GET /markets/{ticker}</span></td>
+              <td>Catch missed fills; mark win/loss when the market is determined.</td>
+              <td class="freq">Fills: once per user per Admin tick. Result quote: pending lots on that tick.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="foot">
+        Duplicate REST is blocked with single-flight per coin, 1s live_data cache, 20s events cache, 5s market cache, and overlapping <code>/tick</code> skip.
+        iOS Last signals polls Cloud <code>GET /me/quotes</code> every 1s (asks + gap). That is our API, not an extra Kalshi call from the phone.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      From Cloud revision that runs the always-on 1s beat. Cap lock Admin flag stays Off until you turn it on.
+      · <a href="./paths.html">Paths guide</a>
+      · <a href="./index.html">Home</a>
+    </div>
+  </footer>
+</body>
+</html>

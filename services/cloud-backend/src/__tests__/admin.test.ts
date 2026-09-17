@@ -259,6 +259,10 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.text).toContain('Bid check (seconds)');
     expect(res.text).toContain('flagCashOut');
     expect(res.text).toContain('flagLastSignalsManualTrade');
+    expect(res.text).toContain('flagPairLock');
+    expect(res.text).toContain('flagCapLock');
+    expect(res.text).toContain('flagCheapLoop');
+    expect(res.text).toContain('Cap lock');
     expect(res.text).toContain('flagKalshiWsQuotes');
     expect(res.text).toContain('flagKalshiWsFills');
     expect(res.text).toContain('Kalshi WebSocket quotes');
@@ -359,9 +363,25 @@ describe('Predict Admin Web Portal API Suite', () => {
     expect(res.body.systemConfig.featureFlags.stepBuy).toBe(false);
     expect(res.body.systemConfig.featureFlags.spikeFade).toBe(false);
     expect(res.body.systemConfig.featureFlags.pairLock).toBe(false);
+    expect(res.body.systemConfig.featureFlags.capLock).toBe(false);
     expect(res.body.systemConfig.featureFlags.cheapLoop).toBe(false);
     expect(res.body.systemConfig.featureFlags.kalshiWsQuotes).toBe(false);
     expect(res.body.systemConfig.featureFlags.kalshiWsFills).toBe(false);
+  });
+
+  test('11d. POST /admin/api/config persists Cap lock only when explicitly true', async () => {
+    const on = await request(app)
+      .post('/admin/api/config')
+      .set('x-admin-key', ADMIN_SECRET)
+      .send({ featureFlags: { capLock: true } });
+    expect(on.status).toBe(200);
+    expect(on.body.systemConfig.featureFlags.capLock).toBe(true);
+    const off = await request(app)
+      .post('/admin/api/config')
+      .set('x-admin-key', ADMIN_SECRET)
+      .send({ featureFlags: { capLock: false } });
+    expect(off.status).toBe(200);
+    expect(off.body.systemConfig.featureFlags.capLock).toBe(false);
   });
 
   test('12. GET /admin/api/trades filters by asset, status, user, and reports realized P&L', async () => {

@@ -104,12 +104,23 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.protect_sell_enabled).toBe(false);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(1);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(45);
+    expect(cfg.risk.home_sell_at_pct).toBe(0);
+    expect(cfg.risk.cushion_lean_sell_at_pct).toBe(0);
     expect(cfg.risk.smart_buy_enabled).toBe(true);
     expect(cfg.risk.smart_buy_min_edge_usd).toBe(0.08);
     expect(cfg.risk.cushion_lean_enabled).toBe(true);
+    expect(cfg.risk.cushion_lean_max_gap_mult).toBe(2.5);
     expect(
       normalizeAppConfig({ risk: { cushion_lean_enabled: false } } as any).risk.cushion_lean_enabled
     ).toBe(false);
+    expect(
+      normalizeAppConfig({ risk: { cushion_lean_max_gap_mult: 3.1 } } as any).risk
+        .cushion_lean_max_gap_mult
+    ).toBe(3);
+    expect(
+      normalizeAppConfig({ risk: { cushion_lean_max_gap_mult: 1 } } as any).risk
+        .cushion_lean_max_gap_mult
+    ).toBe(1.5);
   });
 
   test('Cash out $ seeds from Auto $ when missing, then keeps its own', () => {
@@ -178,11 +189,15 @@ describe('normalize / cushions', () => {
         protect_sell_enabled: true,
         protect_sell_gap_ratio: 9,
         protect_sell_grace_seconds: 999,
+        home_sell_at_pct: 17,
+        cushion_lean_sell_at_pct: -3,
       },
     } as any);
     expect(cfg.risk.protect_sell_enabled).toBe(true);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(3);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(120);
+    expect(cfg.risk.home_sell_at_pct).toBe(15);
+    expect(cfg.risk.cushion_lean_sell_at_pct).toBe(0);
   });
 
   test('normalizeRiskConfig defaults Smart buy On and clamps min extra chance', () => {
@@ -281,6 +296,8 @@ describe('normalize / cushions', () => {
     expect(d.step_buy_enabled).toBe(false);
     expect(d.step_buy_start_minutes).toBe(5);
     expect(d.step_buy_cushion_pct).toBe(50);
+    expect(d.step_buy_add_cushion_pct).toBe(75);
+    expect(d.step_buy_sell_if_thesis_dies).toBe(true);
     expect(d.step_buy_lot_count).toBe(1);
     expect(d.step_buy_add_wait_minutes).toBe(1);
     expect(d.step_buy_add_band_usd).toBe(0.02);
@@ -298,6 +315,8 @@ describe('normalize / cushions', () => {
         step_buy_enabled: true,
         step_buy_start_minutes: 1,
         step_buy_cushion_pct: 10,
+        step_buy_add_cushion_pct: 10,
+        step_buy_sell_if_thesis_dies: false,
         step_buy_lot_count: 0,
         step_buy_add_wait_minutes: 9,
         step_buy_add_band_usd: 0.2,
@@ -309,6 +328,8 @@ describe('normalize / cushions', () => {
     expect(stepOn.step_buy_enabled).toBe(true);
     expect(stepOn.step_buy_start_minutes).toBe(2);
     expect(stepOn.step_buy_cushion_pct).toBe(25);
+    expect(stepOn.step_buy_add_cushion_pct).toBe(25);
+    expect(stepOn.step_buy_sell_if_thesis_dies).toBe(false);
     expect(stepOn.step_buy_lot_count).toBe(1);
     expect(stepOn.step_buy_add_wait_minutes).toBe(3);
     expect(stepOn.step_buy_add_band_usd).toBe(0.1);
@@ -429,14 +450,21 @@ describe('normalize / cushions', () => {
     expect(d.cheap_loop_hourly_stop_usd).toBe(0.06);
     expect(d.cheap_loop_weekly_enabled).toBe(false);
     expect(d.cheap_loop_weekly_start_minutes).toBe(10);
-    expect(d.cheap_loop_weekly_flatten_minutes).toBe(5);
+    expect(d.cheap_loop_weekly_flatten_minutes).toBe(120);
+    expect(d.cheap_loop_weekly_cheap_max_ask_usd).toBe(0.45);
+    expect(d.cheap_loop_weekly_min_gap_usd).toBe(0.08);
+    expect(d.cheap_loop_weekly_take_usd).toBe(0.08);
     expect(d.cheap_loop_weekly_cycles).toBe(10);
     expect(d.cheap_loop_weekly_min_hold_minutes).toBe(2);
     expect(d.cheap_loop_weekly_cooldown_minutes).toBe(3);
-    expect(d.cheap_loop_weekly_assets).toEqual([]);
+    expect(d.cheap_loop_weekly_assets).toEqual(['BTC', 'ETH']);
     expect(d.cheap_loop_weekly_skip_thin_bid).toBe(false);
-    expect(d.cheap_loop_weekly_stop_enabled).toBe(false);
-    expect(d.cheap_loop_weekly_stop_usd).toBe(0.06);
+    expect(d.cheap_loop_weekly_stop_enabled).toBe(true);
+    expect(d.cheap_loop_weekly_stop_usd).toBe(0.12);
+    expect(
+      normalizeAppConfig({ risk: { cheap_loop_weekly_flatten_minutes: 5 } } as any).risk
+        .cheap_loop_weekly_flatten_minutes
+    ).toBe(30);
     const cheapOn = normalizeAppConfig({
       risk: {
         cheap_loop_enabled: true,

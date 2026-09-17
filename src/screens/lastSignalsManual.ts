@@ -6,6 +6,7 @@ import { evaluateStaticGate } from '../engine/gates';
 import {
   countWindowBuysForTicker,
   formatSkipReason,
+  resolveMinutesElapsed,
 } from '../../packages/trading-core/src/gates';
 import {
   isTwapLockEnterPath,
@@ -121,9 +122,13 @@ export function mergeCloudHomeLean(
     minutes_left: Number.isFinite(Number(incoming.minutes_left))
       ? Number(incoming.minutes_left)
       : prev?.minutes_left,
+    minutes_elapsed: Number.isFinite(Number(incoming.minutes_elapsed))
+      ? Number(incoming.minutes_elapsed)
+      : prev?.minutes_elapsed,
     minutes_remaining: Number.isFinite(Number(incoming.minutes_remaining))
       ? Number(incoming.minutes_remaining)
       : prev?.minutes_remaining,
+    open_utc: incoming.open_utc != null ? String(incoming.open_utc) : prev?.open_utc,
     close_utc: incoming.close_utc != null ? String(incoming.close_utc) : prev?.close_utc,
     price_source: incoming.price_source != null ? String(incoming.price_source) : prev?.price_source,
   };
@@ -218,6 +223,88 @@ export function heldOpenFillForTicker(
   return trades.find((t) => isOpenHeldFill(t, tkr));
 }
 
+/** Open YES/NO sides still held on this ticker (Home pair legs). */
+export function openHeldSidesForTicker(
+  trades: Array<
+    Pick<TradeRecord, 'market_ticker' | 'dry_run' | 'outcome' | 'fill_count' | 'side'>
+  >,
+  ticker: string | null | undefined
+): Array<'YES' | 'NO'> {
+  const tkr = String(ticker || '').trim();
+  if (!tkr) return [];
+  const sides = new Set<'YES' | 'NO'>();
+  for (const t of trades) {
+    if (!isOpenHeldFill(t, tkr)) continue;
+    const s = String(t.side || '').toUpperCase();
+    if (s === 'YES' || s === 'NO') sides.add(s);
+  }
+  return [...sides];
+}
+
+/** Open Home sides that can be sold from the row (one or both). */
+export function homeSellSides(opts: {
+  offerKind: 'buy' | 'sell' | 'none';
+  heldSide?: 'YES' | 'NO' | null;
+  heldEntryPath?: string | null;
+  openSides?: Array<'YES' | 'NO'>;
+}): Array<'YES' | 'NO'> {
+  if (opts.offerKind !== 'sell') return [];
+  const path = String(opts.heldEntryPath || '')
+    .toLowerCase()
+    .trim();
+  const isHome =
+    !path ||
+    path === 'home' ||
+    path === 'manual' ||
+    path === 'manual_buy' ||
+    path === 'home_buy';
+  if (path && !isHome) return [];
+  const open = new Set(opts.openSides || []);
+  if (opts.heldSide === 'YES' || opts.heldSide === 'NO') open.add(opts.heldSide);
+  const out: Array<'YES' | 'NO'> = [];
+  if (open.has('YES')) out.push('YES');
+  if (open.has('NO')) out.push('NO');
+  return out;
+}
+
+/**
+ * After one Home side is open on the ticker: offer Buy on the missing opposite side.
+ * Before any fill: never dual YES+NO — a single Buy uses the lean side (mint or dark green).
+ */
+export function homeStrongBuySides(opts: {
+  strongBuy: boolean;
+  offerKind: 'buy' | 'sell' | 'none';
+  leanDecision?: string;
+  heldSide?: 'YES' | 'NO' | null;
+  heldEntryPath?: string | null;
+  openSides?: Array<'YES' | 'NO'>;
+}): Array<'YES' | 'NO'> {
+  const open = new Set(opts.openSides || []);
+  if (opts.heldSide === 'YES' || opts.heldSide === 'NO') open.add(opts.heldSide);
+  const missing: Array<'YES' | 'NO'> = [];
+  if (!open.has('YES')) missing.push('YES');
+  if (!open.has('NO')) missing.push('NO');
+  if (missing.length === 0) return [];
+
+  const path = String(opts.heldEntryPath || '')
+    .toLowerCase()
+    .trim();
+  const isHome =
+    !path ||
+    path === 'home' ||
+    path === 'manual' ||
+    path === 'manual_buy' ||
+    path === 'home_buy';
+
+  // One side already open (fill or optimistic) → offer only the other Buy for Home.
+  if (open.size === 1 && missing.length === 1) {
+    if (path && !isHome) return [];
+    return missing;
+  }
+
+  return [];
+}
+
 export function lastSignalManualKind(opts: {
   featureOn: boolean;
   killSwitch: boolean;
@@ -274,17 +361,21 @@ export function homeBuySkipReason(opts: {
     abs_gap?: number;
     minutes_left?: number;
     minutes_elapsed?: number;
+    open_utc?: string;
+    close_utc?: string;
     phase?: string;
     yes_ask?: number;
     no_ask?: number;
   } | null;
   trades: TradeRecord[];
+  nowMs?: number;
 }): string | null {
   const lean = opts.lean;
   if (!lean || (lean.decision !== 'YES' && lean.decision !== 'NO')) return null;
   try {
     const buyCfg = configForHomeBuy(opts.cfg);
     const ticker = String(lean.market_ticker || '').trim();
+    const elapsed = resolveMinutesElapsed(lean, opts.nowMs ?? Date.now());
     const gate = evaluateStaticGate(
       {
         asset: lean.asset,
@@ -294,10 +385,13 @@ export function homeBuySkipReason(opts: {
         strike: Number(lean.strike) || 0,
         abs_gap: Number(lean.abs_gap) || 0,
         minutes_left: Number(lean.minutes_left) || 0,
-        minutes_elapsed: Number(lean.minutes_elapsed) || 0,
+        minutes_elapsed: elapsed,
+        minutes_remaining: Number((lean as { minutes_remaining?: number }).minutes_remaining),
         phase: lean.phase === 'ended' ? 'ended' : 'live',
         yes_ask: lean.yes_ask,
         no_ask: lean.no_ask,
+        open_utc: lean.open_utc,
+        close_utc: lean.close_utc,
       },
       buyCfg,
       {
@@ -311,6 +405,14 @@ export function homeBuySkipReason(opts: {
   } catch {
     return null;
   }
+}
+
+/** @deprecated Prefer resolveMinutesElapsed from trading-core gates. */
+export function resolveHomeBuyMinutesElapsed(
+  lean: { minutes_elapsed?: number; open_utc?: string; close_utc?: string } | null | undefined,
+  nowMs = Date.now()
+): number {
+  return resolveMinutesElapsed(lean, nowMs);
 }
 
 /** SKIP line on Last signals — only "below cushion" when the 15m book is live. */

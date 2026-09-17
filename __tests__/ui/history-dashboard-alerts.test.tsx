@@ -87,7 +87,7 @@ describe('History / Dashboard / AlertsHub', () => {
     await fireEvent.press(s.getByTestId('seg-trades'));
   });
 
-  test('History Sell shows on pending 15m, hourly, and weekly Cheap loop, not Home', async () => {
+  test('History Sell and live P&L show on pending fills for every path', async () => {
     const Alert = require('react-native').Alert;
     const place = jest.fn(async () => ({ ok: true, message: 'Sold BTC YES' }));
     const { cloudClient } = require('../../src/services/cloud/cloudClient');
@@ -104,7 +104,33 @@ describe('History / Dashboard / AlertsHub', () => {
           market_ticker: 'KXSOL15M-T',
           yes_bid: 0.35,
           no_bid: 0.64,
+          yes_ask: 0.35,
+          no_ask: 0.66,
         } as any,
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          yes_bid: 0.56,
+          no_bid: 0.44,
+          yes_ask: 0.56,
+          no_ask: 0.46,
+        } as any,
+      },
+      liveAskTickers: {
+        'KXBTCD-26SEP1406-T67099.99': {
+          yes_bid: 0.33,
+          no_bid: 0.66,
+          yes_ask: 0.33,
+          no_ask: 0.68,
+          ticker: 'KXBTCD-26SEP1406-T67099.99',
+        },
+        'KXETHD-26SEP1817-T4500': {
+          yes_bid: 0.29,
+          no_bid: 0.32,
+          yes_ask: 0.29,
+          no_ask: 0.72,
+          ticker: 'KXETHD-26SEP1817-T4500',
+        },
       },
       trades: [
         {
@@ -117,6 +143,8 @@ describe('History / Dashboard / AlertsHub', () => {
           outcome: 'pending',
           dry_run: false,
           fill_count: 1,
+          fill_price: 0.3,
+          status: 'FILLED',
           entry_path: 'cheap_loop_hourly',
         } as any,
         {
@@ -129,6 +157,8 @@ describe('History / Dashboard / AlertsHub', () => {
           outcome: 'pending',
           dry_run: false,
           fill_count: 1,
+          fill_price: 0.3,
+          status: 'FILLED',
           entry_path: 'cheap_loop_weekly',
         } as any,
         {
@@ -142,6 +172,7 @@ describe('History / Dashboard / AlertsHub', () => {
           dry_run: false,
           fill_count: 1,
           fill_price: 0.3,
+          status: 'FILLED',
           entry_path: 'cheap_loop',
         } as any,
         {
@@ -154,19 +185,165 @@ describe('History / Dashboard / AlertsHub', () => {
           outcome: 'pending',
           dry_run: false,
           fill_count: 1,
+          fill_price: 0.55,
+          status: 'FILLED',
           entry_path: 'home',
+        } as any,
+        {
+          id: 'pl-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'NO',
+          notional_usd: 0.4,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.4,
+          status: 'FILLED',
+          entry_path: 'pair_lock',
+        } as any,
+        {
+          id: 'auto-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'YES',
+          notional_usd: 5,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.55,
+          status: 'FILLED',
+          entry_path: 'auto',
+        } as any,
+        {
+          id: 'co-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'YES',
+          notional_usd: 5,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.55,
+          status: 'FILLED',
+          entry_path: 'cash_out',
+        } as any,
+        {
+          id: 'gf-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'YES',
+          notional_usd: 5,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.55,
+          status: 'FILLED',
+          entry_path: 'gold_fade',
+        } as any,
+        {
+          id: 'tw-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'YES',
+          notional_usd: 5,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.55,
+          status: 'FILLED',
+          entry_path: 'twap_lock',
+        } as any,
+        {
+          id: 'lm-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'YES',
+          notional_usd: 5,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.55,
+          status: 'FILLED',
+          entry_path: 'last_minute',
+        } as any,
+        {
+          id: 'sb-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'YES',
+          notional_usd: 5,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.55,
+          status: 'FILLED',
+          entry_path: 'step_buy',
+        } as any,
+        {
+          id: 'sf-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'YES',
+          notional_usd: 5,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.55,
+          status: 'FILLED',
+          entry_path: 'spike_fade',
+        } as any,
+        {
+          id: 'plh-1',
+          at: '2026-09-14T10:00:00.000Z',
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-T',
+          side: 'NO',
+          notional_usd: 0.4,
+          outcome: 'pending',
+          dry_run: false,
+          fill_count: 1,
+          fill_price: 0.4,
+          status: 'FILLED',
+          entry_path: 'pair_lock_hedge',
         } as any,
       ],
     });
     const s = await render(<HistoryScreen />);
-    expect(s.getByTestId('history-sell-clh-1')).toBeTruthy();
-    expect(s.getByTestId('history-sell-clw-1')).toBeTruthy();
-    expect(s.getByTestId('history-sell-cl15-1')).toBeTruthy();
+    for (const id of [
+      'clh-1',
+      'clw-1',
+      'cl15-1',
+      'home-1',
+      'pl-1',
+      'auto-1',
+      'co-1',
+      'gf-1',
+      'tw-1',
+      'lm-1',
+      'sb-1',
+      'sf-1',
+      'plh-1',
+    ]) {
+      expect(s.getByTestId(`history-sell-${id}`)).toBeTruthy();
+      expect(s.getByTestId(`trade-live-pnl-${id}`)).toBeTruthy();
+    }
     const liveKids = s.getByTestId('trade-live-pnl-cl15-1').props.children;
     const liveText = Array.isArray(liveKids) ? liveKids.join('') : String(liveKids);
-    expect(liveText).toMatch(/Live \+\$0\.05/);
-    expect(s.queryByTestId('history-sell-home-1')).toBeNull();
-    expect(s.queryByTestId('trade-live-pnl-clh-1')).toBeNull();
+    expect(liveText).toMatch(/Live profit \+\$0\.05/);
+    const hourlyKids = s.getByTestId('trade-live-pnl-clh-1').props.children;
+    const hourlyText = Array.isArray(hourlyKids) ? hourlyKids.join('') : String(hourlyKids);
+    expect(hourlyText).toMatch(/Live profit \+\$0\.03/);
+    expect(s.getByTestId('trade-live-pnl-home-1')).toBeTruthy();
+    expect(s.getByTestId('trade-live-pnl-pl-1')).toBeTruthy();
     await fireEvent.press(s.getByTestId('history-sell-clh-1'));
     await waitFor(() => expect(place).toHaveBeenCalledTimes(1));
     expect(place.mock.calls[0][0]).toMatchObject({
@@ -364,7 +541,7 @@ describe('History / Dashboard / AlertsHub', () => {
       ] as any,
     });
     const s = await render(<HistoryScreen />);
-    expect(s.getByTestId('trade-path-home-fill').props.children).toBe('Home');
+    expect(s.getByTestId('trade-path-home-fill').props.children).toBe('Home Buy');
     expect(s.getByTestId('trade-path-auto-fill').props.children).toBe('Cushion lean');
     expect(s.queryByTestId('trade-path-legacy-fill')).toBeNull();
     expect(s.getByTestId('trade-path-pair-runner').props.children).toBe('Pair lock 1');

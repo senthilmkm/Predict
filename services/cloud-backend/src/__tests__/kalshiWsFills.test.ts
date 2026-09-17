@@ -90,6 +90,20 @@ describe('kalshiWsFills', () => {
     expect(construct.n).toBeGreaterThan(0);
   });
 
+  test('user_orders count is order size, not a fill', async () => {
+    setKalshiWsFillsEnabled(true);
+    const construct = { n: 0 };
+    const rest: KalshiOrderFields = { ...initial, fill_count: '0', remaining_count: '0', status: 'canceled' };
+    const client = fakeClient(rest, pem);
+    const got = await confirmPlaceFillWsOrRest(
+      client,
+      initial,
+      mockOpen({ type: 'user_order', msg: { order_id: 'ord-1', count: '5', remaining_count: '0', status: 'canceled' } }, construct)
+    );
+    expect(got.fill_count).toBe('0');
+    expect(kalshiWsFillDisagreeCount()).toBe(0);
+  });
+
   test('matching WS fill keeps REST count', async () => {
     setKalshiWsFillsEnabled(true);
     const construct = { n: 0 };

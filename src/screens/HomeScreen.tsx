@@ -39,10 +39,14 @@ import {
   heldOpenFillForTicker,
   homeBuySkipReason,
   homeBuyGapBeatsCushion,
+  homeStrongBuySides,
+  homeSellSides,
+  openHeldSidesForTicker,
   formatLastMinuteWatchLine,
   formatStepBuyWatchLine,
   formatSpikeFadeWatchLine,
   formatPairLockWatchLine,
+  formatCapLockWatchLine,
   formatCheapLoopWatchLine,
   formatTwapWatchLine,
   lastSignalExtraLine,
@@ -52,6 +56,11 @@ import {
 } from './lastSignalsManual';
 import { formatTickerOverlapLine } from './tickerOverlap';
 import { isPairLockEntryPath } from '../../packages/trading-core/src/pairLock';
+import {
+  capLockLockedPnlUsd,
+  capLockLotsForTicker,
+  isCapLockEntryPath,
+} from '../../packages/trading-core/src/capLock';
 import { cheapLoopCooldownRemainingSec, cheapLoopLivePnlForTicker, isCheapLoopEntryPath } from '../../packages/trading-core/src/cheapLoop';
 
 const ASSET_ORDER: AssetKey[] = AssetRegistry.keys;
@@ -130,6 +139,8 @@ export function HomeScreen({
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
+  const capLockFeatureOn = useRuntimeStore((s) => s.capLockFeatureOn);
+  const bufferRunFeatureOn = useRuntimeStore((s) => s.bufferRunFeatureOn);
   const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const pinnedIds = usePinnedPathsStore((s) => s.ids);
   const hydratePins = usePinnedPathsStore((s) => s.hydrate);
@@ -138,6 +149,10 @@ export function HomeScreen({
   const [statusOpen, setStatusOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [placing, setPlacing] = useState<Record<string, boolean>>({});
+  /** Home Buy fills before Cloud trades refresh — keeps Sell + opposite Buy on screen. */
+  const [optimisticHomeLegs, setOptimisticHomeLegs] = useState<
+    Partial<Record<AssetKey, Array<{ ticker: string; side: 'YES' | 'NO' }>>>
+  >({});
   const [fly, setFly] = useState<{ id: string; text: string; startX: number; startY: number } | null>(
     null
   );
@@ -152,6 +167,28 @@ export function HomeScreen({
       mountedRef.current = false;
     };
   }, [hydratePins]);
+
+  // Drop optimistic Home legs once Cloud trades show the same side on that ticker.
+  useEffect(() => {
+    setOptimisticHomeLegs((prev) => {
+      let changed = false;
+      const next: typeof prev = { ...prev };
+      for (const asset of Object.keys(next) as AssetKey[]) {
+        const legs = next[asset];
+        if (!legs?.length) continue;
+        const kept = legs.filter((leg) => {
+          const open = openHeldSidesForTicker(trades, leg.ticker);
+          return !open.includes(leg.side);
+        });
+        if (kept.length !== legs.length) {
+          changed = true;
+          if (kept.length) next[asset] = kept;
+          else delete next[asset];
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [trades]);
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 1000);
@@ -192,8 +229,18 @@ export function HomeScreen({
     const stepBuyWatch = stepBuyFeatureOn && config.risk.step_buy_enabled;
     const spikeFadeWatch = spikeFadeFeatureOn && config.risk.spike_fade_enabled;
     const pairLockWatch = pairLockFeatureOn && config.risk.pair_lock_enabled;
+    const capLockWatch = capLockFeatureOn && config.risk.cap_lock_enabled;
     const cheapLoopWatch = cheapLoopFeatureOn && config.risk.cheap_loop_enabled;
-    if (!twapWatch && !lastMinuteWatch && !stepBuyWatch && !spikeFadeWatch && !pairLockWatch && !cheapLoopWatch) return;
+    if (
+      !twapWatch &&
+      !lastMinuteWatch &&
+      !stepBuyWatch &&
+      !spikeFadeWatch &&
+      !pairLockWatch &&
+      !capLockWatch &&
+      !cheapLoopWatch
+    )
+      return;
     const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, [
@@ -202,12 +249,14 @@ export function HomeScreen({
     config.risk.step_buy_enabled,
     config.risk.spike_fade_enabled,
     config.risk.pair_lock_enabled,
+    config.risk.cap_lock_enabled,
     config.risk.cheap_loop_enabled,
     twapLockFeatureOn,
     lastMinuteFeatureOn,
     stepBuyFeatureOn,
     spikeFadeFeatureOn,
     pairLockFeatureOn,
+    capLockFeatureOn,
     cheapLoopFeatureOn,
   ]);
 
@@ -254,7 +303,8 @@ export function HomeScreen({
     async (
       asset: AssetKey,
       action: 'buy' | 'sell',
-      origin?: { x: number; y: number }
+      origin?: { x: number; y: number },
+      decision?: 'YES' | 'NO'
     ) => {
       if (useRuntimeStore.getState().lastSignalsManualTrade === false) {
         Alert.alert('Buy / Sell is off', 'Last signals Buy / Sell is turned off.');
@@ -264,12 +314,23 @@ export function HomeScreen({
         Alert.alert('Kill switch is on', 'Home Buy / Sell is hidden while Kill Switch is on.');
         return;
       }
-      if (placingRef.current[asset]) return;
-      placingRef.current[asset] = true;
-      setPlacing((prev) => ({ ...prev, [asset]: true }));
-      const requestId = `ios_${action}_${asset}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const placeKey =
+        decision && (action === 'buy' || action === 'sell')
+          ? `${asset}:${action}:${decision}`
+          : String(asset);
+      // Side-specific lock — Buy/Sell YES must not block the other side.
+      if (placingRef.current[placeKey]) return;
+      placingRef.current[placeKey] = true;
+      setPlacing((prev) => ({ ...prev, [placeKey]: true }));
+      const requestId = `ios_${action}_${asset}_${decision || 'lean'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const leanTicker = String(useRuntimeStore.getState().leans?.[asset]?.market_ticker || '').trim();
       try {
-        const res = await cloudClient.placeManualOrder({ asset, action, requestId });
+        const res = await cloudClient.placeManualOrder({
+          asset,
+          action,
+          requestId,
+          ...(decision === 'YES' || decision === 'NO' ? { decision } : {}),
+        });
         if (!mountedRef.current) return;
         if (!res.ok) {
           Alert.alert(
@@ -278,11 +339,32 @@ export function HomeScreen({
           );
           return;
         }
+        if (action === 'buy' && (decision === 'YES' || decision === 'NO') && leanTicker) {
+          setOptimisticHomeLegs((prev) => {
+            const cur = prev[asset] || [];
+            const next = cur.filter((l) => !(l.ticker === leanTicker && l.side === decision));
+            next.push({ ticker: leanTicker, side: decision });
+            return { ...prev, [asset]: next };
+          });
+        }
+        if (action === 'sell' && (decision === 'YES' || decision === 'NO') && leanTicker) {
+          setOptimisticHomeLegs((prev) => {
+            const cur = (prev[asset] || []).filter(
+              (l) => !(l.ticker === leanTicker && l.side === decision)
+            );
+            if (!cur.length) {
+              const next = { ...prev };
+              delete next[asset];
+              return next;
+            }
+            return { ...prev, [asset]: cur };
+          });
+        }
         const start = await windowToHomeLocal(homeRootRef.current, origin);
         if (!mountedRef.current) return;
         setFly({
-          id: `${asset}-${action}-${Date.now()}`,
-          text: `${asset} ${action} success`,
+          id: `${asset}-${action}-${decision || ''}-${Date.now()}`,
+          text: `${asset} ${decision || action} success`,
           startX: start.x,
           startY: start.y,
         });
@@ -291,11 +373,11 @@ export function HomeScreen({
         if (!mountedRef.current) return;
         Alert.alert('Could not place order', String(err?.message || err || 'Order failed.'));
       } finally {
-        placingRef.current[asset] = false;
+        delete placingRef.current[placeKey];
         if (mountedRef.current) {
           setPlacing((prev) => {
             const next = { ...prev };
-            delete next[asset];
+            delete next[placeKey];
             return next;
           });
         }
@@ -361,6 +443,16 @@ export function HomeScreen({
   const featureOn = lastSignalsManualTrade !== false;
   const decoratedRows = signalRows.map((row) => {
     const held = heldOpenFillForTicker(trades, row.marketTicker);
+    const ticker = String(row.marketTicker || '').trim();
+    const optimisticLegs = (optimisticHomeLegs[row.asset] || []).filter((l) => l.ticker === ticker);
+    const optimisticSides = optimisticLegs
+      .map((l) => l.side)
+      .filter((s): s is 'YES' | 'NO' => s === 'YES' || s === 'NO');
+    const effectiveHeld =
+      held ||
+      (optimisticSides[0]
+        ? { side: optimisticSides[0], entry_path: 'home' as const, fill_count: 1, dry_run: false, outcome: 'pending', market_ticker: ticker }
+        : null);
     const cashOutHeld = held?.entry_path === 'cash_out';
     const goldFadeHeld = held?.entry_path === 'gold_fade';
     const twapLockHeld = held?.entry_path === 'twap_lock';
@@ -368,6 +460,7 @@ export function HomeScreen({
     const stepBuyHeld = held?.entry_path === 'step_buy';
     const spikeFadeHeld = held?.entry_path === 'spike_fade';
     const pairLockHeld = isPairLockEntryPath(held?.entry_path);
+    const capLockHeld = isCapLockEntryPath(held?.entry_path);
     const cheapLoopHeld = isCheapLoopEntryPath(held?.entry_path);
     const pathHeld =
       cashOutHeld ||
@@ -377,6 +470,7 @@ export function HomeScreen({
       stepBuyHeld ||
       spikeFadeHeld ||
       pairLockHeld ||
+      capLockHeld ||
       cheapLoopHeld;
     const manualKind = pathHeld
       ? 'none'
@@ -384,7 +478,7 @@ export function HomeScreen({
           featureOn,
           killSwitch: Boolean(cloudKillSwitch),
           row,
-          held: held ? { side: held.side } : null,
+          held: effectiveHeld ? { side: effectiveHeld.side } : null,
         });
     const tapSkipReason =
       manualKind === 'buy'
@@ -443,6 +537,11 @@ export function HomeScreen({
         pairLockAssets: config.risk.pair_lock_assets,
         pairLockStartMinutes: config.risk.pair_lock_start_minutes,
         pairLockUntilMinutes: config.risk.pair_lock_until_minutes,
+        capLockAdmin: capLockFeatureOn,
+        capLockOn: Boolean(config.risk.cap_lock_enabled),
+        capLockAssets: config.risk.cap_lock_assets,
+        capLockWindowOpenSeconds: config.risk.cap_lock_window_open_seconds,
+        capLockAllowLater: config.risk.cap_lock_allow_later,
         cheapLoopAdmin: cheapLoopFeatureOn,
         cheapLoopOn: Boolean(config.risk.cheap_loop_enabled),
         cheapLoopAssets: config.risk.cheap_loop_assets,
@@ -457,6 +556,7 @@ export function HomeScreen({
       stepBuyHolding: stepBuyHeld,
       spikeFadeHolding: spikeFadeHeld,
       pairLockHolding: pairLockHeld,
+      capLockHolding: capLockHeld,
       cheapLoopHolding: cheapLoopHeld,
       twapWatchText: formatTwapWatchLine({
         adminEnabled: twapLockFeatureOn,
@@ -534,6 +634,48 @@ export function HomeScreen({
         autoDetail: row.trade?.detail,
         autoStatus: row.trade?.status,
       }),
+      capLockWatchText: formatCapLockWatchLine({
+        adminEnabled: capLockFeatureOn,
+        userEnabled: Boolean(config.risk.cap_lock_enabled),
+        assetEnabled: config.assets_enabled?.[row.asset] !== false,
+        asset: row.asset,
+        assets: config.risk.cap_lock_assets,
+        secondsLeft: twapWatchSecondsLeft(
+          (leans[row.asset] as { close_utc?: string } | undefined)?.close_utc,
+          nowMs
+        ),
+        minutesElapsed: (leans[row.asset] as { minutes_elapsed?: number } | undefined)?.minutes_elapsed,
+        minutesRemaining: (leans[row.asset] as { minutes_remaining?: number } | undefined)?.minutes_remaining,
+        windowOpenSeconds: config.risk.cap_lock_window_open_seconds,
+        allowLater: config.risk.cap_lock_allow_later,
+        holding: capLockHeld,
+        lots: capLockHeld
+          ? capLockLotsForTicker(
+              trades.map((t) => ({
+                ticker: t.market_ticker,
+                market_ticker: t.market_ticker,
+                entryPath: t.entry_path,
+                decision: t.side,
+                fillCount: t.fill_count,
+                status: t.status,
+                outcome: t.outcome,
+                payPrice: t.fill_price,
+                executedAt: t.at,
+              })),
+              row.marketTicker
+            )
+          : null,
+        lockedPnlUsd: capLockHeld
+          ? capLockLockedPnlUsd({
+              yesAskUsd: (leans[row.asset] as { yes_ask?: number | null } | undefined)?.yes_ask,
+              noAskUsd: (leans[row.asset] as { no_ask?: number | null } | undefined)?.no_ask,
+              yesCount: 1,
+              noCount: 1,
+            })
+          : null,
+        autoDetail: row.trade?.detail,
+        autoStatus: row.trade?.status,
+      }),
       cheapLoopWatchText: formatCheapLoopWatchLine({
         adminEnabled: cheapLoopFeatureOn,
         userEnabled: Boolean(config.risk.cheap_loop_enabled),
@@ -579,23 +721,64 @@ export function HomeScreen({
       }),
     });
     const offerKind = lastSignalOfferKind(manualKind, tapSkipReason);
-    const strongBuy =
-      offerKind === 'buy' &&
-      homeBuyGapBeatsCushion({
-        absGap: row.gap,
-        cushionUsd: config.cushions[row.asset],
-      });
+    const strongBuy = homeBuyGapBeatsCushion({
+      absGap: row.gap,
+      cushionUsd: config.cushions[row.asset],
+    });
+    const syncedSides = openHeldSidesForTicker(trades, row.marketTicker);
+    const openSides = Array.from(new Set([...syncedSides, ...optimisticSides]));
+    const pairBuySides = homeStrongBuySides({
+      strongBuy,
+      offerKind,
+      leanDecision: row.decision,
+      heldSide: effectiveHeld?.side,
+      heldEntryPath: effectiveHeld?.entry_path ?? held?.entry_path,
+      openSides,
+    });
+    const pairSellSides = homeSellSides({
+      offerKind,
+      heldSide: effectiveHeld?.side,
+      heldEntryPath: effectiveHeld?.entry_path ?? held?.entry_path,
+      openSides,
+    });
     return {
       ...row,
-      held,
+      held: effectiveHeld
+        ? { side: effectiveHeld.side, entry_path: effectiveHeld.entry_path ?? held?.entry_path }
+        : null,
       manualKind: offerKind,
-      placing: Boolean(placing[row.asset]),
+      placing: Boolean(
+        placing[row.asset] ||
+          placing[`${row.asset}:buy:YES`] ||
+          placing[`${row.asset}:buy:NO`] ||
+          placing[`${row.asset}:sell:YES`] ||
+          placing[`${row.asset}:sell:NO`] ||
+          placing[`${row.asset}:YES`] ||
+          placing[`${row.asset}:NO`]
+      ),
+      placingBuyYes: Boolean(placing[`${row.asset}:buy:YES`] || placing[`${row.asset}:YES`]),
+      placingBuyNo: Boolean(placing[`${row.asset}:buy:NO`] || placing[`${row.asset}:NO`]),
+      placingSellYes: Boolean(placing[`${row.asset}:sell:YES`]),
+      placingSellNo: Boolean(placing[`${row.asset}:sell:NO`]),
       extraLine,
-      strongBuy,
+      strongBuy: offerKind === 'buy' && strongBuy,
+      pairBuySides,
+      pairSellSides,
     };
   });
-  const actionRows = decoratedRows.filter((r) => r.manualKind === 'buy' || r.manualKind === 'sell');
-  const otherRows = decoratedRows.filter((r) => r.manualKind === 'none');
+  const actionRows = decoratedRows.filter(
+    (r) =>
+      r.manualKind === 'buy' ||
+      r.manualKind === 'sell' ||
+      (r.pairBuySides && r.pairBuySides.length > 0) ||
+      (r.pairSellSides && r.pairSellSides.length > 0)
+  );
+  const otherRows = decoratedRows.filter(
+    (r) =>
+      r.manualKind === 'none' &&
+      !(r.pairBuySides && r.pairBuySides.length > 0) &&
+      !(r.pairSellSides && r.pairSellSides.length > 0)
+  );
   const visiblePinnedPaths = useMemo(() => {
     const flags: Record<string, boolean> = {
       cashOutFeatureOn,
@@ -605,6 +788,8 @@ export function HomeScreen({
       stepBuyFeatureOn,
       spikeFadeFeatureOn,
       pairLockFeatureOn,
+      capLockFeatureOn,
+      bufferRunFeatureOn,
       cheapLoopFeatureOn,
     };
     return pinnedIds.filter((id) => {
@@ -620,6 +805,8 @@ export function HomeScreen({
     stepBuyFeatureOn,
     spikeFadeFeatureOn,
     pairLockFeatureOn,
+    capLockFeatureOn,
+    bufferRunFeatureOn,
     cheapLoopFeatureOn,
   ]);
   const scheduleNotice = useMemo(() => {
@@ -780,7 +967,9 @@ export function HomeScreen({
               <LastSignalRow
                 key={row.asset}
                 row={row}
-                onPlace={(action, origin) => void placeManual(row.asset, action, origin)}
+                onPlace={(action, origin, decision) =>
+                  void placeManual(row.asset, action, origin, decision)
+                }
               />
             ))}
             {otherRows.length > 0 && actionRows.length > 0 ? (
@@ -792,20 +981,24 @@ export function HomeScreen({
               <LastSignalRow
                 key={row.asset}
                 row={row}
-                onPlace={(action, origin) => void placeManual(row.asset, action, origin)}
+                onPlace={(action, origin, decision) =>
+                  void placeManual(row.asset, action, origin, decision)
+                }
               />
             ))}
           </>
         )}
         {featureOn ? (
           <Text style={styles.tradeHint}>
-            Lean YES/NO here is a signal. Home Buy / Sell is the Home tap path — Buy YES / Buy NO
-            or Sell. A tap places now on Cloud Run (this phone never talks to Kalshi). If Auto-trade
-            is On and its Risk tab also passes, Cloud can buy that same lean too, as long as shared
-            caps allow (max trades / asset / 15m window, max trades / day, max open, daily loss).
-            Ask too rich and other Home skips hide Buy. A dark green Buy means live is at least 25%
-            past that coin’s Cushion. Kill-Switch and the Last signals Buy / Sell flag hide these
-            buttons.
+            Lean YES/NO here is a signal. Home Buy / Sell is the Home tap path — one Buy for the
+            lean side (mint, or dark green when live is at least 25% past that coin’s Cushion). After
+            a Home fill, Sell for that side and Buy for the other stay on the row. Holding both
+            sides shows Sell YES and Sell NO. Each tap is one side. A tap places now on Cloud Run
+            (this phone never talks to Kalshi). If Auto-trade is On and its Risk tab also passes,
+            Cloud can buy that same lean too, as long as shared caps allow (max trades / asset /
+            15m window, max trades / day, max open, daily loss). Ask too rich and other Home skips
+            hide Buy. A miss is under History → Misses. Kill-Switch and the Last signals Buy / Sell
+            flag hide these buttons.
           </Text>
         ) : autoTradeOn ? (
           <Text style={styles.tradeHint}>
@@ -1017,11 +1210,24 @@ function LastSignalRow({
     } | null;
     askLine?: string;
     strongBuy?: boolean;
+    pairBuySides?: Array<'YES' | 'NO'>;
+    pairSellSides?: Array<'YES' | 'NO'>;
+    placingBuyYes?: boolean;
+    placingBuyNo?: boolean;
+    placingSellYes?: boolean;
+    placingSellNo?: boolean;
   };
-  onPlace: (action: 'buy' | 'sell', origin?: { x: number; y: number }) => void;
+  onPlace: (
+    action: 'buy' | 'sell',
+    origin?: { x: number; y: number },
+    decision?: 'YES' | 'NO'
+  ) => void;
 }) {
   const btnRef = React.useRef<View>(null);
-  const actionable = row.manualKind !== 'none';
+  const pairBuySides = row.pairBuySides || [];
+  const pairSellSides = row.pairSellSides || [];
+  const showPairCol = pairBuySides.length > 0 || pairSellSides.length > 0;
+  const actionable = row.manualKind !== 'none' || showPairCol;
   const gap = formatGapDisplay({
     gap: row.gap,
     assetKey: row.asset,
@@ -1030,20 +1236,19 @@ function LastSignalRow({
     decision: row.decision,
     heldSide: row.held?.side,
   });
-  const btnLabel =
-    row.placing
-      ? 'Placing…'
-      : row.manualKind === 'sell'
-        ? `Sell ${row.held?.side || 'YES'}`
-        : `Buy ${row.decision}`;
-  const firePlace = () => {
-    const action: 'buy' | 'sell' = row.manualKind === 'sell' ? 'sell' : 'buy';
-    const node = btnRef.current as { measureInWindow?: (cb: (...args: number[]) => void) => void } | null;
+  const measureAndPlace = (
+    action: 'buy' | 'sell',
+    decision?: 'YES' | 'NO',
+    ref?: React.RefObject<View | null>
+  ) => {
+    const node = (ref?.current || btnRef.current) as {
+      measureInWindow?: (cb: (...args: number[]) => void) => void;
+    } | null;
     let sent = false;
     const send = (origin?: { x: number; y: number }) => {
       if (sent) return;
       sent = true;
-      onPlace(action, origin);
+      onPlace(action, origin, decision);
     };
     try {
       if (node && typeof node.measureInWindow === 'function') {
@@ -1062,6 +1267,20 @@ function LastSignalRow({
       /* test renderer / missing native measure */
     }
     send();
+  };
+  const btnLabel =
+    row.placing && !showPairCol
+      ? 'Placing…'
+      : row.manualKind === 'sell' && !showPairCol
+        ? `Sell ${row.held?.side || 'YES'}`
+        : `Buy ${row.decision}`;
+  const firePlace = () => {
+    if (row.manualKind === 'sell') {
+      measureAndPlace('sell', row.held?.side === 'NO' ? 'NO' : 'YES');
+      return;
+    }
+    const decision = row.decision === 'NO' ? 'NO' : 'YES';
+    measureAndPlace('buy', decision);
   };
   return (
     <View
@@ -1126,7 +1345,51 @@ function LastSignalRow({
           </Text>
         ) : null}
       </View>
-      {actionable ? (
+      {showPairCol ? (
+        <View style={styles.manualBtnCol} testID={`btn-manual-pair-${row.asset}`}>
+          {pairSellSides.map((side) => {
+            const busy = side === 'YES' ? row.placingSellYes : row.placingSellNo;
+            return (
+              <Pressable
+                key={`sell-${side}`}
+                style={[styles.manualBtn, styles.manualBtnSell, busy && styles.manualBtnBusy]}
+                onPress={() => measureAndPlace('sell', side)}
+                disabled={Boolean(busy)}
+                hitSlop={{ left: 8, right: 8, top: 0, bottom: 0 }}
+                testID={`btn-manual-sell-${side.toLowerCase()}-${row.asset}`}
+                accessibilityLabel={`Sell ${side} only`}
+              >
+                {busy ? <ActivityIndicator color="#fff" size="small" /> : null}
+                <Text style={styles.manualBtnText}>{busy ? 'Placing…' : `Sell ${side}`}</Text>
+              </Pressable>
+            );
+          })}
+          {pairBuySides.map((side) => {
+            const busy = side === 'YES' ? row.placingBuyYes : row.placingBuyNo;
+            return (
+              <Pressable
+                key={`buy-${side}`}
+                style={[
+                  styles.manualBtn,
+                  styles.manualBtnBuyDeep,
+                  busy && styles.manualBtnBusy,
+                ]}
+                onPress={() => measureAndPlace('buy', side)}
+                disabled={Boolean(busy)}
+                hitSlop={{ left: 8, right: 8, top: 0, bottom: 0 }}
+                testID={`btn-manual-buy-${side.toLowerCase()}-${row.asset}`}
+                accessibilityState={{ busy: Boolean(busy), disabled: Boolean(busy) }}
+                accessibilityLabel={`Buy ${side} only`}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : null}
+                <Text style={styles.manualBtnText}>{busy ? 'Placing…' : `Buy ${side}`}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : actionable ? (
         <Pressable
           ref={btnRef}
           collapsable={false}
@@ -1349,6 +1612,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
   },
+  manualBtnCol: { gap: 10, alignItems: 'stretch' },
   manualBtnBuy: { backgroundColor: colors.win },
   manualBtnBuyDeep: { backgroundColor: colors.buyDeep },
   manualBtnSell: { backgroundColor: colors.warn },

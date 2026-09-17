@@ -129,8 +129,8 @@ describe('admin overview metrics', () => {
   });
 
   test('trade stream entry path labels and filter', () => {
-    expect(tradeStreamEntryLabel('home')).toBe('Home');
-    expect(tradeStreamEntryLabel('manual_buy')).toBe('Home');
+    expect(tradeStreamEntryLabel('home')).toBe('Home Buy');
+    expect(tradeStreamEntryLabel('manual_buy')).toBe('Home Buy');
     expect(tradeStreamEntryLabel('auto')).toBe('Cushion lean');
     expect(tradeStreamEntryLabel('cash_out')).toBe('Cash out');
     expect(tradeStreamEntryLabel('gold_fade')).toBe('Gold fade');

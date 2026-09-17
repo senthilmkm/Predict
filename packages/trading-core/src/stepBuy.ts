@@ -16,6 +16,8 @@ export const STEP_BUY_START_MIN_MAX = 10;
 export const STEP_BUY_CUSHION_PCT_DEFAULT = 50;
 export const STEP_BUY_CUSHION_PCT_MIN = 25;
 export const STEP_BUY_CUSHION_PCT_MAX = 100;
+export const STEP_BUY_ADD_CUSHION_PCT_DEFAULT = 75;
+export const STEP_BUY_SELL_IF_THESIS_DIES_DEFAULT = true;
 export const STEP_BUY_LOT_COUNT_DEFAULT = 1;
 export const STEP_BUY_LOT_COUNT_MAX = 5;
 export const STEP_BUY_ADD_WAIT_MIN_DEFAULT = 1;
@@ -55,6 +57,32 @@ export function normalizeStepBuyCushionPct(raw: unknown): number {
   return Math.round(
     clamp(Number(raw ?? STEP_BUY_CUSHION_PCT_DEFAULT), STEP_BUY_CUSHION_PCT_MIN, STEP_BUY_CUSHION_PCT_MAX)
   );
+}
+
+/** Lots 2+. Missing → 75. When lot-1 Cushion % is passed, never below that. */
+export function normalizeStepBuyAddCushionPct(raw: unknown, lot1Pct?: unknown): number {
+  const add = Math.round(
+    clamp(
+      Number(raw ?? STEP_BUY_ADD_CUSHION_PCT_DEFAULT),
+      STEP_BUY_CUSHION_PCT_MIN,
+      STEP_BUY_CUSHION_PCT_MAX
+    )
+  );
+  if (lot1Pct == null) return add;
+  return Math.max(add, normalizeStepBuyCushionPct(lot1Pct));
+}
+
+/** Missing → On (dump when cushion % or lean dies). Explicit false stays Off. */
+export function normalizeStepBuySellIfThesisDies(raw: unknown): boolean {
+  if (raw === false || raw === 0 || raw === '0' || raw === 'false') return false;
+  if (raw === true || raw === 1 || raw === '1' || raw === 'true') return true;
+  return STEP_BUY_SELL_IF_THESIS_DIES_DEFAULT;
+}
+
+export function stepBuyCushionPctForLots(lots: unknown, risk: { step_buy_cushion_pct?: unknown; step_buy_add_cushion_pct?: unknown }): number {
+  const n = Math.max(0, Math.floor(Number(lots) || 0));
+  if (n > 0) return normalizeStepBuyAddCushionPct(risk.step_buy_add_cushion_pct, risk.step_buy_cushion_pct);
+  return normalizeStepBuyCushionPct(risk.step_buy_cushion_pct);
 }
 
 export function normalizeStepBuyLotCount(raw: unknown): number {
@@ -152,15 +180,67 @@ export function stepBuyThesisHolds(opts: {
   leanSide: unknown;
   heldSide?: unknown;
 }): boolean {
+  return stepBuyThesisSkipReason(opts) == null;
+}
+
+export function stepBuyThesisSkipReason(opts: {
+  absGap: unknown;
+  cushionUsd: unknown;
+  cushionPct: unknown;
+  leanSide: unknown;
+  heldSide?: unknown;
+  lots?: unknown;
+}): string | null {
+  const lean = String(opts.leanSide || '').toUpperCase();
+  const held = String(opts.heldSide || '').toUpperCase();
+  const heldYesNo = held === 'YES' || held === 'NO';
+  const lots = Math.max(0, Math.floor(Number(opts.lots) || 0));
+  if (lean !== 'YES' && lean !== 'NO') {
+    return lots > 0 && heldYesNo ? 'step_buy_lean_flipped' : 'step_buy_no_thesis';
+  }
+  if (heldYesNo && lean !== held) return 'step_buy_lean_flipped';
   const gap = Number(opts.absGap);
   if (!Number.isFinite(gap) || gap + 1e-9 < stepBuyNeedGapUsd(opts.cushionUsd, opts.cushionPct)) {
-    return false;
+    return lots > 0 ? 'step_buy_add_cushion' : 'step_buy_no_thesis';
   }
-  const lean = String(opts.leanSide || '').toUpperCase();
-  if (lean !== 'YES' && lean !== 'NO') return false;
+  return null;
+}
+
+export function evaluateStepBuyThesisDie(opts: {
+  sellIfThesisDies?: unknown;
+  absGap?: unknown;
+  cushionUsd?: unknown;
+  cushionPct?: unknown;
+  leanSide?: unknown;
+  heldSide?: unknown;
+  lastFilledAt?: string | Date | number | null;
+  now?: Date;
+  graceSeconds?: number;
+  phase?: string;
+}): { sell: boolean; reason: string } {
+  if (opts.sellIfThesisDies !== true) return { sell: false, reason: 'step_buy_thesis_off' };
+  if (opts.phase === 'ended') return { sell: false, reason: 'window_ended' };
   const held = String(opts.heldSide || '').toUpperCase();
-  if (held === 'YES' || held === 'NO') return lean === held;
-  return true;
+  if (held !== 'YES' && held !== 'NO') return { sell: false, reason: 'step_buy_no_held' };
+  const fail = stepBuyThesisSkipReason({
+    absGap: opts.absGap,
+    cushionUsd: opts.cushionUsd,
+    cushionPct: opts.cushionPct,
+    leanSide: opts.leanSide,
+    heldSide: held,
+    lots: 1,
+  });
+  if (fail == null) return { sell: false, reason: 'step_buy_thesis_holds' };
+  if (
+    inProtectSellGrace({
+      filledAt: opts.lastFilledAt,
+      graceSeconds: opts.graceSeconds ?? STEP_BUY_GRACE_SEC,
+      now: opts.now,
+    })
+  ) {
+    return { sell: false, reason: 'grace_after_fill' };
+  }
+  return { sell: true, reason: fail === 'step_buy_lean_flipped' ? 'step_buy_lean_flipped' : 'step_buy_thesis_died' };
 }
 
 export function stepBuyAskUsd(raw: unknown): number | null {
@@ -351,6 +431,12 @@ export function evaluateStepBuyStops(opts: {
   noAsk?: unknown;
   stopUsd?: unknown;
   now?: Date;
+  sellIfThesisDies?: unknown;
+  absGap?: unknown;
+  cushionUsd?: unknown;
+  cushionPct?: unknown;
+  leanSide?: unknown;
+  phase?: string;
 }): Array<{ trade: StepBuyTrade; reason: string; flatten: boolean }> {
   const open = (opts.trades || []).filter(
     (t) =>
@@ -360,6 +446,30 @@ export function evaluateStepBuyStops(opts: {
   );
   const lot1 = stepBuyOriginalLot1(opts.trades, opts.marketTicker);
   const lot1Open = Boolean(lot1 && isOpenLiveFill(lot1));
+  let latestAt: string | Date | number | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  let heldSide: 'YES' | 'NO' | null = null;
+  for (const trade of open) {
+    const d = String(trade.decision || '').toUpperCase();
+    if (d === 'YES' || d === 'NO') heldSide = d;
+    const at = trade.executedAt;
+    const ms = at ? new Date(at).getTime() : NaN;
+    if (Number.isFinite(ms) && ms > latestMs) {
+      latestMs = ms;
+      latestAt = at ?? null;
+    }
+  }
+  const thesis = evaluateStepBuyThesisDie({
+    sellIfThesisDies: opts.sellIfThesisDies,
+    absGap: opts.absGap,
+    cushionUsd: opts.cushionUsd,
+    cushionPct: opts.cushionPct,
+    leanSide: opts.leanSide,
+    heldSide,
+    lastFilledAt: latestAt,
+    now: opts.now,
+    phase: opts.phase,
+  });
   const lot1Stop =
     lot1 && lot1Open
       ? evaluateStepBuyLotStop({
@@ -374,6 +484,10 @@ export function evaluateStepBuyStops(opts: {
       : { sell: false, reason: 'step_buy_hold' };
   const out: Array<{ trade: StepBuyTrade; reason: string; flatten: boolean }> = [];
   for (const trade of open) {
+    if (thesis.sell) {
+      out.push({ trade, reason: thesis.reason, flatten: true });
+      continue;
+    }
     if (lot1Stop.sell) {
       out.push({ trade, reason: 'step_buy_lot1_flatten', flatten: true });
       continue;
@@ -441,6 +555,8 @@ export function evaluateStepBuyEnter(opts: {
     step_buy_enabled?: boolean;
     step_buy_start_minutes?: number;
     step_buy_cushion_pct?: number;
+    step_buy_add_cushion_pct?: number;
+    step_buy_sell_if_thesis_dies?: boolean;
     step_buy_lot_count?: number;
     step_buy_add_wait_minutes?: number;
     step_buy_add_band_usd?: number;
@@ -505,17 +621,15 @@ export function evaluateStepBuyEnter(opts: {
 
   const leanSide = String(opts.lean.decision || '').toUpperCase();
   const held = lots > 0 ? opts.heldSide : undefined;
-  if (
-    !stepBuyThesisHolds({
-      absGap: opts.lean.abs_gap,
-      cushionUsd: opts.cfg.cushions?.[opts.lean.asset],
-      cushionPct: risk.step_buy_cushion_pct,
-      leanSide,
-      heldSide: held,
-    })
-  ) {
-    return { ok: false, skip_reason: lots > 0 ? 'step_buy_lean_flipped' : 'step_buy_no_thesis' };
-  }
+  const thesisSkip = stepBuyThesisSkipReason({
+    absGap: opts.lean.abs_gap,
+    cushionUsd: opts.cfg.cushions?.[opts.lean.asset],
+    cushionPct: stepBuyCushionPctForLots(lots, risk),
+    leanSide,
+    heldSide: held,
+    lots,
+  });
+  if (thesisSkip) return { ok: false, skip_reason: thesisSkip };
   const decision = (held === 'NO' || leanSide === 'NO' ? 'NO' : 'YES') as 'YES' | 'NO';
   const maxAsk = normalizeStepBuyMaxAskUsd(risk.step_buy_max_ask_usd);
   const ask = decision === 'NO' ? stepBuyAskUsd(opts.lean.no_ask) : stepBuyAskUsd(opts.lean.yes_ask);

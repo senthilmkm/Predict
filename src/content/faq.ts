@@ -220,6 +220,13 @@ export function getFaqCategories(): FaqCategory[] {
             'You can lose the full amount of that order. GTC can rest on the book. IOC can miss. If the Admin flag Last signals Buy / Sell is Off, buttons disappear and Cloud rejects taps.',
         },
         {
+          id: 'home-sell-at',
+          q: 'What is Home Buy “Sell at” %?',
+          a:
+            'Settings → Risk → Home Buy → Sell at. Dump when the live held-side mark is at least this % above your fill (0 = Off; default Off). Steps 5–100.\n\n' +
+            'Uses the same Protect wait-after-fill / grace. Independent of Protect money lean-flip — it can dump on mark profit even if Protect is Off.',
+        },
+        {
           id: 'need-keys-for-alerts',
           q: 'Do I need a Kalshi API key for alerts only?',
           a:
@@ -392,10 +399,25 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'cushion-lean',
           q: 'What is Cushion lean?',
           a:
-            'Settings → Paths → Cushion lean. This is the leftover Auto path: Cloud buys when the live gap is bigger than your Cushions $ (and Smart buy, minutes, max ask, and shared caps pass). Default On.\n\n' +
+            'Settings → Paths → Cushion lean. This is the leftover Auto path: Cloud buys when the live gap is bigger than your Cushions $ and not yet Skip if gap ≥ cushion × (default 2.5×), and Smart buy, minutes, max ask, and shared caps pass. Default On.\n\n' +
             'Off = Cloud skips those gap>cushion buys only. Last-minute, Pair lock, Spike fade, Step buy, Cheap loop, Cash out, Gold fade, and TWAP lock keep their own switches.\n\n' +
             'Settings Auto-trade is the master. Off there stops every Auto path, including Cushion lean.\n\n' +
             'Missing on old phones = On, so nothing changes until you flip it. Protect money still works when Cushion lean is Off.',
+        },
+        {
+          id: 'cushion-lean-max-gap',
+          q: 'What does “Skip if gap ≥ cushion ×” mean?',
+          a:
+            'Settings → Paths → Cushion lean only. Home Buy ignores it.\n\n' +
+            'Cushion lean buys when the live gap is above your Cushions $. This knob also skips when the gap is too stretched — at least X times that cushion (default 2.5×).\n\n' +
+            'Example: BTC cushion $100 and 2.5× → buy only when gap is above $100 and at most $250. A $300 gap sits out.',
+        },
+        {
+          id: 'cushion-lean-sell-at',
+          q: 'What is Cushion lean “Sell at” %?',
+          a:
+            'Settings → Paths → Cushion lean → Sell at (when Cushion lean is On). Dump Auto fills when the live held-side mark is at least this % above your fill (0 = Off; default Off). Steps 5–100.\n\n' +
+            'Uses the same Protect wait-after-fill / grace. Independent of Protect money lean-flip. Home Buy has its own Sell at knob.',
         },
       ],
     },
@@ -409,7 +431,7 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'When On (Settings → Paths → Cushion lean), if you already hold a fill and the live lean flips strongly against you, Cloud Run sends an IOC sell after the wait-after-fill.\n\n' +
             'Default wait is 45 seconds so the first noisy ticks after a buy don’t instantly sell. After that wait, a sell can fire at any remaining time in the window — not only in the last minutes.\n\n' +
-            'When Off (default), open trades ride until the 15-minute contract settles win or loss.',
+            'When Off (default), open trades ride until the 15-minute contract settles win or loss — unless Home Buy or Cushion lean Sell at % is set and the mark hits that profit.',
         },
         {
           id: 'protect-gap',
@@ -420,6 +442,13 @@ export function getFaqCategories(): FaqCategory[] {
             'Higher (1.50×) = harder to trigger.\n' +
             'Lower (0.75×) = easier to trigger.\n\n' +
             'Example: BTC cushion $175 and 1.00×. You hold YES. Sell if lean is NO and live is at least $175 below the strike.',
+        },
+        {
+          id: 'protect-vs-sell-at',
+          q: 'How is Protect money different from Sell at %?',
+          a:
+            'Protect money sells on a strong opposite lean after the wait. Sell at % (Home Buy and Cushion lean knobs) dumps when the held mark is that % above your fill.\n\n' +
+            'Both share Protect’s wait-after-fill / grace. They are independent — Sell at can fire with Protect Off, and Protect can fire with Sell at Off.',
         },
       ],
     },
@@ -498,9 +527,18 @@ export function getFaqCategories(): FaqCategory[] {
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Last-minute. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Last-minute buys.\n\n' +
             'Cloud watches 1s quotes from Watch start (default 150s / 2.5 minutes left). It does not buy at minute 13 on a 60–75¢ print. First clip is 1 contract only when Both still qualifies — favorite ≥ Both min, ≥ Both gap ahead, and live ask ≤ Entry ask. That usually appears in the last 60–90 seconds (First clip by, default 90s). Then clip ladder: every Ladder wait (default 2s), +Clip contracts/asset if it is still the favorite and ask is still ≤ Entry ask. Stop with Stop seconds left (default 10s) or a $1.00 ask.\n\n' +
-            'Tune Watch start, First clip by, Stop, Ladder wait, Clip contracts/asset, Max clips/asset, Both min favorite, Both min gap, Sell if flip, Entry ask, Side, and assets on Risk. Both sits out a 50/50 book. Hold to settlement unless Sell if flip is On — then a real opposite-side flip of that many cents (default Off; 10¢ is a real flip, not a 1¢ dip) sells only those lots and frees the clip slots.\n\n' +
+            'Tune Watch start, First clip by, Stop, Ladder wait, Clip contracts/asset, Max clips/asset, Both min favorite, Both min gap, Sell if flip, Late ATR cushion, Entry ask, Side, and assets on Risk. Both sits out a 50/50 book. Hold to settlement unless Sell if flip is On — then a real opposite-side flip of that many cents (default Off; 10¢ is a real flip, not a 1¢ dip) sells only those lots and frees the clip slots.\n\n' +
+            'Late ATR cushion (default On): in the final 60 seconds, when the chosen ask is at least High ask floor (default 88¢), Cloud also needs signed lead ≥ ATR × (default 1.25) using a 1‑minute ATR built from this window’s Kalshi live path when that path can be measured. Lead thinner than normal 1m noise → skip. Missing path does not block. Home Buy and Cushion lean ignore this.\n\n' +
             'This is not TWAP lock. There is no $0 leftover math. Last seconds can flip. You can lose the full entry ask.\n\n' +
             'Cash out and Auto already sit out the last minute, so Last-minute does not pull coins off those paths. Window cap 1 still applies: if Auto or Cash out already filled this coin this window, the first clip sits out. After that first Last-minute fill, ladder adds are extra (up to Max clips/asset). If TWAP lock is On for BTC/ETH, those two stay with TWAP. This path’s Skip thin bid applies (unknown book fails closed). IOC only.',
+        },
+        {
+          id: 'lastminute-atr',
+          q: 'What is Late ATR cushion?',
+          a:
+            'Settings → Paths → Last-minute only. In the final 60 seconds at a high ask (default ≥ 88¢), the lead to the strike must be at least ATR × (default 1.25) the asset’s 1‑minute Average True Range from this window’s live path.\n\n' +
+            'Example: 1m ATR $0.08 and 1.25× → need $0.10 lead. A $0.03 lead at a 90¢ ask skips; a $0.12 lead can buy. If the 1m path cannot be measured, Last-minute does not skip for ATR.\n\n' +
+            'Off = Last-minute skips this check. Home Buy and Cushion lean never use it.',
         },
         {
           id: 'lastminute-admin',
@@ -519,8 +557,8 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Step buy?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Step buy. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Step buy buys.\n\n' +
-            'After Start after minutes, if the live gap is at least Cushion % of that coin’s Cushions $ and the lean is YES or NO, Cloud buys Lot contracts at the live ask (lot 1). Every Add wait, it may add another lot only if Cushion % and the lean are still with you and the ask is the last fill or up to Add band richer (0–10¢). If the ask has already jumped past that band, Cloud waits for it to come back — it does not chase. Stop adding with 30s left. Max lots is the cap. Size is Lot contracts × ask — not Auto $5.\n\n' +
-            'From the first fill, a 1s watcher checks the ask. After Max lots it only watches for stops. A lot sells when ask ≤ that lot’s fill − Stop ¢ (bid IOC). If lot 1 stops, every remaining Step buy lot on that ticker sells. 5s grace after each fill. Protect skips these rows.\n\n' +
+            'After Start after minutes, if the live gap is at least Cushion % of that coin’s Cushions $ and the lean is YES or NO, Cloud buys Lot contracts at the live ask (lot 1). Every Add wait, it may add another lot only if Add cushion % (default 75%, never below Cushion %) and the lean are still with you and the ask is the last fill or up to Add band richer (0–10¢). If the ask has already jumped past that band, Cloud waits for it to come back — it does not chase. Stop adding with 30s left. Max lots is the cap. Size is Lot contracts × ask — not Auto $5.\n\n' +
+            'From the first fill, a 1s watcher checks live bid/ask (websocket when the book is up). After Max lots it only watches for exits. A lot sells when ask ≤ that lot’s fill − Stop ¢ (bid IOC). If lot 1 stops, every remaining Step buy lot on that ticker sells. Sell if thesis dies is On by default: if the gap falls under Cushion % or the lean flips, Cloud dumps the stack at the live bid. 5s grace after each fill. Protect skips these rows.\n\n' +
             'Window cap 1 blocks lot 1 if Auto / Home / Cash out already filled this coin. Later Step buy lots are extra. Open Step buy sits Auto / Home / Cash out / Last-minute out of that ticker. TWAP still owns BTC/ETH if that path is On. Last-minute owns new buys if it is in its buy window and Step buy has no lots yet.',
         },
         {
@@ -561,9 +599,9 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Pair lock?',
           a:
             'A separate Auto path (Admin must turn it On first). Settings → Risk → Auto-trade → Pair lock. Default Off. Pick assets on that block; they must also be On in Cushions. Empty means no Pair lock buys.\n\n' +
-            'After Start after and before Until minute (default minutes 2–10), Cloud buys the Auto lean side if that ask is at or under Runner max ask (default 60¢). Lock first (default On) also requires the opposite ask already locks at least Min lock (default 5¢). Size is Lot contracts × live ask — not Auto $5. If both sides already lock Min lock, Cloud fires YES and NO IOC on the same tick. One fill and one miss dumps the fill now. Lock first Off still does that when the book already locks; otherwise it buys the runner alone so you get more first legs. Example with Lock first On: YES 52¢ and NO 18¢ → both IOC. YES 52¢ and NO 48¢ sits out.\n\n' +
-            'From a sequential runner fill, a 1s watcher buys the opposite side when runner fill + opposite ask ≤ $1 − Min lock. After Recover wait (default 20s, 10–60 on the tile), if that 5¢ hedge is gone: buy the dog if fill + ask ≤ $1 (even +1–2¢ at settlement), else sell the runner if its bid is fill + 2¢, else compare finish vs dump and take the smaller hole. 52¢ + 18¢ = 70¢ locks +30¢ at settlement. Hedge count matches the runner. Hedge does not wait the 5s grace. Window cap 1 blocks the runner only.\n\n' +
-            'Add new pair (default 0, max 3) is extra pairs after that first lock. 0 = first pair only. 3 = 3 more (4 pairs total). Only after both first-pair legs fill. If live YES+NO asks still sum to $1 or less, Cloud fires YES and NO together on that hedge-fill pulse, then every 1s while the pair stays locked and Add new pair still has room. If one fills and one misses, it compares finish (pay the missing side) vs dump (sell the extra) and takes the smaller loss — even a tiny locked loss if dumping would hurt more.\n\n' +
+            'After Start after and before Until minute (default minutes 2–10), Cloud buys the Auto lean side if that ask is at or under Runner max ask (default 60¢). Lock first (default On) also requires the opposite ask already locks at least Min lock (default 5¢). Size is Lot contracts × live ask — not Auto $5. If both sides already lock Min lock, Cloud fires YES and NO IOC on the same tick. One fill and one miss waits Recover wait. Lock first Off still does that when the book already locks; otherwise it buys the runner alone so you get more first legs. Example with Lock first On: YES 52¢ and NO 18¢ → both IOC. YES 52¢ and NO 48¢ sits out.\n\n' +
+            'From a sequential runner fill, a 1s watcher buys the opposite side when runner fill + opposite ask ≤ $1 − Min lock. After Recover wait (default 20s, 10–60 on the tile), if that 5¢ hedge is gone: buy the dog only if fill + ask ≤ 99¢, else sell the runner if its bid is fill + 2¢, else compare finish vs dump and take the strictly smaller hole. 52¢ + 18¢ = 70¢ locks +30¢ at settlement. Hedge count matches the runner. Hedge does not wait the 5s grace. Window cap 1 blocks the runner only.\n\n' +
+            'Add new pair (default 0, max 3) is extra pairs after that first lock. 0 = first pair only. 3 = 3 more (4 pairs total). Only after both first-pair legs fill. If live YES+NO asks still lock Min lock, Cloud fires YES and NO together on that hedge-fill pulse, then every 1s while the pair stays locked and Add new pair still has room. If one fills and one misses, it compares finish vs dump and takes the strictly smaller hole.\n\n' +
             'A completed pair holds both sides to $1. No take, stop, Protect, or Home Sell. If the second leg is still missing, Cloud sells the runner IOC at the bid when minutes left ≤ Flatten unmatched (default 3), the window ends, or live runner ask ≤ fill − Runner stop (default 10¢; $0 = off) and the hedge is still too rich to lock. 5s grace after the runner fill for flatten / runner stop only. The sell does not cap the loss at exactly the stop if the bid gaps. After that sell we do not buy the other leg on this ticket.\n\n' +
             'While On for that chip and inside the enter window, Auto / Cash out / Gold fade sit that ticker out. After Until minute with no runner, those paths may use the coin again. Open runner or open pair sits Home / Auto / Cash out / Gold fade / Last-minute / Step buy / Spike fade out. TWAP still owns BTC/ETH if that path is On. Last-minute owns new buys if it is in its buy window and Pair lock has no runner and no pair. Spike fade and Step buy take first pick for new buys when they want the ticker. Protect skips these rows.',
         },
@@ -572,6 +610,46 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'Why don’t I see Pair lock on Risk?',
           a:
             'The Admin portal Feature configs switch “Pair lock” is Off (default). When an admin turns it On, the block appears on Auto-trade. Your Pair lock switch stays Off until you turn it on.',
+        },
+      ],
+    },
+    {
+      id: 'cap-lock',
+      title: 'Cap lock',
+      items: [
+        {
+          id: 'what-is-cap-lock',
+          q: 'What is Cap lock?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Paths → Cap lock. Default Off. Every 15m catalog chip is listed, including HYPE. Empty chips mean no Cap lock buys. The asset must also be On in Cushions.\n\n' +
+            'No lean and no cushion. Cloud buys YES and NO on the same ticker when the two live asks plus Kalshi fees still fit $1 + Max lock loss (default 5¢). Richer ask first. Second size matches the first fill. A 0-fill first leg does not send the second. One pair per ticker per window. Sitting out because the book is rich does not burn the window when Allow later is On.\n\n' +
+            'Example: 50¢ + 50¢ + about 4¢ fees → about −4¢ → buy both if Max lock loss is 5¢. 52¢ + 52¢ sits. Window cap 1 does not block this path. A matched pair holds both sides to $1. Unmatched leftover gets one retry if it still fits the cap, else it flattens. History Sell stays hidden on a matched pair. Protect / Cash out / Gold fade skip these rows. When Cap lock is On for a chip, Cushion Auto lean sits that coin.',
+        },
+        {
+          id: 'cap-lock-risk-hidden',
+          q: 'Why don’t I see Cap lock on Risk?',
+          a:
+            'The Admin portal Feature configs switch “Cap lock” is Off (default). When an admin turns it On, the tile appears on Paths. Your Cap lock switch stays Off until you turn it on.',
+        },
+      ],
+    },
+    {
+      id: 'buffer-run',
+      title: 'Buffer run',
+      items: [
+        {
+          id: 'what-is-buffer-run',
+          q: 'What is Buffer run?',
+          a:
+            'A separate Auto path (Admin must turn it On first). Settings → Paths → Buffer run. Default Off. BTC and ETH chips only. Empty chips mean no Buffer run buys. The asset must also be On in Cushions.\n\n' +
+            'Mid-window lean scalp: after Enter after (default 3 minutes) and while Enter left (default 5) remain, Cloud buys the lead side when spot lead clears max(BTC $40 / ETH $2.50 floor, ATR×1.25) and that ask sits in Ask min…Ask max (default 42–62¢). Skip when YES+NO ≤ Pair-sum skip (default 0.98). Size is path $ per trade (default $2.50) — not Auto $.\n\n' +
+            'One trade per ticker per window. Exits: Take (+12¢), Stop (−7¢), lean flip, or Flatten (≤ 3 minutes left). Never hold to $1. TWAP / Last-minute / Spike / Step / Pair / Cap / Cheap sit it out when they own the coin. Protect skips these rows.',
+        },
+        {
+          id: 'buffer-run-risk-hidden',
+          q: 'Why don’t I see Buffer run on Risk?',
+          a:
+            'The Admin portal Feature configs switch “Buffer run” is Off (default). When an admin turns it On, the tile appears on Paths. Your Buffer run switch stays Off until you turn it on.',
         },
       ],
     },
@@ -601,16 +679,16 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Cheap loop Weekly?',
           a:
             'A third switch on the Cheap loop tile (same Admin flag). Default Off. Empty weekly chips mean no weekly buys.\n\n' +
-            'Same Kalshi above/below series as Hourly (KXBTCD, …). Cloud picks the live event that lasts about a week (4–10 days), not the hour or the day. Unique ATM strike. After a fill it holds that ticker until Take, Stop (if On), Flatten, or you tap History Sell. Then Cooldown (minutes), then it looks for the cheaper ATM side again. Cycles count exits this weekly event (default 10, max 50). One open weekly lot per coin.\n\n' +
-            'Start after 10 minutes, Flatten left 5, Cheap max $0.40, Min gap 10¢, Take 5¢, Stop Off (On = 6¢, 5–12¢), Min hold 2, Cooldown 3. 15m, Hourly, and Weekly may all hold. Protect skips these rows.',
+            'Same Kalshi above/below series as Hourly (KXBTCD, …). Cloud picks the live event that lasts about a week (3–14 days), not the hour or the day. Nearest ATM strike (picks one on a tie). After a fill it holds that ticker until Take, Stop, Flatten, or you tap History Sell. Then Cooldown (minutes), then it looks for the cheaper ATM side again. Cycles count exits this weekly event (default 10, max 50). One open weekly lot per coin.\n\n' +
+            'Start after 10 minutes, Flatten left 2 hours (30 min–12 hr), Cheap max $0.45, Min gap 8¢, Take 8¢, Stop On at 12¢, Min hold 2, Cooldown 3. Weekly chips default BTC and ETH. 15m, Hourly, and Weekly may all hold. Protect skips these rows.',
         },
         {
           id: 'cheap-loop-history-sell',
-          q: 'What does History Sell do on Cheap loop?',
+          q: 'What does History Sell do?',
           a:
-            'On a pending Cheap loop 15m, hourly, or weekly fill, History shows Sell. Tap sells that contract now on Kalshi’s book (bid IOC). It does not wait for Take, Stop, Flatten, or Friday.\n\n' +
-            'A confirm dialog, then Placing… so a double tap cannot fire twice. If IOC misses, the fill stays pending. If Cloud’s 1s watcher already sold it, you get “already sold.” Success counts as a Cheap loop exit (cycle + cooldown, then hunt again).\n\n' +
-            'Works with Auto Off and with Kill switch (emergency dump). It does not use Home Buy/Sell. Other paths do not show this button. When History has a live bid on that same ticker, it also shows live P&L at that bid (15m when the window still matches). Hourly/weekly live P&L shows only if that ticker’s quote is on the phone.',
+            'On any pending open fill (Home, Auto, Cash out, Gold fade, TWAP, Last-minute, Step buy, Spike fade, Pair lock, Cheap loop 15m/hourly/weekly), History shows Sell and live profit (cost vs current ask) when that ticker’s ask is on the phone.\n\n' +
+            'Tap sells that contract now on Kalshi’s book (bid IOC). A confirm dialog, then Placing… so a double tap cannot fire twice. If IOC misses, the fill stays pending. If Cloud already sold it, you get “already sold.”\n\n' +
+            'Works with Auto Off and with Kill switch (emergency dump). It does not use Home Buy/Sell. Cheap loop still counts a successful History Sell as an exit (cycle + cooldown).',
         },
         {
           id: 'cheap-loop-risk-hidden',

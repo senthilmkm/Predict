@@ -106,9 +106,9 @@ export class CfbRtiBuffer {
       this.byAsset.set(key, map);
     }
     map.set(Math.floor(print.utcSec), print.price);
-    if (map.size > 180) {
+    if (map.size > 1400) {
       const keys = [...map.keys()].sort((a, b) => a - b);
-      for (const k of keys.slice(0, keys.length - 120)) map.delete(k);
+      for (const k of keys.slice(0, keys.length - 1200)) map.delete(k);
     }
   }
 
@@ -124,6 +124,33 @@ export class CfbRtiBuffer {
 }
 
 export const cfbRtiBuffer = new CfbRtiBuffer();
+
+/** One history pull covers ~3600 1s rows. Do not refetch every watch pulse. */
+export const CFB_INGEST_MIN_MS = 10_000;
+const lastCfbIngestAt = new Map<string, number>();
+
+export function resetCfbIngestGateForTests(): void {
+  lastCfbIngestAt.clear();
+}
+
+export function cfbAssetsDueForIngest(
+  assets: readonly string[],
+  nowMs = Date.now()
+): string[] {
+  const out: string[] = [];
+  for (const raw of assets) {
+    const asset = String(raw || '').trim();
+    if (!asset) continue;
+    const prev = lastCfbIngestAt.get(asset) || 0;
+    if (nowMs - prev >= CFB_INGEST_MIN_MS) out.push(asset);
+  }
+  return out;
+}
+
+export function markCfbIngested(asset: string, nowMs = Date.now()): void {
+  const key = String(asset || '').trim();
+  if (key) lastCfbIngestAt.set(key, nowMs);
+}
 
 export async function isCfbRtiConfigured(): Promise<boolean> {
   return Boolean(await getCfbApiCredentials());
@@ -200,7 +227,7 @@ export function ingestRecentCfbPrints(
   asset: string,
   prints: TwapLockPrint[],
   now: Date,
-  keepSec = 180
+  keepSec = 1200
 ): number {
   const minSec = Math.floor(now.getTime() / 1000) - keepSec;
   let n = 0;

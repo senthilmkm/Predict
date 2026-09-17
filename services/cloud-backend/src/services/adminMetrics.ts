@@ -3,7 +3,7 @@ import { TradeRecordDoc } from './firestore';
 import { cloudDailyRealizedPnl } from './settlement';
 
 export type TradeStreamEntryLabel =
-  | 'Home'
+  | 'Home Buy'
   | 'Cushion lean'
   | 'Cash out'
   | 'Gold fade'
@@ -13,6 +13,8 @@ export type TradeStreamEntryLabel =
   | 'Spike fade'
   | 'Pair lock'
   | 'Pair lock hedge'
+  | 'Cap lock'
+  | 'Buffer run'
   | 'Cheap loop 15m'
   | 'Cheap loop hourly'
   | 'Cheap loop weekly'
@@ -26,7 +28,7 @@ export function tradeStreamEntryLabel(raw: unknown): TradeStreamEntryLabel {
     .replace(/-/g, '_');
   if (alias === 'pair_lock_hedge' || alias === 'pairlockhedge') return 'Pair lock hedge';
   const parsed = parseTradeEntryPath(raw);
-  if (parsed === 'home') return 'Home';
+  if (parsed === 'home') return 'Home Buy';
   if (parsed === 'auto') return 'Cushion lean';
   if (parsed === 'cash_out') return 'Cash out';
   if (parsed === 'gold_fade') return 'Gold fade';
@@ -35,6 +37,8 @@ export function tradeStreamEntryLabel(raw: unknown): TradeStreamEntryLabel {
   if (parsed === 'step_buy') return 'Step buy';
   if (parsed === 'spike_fade') return 'Spike fade';
   if (parsed === 'pair_lock') return 'Pair lock';
+  if (parsed === 'cap_lock') return 'Cap lock';
+  if (parsed === 'buffer_run') return 'Buffer run';
   if (parsed === 'cheap_loop') return 'Cheap loop 15m';
   if (parsed === 'cheap_loop_hourly') return 'Cheap loop hourly';
   if (parsed === 'cheap_loop_weekly') return 'Cheap loop weekly';
@@ -93,7 +97,7 @@ export const TRADE_STREAM_DISPLAY_MAX = 500;
 export interface TradeStreamFilters {
   asset?: string;
   status?: string;
-  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'cheap_loop' | 'cheap_loop_hourly' | 'cheap_loop_weekly';
+  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'cap_lock' | 'buffer_run' | 'cheap_loop' | 'cheap_loop_hourly' | 'cheap_loop_weekly';
   userId?: string;
   fromMs?: number;
   toMs?: number;

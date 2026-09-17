@@ -8,6 +8,12 @@ import {
   twapLockBlocksOtherAutoPaths,
   twapLockSecondsLeft,
 } from './twapLock';
+import {
+  evaluateLateAtrCushion,
+  isLastMinuteAtrCushionEnabled,
+  normalizeLastMinuteAtrAskUsd,
+  normalizeLastMinuteAtrMult,
+} from './lateAtrCushion';
 
 export const LAST_MINUTE_WATCH_SEC = 150;
 export const LAST_MINUTE_WATCH_SEC_MIN = 70;
@@ -448,6 +454,9 @@ export function evaluateLastMinuteEnter(opts: {
     last_minute_both_min_ask?: number;
     last_minute_both_gap?: number;
     last_minute_flip_sell_usd?: number;
+    last_minute_atr_cushion_enabled?: boolean;
+    last_minute_atr_ask_usd?: number;
+    last_minute_atr_mult?: number;
     cash_out_skip_thin_bid?: boolean;
     last_minute_skip_thin_bid?: boolean;
     twap_lock_enabled?: boolean;
@@ -522,6 +531,21 @@ export function evaluateLastMinuteEnter(opts: {
   }
   if (opts.hasOpenOnTicker) {
     return { ok: false, skip_reason: 'last_minute_holding_other_path' };
+  }
+
+  const atrGate = evaluateLateAtrCushion({
+    enabled: isLastMinuteAtrCushionEnabled(risk),
+    secondsLeft: left,
+    askUsd: picked.ask,
+    highAskFloorUsd: normalizeLastMinuteAtrAskUsd(risk.last_minute_atr_ask_usd),
+    atrMult: normalizeLastMinuteAtrMult(risk.last_minute_atr_mult),
+    decision: picked.decision,
+    live: opts.lean.live,
+    strike: opts.lean.strike,
+    timeseries: opts.lean.timeseries,
+  });
+  if (!atrGate.ok) {
+    return { ok: false, skip_reason: atrGate.skip_reason || 'last_minute_atr_thin' };
   }
 
   const leanForGate: LeanSignal = {

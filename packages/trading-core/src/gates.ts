@@ -24,6 +24,64 @@ export interface LeanSignal {
   timeseries?: SpotTick[];
   /** Exact minutes until close (not floored). Falls back to minutes_left. */
   minutes_remaining?: number;
+  /** ISO open — preferred source for minutes_elapsed (avoids frozen 0 in cache). */
+  open_utc?: string;
+  /** ISO close — used to infer open when open_utc is missing (15m windows). */
+  close_utc?: string;
+}
+
+const DEFAULT_WINDOW_MS = 15 * 60_000;
+
+/**
+ * Prefer open/close clock over a cached minutes_elapsed that may be stuck at 0
+ * for the whole window (shared lean cache without open_utc).
+ */
+export function resolveMinutesElapsed(
+  lean:
+    | {
+        minutes_elapsed?: number | null;
+        open_utc?: string | null;
+        close_utc?: string | null;
+      }
+    | null
+    | undefined,
+  nowMs = Date.now(),
+  windowMs = DEFAULT_WINDOW_MS
+): number {
+  const openMs = lean?.open_utc ? Date.parse(String(lean.open_utc)) : NaN;
+  if (Number.isFinite(openMs)) {
+    return Math.max(0, Math.floor((nowMs - openMs) / 60_000));
+  }
+  const closeMs = lean?.close_utc ? Date.parse(String(lean.close_utc)) : NaN;
+  if (Number.isFinite(closeMs) && windowMs > 0) {
+    const inferredOpen = closeMs - windowMs;
+    return Math.max(0, Math.floor((nowMs - inferredOpen) / 60_000));
+  }
+  const raw = Number(lean?.minutes_elapsed);
+  if (Number.isFinite(raw) && raw >= 0) return Math.floor(raw);
+  return 0;
+}
+
+export function resolveMinutesLeft(
+  lean:
+    | {
+        minutes_left?: number | null;
+        minutes_remaining?: number | null;
+        close_utc?: string | null;
+      }
+    | null
+    | undefined,
+  nowMs = Date.now()
+): number {
+  const closeMs = lean?.close_utc ? Date.parse(String(lean.close_utc)) : NaN;
+  if (Number.isFinite(closeMs)) {
+    return Math.max(0, Math.floor((closeMs - nowMs) / 60_000));
+  }
+  const remaining = Number(lean?.minutes_remaining);
+  if (Number.isFinite(remaining) && remaining >= 0) return Math.floor(remaining);
+  const left = Number(lean?.minutes_left);
+  if (Number.isFinite(left) && left >= 0) return Math.floor(left);
+  return 0;
 }
 
 export interface GateResult {
@@ -50,6 +108,14 @@ export function isCushionLeanEnabled(risk?: { cushion_lean_enabled?: boolean } |
   return risk?.cushion_lean_enabled !== false;
 }
 
+/** Skip Cushion lean when gap ≥ cushion × this. Default 2.5. Range 1.5–5. */
+export function normalizeCushionLeanMaxGapMult(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 2.5;
+  const clamped = Math.min(5, Math.max(1.5, n));
+  return Math.round(clamped * 4) / 4;
+}
+
 /** Home Last-signals amber/green label for a Cloud gate skip. */
 export function formatSkipReason(reason: string | undefined): string {
   switch (reason) {
@@ -67,6 +133,8 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'too early in window';
     case 'below_cushion':
       return 'below cushion';
+    case 'above_cushion_max':
+      return 'gap too far past cushion';
     case 'max_open':
       return 'max open positions';
     case 'daily_loss_stop':
@@ -95,10 +163,14 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Spike fade already filled this window';
     case 'window_used_by_pair_lock':
       return 'Pair lock already filled this window';
+    case 'window_used_by_cap_lock':
+      return 'Cap lock already filled this window';
     case 'window_used_by_cheap_loop':
       return 'Cheap loop already filled this window';
     case 'ask_too_rich':
       return 'ask too rich';
+    case 'ask_moved':
+      return 'ask moved before send';
     case 'smart_buy_no_path':
       return 'need a longer price path';
     case 'smart_buy_gap_dying':
@@ -215,6 +287,10 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'no Last-minute flip';
     case 'last_minute_flip_off':
       return 'Last-minute flip off';
+    case 'last_minute_atr_thin':
+      return 'lead thinner than 1m noise';
+    case 'last_minute_atr_no_path':
+      return 'no 1m ATR path';
     case 'step_buy_admin_off':
     case 'step_buy_off':
       return 'step buy off';
@@ -234,8 +310,12 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Step buy add wait';
     case 'step_buy_no_thesis':
       return 'Step buy cushion % not reached';
+    case 'step_buy_add_cushion':
+      return 'Step buy add cushion % not reached';
     case 'step_buy_lean_flipped':
       return 'Step buy lean not with you';
+    case 'step_buy_thesis_died':
+      return 'Step buy thesis died — sell all';
     case 'step_buy_add_band':
       return 'Step buy ask left the add band';
     case 'step_buy_ask_rich':
@@ -344,6 +424,92 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'Pair lock add pair finish';
     case 'pair_lock_stack_dump':
       return 'Pair lock add pair dump';
+    case 'cap_lock_admin_off':
+    case 'cap_lock_off':
+      return 'cap lock off';
+    case 'cap_lock_asset_off':
+      return 'cap lock asset off';
+    case 'cap_lock_twap_owns':
+      return 'twap lock owns this coin';
+    case 'cap_lock_last_minute_owns':
+      return 'last-minute owns new buys';
+    case 'cap_lock_pair_lock_owns':
+      return 'pair lock owns this ticket';
+    case 'cap_lock_owns_auto':
+      return 'cap lock owns this coin';
+    case 'cap_lock_holding_other_path':
+      return 'another path already holding';
+    case 'cap_lock_attempted':
+      return 'cap lock already tried this window';
+    case 'cap_lock_outside_window':
+      return 'cap lock outside window';
+    case 'cap_lock_too_late':
+      return 'too little time left';
+    case 'cap_lock_no_ask':
+      return 'no ask';
+    case 'cap_lock_too_rich':
+      return 'asks too rich to lock';
+    case 'cap_lock_first_miss':
+      return 'first leg missed';
+    case 'cap_lock_cooldown':
+      return 'cap lock cooling down after a miss';
+    case 'cap_lock_wait_second':
+      return 'waiting for second leg';
+    case 'cap_lock_hold_leftover':
+      return 'holding leftover — dump bigger than cap';
+    case 'cap_lock_flatten':
+      return 'Cap lock flatten unmatched';
+    case 'buffer_run_admin_off':
+    case 'buffer_run_off':
+      return 'buffer run off';
+    case 'buffer_run_asset_off':
+      return 'buffer run asset off';
+    case 'buffer_run_twap_owns':
+      return 'twap lock owns this coin';
+    case 'buffer_run_last_minute_owns':
+      return 'last-minute owns new buys';
+    case 'buffer_run_spike_owns':
+      return 'spike fade owns this coin';
+    case 'buffer_run_step_owns':
+      return 'step buy owns this coin';
+    case 'buffer_run_pair_owns':
+      return 'pair lock owns this coin';
+    case 'buffer_run_cap_owns':
+      return 'cap lock owns this coin';
+    case 'buffer_run_cheap_owns':
+      return 'cheap loop owns this coin';
+    case 'buffer_run_holding':
+      return 'buffer run is holding this ticket';
+    case 'buffer_run_holding_other_path':
+      return 'another path already holding';
+    case 'buffer_run_attempted':
+      return 'buffer run already tried this window';
+    case 'buffer_run_too_early':
+      return 'buffer run start after';
+    case 'buffer_run_too_late':
+      return 'too little time left';
+    case 'buffer_run_no_ask':
+      return 'no ask';
+    case 'buffer_run_no_spot':
+      return 'no live spot';
+    case 'buffer_run_ask_cheap':
+      return 'ask below buffer band';
+    case 'buffer_run_ask_rich':
+      return 'ask above buffer band';
+    case 'buffer_run_pair_lock':
+      return 'pair already cheap — sit out';
+    case 'buffer_run_thin_lead':
+      return 'lead thinner than buffer';
+    case 'buffer_run_thin_bid':
+      return 'bid too thin';
+    case 'buffer_run_take':
+      return 'Buffer run take';
+    case 'buffer_run_stop':
+      return 'Buffer run stop';
+    case 'buffer_run_lean_flip':
+      return 'Buffer run lean flip';
+    case 'buffer_run_flatten':
+      return 'Buffer run flatten';
     case 'cheap_loop_admin_off':
     case 'cheap_loop_off':
       return 'cheap loop off';
@@ -414,7 +580,7 @@ export function windowBuyCap(risk: { max_trades_per_asset_per_window?: number } 
 export function isCountableWindowBuy(trade: {
   dryRun?: boolean;
   dry_run?: boolean;
-  status?: string;
+  status?: string | null;
   outcome?: string | null;
   fillCount?: number | null;
   fill_count?: number | null;
@@ -458,6 +624,7 @@ const WINDOW_USED_PATHS = [
   'step_buy',
   'spike_fade',
   'pair_lock',
+  'cap_lock',
   'cheap_loop',
 ] as const;
 
@@ -500,6 +667,8 @@ export function firstWindowBuyEntryPath(
                       ? 'spike_fade'
                       : raw === 'pairlock' || raw === 'pair_lock_hedge' || raw === 'pairlockhedge'
                         ? 'pair_lock'
+                        : raw === 'caplock' || raw === 'completeness_lock' || raw === 'completenesslock'
+                          ? 'cap_lock'
                         : raw === 'cheaploop'
                           ? 'cheap_loop'
                           : raw;
@@ -529,6 +698,13 @@ export function evaluateStaticGate(
     assetTradesInWindow?: number;
     /** Home Buy tap: same risk gates except auto-trade Off. */
     allowWhenAutoTradeOff?: boolean;
+    /** Second Home leg on the same ticker — cushion already cleared on the first tap. */
+    skipCushion?: boolean;
+    /**
+     * Cushion lean path only. Skip when gap ≥ cushion × max-gap mult.
+     * Other Auto paths must leave this unset.
+     */
+    applyCushionLeanMaxGap?: boolean;
   }
 ): GateResult {
   const openPositions = opts?.openPositions ?? 0;
@@ -548,17 +724,26 @@ export function evaluateStaticGate(
   if (lean.decision !== 'YES' && lean.decision !== 'NO') {
     return { ok: false, skip_reason: 'skip_decision' };
   }
-  if (lean.minutes_left < cfg.risk.min_minutes_left) {
+  const minutesLeft = resolveMinutesLeft(lean);
+  if (minutesLeft < cfg.risk.min_minutes_left) {
     return { ok: false, skip_reason: 'minutes_left' };
   }
-  const elapsed = Number(lean.minutes_elapsed ?? 0);
+  const elapsed = resolveMinutesElapsed(lean);
   if (elapsed < cfg.risk.min_minutes_elapsed) {
     return { ok: false, skip_reason: 'minutes_elapsed' };
   }
 
-  const cushion = Number(cfg.cushions[lean.asset]);
-  if (lean.abs_gap + 1e-9 < cushion) {
-    return { ok: false, skip_reason: 'below_cushion' };
+  if (!opts?.skipCushion) {
+    const cushion = Number(cfg.cushions[lean.asset]);
+    if (lean.abs_gap + 1e-9 < cushion) {
+      return { ok: false, skip_reason: 'below_cushion' };
+    }
+    if (opts?.applyCushionLeanMaxGap && cushion > 0) {
+      const mult = normalizeCushionLeanMaxGapMult(cfg.risk.cushion_lean_max_gap_mult);
+      if (lean.abs_gap > cushion * mult + 1e-9) {
+        return { ok: false, skip_reason: 'above_cushion_max' };
+      }
+    }
   }
 
   if (openPositions >= cfg.risk.max_open_positions) {
@@ -588,7 +773,7 @@ export function evaluateStaticGate(
     const tLeft = Number(
       lean.minutes_remaining != null && Number.isFinite(Number(lean.minutes_remaining))
         ? lean.minutes_remaining
-        : lean.minutes_left
+        : minutesLeft
     );
     const smart = evaluateSmartBuy({
       live: lean.live,
@@ -630,8 +815,10 @@ export function evaluateStaticGate(
     return { ok: false, skip_reason: 'notional_too_small' };
   }
 
+  // V2 events/orders: bid@pay = buy YES; ask@pay = buy NO (same as Cap/Pair lock).
+  // ask@(1−pay) overstated the debit and triggered insufficient_balance on Home/Auto NO.
   const side: 'bid' | 'ask' = lean.decision === 'YES' ? 'bid' : 'ask';
-  const priceNum = lean.decision === 'YES' ? pay : Math.max(0.01, 1 - pay);
+  const priceNum = pay;
 
   return {
     ok: true,

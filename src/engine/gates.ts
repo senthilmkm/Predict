@@ -25,6 +25,8 @@ export interface LeanSignal {
   no_ask?: number;
   timeseries?: { t: number; v: number }[];
   minutes_remaining?: number;
+  open_utc?: string;
+  close_utc?: string;
 }
 
 /**
@@ -40,6 +42,8 @@ export function evaluateStaticGate(
     tradesToday?: number;
     assetTradesInWindow?: number;
     allowWhenAutoTradeOff?: boolean;
+    skipCushion?: boolean;
+    applyCushionLeanMaxGap?: boolean;
   }
 ): CoreGateResult {
   const cfg = snapshotConfig(cfgIn);

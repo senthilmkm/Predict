@@ -204,10 +204,16 @@ export class KalshiClient {
       payload
     );
     const ok = status === 200 || status === 201;
-    const errCode =
+    const errObj =
       data && typeof data === 'object' && data.error && typeof data.error === 'object'
-        ? data.error.code
+        ? (data.error as { code?: unknown; message?: unknown })
         : null;
+    const errCode = errObj?.code != null ? String(errObj.code) : null;
+    const errDetail = errObj?.message != null ? String(errObj.message).trim() : '';
+    const errText =
+      errCode && errDetail
+        ? `${errCode}: ${errDetail}`
+        : errCode || errDetail || null;
     let fields = extractKalshiOrderFields(data);
     if (ok && fields.order_id && !placeFillLooksComplete(fields)) {
       fields = await this.confirmPlaceFill(fields);
@@ -218,7 +224,7 @@ export class KalshiClient {
       dry_run: false,
       payload,
       response: data,
-      error: errCode,
+      error: errText,
       order_id: fields.order_id,
       fill_count: fields.fill_count,
       remaining_count: fields.remaining_count,
@@ -242,6 +248,17 @@ export class KalshiClient {
       http_status: status,
       fields: extractKalshiOrderFields(data),
     };
+  }
+
+  async getFills(opts?: {
+    limit?: number;
+    ticker?: string;
+  }): Promise<{ ok: boolean; http_status: number; fills: unknown }> {
+    const q = new URLSearchParams();
+    q.set('limit', String(Math.max(1, Math.min(200, Math.round(Number(opts?.limit) || 100)))));
+    if (opts?.ticker) q.set('ticker', String(opts.ticker));
+    const { status, data } = await this.request('GET', `/portfolio/fills?${q.toString()}`);
+    return { ok: status === 200, http_status: status, fills: data };
   }
 
   async restConfirmPlaceFill(initial: KalshiOrderFields): Promise<KalshiOrderFields> {

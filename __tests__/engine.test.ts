@@ -1,6 +1,6 @@
 import { AsyncMutex, WindowLockRegistry } from '../src/engine/concurrency';
 import { evaluateStaticGate, LeanSignal } from '../src/engine/gates';
-import { formatSkipReason } from '../packages/trading-core/src/gates';
+import { formatSkipReason, resolveMinutesElapsed } from '../packages/trading-core/src/gates';
 import { TradingEngine } from '../src/engine/TradingEngine';
 import { defaultAppConfig } from '../src/config/types';
 import { configForHomeBuy } from '../src/config/normalize';
@@ -93,6 +93,21 @@ describe('evaluateStaticGate edge cases', () => {
     expect(g.notional_usd!).toBeLessThanOrEqual(g.config_snapshot!.risk.max_dollars_per_trade);
   });
 
+  test('NO buy is ask at pay (not 1−pay) so Kalshi debit matches size', () => {
+    const cfg = base();
+    cfg.risk.chase_above_ask_usd = 0;
+    cfg.risk.fixed_dollars_per_trade = 5;
+    cfg.risk.max_dollars_per_trade = 5;
+    const g = evaluateStaticGate(lean({ decision: 'NO', abs_gap: 10, no_ask: 0.4, yes_ask: 0.62 }), cfg);
+    expect(g.ok).toBe(true);
+    expect(g.decision).toBe('NO');
+    expect(g.side).toBe('ask');
+    expect(g.pay_price).toBeCloseTo(0.4, 4);
+    expect(Number(g.price)).toBeCloseTo(0.4, 4);
+    expect(Number(g.count) * (g.pay_price || 0)).toBeCloseTo(g.notional_usd!, 2);
+    expect(g.notional_usd!).toBeLessThanOrEqual(5 + 1e-9);
+  });
+
   test('notional never exceeds max/fixed dollars', () => {
     const cfg = base();
     cfg.risk.fixed_dollars_per_trade = 5;
@@ -106,6 +121,34 @@ describe('evaluateStaticGate edge cases', () => {
 
   test('below_cushion', () => {
     expect(evaluateStaticGate(lean({ abs_gap: 6 }), base()).skip_reason).toBe('below_cushion');
+  });
+
+  test('above_cushion_max when Cushion lean max-gap flag is on', () => {
+    const cfg = base();
+    cfg.cushions.Gold = 7;
+    cfg.risk.cushion_lean_max_gap_mult = 2.5;
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 18 }), cfg, { applyCushionLeanMaxGap: true }).skip_reason
+    ).toBe('above_cushion_max');
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 17 }), cfg, { applyCushionLeanMaxGap: true }).ok
+    ).toBe(true);
+    expect(evaluateStaticGate(lean({ abs_gap: 18 }), cfg).ok).toBe(true);
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 18 }), cfg, {
+        allowWhenAutoTradeOff: true,
+        applyCushionLeanMaxGap: true,
+      }).skip_reason
+    ).toBe('above_cushion_max');
+  });
+
+  test('skipCushion allows Home opposite leg below cushion', () => {
+    const g = evaluateStaticGate(lean({ abs_gap: 1, decision: 'NO', no_ask: 0.4 }), base(), {
+      allowWhenAutoTradeOff: true,
+      skipCushion: true,
+    });
+    expect(g.ok).toBe(true);
+    expect(g.side).toBe('ask');
   });
 
   test('skip_decision', () => {
@@ -236,6 +279,35 @@ describe('evaluateStaticGate edge cases', () => {
     expect(formatSkipReason('gold_fade_gap_wide')).toBe('gap too wide to fade');
     expect(formatSkipReason('gold_fade_thin_bid')).toBe('bid too thin');
     expect(formatSkipReason('cushion_lean_off')).toBe('Cushion lean off');
+    expect(formatSkipReason('above_cushion_max')).toBe('gap too far past cushion');
+  });
+
+  test('resolveMinutesElapsed prefers open/close clock over frozen 0', () => {
+    const nowMs = Date.now();
+    const closeUtc = new Date(nowMs + 7 * 60_000).toISOString();
+    expect(
+      resolveMinutesElapsed(
+        {
+          minutes_elapsed: 0,
+          close_utc: closeUtc,
+        },
+        nowMs
+      )
+    ).toBe(8);
+    const cfg = base();
+    cfg.risk.smart_buy_enabled = false;
+    expect(
+      evaluateStaticGate(
+        lean({
+          minutes_elapsed: 0,
+          minutes_left: 0,
+          close_utc: closeUtc,
+        }),
+        cfg
+      ).ok
+    ).toBe(true);
+    // Without a clock, frozen 0 still means too early.
+    expect(evaluateStaticGate(lean({ minutes_elapsed: 0 }), cfg).skip_reason).toBe('minutes_elapsed');
   });
 });
 

@@ -208,10 +208,16 @@ export class KalshiClient {
       payload
     );
     const ok = status === 200 || status === 201;
-    const errCode =
+    const errObj =
       data && typeof data === 'object' && data.error && typeof data.error === 'object'
-        ? data.error.code
+        ? (data.error as { code?: unknown; message?: unknown })
         : null;
+    const errCode = errObj?.code != null ? String(errObj.code) : null;
+    const errDetail = errObj?.message != null ? String(errObj.message).trim() : '';
+    const errText =
+      errCode && errDetail
+        ? `${errCode}: ${errDetail}`
+        : errCode || errDetail || null;
     let fields = extractKalshiOrderFields(data);
     if (ok && fields.order_id && !placeFillLooksComplete(fields)) {
       fields = await this.confirmPlaceFill(fields);
@@ -222,7 +228,7 @@ export class KalshiClient {
       dry_run: false,
       payload,
       response: data,
-      error: errCode,
+      error: errText,
       order_id: fields.order_id,
       fill_count: fields.fill_count,
       remaining_count: fields.remaining_count,

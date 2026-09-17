@@ -9,6 +9,7 @@ import { computeLean, LeanResult } from '../services/lean/lean';
 import { isMarketOpen } from '../services/marketHours';
 import { maybeNotify } from '../services/notifications';
 import { cloudClient } from '../services/cloud/cloudClient';
+import { mergeCloudHomeLean } from '../screens/lastSignalsManual';
 import { MemoryAlertRepo, MemoryTradeRepo, TradeRecord, AlertRecord, cloudTradesToRecords, cloudAlertsToRecords } from '../storage/repos';
 import { ALERTS_INBOX_CAUGHT_UP_KEY, hydrateRepos, persistRepos } from '../storage/historyPersistence';
 import { getKeyValueStore } from '../platform/storage';
@@ -351,6 +352,27 @@ export class AppRuntime {
     this.onChange?.();
   }
 
+  /** Last signals gap/live from Cloud 1s /me/quotes. */
+  syncCloudHomeLeans(
+    leans: Record<string, Record<string, unknown>> | undefined,
+    cushions: Record<string, number> | undefined,
+    atIso?: string
+  ): void {
+    if (!leans || typeof leans !== 'object') return;
+    const at = String(atIso || new Date().toISOString());
+    let changed = false;
+    for (const [raw, row] of Object.entries(leans)) {
+      const asset = String(raw || '').trim() as AssetKey;
+      if (!asset || !row || typeof row !== 'object') continue;
+      const next = mergeCloudHomeLean(this.status.lastLeans[asset], { ...row, asset }, Number(cushions?.[asset] || 0));
+      if (!next) continue;
+      this.status.lastLeans[asset] = next;
+      this.status.lastLeanAt[asset] = at;
+      changed = true;
+    }
+    if (changed) this.onChange?.();
+  }
+
   async hydrateHistory(): Promise<void> {
     const days = this.getConfig().alert_retention_days ?? 30;
     await hydrateRepos(this.trades, this.alerts, days);
@@ -600,8 +622,17 @@ export class AppRuntime {
           if (staggerMs > 0) await new Promise((r) => setTimeout(r, staggerMs));
         }
         let lean: LeanResult;
+        const lastLeanAtMs = Date.parse(this.status.lastLeanAt[asset] || '');
+        const cloudFresh =
+          Number.isFinite(lastLeanAtMs) &&
+          Date.now() - lastLeanAtMs < 8_000 &&
+          Boolean(this.status.lastLeans[asset]?.market_ticker);
         try {
-          lean = await computeLean(asset, cfg.cushions[asset], this.fetchImpl);
+          if (cloudFresh) {
+            lean = this.status.lastLeans[asset] as LeanResult;
+          } else {
+            lean = await computeLean(asset, cfg.cushions[asset], this.fetchImpl);
+          }
         } catch (e: any) {
           const raw = String(e?.message || e);
           if (raw.includes('http_429') || isRateLimitError(raw)) {

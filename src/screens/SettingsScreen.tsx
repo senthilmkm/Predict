@@ -1154,6 +1154,12 @@ function RiskHelpModal({
             </HelpItem>
 
             <Text style={styles.modalSection}>Risk — Smart buy (Cushion lean only)</Text>
+            <HelpItem title="Skip if gap ≥ cushion ×">
+              Settings → Paths → Cushion lean only. Home Buy ignores this.{'\n\n'}
+              Cushion lean buys when the live gap is above your Cushions $. This also skips when the
+              gap is too stretched — at least X times that cushion (default 2.5×).{'\n\n'}
+              Example: cushion $100 and 2.5× → buy only above $100 and at most $250.
+            </HelpItem>
             <HelpItem title="Smart buy">
               Settings → Paths → Cushion lean only. Home Buy taps ignore this.{'\n\n'}
               When On (default), Cushion lean still uses your cushions, minutes, max ask, and shared caps —
@@ -1261,19 +1267,24 @@ function RiskHelpModal({
               lock. Does not pull coins off Cash out or Auto. Window cap 1 still blocks the first
               clip; ladder adds after that first Last-minute fill are extra. Sell if flip is Off
               unless you set it — then only a real opposite-side flip sells those lots and frees
-              clip slots. TWAP lock keeps BTC/ETH if that path is On. Hold to settlement when flip
-              is Off. Default Off. Admin must enable the block first.
+              clip slots.               Late ATR cushion (default On): final 60s at High ask floor (default 88¢)
+              needs lead ≥ ATR × (default 1.25) from this window’s 1m path when that path
+              can be measured; missing path does not block. TWAP lock keeps BTC/ETH
+              if that path is On. Hold to settlement when flip is Off. Default Off. Admin must
+              enable the block first.
             </HelpItem>
             <HelpItem title="Step buy">
               Checked Step buy assets that are also On in Cushions. Empty means no Step buy buys.
               After Start after minutes, buy Lot contracts if Cushion % of that coin’s Cushions $
-              still holds and the lean is with you. Add another lot every Add wait only if the
-              thesis is still on and the ask is the last fill or up to Add band richer (0–10¢). If
-              the ask has already jumped past that band, Cloud waits — it does not chase. Stop adding
-              with 30s left. A 1s watcher checks the ask from the first fill; after Max lots it only
-              stops. Sell a lot when ask is Stop ¢ under that lot’s fill; lot 1 stop sells all
-              remaining Step buy lots on that ticker. Window cap 1 blocks lot 1 only. Protect skips
-              these rows. Default Off. Admin must enable the block first.
+              still holds and the lean is with you. Add another lot every Add wait only if Add
+              cushion % (default 75%) and the lean are still with you and the ask is the last fill
+              or up to Add band richer (0–10¢). If the ask has already jumped past that band, Cloud
+              waits — it does not chase. Stop adding with 30s left. A 1s watcher checks live bid/ask
+              from the first fill; after Max lots it only exits. Sell a lot when ask is Stop ¢ under
+              that lot’s fill; lot 1 stop sells all remaining Step buy lots on that ticker. Sell if
+              thesis dies is On by default — gap under Cushion % or a lean flip dumps the stack at
+              the live bid. Window cap 1 blocks lot 1 only. Protect skips these rows. Default Off.
+              Admin must enable the block first.
             </HelpItem>
             <HelpItem title="Spike fade">
               Checked Spike fade assets that are also On in Cushions. Empty means no Spike fade

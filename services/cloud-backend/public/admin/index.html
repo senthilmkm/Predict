@@ -284,7 +284,7 @@
           </div>
         </h3>
         <p class="text-xs text-slate-400 mb-6">
-          Predict Cloud Engine automatically evaluates 15m Pyth index feeds against Kalshi prediction market strikes <span id="systemTickDescription" class="text-sky-400 font-semibold">every 20 seconds</span>.
+          Lean <strong class="text-white">asks</strong> update every 1s from the Kalshi WebSocket for coins On in Cushions (one book per ticker, no duplicate REST). This knob is ticker reconcile + user walk — not a 1s <code>/events</code> flood. <span id="systemTickDescription" class="text-sky-400 font-semibold">every 20 seconds</span>.
         </p>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -433,6 +433,8 @@
               <option value="step_buy">Step buy</option>
               <option value="spike_fade">Spike fade</option>
               <option value="pair_lock">Pair lock</option>
+              <option value="cap_lock">Cap lock</option>
+              <option value="buffer_run">Buffer run</option>
               <option value="cheap_loop">Cheap loop 15m</option>
               <option value="cheap_loop_hourly">Cheap loop hourly</option>
               <option value="cheap_loop_weekly">Cheap loop weekly</option>
@@ -807,10 +809,11 @@
               <span class="block text-xs text-slate-400 mt-1">
                 Separate Auto path. Default Off. Asset chips required. After Start after + Cushion %
                 of that coin’s Cushions $, one lot at the Auto lean YES/NO if ask is at or under
-                Entry ask. Adds later lots on the same side inside Add wait + Add band. Lot 1 stop
-                flattens every remaining Step buy lot on that ticker. Stop adding with 30s left.
-                Protect skips this path. Window cap 1 blocks lot 1 only. Off hides the phone block
-                and blocks new Step buy lots. Open lots still stop and sell.
+                Entry ask. Adds later lots on the same side inside Add wait + Add cushion % + Add
+                band. Lot 1 stop or Sell if thesis dies (default On) flattens every remaining Step
+                buy lot on that ticker. Stop adding with 30s left. Protect skips this path. Window
+                cap 1 blocks lot 1 only. Off hides the phone block and blocks new Step buy lots.
+                Open lots still stop and sell.
               </span>
             </span>
           </label>
@@ -838,6 +841,32 @@
                 Flatten unmatched dumps the runner only. Protect skips this path. Window cap 1
                 blocks the runner only. Off hides the phone block and blocks new Pair lock buys.
                 Open unmatched runners still hedge or flatten.
+              </span>
+            </span>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagCapLock" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">Cap lock</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                Separate Auto path. Default Off. Do not enable until unit tests pass. Full 15m chip
+                catalog. Empty chips = no buys. Buy YES and NO on the same ticker when asks plus
+                fees still fit Max lock loss (default 5¢). No lean. One pair per window. Unmatched
+                leftover flattens. Matched pair holds to $1. Window cap 1 does not block this path.
+                Off hides the phone tile and blocks new Cap lock buys.
+              </span>
+            </span>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="flagBufferRun" class="mt-1 accent-sky-500" onchange="markFeatureFormDirty()" />
+            <span>
+              <span class="text-sm font-bold text-white">Buffer run</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                Separate Auto path. Default Off. BTC / ETH only. Empty chips = no buys. Mid-window
+                lean scalp when lead clears ATR/min-gap floors and ask is mid-range (default
+                42–62¢). Take / stop / lean-flip / flatten. One trade per window. TWAP / LM / Spike /
+                Step / Pair / Cap / Cheap sit it out. Off hides the phone tile and blocks new
+                Buffer run buys. Open lots still exit.
               </span>
             </span>
           </label>
@@ -1200,6 +1229,12 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       if (v === 'pair_lock' || v === 'pairlock' || v === 'pair-lock') {
         return { label: 'Pair lock', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
       }
+      if (v === 'cap_lock' || v === 'caplock' || v === 'cap-lock') {
+        return { label: 'Cap lock', cls: 'bg-sky-500/20 text-sky-300 border-sky-500/30' };
+      }
+      if (v === 'buffer_run' || v === 'bufferrun' || v === 'buffer-run') {
+        return { label: 'Buffer run', cls: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' };
+      }
       if (v === 'cheap_loop_weekly' || v === 'cheaploopweekly' || v === 'cheap-loop-weekly') {
         return { label: 'Cheap loop weekly', cls: 'bg-teal-500/20 text-teal-100 border-teal-500/30' };
       }
@@ -1551,6 +1586,10 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
       if (spikeFade) spikeFade.checked = flags.spikeFade === true;
       const pairLock = document.getElementById('flagPairLock');
       if (pairLock) pairLock.checked = flags.pairLock === true;
+      const capLock = document.getElementById('flagCapLock');
+      if (capLock) capLock.checked = flags.capLock === true;
+      const bufferRun = document.getElementById('flagBufferRun');
+      if (bufferRun) bufferRun.checked = flags.bufferRun === true;
       const cheapLoop = document.getElementById('flagCheapLoop');
       if (cheapLoop) cheapLoop.checked = flags.cheapLoop === true;
       const wsQuotes = document.getElementById('flagKalshiWsQuotes');
@@ -1577,6 +1616,8 @@ gcloud run deploy predict-cloud-api --source . --project predict-trading-0904 --
               stepBuy: document.getElementById('flagStepBuy').checked,
               spikeFade: document.getElementById('flagSpikeFade').checked,
               pairLock: document.getElementById('flagPairLock').checked,
+              capLock: document.getElementById('flagCapLock').checked,
+              bufferRun: document.getElementById('flagBufferRun').checked,
               cheapLoop: document.getElementById('flagCheapLoop').checked,
               kalshiWsQuotes: document.getElementById('flagKalshiWsQuotes').checked,
               kalshiWsFills: document.getElementById('flagKalshiWsFills').checked,

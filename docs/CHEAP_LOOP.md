@@ -98,7 +98,7 @@ Normalize: `cheap_loop_enabled === true`; clamp / snap like other chase + int fi
 
 **Profit clamps (do not loosen in code):**
 
-- Stop default **Off**. When On, Take must stay strictly below Stop (cut Take; never raise Stop). When Off, Take clamps to 3–8¢ only.
+- Stop default **Off**. When On, Take must stay strictly below Stop. Hydrate/load cuts Take. Settings Take **+** raises Stop by 1¢ if Take would catch it. When Off, Take clamps to 3–8¢ only.
 - Cheap max **≤ $0.45**. 55¢ is a favorite, not a scalp.
 - Min gap **≥ 8¢**. No 50/50 churn.
 - 15m cheap floor **20¢** and favorite cap **80¢**. 11¢ / 90¢ sits. Do not drop the floor or raise the cap to chase fills.
@@ -213,7 +213,7 @@ Window ends mid-cooldown → stop. Cycle store is the trade book for that market
 | Admin / user / chip / Cushions / Auto Off with open lot | Continue exits only; no next cycle |
 | Manual / Home tap lot | `cheap_loop_holding_other_path` |
 | In-flight place | Place lock; re-read + re-gate |
-| Take ≥ Stop on Save | Only when Stop is On. Cut Take; never raise Stop. Off = Take 3–8¢ only |
+| Take ≥ Stop on Save | Only when Stop is On. Hydrate cuts Take. Settings Take + raises Stop. Off = Take 3–8¢ only |
 | 15m window | Shipped. Cycles 1, Start after 2, Stop Off, take / stop / flatten |
 | Hourly window | Own toggle + clocks after 15m ships. Needs hourly series in catalog + Cloud lean. Do not point 15m knobs at hourly tickers |
 
@@ -328,28 +328,28 @@ No open hourly event → sit. Open lot still exits if Hourly toggle later turns 
 
 Status: **shipping**. Same Admin flag `cheapLoop`. Own user toggle **Weekly** under Hourly. Default Off. Empty weekly chips = no weekly buys.
 
-Same `KX*D` series as Hourly. Cloud picks the live event whose open→close is **4–10 days** (~7d). Hourly is fail-closed to **20 min–3 h** so a weekend with only a weekly book cannot buy a week as “hourly.” No daily / monthly / annual this pass. Does **not** use the 15m 20¢ / 80¢ alive band.
+Same `KX*D` series as Hourly. Cloud picks the live event whose open→close is **3–14 days** (~7d). Hourly is fail-closed to **20 min–3 h** so a weekend with only a weekly book cannot buy a week as “hourly.” No daily / monthly / annual this pass. Does **not** use the 15m 20¢ / 80¢ alive band.
 
-Loop: buy cheap ATM → wait until **bid ≥ fill + Take** (or Stop On and **bid ≤ fill − Stop**) → sell → **Cooldown minutes** → hunt ATM again (ATM may move) → repeat until **Flatten left** minutes of that weekly window. Flatten: no new buys; dump if holding. Stop default Off. Never both sides. Never hold to $1. One open weekly lot per asset.
+Loop: buy cheap ATM → wait until **bid ≥ fill + Take** (or Stop On and **bid ≤ fill − Stop**) → sell → **Cooldown minutes** → hunt ATM again (ATM may move) → repeat until **Flatten left** of that weekly window. Flatten: no new buys; dump if holding. Never both sides. Never hold to $1. One open weekly lot per asset.
 
-`entry_path`: **`cheap_loop_weekly`**. Protect skips these rows. Cycles = completed **exits this weekly event** (default **10**, range **1–50**). Cooldown / Start / Flatten / Min hold are **minutes** (same ranges as hourly). Take / Cheap max / Min gap same 5¢ / 40¢ / 10¢. Skip thin default Off. Min live % mapped to 0 (ATM). Cloud-only; Home stays 15m.
+`entry_path`: **`cheap_loop_weekly`**. Protect skips these rows. Cycles = completed **exits this weekly event** (default **10**, range **1–50**). Cooldown / Start / Min hold are **minutes**. Flatten is **30 min–12 hr** (default **2 hours**) so it does not dump in Friday’s last 5 minutes. Take 8¢ / Cheap max 45¢ / Min gap 8¢. Stop default **On** at 12¢. Skip thin default Off. Min live % mapped to 0 (ATM). Weekly chips default **BTC, ETH**. Cloud-only; Home stays 15m.
 
 | Risk key | UI | Weekly shipped | Range |
 |---|---|---|---|
 | `cheap_loop_weekly_enabled` | Weekly | **false** | — |
 | `cheap_loop_weekly_start_minutes` | Start after | **10** | 1–20 |
-| `cheap_loop_weekly_flatten_minutes` | Flatten left | **5** | 3–10 |
-| `cheap_loop_weekly_cheap_max_ask_usd` | Cheap max ask | **0.40** | 0.25–0.45 |
-| `cheap_loop_weekly_min_gap_usd` | Min gap | **0.10** | 0.08–0.20 |
-| `cheap_loop_weekly_take_usd` | Take | **0.05** | 0.03–0.08 |
-| `cheap_loop_weekly_stop_enabled` | Stop | **false** | — |
-| `cheap_loop_weekly_stop_usd` | Stop | **0.06** | 0.05–0.12 |
+| `cheap_loop_weekly_flatten_minutes` | Flatten left | **120** | 30–720 |
+| `cheap_loop_weekly_cheap_max_ask_usd` | Cheap max ask | **0.45** | 0.25–0.45 |
+| `cheap_loop_weekly_min_gap_usd` | Min gap | **0.08** | 0.08–0.20 |
+| `cheap_loop_weekly_take_usd` | Take | **0.08** | 0.03–0.08 |
+| `cheap_loop_weekly_stop_enabled` | Stop | **true** | — |
+| `cheap_loop_weekly_stop_usd` | Stop | **0.12** | 0.05–0.12 |
 | `cheap_loop_weekly_min_hold_minutes` | Min hold | **2** | 1–8 |
 | `cheap_loop_weekly_cooldown_minutes` | Cooldown | **3** | 1–10 |
 | `cheap_loop_weekly_cycles` | Cycles | **10** | 1–50 |
 | `cheap_loop_weekly_lot_count` | Lot contracts | **1** | 1–5 |
 | `cheap_loop_weekly_skip_thin_bid` | Skip thin bid | **false** | — |
-| `cheap_loop_weekly_assets` | Weekly assets | **[]** | same series as hourly |
+| `cheap_loop_weekly_assets` | Weekly assets | **BTC, ETH** | same series as hourly |
 
 15m / Hourly / Weekly may all hold (different tickers). Shared: max open, daily loss, trades/day. TWAP / Last-minute / Spike / Step / Pair stay on **15m**.
 

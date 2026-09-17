@@ -235,6 +235,12 @@ function parseAdminFeatureFlagsPatch(raw: unknown): Partial<FeatureFlags> | unde
   if (body.pairLock !== undefined) {
     patch.pairLock = body.pairLock === true;
   }
+  if (body.capLock !== undefined) {
+    patch.capLock = body.capLock === true;
+  }
+  if (body.bufferRun !== undefined) {
+    patch.bufferRun = body.bufferRun === true;
+  }
   if (body.cheapLoop !== undefined) {
     patch.cheapLoop = body.cheapLoop === true;
   }

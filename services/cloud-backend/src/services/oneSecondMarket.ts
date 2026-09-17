@@ -47,6 +47,21 @@ export function collectHomeQuoteAssets(
   return [...out] as AssetKey[];
 }
 
+/** Kalshi lean/quote coins: Cushions On only. Empty allowlist = none. */
+export function intersectCushionAssets(
+  assets: readonly string[] | undefined | null,
+  cushionOn: readonly string[] | undefined | null
+): AssetKey[] {
+  const allow = new Set((cushionOn || []).map((a) => String(a || '').trim()).filter(Boolean));
+  if (!allow.size) return [];
+  const out: string[] = [];
+  for (const raw of assets || []) {
+    const key = String(raw || '').trim();
+    if (key && allow.has(key) && !out.includes(key)) out.push(key);
+  }
+  return out as AssetKey[];
+}
+
 export function unionAssetKeys(
   ...lists: Array<readonly string[] | undefined | null>
 ): AssetKey[] {
@@ -141,6 +156,34 @@ export function liveAsksFromTickers(
   return liveAsksByAsset(leans, quotes);
 }
 
+export function quotesByTicker(
+  quotes: Map<string, OneSecondAskQuote>
+): Record<string, LiveAskByAsset> {
+  const out: Record<string, LiveAskByAsset> = {};
+  for (const [raw, q] of quotes) {
+    const ticker = String(raw || '').trim();
+    if (!ticker || !q) continue;
+    if (q.yes_ask == null && q.no_ask == null && q.yes_bid == null && q.no_bid == null) continue;
+    out[ticker] = { ...q, ticker };
+  }
+  return out;
+}
+
+export function mergeLiveAskTickers(
+  prev: Record<string, LiveAskByAsset>,
+  next: Record<string, LiveAskByAsset>,
+  wanted: string[]
+): Record<string, LiveAskByAsset> {
+  const out: Record<string, LiveAskByAsset> = {};
+  for (const raw of wanted) {
+    const ticker = String(raw || '').trim();
+    if (!ticker) continue;
+    if (next[ticker]) out[ticker] = next[ticker];
+    else if (prev[ticker]) out[ticker] = prev[ticker];
+  }
+  return out;
+}
+
 export function quoteFromMarket(raw: any): OneSecondAskQuote {
   const n = (v: unknown) => {
     const x = Number(v);
@@ -181,6 +224,17 @@ export function mergeQuoteMaps(
     }
   }
   return out;
+}
+
+/** Live book only. Never hits Kalshi REST. */
+export function wsQuotesForTickers(tickers: string[]): Map<string, OneSecondAskQuote> {
+  const quotes = new Map<string, OneSecondAskQuote>();
+  const uniq = [...new Set(tickers.map((t) => String(t || '').trim()).filter(Boolean))];
+  for (const ticker of uniq) {
+    const ws = readWsAskBid(ticker);
+    if (ws) quotes.set(ticker, ws);
+  }
+  return quotes;
 }
 
 export async function fetchAskQuotesOnce(

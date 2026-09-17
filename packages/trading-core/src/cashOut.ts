@@ -26,7 +26,7 @@ export const CASH_OUT_STOP_MIN_USD = 0.03;
 export const CASH_OUT_STOP_MAX_USD = 0.1;
 export const CASH_OUT_DEFAULT_ASSETS: AssetKey[] = ['Gold'];
 
-export type TradeEntryPath = 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'cheap_loop' | 'cheap_loop_hourly' | 'cheap_loop_weekly';
+export type TradeEntryPath = 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'cap_lock' | 'buffer_run' | 'cheap_loop' | 'cheap_loop_hourly' | 'cheap_loop_weekly';
 export type CashOutHeldSide = 'YES' | 'NO';
 export type CashOutExitKind =
   | 'none'
@@ -362,6 +362,12 @@ export function parseTradeEntryPath(raw: unknown): TradeEntryPath | undefined {
   if (v === 'cheap_loop_weekly' || v === 'cheaploopweekly' || v === 'cheap-loop-weekly') return 'cheap_loop_weekly';
   if (v === 'cheap_loop_hourly' || v === 'cheaploophourly' || v === 'cheap-loop-hourly') return 'cheap_loop_hourly';
   if (v === 'cheap_loop' || v === 'cheaploop' || v === 'cheap-loop') return 'cheap_loop';
+  if (v === 'cap_lock' || v === 'caplock' || v === 'cap-lock' || v === 'completeness_lock' || v === 'completenesslock') {
+    return 'cap_lock';
+  }
+  if (v === 'buffer_run' || v === 'bufferrun' || v === 'buffer-run') {
+    return 'buffer_run';
+  }
   if (
     v === 'pair_lock' ||
     v === 'pairlock' ||
@@ -403,6 +409,22 @@ export function isOpenLiveFill(trade: {
     return false;
   }
   return outcome === 'pending' || outcome === 'exiting' || outcome === '';
+}
+
+/** History Sell: any live open fill (all paths). Cheap loop still uses this plus its path check. */
+export function isHistorySellableTrade(trade: {
+  dryRun?: boolean;
+  dry_run?: boolean;
+  status?: string;
+  outcome?: string | null;
+  fillCount?: number | null;
+  fill_count?: number | null;
+  ticker?: string;
+  market_ticker?: string;
+  protectExitOrderId?: string | null;
+}): boolean {
+  if (String(trade.protectExitOrderId || '').trim()) return false;
+  return isOpenLiveFill(trade);
 }
 
 export function openFillsForTicker<T extends { ticker?: string; market_ticker?: string }>(

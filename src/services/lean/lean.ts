@@ -38,6 +38,8 @@ export interface LeanResult {
   timeseries?: { t: number; v: number }[];
   /** Exact minutes until close (not floored). */
   minutes_remaining?: number;
+  /** ISO open time — Home Buy refreshes minutes_elapsed from this. */
+  open_utc?: string;
   close_utc?: string;
 }
 
@@ -377,6 +379,7 @@ export async function computeLean(
     price_source: priceSource,
     cushion,
     timeseries,
+    open_utc: open ? open.toISOString() : undefined,
     close_utc: close ? close.toISOString() : undefined,
   };
 }

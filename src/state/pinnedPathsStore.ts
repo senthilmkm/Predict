@@ -14,6 +14,8 @@ type PinnedPathsState = {
   ids: PathFocusId[];
   hydrated: boolean;
   hydrate: () => Promise<void>;
+  /** Drop ghost pins (e.g. admin-off) so they do not burn the 3-pin cap. */
+  prune: (keep: (id: PathFocusId) => boolean) => Promise<void>;
   toggle: (id: PathFocusId) => Promise<{ ok: true } | { ok: false; reason: 'max' }>;
 };
 
@@ -39,6 +41,17 @@ export const usePinnedPathsStore = create<PinnedPathsState>((set, get) => ({
       }
     })();
     return hydrateInFlight;
+  },
+  prune: async (keep) => {
+    const cur = get().ids;
+    const next = cur.filter(keep);
+    if (next.length === cur.length) return;
+    set({ ids: next, hydrated: true });
+    try {
+      await persist(next);
+    } catch {
+      set({ ids: cur });
+    }
   },
   toggle: async (id) => {
     const cur = get().ids;

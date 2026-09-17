@@ -94,6 +94,21 @@ export function resolvedPlaceFillCount(opts: {
   return { fillCount: n, filled: n > 0 };
 }
 
+/** Persist even when HTTP ok is false if Kalshi still returned a fill or order id. */
+export function placeResultShouldPersist(res: {
+  ok?: boolean;
+  dry_run?: boolean;
+  fill_count?: string | number | null;
+  order_id?: string | number | null;
+}): boolean {
+  if (res.ok) return true;
+  if (String(res.order_id || '').trim()) return true;
+  return resolvedPlaceFillCount({
+    dryRun: Boolean(res.dry_run),
+    fillCount: res.fill_count,
+  }).filled;
+}
+
 export function sleepMs(ms: number): Promise<void> {
   if (!(ms > 0)) return Promise.resolve();
   return new Promise((resolve) => setTimeout(resolve, ms));

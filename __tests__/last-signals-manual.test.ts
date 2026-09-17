@@ -16,6 +16,8 @@ import {
   heldOpenFillForTicker,
   homeBuySkipReason,
   homeBuyGapBeatsCushion,
+  homeStrongBuySides,
+  homeSellSides,
   lastSignalExtraLine,
   lastSignalManualKind,
   lastSignalOfferKind,
@@ -136,6 +138,26 @@ describe('last signals manual kind', () => {
     expect(below?.decision).toBe('SKIP');
   });
 
+  test('Cloud lean keeps minutes_elapsed for Home Buy timing', () => {
+    const next = mergeCloudHomeLean(
+      { ok: true, asset: 'Gold', decision: 'SKIP', phase: 'live' },
+      {
+        asset: 'Gold',
+        live: 3687,
+        strike: 3680,
+        phase: 'live',
+        minutes_elapsed: 6,
+        minutes_left: 9,
+        open_utc: '2026-09-15T22:00:00.000Z',
+        close_utc: '2026-09-15T22:15:00.000Z',
+      },
+      4
+    );
+    expect(next?.minutes_elapsed).toBe(6);
+    expect(next?.minutes_left).toBe(9);
+    expect((next as { open_utc?: string } | undefined)?.open_utc).toBe('2026-09-15T22:00:00.000Z');
+  });
+
   test('feature off or kill hides buttons', () => {
     expect(lastSignalManualKind({ featureOn: false, killSwitch: false, row: yesRow })).toBe('none');
     expect(lastSignalManualKind({ featureOn: true, killSwitch: true, row: yesRow })).toBe('none');
@@ -161,6 +183,67 @@ describe('last signals manual kind', () => {
         held: { side: 'NO' },
       })
     ).toBe('sell');
+  });
+
+  test('strong Home Buy does not dual-offer; opposite only after one Home leg', () => {
+    expect(
+      homeStrongBuySides({
+        strongBuy: true,
+        offerKind: 'buy',
+        leanDecision: 'YES',
+        openSides: [],
+      })
+    ).toEqual([]);
+    expect(
+      homeStrongBuySides({
+        strongBuy: false,
+        offerKind: 'sell',
+        heldSide: 'YES',
+        heldEntryPath: 'home',
+        openSides: ['YES'],
+      })
+    ).toEqual(['NO']);
+    expect(
+      homeStrongBuySides({
+        strongBuy: true,
+        offerKind: 'sell',
+        heldSide: 'NO',
+        heldEntryPath: 'home',
+        openSides: ['NO'],
+      })
+    ).toEqual(['YES']);
+    expect(
+      homeStrongBuySides({
+        strongBuy: false,
+        offerKind: 'buy',
+        leanDecision: 'YES',
+      })
+    ).toEqual([]);
+  });
+
+  test('homeSellSides lists every open Home side', () => {
+    expect(
+      homeSellSides({
+        offerKind: 'sell',
+        heldSide: 'YES',
+        heldEntryPath: 'home',
+        openSides: ['YES', 'NO'],
+      })
+    ).toEqual(['YES', 'NO']);
+    expect(
+      homeSellSides({
+        offerKind: 'sell',
+        heldSide: 'YES',
+        heldEntryPath: 'home',
+        openSides: ['YES'],
+      })
+    ).toEqual(['YES']);
+    expect(
+      homeSellSides({
+        offerKind: 'buy',
+        openSides: ['YES'],
+      })
+    ).toEqual([]);
   });
 
   test('Home Buy skip hides Buy; Sell still offered', () => {
@@ -757,5 +840,44 @@ describe('homeBuySkipReason', () => {
     expect(homeBuySkipReason({ cfg, lean, trades: [] })).toBeNull();
     cfg.manual_risk = { ...cfg.manual_risk, max_entry_ask_usd: 0.5 };
     expect(homeBuySkipReason({ cfg, lean, trades: [] })).toBe('ask too rich');
+  });
+
+  test('does not stay too early when minutes_elapsed was stripped but close_utc is known', () => {
+    const cfg = defaultAppConfig();
+    cfg.manual_risk = {
+      ...cfg.manual_risk,
+      max_entry_ask_usd: 0.99,
+      min_minutes_elapsed: 2,
+      min_minutes_left: 0,
+    };
+    cfg.cushions.Gold = 4;
+    const lean = {
+      asset: 'Gold',
+      market_ticker: 'KXGOLD15M-T',
+      decision: 'YES' as const,
+      live: 3688,
+      strike: 3680,
+      abs_gap: 8,
+      minutes_left: 7,
+      phase: 'live',
+      yes_ask: 0.55,
+      close_utc: '2026-09-15T22:15:00.000Z',
+    };
+    expect(
+      homeBuySkipReason({
+        cfg,
+        lean,
+        trades: [],
+        nowMs: Date.parse('2026-09-15T22:08:00.000Z'),
+      })
+    ).toBeNull();
+    expect(
+      homeBuySkipReason({
+        cfg,
+        lean: { ...lean, close_utc: undefined },
+        trades: [],
+        nowMs: Date.parse('2026-09-15T22:08:00.000Z'),
+      })
+    ).toBe('too early in window');
   });
 });

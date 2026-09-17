@@ -6,7 +6,7 @@ import { PATH_TILES } from '../content/pathCatalog';
 
 const COMPARE: { path: string; buys: string; exits: string; hold: string; cushion: string }[] = [
   { path: 'Home Buy', buys: 'The lean you tap', exits: 'You Sell, or Protect if On', hold: 'Unless you sell', cushion: 'Yes' },
-  { path: 'Cushion lean', buys: 'Gap > cushion', exits: 'Protect if On, else settle', hold: 'Unless Protect', cushion: 'Yes, full' },
+  { path: 'Cushion lean', buys: 'Cushion < gap ≤ cushion×', exits: 'Protect if On, else settle', hold: 'Unless Protect', cushion: 'Yes, full' },
   { path: 'Cash out', buys: 'Lean, cheaper entry', exits: 'Target bid, stop, thin bid', hold: 'Tries to sell', cushion: 'Enter %' },
   { path: 'Gold fade', buys: 'Cheap Gold side', exits: 'Take, stop, flatten', hold: 'Always dumps', cushion: 'On/Off only' },
   { path: 'TWAP lock', buys: 'BTC/ETH Yes lock', exits: 'None — hold to $1', hold: 'Yes', cushion: 'On/Off only' },
@@ -14,6 +14,8 @@ const COMPARE: { path: string; buys: string; exits: string; hold: string; cushio
   { path: 'Step buy', buys: 'Lean, then add lots', exits: 'Per-lot stop', hold: 'Unless stop', cushion: 'Cushion %' },
   { path: 'Spike fade', buys: 'Always cheap side', exits: 'Take, stop, flatten', hold: 'Always dumps', cushion: 'On/Off only' },
   { path: 'Pair lock', buys: 'Runner + opposite hedge', exits: 'Hold both, or flatten unmatched', hold: 'Locked pair yes', cushion: 'On/Off only' },
+  { path: 'Cap lock', buys: 'YES+NO if asks+fees fit cap', exits: 'Hold matched, flatten leftover', hold: 'Matched pair yes', cushion: 'On/Off only' },
+  { path: 'Buffer run', buys: 'Lead side mid-ask scalp', exits: 'Take, stop, lean flip, flatten', hold: 'Always dumps', cushion: 'On/Off only' },
   { path: 'Cheap loop', buys: 'Cheaper side, then repeat', exits: 'Take or flatten', hold: 'Always dumps', cushion: 'On/Off only' },
 ];
 
@@ -28,6 +30,8 @@ const GUIDE_KEYS = [
   'stepBuy',
   'spikeFade',
   'pairLock',
+  'capLock',
+  'bufferRun',
   'cheapLoop',
 ] as const;
 

@@ -42,7 +42,7 @@ export class TradingEngine {
     }
   ): Promise<{ ok: boolean; placed?: KalshiPlaceResult; gate: ReturnType<typeof evaluateStaticGate> }> {
     return this.mutex.runExclusive(async () => {
-      const gate = evaluateStaticGate(lean, cfg, opts);
+      const gate = evaluateStaticGate(lean, cfg, { ...opts, applyCushionLeanMaxGap: true });
       if (!gate.ok) {
         this.intents.push({
           at: new Date().toISOString(),

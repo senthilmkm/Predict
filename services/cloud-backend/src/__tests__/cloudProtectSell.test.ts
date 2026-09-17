@@ -91,6 +91,7 @@ describe('cloud protect-sell', () => {
       now: new Date('2026-09-07T15:00:50.000Z'),
     });
     expect(later.sell).toBe(true);
+    expect(later.kind).toBe('protect_flip');
   });
 
   test('same-side lean, small gap, ended window, and kill-off do not sell', () => {
@@ -105,8 +106,8 @@ describe('cloud protect-sell', () => {
         graceSeconds: 0,
         enabled: true,
         now,
-      }).reason
-    ).toBe('lean_still_with_you');
+      })
+    ).toMatchObject({ sell: false, kind: 'none', reason: 'lean_still_with_you' });
     expect(
       evaluateCloudProtectSell({
         trade,
@@ -116,8 +117,8 @@ describe('cloud protect-sell', () => {
         graceSeconds: 0,
         enabled: true,
         now,
-      }).reason
-    ).toBe('gap_too_small');
+      })
+    ).toMatchObject({ sell: false, kind: 'none', reason: 'gap_too_small' });
     expect(
       evaluateCloudProtectSell({
         trade,
@@ -127,8 +128,8 @@ describe('cloud protect-sell', () => {
         graceSeconds: 0,
         enabled: true,
         now,
-      }).reason
-    ).toBe('window_ended');
+      })
+    ).toMatchObject({ sell: false, kind: 'none', reason: 'window_ended' });
     expect(
       evaluateCloudProtectSell({
         trade,
@@ -138,8 +139,24 @@ describe('cloud protect-sell', () => {
         graceSeconds: 0,
         enabled: false,
         now,
-      }).reason
-    ).toBe('protect_off');
+      })
+    ).toMatchObject({ sell: false, kind: 'none', reason: 'protect_off' });
+  });
+
+  test('home Sell at % dumps on mark profit without lean flip', () => {
+    const trade = filledTrade({ payPrice: 0.5, entryPath: 'home' });
+    const now = new Date('2026-09-07T15:01:00.000Z');
+    const res = evaluateCloudProtectSell({
+      trade,
+      lean: { decision: 'YES', abs_gap: 10, phase: 'live', yes_bid: 0.65, yes_ask: 0.66 },
+      cushion: 175,
+      gapRatio: 1,
+      graceSeconds: 0,
+      enabled: false,
+      homeSellAtPct: 20,
+      now,
+    });
+    expect(res).toMatchObject({ sell: true, kind: 'sell_at', reason: 'sell_at_profit', pct: 20 });
   });
 
   test('1s protect watch lists Home/Auto lots only, not path lots', () => {

@@ -50,8 +50,8 @@ export interface TradeRecordDoc {
   /** Admin stream only. Cash out sell price (stored or derived). */
   sellPriceUsd?: number | null;
   /** How the fill was opened. Protect / Home sell / Cash out must not overwrite. */
-  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'pair_lock_hedge' | 'cheap_loop' | 'cheap_loop_hourly' | 'cheap_loop_weekly';
-  /** Pair lock enter fired YES+NO together. One-leg leftover dumps now. */
+  entryPath?: 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'pair_lock_hedge' | 'cap_lock' | 'buffer_run' | 'cheap_loop' | 'cheap_loop_hourly' | 'cheap_loop_weekly';
+  /** Pair lock enter fired YES+NO together. One-leg leftover waits Recover wait. */
   pairLockAtomic?: boolean;
   stepLotIndex?: number | null;
 }
@@ -290,7 +290,10 @@ function getDb(): Firestore | null {
   if (!db) {
     try {
       const projectId = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
-      db = projectId ? new Firestore({ projectId }) : new Firestore();
+      db = new Firestore({
+        ...(projectId ? { projectId } : {}),
+        ignoreUndefinedProperties: true,
+      });
     } catch {
       db = null;
     }
@@ -401,18 +404,28 @@ export async function getEnrolledActiveUsers(): Promise<(UserStatusDoc & { confi
 }
 
 export async function saveTradeRecord(userId: string, trade: TradeRecordDoc): Promise<void> {
+  const doc = omitUndefinedDeep(trade);
   const userTrades = localTradeStore.get(userId) || [];
-  userTrades.unshift(trade);
+  userTrades.unshift(doc);
   localTradeStore.set(userId, userTrades);
 
   const f = getDb();
-  if (f) {
+  if (!f) return;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      await f.collection('users').doc(userId).collection('trades').doc(trade.tradeId).set(trade);
-    } catch {
-      /* ignore */
+      await f.collection('users').doc(userId).collection('trades').doc(doc.tradeId).set(doc);
+      return;
+    } catch (err) {
+      lastErr = err;
     }
   }
+  await writeAuditLog(userId, 'ERROR', {
+    source: 'saveTradeRecord',
+    tradeId: doc.tradeId,
+    ticker: doc.ticker,
+    error: String((lastErr as Error)?.message || lastErr || 'firestore_write_failed'),
+  });
 }
 
 export const PROTECT_CLAIM_STALE_MS = 20_000;
@@ -489,16 +502,17 @@ export async function updateTradeRecord(
   tradeId: string,
   patch: Partial<TradeRecordDoc>
 ): Promise<void> {
+  const clean = omitUndefinedDeep(patch);
   const userTrades = localTradeStore.get(userId) || [];
   const i = userTrades.findIndex((t) => t.tradeId === tradeId);
   if (i >= 0) {
-    userTrades[i] = { ...userTrades[i], ...patch };
+    userTrades[i] = { ...userTrades[i], ...clean };
     localTradeStore.set(userId, userTrades);
   }
   const f = getDb();
   if (f) {
     try {
-      await f.collection('users').doc(userId).collection('trades').doc(tradeId).set(patch, { merge: true });
+      await f.collection('users').doc(userId).collection('trades').doc(tradeId).set(clean, { merge: true });
     } catch {
       /* ignore */
     }

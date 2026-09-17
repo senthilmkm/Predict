@@ -147,7 +147,7 @@
         <a href="#how">How it works</a>
         <a href="#shared">Shared limits</a>
         <a href="#compare">Compare</a>
-        <a href="#isolate">Isolation</a>
+        <a href="./kalshi-calls.html">Kalshi calls</a>
         <a href="./disclaimer.html">Risk</a>
       </nav>
     </div>
@@ -367,18 +367,20 @@
         <span class="tag" style="background:rgba(126,206,168,.16);color:var(--step)">Add if thesis holds</span>
         <h3>Step buy</h3>
         <p>Buy a small lot after the window is underway, only if a slice of the cushion is still true. Add more only if the ask has not run away. Admin On first. Empty chips = no buys. Default Off.</p>
-        <div class="example"><strong>Example.</strong> Gold, Start after 5 minutes, Cushion % 50%, lot 1 contract, Add wait 1 minute, Add band 2¢, Max lots 3, Stop 3¢. At minute 5 the lean is YES and 50% of the Gold cushion still holds. Cloud buys 1 YES. A minute later, if YES ask is the last fill or at most 2¢ richer, it adds. If the ask already jumped 8¢, it waits — it does not chase. If ask falls 3¢ under a lot’s fill, that lot sells. Lot 1 stop sells every remaining Step buy lot on that ticker.</div>
+        <div class="example"><strong>Example.</strong> Gold, Start after 5 minutes, Cushion % 50%, Add cushion % 75%, lot 1 contract, Add wait 1 minute, Add band 2¢, Max lots 3, Stop 3¢, Sell if thesis dies On. At minute 5 the lean is YES and 50% of the Gold cushion still holds. Cloud buys 1 YES. A minute later, adds need 75% of the cushion still holding and YES ask the last fill or at most 2¢ richer. If the ask already jumped 8¢, it waits — it does not chase. If the gap falls under 50% or the lean flips, it dumps the stack at the live bid. If ask falls 3¢ under a lot’s fill, that lot sells. Lot 1 stop sells every remaining Step buy lot on that ticker.</div>
         <table class="knobs">
           <tr><td>Start after</td><td>Default 5 minutes into the window.</td></tr>
-          <tr><td>Cushion %</td><td>Default 50% of that coin’s Cushions $. Needed for lot 1 and every add.</td></tr>
+          <tr><td>Cushion %</td><td>Default 50% of that coin’s Cushions $. Lot 1 enter, and the dump line when Sell if thesis dies is On.</td></tr>
+          <tr><td>Add cushion %</td><td>Default 75%. Lots 2+ only. Never below Cushion %.</td></tr>
           <tr><td>Lot / Add wait / Add band / Max lots</td><td>Default 1 contract, 1 min, 2¢, 3 lots. Band is lots 2+ only. Band 0 = next ask must match last fill.</td></tr>
           <tr><td>Stop / Entry ask</td><td>Default 3¢ under that lot’s fill / $0.80 max.</td></tr>
+          <tr><td>Sell if thesis dies</td><td>Default On. Gap under Cushion % or lean flip dumps the stack at the live bid (1s book).</td></tr>
           <tr><td>Skip thin bid</td><td>Default Off. On = skip the buy. Stops still run.</td></tr>
         </table>
         <div class="grid-3">
-          <div class="box iso"><h4>Isolation</h4><ul><li>Follows Auto lean. Never both sides</li><li>Window cap 1 blocks lot 1 only</li><li>Open Step buy: Home / Auto / Cash out / Last-minute / Pair lock sit out</li><li>Last-minute owns new buys if it is in its window and Step buy has no lots yet</li><li>Protect skips these rows</li><li>Stop adding with 30s left (not a knob). Stops still run</li></ul></div>
+          <div class="box iso"><h4>Isolation</h4><ul><li>Follows Auto lean. Never both sides</li><li>Window cap 1 blocks lot 1 only</li><li>Open Step buy: Home / Auto / Cash out / Last-minute / Pair lock sit out</li><li>Last-minute owns new buys if it is in its window and Step buy has no lots yet</li><li>Protect skips these rows</li><li>Stop adding with 30s left (not a knob). Stops and thesis dump still run</li></ul></div>
           <div class="box limit"><h4>Limits</h4><ul><li>Size is Lot × live ask</li><li>5s grace after each fill</li><li>Sold lots free Max lots slots</li></ul></div>
-          <div class="box risk"><h4>Risk</h4><ul><li>Adding into a fading move stacks losses</li><li>Lot 1 stop dumps the whole stack</li></ul></div>
+          <div class="box risk"><h4>Risk</h4><ul><li>Adding into a fading move stacks losses — Add cushion % is the brake</li><li>Lot 1 stop or thesis dump dumps the whole stack</li></ul></div>
         </div>
       </div>
     </section>

@@ -51,7 +51,7 @@ describe('cloud alerts persist + mute + settlement', () => {
     expect(leanAlertSide({ phase: 'upcoming', decision: 'YES' })).toBeNull();
     expect(
       orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'YES', entryPath: 'home' })
-    ).toBe('Order Placed · Home · Gold YES');
+    ).toBe('Order Placed · Home Buy · Gold YES');
     expect(
       orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'YES', entryPath: 'auto' })
     ).toBe('Order Placed · Cushion lean · Gold YES');
@@ -85,6 +85,14 @@ describe('cloud alerts persist + mute + settlement', () => {
     );
     expect(iocMissAlertTitle('pair_lock')).toBe('IOC miss · Pair lock');
     expect(iocMissAlertTitle('pair_lock_hedge')).toBe('IOC miss · Pair lock hedge');
+    expect(
+      orderPlacedAlertTitle({ live: true, asset: 'Gold', decision: 'YES', entryPath: 'cap_lock' })
+    ).toBe('Order Placed · Cap lock · Gold YES');
+    expect(iocMissAlertTitle('cap_lock')).toBe('IOC miss · Cap lock');
+    expect(
+      orderPlacedAlertTitle({ live: true, asset: 'BTC', decision: 'YES', entryPath: 'buffer_run' })
+    ).toBe('Order Placed · Buffer run · BTC YES');
+    expect(iocMissAlertTitle('buffer_run')).toBe('IOC miss · Buffer run');
     expect(
       orderPlacedAlertTitle({ live: true, asset: 'BTC', decision: 'YES', entryPath: 'cheap_loop' })
     ).toBe('Order Placed · Cheap loop 15m · BTC YES');

@@ -40,6 +40,8 @@ export interface LeanResult {
   timeseries?: { t: number; v: number }[];
   /** Exact minutes until close (not floored). */
   minutes_remaining?: number;
+  /** ISO open time — Home Buy / gates refresh minutes_elapsed from this. */
+  open_utc?: string;
   /** ISO close time for TWAP last-minute math. */
   close_utc?: string;
 }
@@ -252,23 +254,53 @@ export async function getMarketOrderbook(
   }
 }
 
+const liveSpotCache = new Map<string, CacheEntry<{ price: number; timeseries: any[] } | null>>();
+const liveSpotInflight = new Map<string, Promise<{ price: number; timeseries: any[] } | null>>();
+export const LIVE_SPOT_CACHE_TTL_MS = 1_000;
+
+export function resetLeanSpotCacheForTests(): void {
+  liveSpotCache.clear();
+  liveSpotInflight.clear();
+}
+
 export async function getKalshiEventLiveSpot(
   eventTicker: string,
   fetchImpl: typeof fetch = fetch,
   range = '15min'
 ): Promise<{ price: number; timeseries: any[] } | null> {
+  const key = `${String(eventTicker || '').trim()}::${String(range || '15min')}`;
+  if (!key.startsWith('::')) {
+    const cached = liveSpotCache.get(key);
+    if (cached && Date.now() - cached.at < LIVE_SPOT_CACHE_TTL_MS) return cached.value;
+    const pending = liveSpotInflight.get(key);
+    if (pending) return pending;
+  }
+  const run = (async () => {
+    try {
+      const resp = await jsonGet(
+        `${PUBLIC_BASE}/live_data/events/${encodeURIComponent(eventTicker)}?range=${encodeURIComponent(range)}`,
+        fetchImpl
+      );
+      const series = resp?.live_data?.details?.timeseries;
+      if (!Array.isArray(series) || series.length < 1) return null;
+      const last = series[series.length - 1];
+      if (last?.v == null) return null;
+      return { price: Number(last.v), timeseries: series };
+    } catch {
+      return null;
+    }
+  })();
+  if (key && !key.startsWith('::')) {
+    liveSpotInflight.set(key, run);
+  }
   try {
-    const resp = await jsonGet(
-      `${PUBLIC_BASE}/live_data/events/${encodeURIComponent(eventTicker)}?range=${encodeURIComponent(range)}`,
-      fetchImpl
-    );
-    const series = resp?.live_data?.details?.timeseries;
-    if (!Array.isArray(series) || series.length < 1) return null;
-    const last = series[series.length - 1];
-    if (last?.v == null) return null;
-    return { price: Number(last.v), timeseries: series };
-  } catch {
-    return null;
+    const value = await run;
+    if (key && !key.startsWith('::')) {
+      liveSpotCache.set(key, { at: Date.now(), value });
+    }
+    return value;
+  } finally {
+    if (key && !key.startsWith('::')) liveSpotInflight.delete(key);
   }
 }
 
@@ -423,6 +455,7 @@ export async function computeLean(
     price_source: priceSource,
     cushion,
     timeseries,
+    open_utc: open ? open.toISOString() : undefined,
     close_utc: close ? close.toISOString() : undefined,
   };
 }
@@ -449,7 +482,7 @@ async function getLiveLadderEventMarkets(
   now: Date,
   durationOk: (ms: number) => boolean
 ): Promise<{ phase: LeanPhase; eventTicker: string; markets: MarketRow[] } | null> {
-  const url = `${PUBLIC_BASE}/events?limit=12&status=open&series_ticker=${encodeURIComponent(seriesTicker)}&with_nested_markets=true`;
+  const url = `${PUBLIC_BASE}/events?limit=50&status=open&series_ticker=${encodeURIComponent(seriesTicker)}&with_nested_markets=true`;
   const cached = eventsCache.get(seriesTicker);
   let ev: any;
   if (cached && Date.now() - cached.at < EVENTS_CACHE_TTL_MS) {
@@ -520,6 +553,7 @@ export async function computeWeeklyAtmLean(
     seriesOf: cheapLoopWeeklySeriesTicker,
     loadEvents: getLiveWeeklyEventMarkets,
     noMarket: 'cheap_loop_weekly_no_market',
+    allowAtmTie: true,
     remapAtmSkip: (reason) =>
       reason === 'cheap_loop_hourly_no_atm' ? 'cheap_loop_weekly_no_atm' : reason,
   });
@@ -537,6 +571,7 @@ async function computeAtmLadderLean(
       now?: Date
     ) => Promise<{ phase: LeanPhase; eventTicker: string; markets: MarketRow[] } | null>;
     noMarket: string;
+    allowAtmTie?: boolean;
     remapAtmSkip?: (reason: string) => string;
   }
 ): Promise<LeanResult> {
@@ -574,6 +609,7 @@ async function computeAtmLadderLean(
   const atm = pickUniqueAtmStrike({
     live,
     markets: bundle.markets.map((m) => ({ ticker: m.market_ticker, strike: m.floor_strike })),
+    allowTie: opts.allowAtmTie === true,
   });
   if (!atm.ok) {
     return {
@@ -641,6 +677,7 @@ async function computeAtmLadderLean(
     no_ask,
     price_source: priceSource,
     timeseries: sanitizeTimeseries(liveSpot?.timeseries),
+    open_utc: open ? open.toISOString() : undefined,
     close_utc: close ? close.toISOString() : undefined,
   };
 }

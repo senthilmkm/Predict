@@ -28,6 +28,7 @@ export const PATH_INFO = {
       '• This tab’s $ per trade / min / max\n' +
       '• Minutes left and elapsed\n' +
       '• Home max entry ask, TIF, chase\n' +
+      '• Sell at % take-profit (0 = Off; uses Protect wait/grace)\n' +
       '• Shared limits\n' +
       '• Cushions $ gap and asset on/off (Cushions tab)\n\n' +
       'Does not use\n' +
@@ -39,6 +40,7 @@ export const PATH_INFO = {
       '• Will not buy a ticker Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, Pair lock, or Cheap loop already holds\n' +
       '• A Home fill counts toward window cap 1 (Last-minute first clip then sits out)\n' +
       '• Protect money can later sell a Home fill (if Protect is On)\n' +
+      '• Sell at % can dump a Home fill without a lean flip\n' +
       '• Home Sell is IOC; slippage is Home Buy chase',
   },
   auto: {
@@ -48,19 +50,22 @@ export const PATH_INFO = {
       '• This path’s $ per trade / min / max\n' +
       '• Minutes left and elapsed (default 2 / 2 — no last-minute chase)\n' +
       '• Auto max entry ask, TIF, chase\n' +
-      '• Cushions $ gap, Smart buy (if On), shared limits, asset on/off\n\n' +
+      '• Sell at % take-profit (0 = Off; uses Protect wait/grace)\n' +
+      '• Cushions $ gap (above cushion, below cushion × max gap), Smart buy (if On), shared limits, asset on/off\n\n' +
       'Does not use\n' +
       '• Home Buy size/timing\n' +
       '• Cash out / Gold fade / TWAP / Last-minute / Step buy / Spike fade / Pair lock / Cheap loop ask, side, or lots\n\n' +
       'Isolation\n' +
       '• Off = Cloud skips gap>cushion buys only. Last-minute and other paths keep their own switches\n' +
+      '• Skip if gap ≥ cushion × (default 2.5) sits out stretched moves — Home Buy ignores it\n' +
       '• Settings Auto-trade Off still stops every Auto path\n' +
       '• Missing on old configs = On\n' +
       '• Default minutes left = 2, so Auto sits out the last minute\n' +
       '• If cushion already hit, this is the path — you do not need Last-minute on that coin\n' +
       '• If you set minutes left to 0, Auto can collide with Last-minute (window cap 1 wins)\n' +
       '• Will not enter a ticker another path already holds\n' +
-      '• BTC/ETH leave Auto while TWAP lock is On for those chips',
+      '• BTC/ETH leave Auto while TWAP lock is On for those chips\n' +
+      '• Sell at % dumps Auto fills on mark profit — independent of Protect lean-flip',
   },
   smartBuy: {
     title: 'Smart buy',
@@ -83,10 +88,12 @@ export const PATH_INFO = {
       '• Gap ≥ cushion × ratio, after the wait\n' +
       '• Can exit Auto and Home fills only\n' +
       '• Skips Step buy, Spike fade, Pair lock, and Cheap loop rows — those paths stop themselves\n' +
-      '• IOC sell; slippage from Auto chase\n\n' +
+      '• IOC sell; slippage from Auto chase\n' +
+      '• Wait after fill / grace is also used by Home Buy and Cushion lean Sell at %\n\n' +
       'Does not use\n' +
       '• Minutes left / elapsed (after the wait, any time left)\n' +
-      '• Cash out / Gold fade / TWAP lock / Last-minute lots — those paths hold or exit themselves\n\n' +
+      '• Cash out / Gold fade / TWAP lock / Last-minute lots — those paths hold or exit themselves\n' +
+      '• Sell at % (separate Home / Cushion lean knobs; independent of lean-flip)\n\n' +
       'Isolation\n' +
       '• Does not place new buys\n' +
       '• Auto-trade Off does not turn Protect Off',
@@ -162,6 +169,7 @@ export const PATH_INFO = {
       '• Entry ask, Side (Yes / No / Both), Both min favorite, Both min gap\n' +
       '• Watch start, First clip by, Stop with, Ladder wait, Clip contracts/asset, Max clips/asset\n' +
       '• Sell if flip ≥ (0 = Off). Sells a lot only when the other side is that much richer\n' +
+      '• Late ATR cushion (default On): in the final 60s at High ask floor (default 88¢), needs signed lead ≥ ATR × (default 1.25) from this window’s 1m path when measurable; missing path does not block\n' +
       '• Shared: max open, trades/day, daily loss stop\n' +
       '• Window cap 1 for the first clip only\n' +
       '• IOC, 1-second quotes from Watch start\n\n' +
@@ -177,6 +185,7 @@ export const PATH_INFO = {
       '• Window cap 1: if Auto, Home, or Cash out already filled this coin this window, the first clip sits out\n' +
       '• After that first Last-minute fill, ladder adds are extra (up to Max clips/asset of open lots)\n' +
       '• A flip sell frees that clip slot so the path can buy the new favorite\n' +
+      '• Late ATR cushion is Last-minute only (Home / Cushion lean ignore it)\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Open Step buy lots sit this ticker out\n' +
       '• Both = expensive side only (not a 50/50). Never Yes and No in the same window\n' +
@@ -189,35 +198,38 @@ export const PATH_INFO = {
       'Uses\n' +
       '• Step buy asset chips, and that asset On (Cushions tab on/off). Empty chips = no Step buy buys\n' +
       '• Start after (minutes into the 15m window before lot 1)\n' +
-      '• Cushion % of that coin’s Cushions $ — lot 1 and every add. Lean must stay on the same side\n' +
+      '• Cushion % of that coin’s Cushions $ — lot 1, and the dump when Sell if thesis dies is On\n' +
+      '• Add cushion % — lots 2+ only (default 75%, never below Cushion %)\n' +
       '• Lot contracts (size of each lot), Add wait, Add band (lots 2+ only), Max lots, Stop, Entry ask\n' +
+      '• Sell if thesis dies (default On) — dump the stack at the live bid if gap < Cushion % or lean flips\n' +
       '• Shared: max open, trades/day, daily loss stop\n' +
       '• Window cap 1 for lot 1 only\n' +
-      '• IOC. 1-second ask watch from the first fill (stops). After Max lots the watcher is stop-only\n\n' +
+      '• IOC. 1-second bid/ask watch from the first fill (stops + thesis dump). After Max lots the watcher is exit-only\n\n' +
       'Does not use\n' +
       '• Auto $ per trade (size is Lot contracts × live ask)\n' +
       '• Auto max ask, Smart buy, chase, minutes left, Auto TIF\n' +
-      '• Full cushion — only Cushion % of the $ gap\n' +
+      '• Full cushion — only Cushion % / Add cushion % of the $ gap\n' +
       '• Protect, Cash out, Gold fade, TWAP $0 lock, Last-minute clips, Home Sell\n' +
       '• Skip thin bid unless you turn that checkbox On (default Off)\n\n' +
       'Isolation\n' +
       '• Own path. Default Off. Admin must enable the block first\n' +
       '• Follows the Auto lean (YES or NO). Never both sides on one ticker\n' +
       '• Lot 1 only after Start after + Cushion % + lean + Entry ask\n' +
-      '• Later lots need Add wait, Cushion % + lean still with you, and ask between last fill and last fill + Add band\n' +
+      '• Later lots need Add wait, Add cushion % + lean still with you, and ask between last fill and last fill + Add band\n' +
       '• Add band 0 = next ask must match the last fill. Band does not apply to lot 1\n' +
       '• If the ask has already run past last fill + Add band, Cloud waits for it to come back — it does not chase. Widen the band (up to 10¢) if you still want that add after a jump\n' +
-      '• Stop adding with 30s left (code, not a knob). Stops still run in those last 30s\n' +
+      '• Stop adding with 30s left (code, not a knob). Stops and thesis dump still run in those last 30s\n' +
       '• 5s grace after each fill so your own print does not stop you out\n' +
-      '• Sell a lot when live ask ≤ that lot’s fill − Stop ¢. Sell is bid IOC\n' +
+      '• Sell a lot when live ask ≤ that lot’s fill − Stop ¢. Sell is bid IOC from the 1s live book\n' +
       '• Lot 1 stop sells every remaining Step buy lot on that ticker\n' +
+      '• Sell if thesis dies On: gap under Cushion % or lean flip also dumps every remaining lot at the live bid\n' +
       '• Sold lots free Max lots slots (open lots only)\n' +
       '• Window cap 1: Auto / Home / Cash out fill this window blocks lot 1. Later Step buy lots are extra\n' +
       '• Open Step buy: Auto / Home / Cash out / Last-minute / Pair lock / Cheap loop sit out that ticker\n' +
       '• If Last-minute is in its buy window and Step buy has no lots yet, Last-minute owns new buys\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Protect skips Step buy rows\n' +
-      '• Hold to settlement unless a stop already fired',
+      '• Hold to settlement unless a stop or thesis dump already fired',
   },
   spikeFade: {
     title: 'Spike fade',
@@ -272,12 +284,12 @@ export const PATH_INFO = {
       '• Example: YES 52¢ and NO 18¢ already lock → YES and NO IOC together. Spent 70¢. Settlement pays $1. Locked +30¢\n' +
       '• Lock first On: first buy only if opposite ask already locks at least Min lock (default 5¢). Then YES and NO IOC together. 52¢ + 48¢ sits out. 50¢ + 50¢ sits out\n' +
       '• Lock first Off: first buy if runner ask ≤ Runner max. If the other ask already locks Min lock, still both IOC together. Else runner only\n' +
-      '• Atomic one-leg miss: dump that fill now. Do not wait Recover wait\n' +
+      '• Atomic one-leg miss: wait Recover wait (hedge / take / smaller dump). Do not dump on the first tick\n' +
       '• Hedge when runner fill + opposite ask ≤ $1 − Min lock. Hedge count matches the runner. Window cap 1 blocks the runner only\n' +
-      '• Recover wait (default 20s, 10–60): after a sequential unmatched runner, if Min lock hedge is gone: buy the dog if fill + ask ≤ $1, else sell the runner if bid ≥ fill + 2¢, else finish vs dump the smaller hole\n' +
+      '• Recover wait (default 20s, 10–60): after an unmatched runner, if Min lock hedge is gone: buy the dog only if fill + ask ≤ 99¢, else sell the runner if bid ≥ fill + 2¢, else finish vs dump — finish only when that hole is strictly smaller\n' +
       '• Hedge right after the runner fill. 5s grace is for flatten / runner stop / recover take so your own print does not dump you\n' +
       '• Add new pair 0–3 (default 0 = first pair only). 3 = 3 more pairs after the first (4 total)\n' +
-      '• After both first-pair legs fill, if Add new pair > 0 and live YES+NO asks still sum to $1 or less, Cloud fires YES and NO together on that pulse and every 1s\n' +
+      '• After both first-pair legs fill, if Add new pair > 0 and live YES+NO asks still lock Min lock, Cloud fires YES and NO together on that pulse and every 1s\n' +
       '• If only one stacked side fills, compare finish vs dump and take the smaller loss. Do not sit unmatched\n' +
       '• Pair complete → hold both to $1. Flatten unmatched: minutes left ≤ Flatten unmatched, or window end, and only if the second leg is missing\n' +
       '• Runner stop (default 10¢, $0 = off): unmatched only, after 5s grace, and only if the hedge still cannot lock. Sells when live runner ask ≤ fill − Runner stop. Sell is bid IOC — the book can gap past 10¢. After that sell we do not buy the other leg on this ticket\n' +
@@ -288,7 +300,56 @@ export const PATH_INFO = {
       '• If Last-minute is in its buy window and Pair lock has no runner and no pair, Last-minute owns new buys\n' +
       '• If TWAP lock is On for BTC/ETH, those two stay with TWAP\n' +
       '• Spike fade and Step buy take first pick for new buys when they want the ticker\n' +
+      '• History Sell on a pending Pair lock (or hedge) fill dumps that leg now (bid IOC). Allowed with Auto Off and Kill switch\n' +
       '• Protect skips Pair lock rows',
+  },
+  capLock: {
+    title: 'Cap lock',
+    body:
+      'Uses\n' +
+      '• Cap lock asset chips, and that asset On (Cushions tab on/off). Empty chips = no Cap lock buys. Every 15m catalog chip is listed\n' +
+      '• Max lock loss (default 5¢/pair, 1–8¢), Try first (default 90s, 30–180), Allow later, Lot contracts (1–5)\n' +
+      '• Live YES ask + NO ask + Kalshi fees must fit $1 + Max lock loss. No lean. No cushion. No spot vs strike\n' +
+      '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block this path — one pair is one action\n' +
+      '• IOC only. Richer ask first. Second size = first fill count. Unmatched leftover flattens. Matched pair holds to $1\n\n' +
+      'Does not use\n' +
+      '• Auto lean, Auto $, Smart buy, chase, Auto TIF, Cushions $ gap\n' +
+      '• Pair lock runner / hedge / stack / recover / min lock profit\n' +
+      '• Cheap loop, Cash out, Gold fade, TWAP, Last-minute, Spike fade, Step buy exits on a matched pair\n\n' +
+      'Isolation\n' +
+      '• Own path. Default Off. Admin must enable the block first\n' +
+      '• Example: 50¢ + 50¢ + ~4¢ fees → about −4¢ → buy both if Max lock loss is 5¢. 52¢ + 52¢ sits. 60¢ + 60¢ sits\n' +
+      '• One pair per ticker per window. A sent IOC (including a 0-fill) burns the attempt. Sitting out because the book is rich does not\n' +
+      '• Prefer Try first. Allow later On: still enter once if the book later fits\n' +
+      '• First IOC 0 fill → do not send the second. Second miss: one retry only if leftover still fits the cap, else flatten. Never add more of the filled side\n' +
+      '• When On for that chip, Cushion Auto lean sits that coin. Pair lock / other open lots on the ticker sit Cap lock out\n' +
+      '• History Sell stays hidden on a matched pair. Unmatched leftover can dump\n' +
+      '• Protect / Cash out / Gold fade skip Cap lock rows\n' +
+      '• If TWAP lock is On for BTC/ETH, those two stay with TWAP',
+  },
+  bufferRun: {
+    title: 'Buffer run',
+    body:
+      'Uses\n' +
+      '• BTC / ETH chips only, and that asset On (Cushions). Empty chips = no Buffer run buys\n' +
+      '• Ask min / Ask max (default 42–62¢), Take (default +12¢), Stop (default −7¢)\n' +
+      '• Enter after (default 3m), Enter left (default 5m), Flatten left (default 3m)\n' +
+      '• ATR × (default 1.25) and BTC / ETH min gap floors ($40 / $2.50). Lead must clear max(floor, ATR×)\n' +
+      '• $ per trade (default $2.50), Pair-sum skip (default 0.98 — sit when YES+NO looks like a lock)\n' +
+      '• Shared: max open, trades/day, daily loss stop. One trade per ticker per window\n' +
+      '• IOC. Exits: Take, Stop, lean flip, or Flatten. Never hold to $1\n\n' +
+      'Does not use\n' +
+      '• Auto lean $, Auto max ask, Smart buy, chase, Auto TIF, Cushions $ gap\n' +
+      '• Cap lock / Pair lock / Cheap loop / Cash out / Gold fade knobs\n' +
+      '• Skip thin bid unless you turn that checkbox On (default Off)\n\n' +
+      'Isolation\n' +
+      '• Own path. Default Off. Admin must enable the block first\n' +
+      '• Example: BTC live $100 above strike, YES ask 55¢ → buy YES. Sell if bid ≥ fill + 12¢, dump if bid ≤ fill − 7¢ or lean flips, else flatten with ≤ 3m left\n' +
+      '• One trade per ticker per window. A sent IOC (including a 0-fill) burns the attempt\n' +
+      '• TWAP / Last-minute / Spike fade / Step buy / Pair lock / Cap lock / Cheap loop sit Buffer run out when they own the coin\n' +
+      '• While Buffer run holds, those paths sit that ticker out\n' +
+      '• Protect skips Buffer run rows\n' +
+      '• If TWAP lock is On for BTC/ETH, those two stay with TWAP',
   },
   cheapLoop: {
     title: 'Cheap loop',
@@ -349,10 +410,10 @@ export const PATH_INFO = {
     title: 'Cheap loop weekly',
     body:
       'Uses\n' +
-      '• Weekly switch and weekly asset chips. Empty chips = no weekly buys. Asset must be On in Cushions\n' +
-      '• Same KX*D series as Hourly. Cloud picks the live event whose open→close is 4–10 days (~7d week)\n' +
-      '• Unique ATM strike. After fill, hold that ticker until Take, Flatten, or History Sell\n' +
-      '• Start after / Flatten left / Cheap max / Min gap / Take / Stop (default Off) / Min hold / Cooldown (minutes). Cycles default 10 (max 50) per weekly event\n' +
+      '• Weekly switch and weekly asset chips. Default BTC and ETH. Empty chips = no weekly buys. Asset must be On in Cushions\n' +
+      '• Same KX*D series as Hourly. Cloud picks the live event whose open→close is 3–14 days (~7d week)\n' +
+      '• Nearest ATM strike (picks one on a tie). After fill, hold that ticker until Take, Stop, Flatten, or History Sell\n' +
+      '• Start after / Flatten left (default 2 hours, 30 min–12 hr) / Cheap max 45¢ / Min gap 8¢ / Take 8¢ / Stop On at 12¢ / Min hold / Cooldown (minutes). Cycles default 10 (max 50) per weekly event\n' +
       '• Shared: max open, trades/day, daily loss stop. Window cap 1 does not block\n\n' +
       'Does not use\n' +
       '• 15m or hourly Cheap loop chips or clocks\n' +
@@ -361,7 +422,8 @@ export const PATH_INFO = {
       '• Daily / monthly / annual ladders this pass\n\n' +
       'Isolation\n' +
       '• Buy cheap ATM → wait until bid ≥ fill + Take → sell → Cooldown minutes → hunt ATM again (ATM may move)\n' +
-      '• Repeat until Flatten left minutes of that weekly window. Flatten: no new buys; dump if holding\n' +
+      '• Repeat until Flatten left of that weekly window. Flatten: no new buys; dump if holding\n' +
+      '• Stop dumps after Min hold when bid ≤ fill − Stop\n' +
       '• One open weekly lot per coin. 15m / Hourly / Weekly may all hold (different tickers)\n' +
       '• History Sell on a pending hourly or weekly fill dumps that ticker now (bid IOC). Allowed with Auto Off and Kill switch\n' +
       '• Open lot still exits if Weekly is later turned Off\n' +

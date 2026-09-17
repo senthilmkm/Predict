@@ -24,6 +24,7 @@ describe('feature flags', () => {
     expect(normalizeFeatureFlags(null).spikeFade).toBe(false);
     expect(normalizeFeatureFlags(null).pairLock).toBe(false);
     expect(normalizeFeatureFlags(null).cheapLoop).toBe(false);
+    expect(normalizeFeatureFlags(null).bufferRun).toBe(false);
     expect(normalizeFeatureFlags(null).kalshiWsQuotes).toBe(false);
     expect(normalizeFeatureFlags(null).kalshiWsFills).toBe(false);
     expect(normalizeFeatureFlags({}).cashOutBidCheckSeconds).toBe(3);
@@ -37,9 +38,19 @@ describe('feature flags', () => {
     expect(normalizeFeatureFlags({ spikeFade: true }).spikeFade).toBe(true);
     expect(normalizeFeatureFlags({ pairLock: true }).pairLock).toBe(true);
     expect(normalizeFeatureFlags({ cheapLoop: true }).cheapLoop).toBe(true);
+    expect(normalizeFeatureFlags({ bufferRun: true }).bufferRun).toBe(true);
     const keepCash = mergeFeatureFlags(
       { cashOut: true },
-      { goldFade: true, twapLock: true, lastMinute: true, stepBuy: true, spikeFade: true, pairLock: true, cheapLoop: true }
+      {
+        goldFade: true,
+        twapLock: true,
+        lastMinute: true,
+        stepBuy: true,
+        spikeFade: true,
+        pairLock: true,
+        cheapLoop: true,
+        bufferRun: true,
+      }
     );
     expect(keepCash.cashOut).toBe(true);
     expect(keepCash.goldFade).toBe(true);
@@ -49,6 +60,7 @@ describe('feature flags', () => {
     expect(keepCash.spikeFade).toBe(true);
     expect(keepCash.pairLock).toBe(true);
     expect(keepCash.cheapLoop).toBe(true);
+    expect(keepCash.bufferRun).toBe(true);
     const keepWs = mergeFeatureFlags({ kalshiWsQuotes: true, kalshiWsFills: true }, { cheapLoop: true });
     expect(keepWs.kalshiWsQuotes).toBe(true);
     expect(keepWs.kalshiWsFills).toBe(true);
@@ -125,6 +137,8 @@ describe('systemConfig nested merge', () => {
         stepBuy: false,
         spikeFade: false,
         pairLock: false,
+        capLock: false,
+        bufferRun: false,
         cheapLoop: false,
         kalshiWsQuotes: false,
         kalshiWsFills: false,

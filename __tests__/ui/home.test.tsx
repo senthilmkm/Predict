@@ -305,6 +305,7 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('signal-decision-BTC').props.children).toBe('YES');
     expect(s.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
+    expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
     expect(s.queryByTestId('skip-reason-BTC')).toBeNull();
   });
@@ -419,7 +420,7 @@ describe('HomeScreen', () => {
     expect(s.getByText('Down for a bit.')).toBeTruthy();
   });
 
-  test('YES row shows Buy YES', async () => {
+  test('YES row shows single dark green Buy YES', async () => {
     useConfigStore.setState({
       config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
       hydrated: true,
@@ -437,6 +438,8 @@ describe('HomeScreen', () => {
     const on = await render(<HomeScreen />);
     expect(on.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
     expect(on.getByText('Buy YES')).toBeTruthy();
+    expect(on.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
+    expect(on.queryByTestId('btn-manual-pair-BTC')).toBeNull();
     expect(on.getByTestId('signal-gap-BTC').props.children).toBe('\u25B2 $400.00 (gap)');
     expect(on.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(StyleSheet.flatten(on.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
@@ -461,6 +464,7 @@ describe('HomeScreen', () => {
     });
     const s = await render(<HomeScreen />);
     expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
+    expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
     expect(StyleSheet.flatten(s.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
       colors.win
     );
@@ -528,18 +532,79 @@ describe('HomeScreen', () => {
           fill_count: 4,
           outcome: 'pending',
           dry_run: false,
+          entry_path: 'home',
         },
       ],
     });
     expect(useRuntimeStore.getState().lastSignalsManualTrade).toBe(true);
     expect(heldOpenFillForTicker(useRuntimeStore.getState().trades, 'KXBTC15M-X')?.side).toBe('YES');
     const s = await render(<HomeScreen />);
-    await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
+    await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
     expect(s.getByText('Sell YES')).toBeTruthy();
+    expect(s.getByTestId('btn-manual-buy-no-BTC')).toBeTruthy();
+    expect(s.getByText('Buy NO')).toBeTruthy();
     expect(s.getByTestId('signal-gap-BTC').props.children).toBe('against you $10.00 (gap)');
     expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+    expect(s.queryByTestId('btn-manual-buy-yes-BTC')).toBeNull();
     expect(s.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
+  });
+
+  test('holding YES and NO shows Sell YES and Sell NO', async () => {
+    useConfigStore.setState({
+      config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+      hydrated: true,
+    });
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
+      cloudKillSwitch: false,
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'YES',
+          live: 110,
+          strike: 100,
+          abs_gap: 10,
+          minutes_left: 8,
+          phase: 'live',
+        },
+      } as any,
+      leanAt: { BTC: new Date().toISOString() },
+      trades: [
+        {
+          id: 't1',
+          at: new Date().toISOString(),
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          side: 'YES',
+          notional_usd: 5,
+          fill_count: 4,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+        {
+          id: 't2',
+          at: new Date().toISOString(),
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          side: 'NO',
+          notional_usd: 4,
+          fill_count: 5,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+      ],
+    });
+    const s = await render(<HomeScreen />);
+    await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
+    expect(s.getByTestId('btn-manual-sell-no-BTC')).toBeTruthy();
+    expect(s.queryByTestId('btn-manual-buy-yes-BTC')).toBeNull();
+    expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
   });
 
   test('Home has no path-buy strip and Sell row keeps placed @', async () => {
@@ -653,7 +718,7 @@ describe('HomeScreen', () => {
     expect(s.queryByTestId('home-today-path-buys')).toBeNull();
     expect(s.queryByText('Home  BTC 2 · Gold 1')).toBeNull();
     expect(s.queryByText(/Manual/i)).toBeNull();
-    await waitFor(() => expect(s.getByTestId('btn-manual-sell-BTC')).toBeTruthy());
+    await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
     expect(s.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(s.getByTestId('trade-action-BTC').props.children).toBe('placed YES · 5 @ $0.55');
   });
@@ -722,10 +787,186 @@ describe('HomeScreen', () => {
       await waitFor(() => expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy());
       await fireEvent.press(s.getByTestId('btn-manual-buy-BTC'));
       await waitFor(() => expect(s.getByTestId('manual-success-fly')).toBeTruthy());
-      expect(s.getByTestId('manual-success-fly-text').props.children).toBe('BTC buy success');
+      expect(s.getByTestId('manual-success-fly-text').props.children).toBe('BTC YES success');
+      expect(placeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'buy', decision: 'YES' })
+      );
       expect(spy).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
+      placeSpy.mockRestore();
+    }
+  });
+
+  test('Buy YES then opposite Buy NO each place only that side', async () => {
+    const { cloudClient } = require('../../src/services/cloud/cloudClient');
+    const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockResolvedValue({
+      ok: true,
+      filled: true,
+      message: 'Bought',
+      tradeId: 't1',
+    });
+    try {
+      useConfigStore.setState({
+        config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+        hydrated: true,
+      });
+      useRuntimeStore.setState({
+        refreshPredictionsBalance: async () => {},
+        refreshCloudSnapshot: async () => {},
+        lastSignalsManualTrade: true,
+        cloudKillSwitch: false,
+        leans: {
+          BTC: homeBuyReadyLean,
+        } as any,
+        leanAt: { BTC: new Date().toISOString() },
+      });
+      const s = await render(<HomeScreen />);
+      await waitFor(() => expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy());
+      expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
+      await fireEvent.press(s.getByTestId('btn-manual-buy-BTC'));
+      await waitFor(() => expect(placeSpy).toHaveBeenCalledTimes(1));
+      expect(placeSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({ action: 'buy', decision: 'YES' })
+      );
+      await waitFor(() => expect(s.getByTestId('btn-manual-buy-no-BTC')).toBeTruthy());
+      expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy();
+      expect(s.getByText('Sell YES')).toBeTruthy();
+      expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+      await fireEvent.press(s.getByTestId('btn-manual-buy-no-BTC'));
+      await waitFor(() => expect(placeSpy).toHaveBeenCalledTimes(2));
+      expect(placeSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({ action: 'buy', decision: 'NO' })
+      );
+    } finally {
+      placeSpy.mockRestore();
+    }
+  });
+
+  test('mint Buy YES then shows Sell and Buy NO', async () => {
+    const { cloudClient } = require('../../src/services/cloud/cloudClient');
+    const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockResolvedValue({
+      ok: true,
+      filled: true,
+      message: 'Bought YES',
+      tradeId: 't1',
+    });
+    try {
+      useConfigStore.setState({
+        config: {
+          ...defaultAppConfig(),
+          assets_enabled: { BTC: true } as any,
+          cushions: { ...defaultAppConfig().cushions, BTC: 50 },
+        },
+        hydrated: true,
+      });
+      useRuntimeStore.setState({
+        refreshPredictionsBalance: async () => {},
+        refreshCloudSnapshot: async () => {},
+        lastSignalsManualTrade: true,
+        cloudKillSwitch: false,
+        leans: {
+          BTC: {
+            ...homeBuyReadyLean,
+            // Gap over cushion but under 1.25× → single mint Buy, not dual dark green.
+            abs_gap: 55,
+            live: 100_055,
+            strike: 100_000,
+          },
+        } as any,
+        leanAt: { BTC: new Date().toISOString() },
+      });
+      const s = await render(<HomeScreen />);
+      await waitFor(() => expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy());
+      expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
+      await fireEvent.press(s.getByTestId('btn-manual-buy-BTC'));
+      await waitFor(() => expect(placeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'buy', decision: 'YES' })
+      ));
+      await waitFor(() => expect(s.getByTestId('btn-manual-buy-no-BTC')).toBeTruthy());
+      expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy();
+      expect(s.getByText('Sell YES')).toBeTruthy();
+      expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+    } finally {
+      placeSpy.mockRestore();
+    }
+  });
+
+  test('Sell YES and Sell NO each sell only that side', async () => {
+    const { cloudClient } = require('../../src/services/cloud/cloudClient');
+    const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockResolvedValue({
+      ok: true,
+      filled: true,
+      message: 'Sold',
+      tradeId: 't1',
+    });
+    try {
+      useConfigStore.setState({
+        config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
+        hydrated: true,
+      });
+      useRuntimeStore.setState({
+        refreshPredictionsBalance: async () => {},
+        refreshCloudSnapshot: async () => {},
+        lastSignalsManualTrade: true,
+        cloudKillSwitch: false,
+        leans: {
+          BTC: {
+            asset: 'BTC',
+            market_ticker: 'KXBTC15M-X',
+            decision: 'YES',
+            live: 110,
+            strike: 100,
+            abs_gap: 10,
+            minutes_left: 8,
+            phase: 'live',
+          },
+        } as any,
+        leanAt: { BTC: new Date().toISOString() },
+        trades: [
+          {
+            id: 't1',
+            at: new Date().toISOString(),
+            asset: 'BTC',
+            market_ticker: 'KXBTC15M-X',
+            side: 'YES',
+            notional_usd: 5,
+            fill_count: 4,
+            outcome: 'pending',
+            dry_run: false,
+            entry_path: 'home',
+          },
+          {
+            id: 't2',
+            at: new Date().toISOString(),
+            asset: 'BTC',
+            market_ticker: 'KXBTC15M-X',
+            side: 'NO',
+            notional_usd: 4,
+            fill_count: 5,
+            outcome: 'pending',
+            dry_run: false,
+            entry_path: 'home',
+          },
+        ],
+      });
+      const s = await render(<HomeScreen />);
+      await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
+      expect(s.getByTestId('btn-manual-sell-no-BTC')).toBeTruthy();
+      await fireEvent.press(s.getByTestId('btn-manual-sell-yes-BTC'));
+      await waitFor(() =>
+        expect(placeSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ action: 'sell', decision: 'YES' })
+        )
+      );
+      await fireEvent.press(s.getByTestId('btn-manual-sell-no-BTC'));
+      await waitFor(() =>
+        expect(placeSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ action: 'sell', decision: 'NO' })
+        )
+      );
+      expect(placeSpy).toHaveBeenCalledTimes(2);
+    } finally {
       placeSpy.mockRestore();
     }
   });

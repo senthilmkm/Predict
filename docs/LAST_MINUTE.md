@@ -45,3 +45,83 @@ Any asset the user has On. No separate chip row.
 **Uses:** $ per trade, window cap 1, shared caps, skip thin bid, IOC, this path’s entry ask, Yes/No/Both, enabled assets, 1s watch in the last 60s.
 
 **Does not use:** cushions, Auto max ask, Smart buy, chase, minutes left/elapsed, Auto TIF, Protect, Cash out, Gold fade, TWAP $0 lock, Home Sell.
+
+---
+
+## Locked: Late ATR cushion
+
+Status: **implemented**. Last-minute **only**. Home Buy, Cushion lean, and other paths **out of scope**.
+
+### Why
+
+A high ask in the final seconds prices “almost sure,” but a lead smaller than normal 1‑minute noise is still a trap. Require lead ≥ a multiple of this window’s 1‑minute ATR before buying expensive late tickets.
+
+### When the gate runs
+
+All of the following must be true (after side pick, before place):
+
+1. Last-minute would otherwise place (Admin + user On, enter window, stop window, clips, Both, shared caps, etc.)
+2. **Seconds left ≤ 60** (final minute only — not the full enter window, e.g. 90s)
+3. **Chosen side’s ask ≥ high-ask floor** (default **88¢**)
+
+If ask is under the floor, or more than 60s remain → gate does **not** run.
+
+### Lead (cushion)
+
+Use **signed lead on the bought side**, not raw `|gap|`:
+
+- YES → `live − strike`
+- NO → `strike − live`
+
+If lead ≤ 0 (wrong side / on the line) → **SKIP** when the gate is active.
+
+### 1‑minute ATR (constructed)
+
+Source: Kalshi `live_data` timeseries already on the lean (`{ t, v }` spot ticks for this 15m event). No external ATR feed. No exchange OHLC required.
+
+Method:
+
+1. Bucket ticks into **1‑minute bars** (high = max `v`, low = min `v`, close = last `v` in the minute)
+2. True range per bar = `max(high−low, |high−prevClose|, |low−prevClose|)`
+3. ATR = **simple mean** of the last **N** true ranges (**N = 14**; if fewer complete bars, use what exists with a **minimum of 5** bars)
+
+This is a tick-built ATR, not TradingView candle ATR. Good enough for noise vs lead.
+
+### Pass / skip
+
+```
+need = atr_mult × ATR
+pass if lead ≥ need
+```
+
+| Case | Action | Skip reason |
+|---|---|---|
+| lead ≥ need | continue Last-minute | — |
+| lead &lt; need | SKIP | `last_minute_atr_thin` → “lead thinner than 1m noise” |
+| gate active but ATR unavailable (&lt;5 bars or no path) | **allow** (do not veto) | — |
+
+> Note: an earlier draft skipped on no-path; that blocked almost all Last-minute clips when live path was missing on the 1s lean. Shipped behavior is allow when ATR cannot be measured.
+
+### Settings (Paths → Last-minute)
+
+| Risk key | UI | Default | Range |
+|---|---|---|---|
+| `last_minute_atr_cushion_enabled` | Late ATR cushion | **On** (`!== false`) | On / Off |
+| `last_minute_atr_ask_usd` | High ask floor | **$0.88** | 0.80–0.95 |
+| `last_minute_atr_mult` | Lead ≥ ATR × | **1.25** | 1.00–1.50 (step 0.05) |
+
+Fixed (not knobs): window **60s**, ATR period **14**, min bars **5**, SMA of true ranges.
+
+### Isolation for this gate
+
+- Does **not** change Cushion lean “Skip if gap ≥ cushion ×”
+- Does **not** replace Smart buy (Last-minute already ignores Smart buy)
+- Does **not** apply to Home Buy or any other path in v1
+- Off = Last-minute behaves as today (no ATR check)
+
+### Example (locked numbers)
+
+WTI strike $72.00, 1m ATR $0.08, mult 1.25 → need **$0.10**, ask 90¢, T−55s:
+
+- live $72.03 (lead $0.03) → **SKIP**
+- live $72.12 (lead $0.12) → **BUY** (other Last-minute gates still apply)

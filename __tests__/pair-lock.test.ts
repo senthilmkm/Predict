@@ -125,9 +125,10 @@ describe('Pair lock path', () => {
     expect(canPairLockHedge({ runnerFillUsd: 0.52, hedgeAskUsd: 0.18, minLockUsd: 0.05 })).toBe(true);
     expect(canPairLockHedge({ runnerFillUsd: 0.52, hedgeAskUsd: 0.48, minLockUsd: 0.05 })).toBe(false);
     expect(canPairLockHedge({ runnerFillUsd: 0.5, hedgeAskUsd: 0.5, minLockUsd: 0.05 })).toBe(false);
-    expect(canPairLockStackAsks({ yesAskUsd: 0.61, noAskUsd: 0.39 })).toBe(true);
-    expect(canPairLockStackAsks({ yesAskUsd: 0.52, noAskUsd: 0.48 })).toBe(true);
-    expect(canPairLockStackAsks({ yesAskUsd: 0.52, noAskUsd: 0.49 })).toBe(false);
+    expect(canPairLockStackAsks({ yesAskUsd: 0.61, noAskUsd: 0.38 })).toBe(true);
+    expect(canPairLockStackAsks({ yesAskUsd: 0.52, noAskUsd: 0.47 })).toBe(true);
+    expect(canPairLockStackAsks({ yesAskUsd: 0.52, noAskUsd: 0.48 })).toBe(false);
+    expect(canPairLockStackAsks({ yesAskUsd: 0.61, noAskUsd: 0.39, minLockUsd: 0.05 })).toBe(false);
     expect(pairLockLockedUsd(0.52, 0.18)).toBe(0.3);
   });
 
@@ -545,7 +546,7 @@ describe('Pair lock path', () => {
     expect(stack.no.decision).toBe('NO');
     const tightBook = evaluatePairLockStackAdd({
       lots: lockedLots,
-      quotes: { yes_bid: 0.6, yes_ask: 0.61, no_bid: 0.37, no_ask: 0.39 },
+      quotes: { yes_bid: 0.55, yes_ask: 0.56, no_bid: 0.37, no_ask: 0.39 },
       addPairs: 1,
       lotCount: 1,
       minLockUsd: 0.05,
@@ -708,8 +709,8 @@ describe('Pair lock path', () => {
     expect(PATH_INFO.pairLock.body).toMatch(/Flatten unmatched/);
     expect(PATH_INFO.pairLock.body).toMatch(/Runner stop/);
     expect(PATH_INFO.pairLock.body).toMatch(/Add new pair/);
-    expect(PATH_INFO.pairLock.body).toMatch(/sum to \$1 or less/);
-    expect(PATH_INFO.pairLock.body).toMatch(/hedge-fill pulse and every 1s/);
+    expect(PATH_INFO.pairLock.body).toMatch(/lock Min lock/);
+    expect(PATH_INFO.pairLock.body).toMatch(/on that pulse and every 1s/);
     expect(PATH_INFO.pairLock.body).toMatch(/do not buy the other leg/);
     expect(PATH_INFO.pairLock.body).toMatch(/hold both to \$1/);
     expect(PATH_INFO.pairLock.body).toMatch(/5s grace/);
@@ -722,11 +723,12 @@ describe('Pair lock path', () => {
     expect(PATH_INFO.protect.body).toMatch(/Pair lock/);
   });
 
-  test('atomic enter + recover wait even hedge / take / atomic dump', () => {
+  test('atomic enter + recover wait even hedge / take; no instant dump', () => {
     expect(normalizePairLockRecoverSeconds(20)).toBe(20);
     expect(normalizePairLockRecoverSeconds(5)).toBe(10);
     expect(normalizePairLockRecoverSeconds(99)).toBe(60);
     expect(canPairLockEvenHedge({ runnerFillUsd: 0.55, hedgeAskUsd: 0.44 })).toBe(true);
+    expect(canPairLockEvenHedge({ runnerFillUsd: 0.55, hedgeAskUsd: 0.45 })).toBe(false);
     expect(canPairLockEvenHedge({ runnerFillUsd: 0.55, hedgeAskUsd: 0.46 })).toBe(false);
     const t0 = '2026-09-14T21:00:00.000Z';
     const lots = {
@@ -795,7 +797,7 @@ describe('Pair lock path', () => {
       now: new Date('2026-09-14T21:00:21.000Z'),
     });
     expect(take.kind).toBe('runner_take');
-    const atomicDump = evaluatePairLockWatch({
+    const atomicEarly = evaluatePairLockWatch({
       lots: { ...lots, atomicUnmatched: true },
       quotes: { yes_bid: 0.5, yes_ask: 0.55, no_bid: 0.48, no_ask: 0.5 },
       minLockUsd: 0.05,
@@ -805,6 +807,7 @@ describe('Pair lock path', () => {
       filledAt: t0,
       now: new Date('2026-09-14T21:00:01.000Z'),
     });
-    expect(atomicDump.kind).toBe('atomic_dump');
+    expect(atomicEarly.kind).toBe('none');
+    expect(atomicEarly.reason).toBe('grace_after_fill');
   });
 });

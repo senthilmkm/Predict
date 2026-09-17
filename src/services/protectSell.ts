@@ -7,6 +7,10 @@ import {
   inProtectSellGrace,
   protectSellMinGapUsd,
   shouldProtectSell as shouldProtectSellCore,
+  normalizeSellAtPct,
+  shouldSellAtProfitPct,
+  homeAutoExitWatchNeeded,
+  sellAtPctForEntryPath,
 } from '../../packages/trading-core/src/protectSell';
 
 export {
@@ -14,6 +18,10 @@ export {
   computeProtectSellPnlUsd,
   inProtectSellGrace,
   protectSellMinGapUsd,
+  normalizeSellAtPct,
+  shouldSellAtProfitPct,
+  homeAutoExitWatchNeeded,
+  sellAtPctForEntryPath,
 };
 
 /**

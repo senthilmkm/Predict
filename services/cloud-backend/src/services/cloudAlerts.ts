@@ -14,13 +14,13 @@ import { sendPushNotification } from './notifications';
 
 export function orderPlacedPathTag(
   raw: unknown
-): 'Home' | 'Cushion lean' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | 'Step buy' | 'Spike fade' | 'Pair lock' | 'Pair lock hedge' | 'Cheap loop 15m' | 'Cheap loop hourly' | 'Cheap loop weekly' | null {
+): 'Home Buy' | 'Cushion lean' | 'Cash out' | 'Gold fade' | 'TWAP lock' | 'Last-minute' | 'Step buy' | 'Spike fade' | 'Pair lock' | 'Pair lock hedge' | 'Cap lock' | 'Buffer run' | 'Cheap loop 15m' | 'Cheap loop hourly' | 'Cheap loop weekly' | null {
   const alias = String(raw ?? '')
     .toLowerCase()
     .trim();
   if (alias === 'pair_lock_hedge' || alias === 'pairlockhedge') return 'Pair lock hedge';
   const parsed = parseTradeEntryPath(raw);
-  if (parsed === 'home') return 'Home';
+  if (parsed === 'home') return 'Home Buy';
   if (parsed === 'auto') return 'Cushion lean';
   if (parsed === 'cash_out') return 'Cash out';
   if (parsed === 'gold_fade') return 'Gold fade';
@@ -29,6 +29,8 @@ export function orderPlacedPathTag(
   if (parsed === 'step_buy') return 'Step buy';
   if (parsed === 'spike_fade') return 'Spike fade';
   if (parsed === 'pair_lock') return 'Pair lock';
+  if (parsed === 'cap_lock') return 'Cap lock';
+  if (parsed === 'buffer_run') return 'Buffer run';
   if (parsed === 'cheap_loop') return 'Cheap loop 15m';
   if (parsed === 'cheap_loop_hourly') return 'Cheap loop hourly';
   if (parsed === 'cheap_loop_weekly') return 'Cheap loop weekly';

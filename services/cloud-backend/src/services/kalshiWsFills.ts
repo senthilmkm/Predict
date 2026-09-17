@@ -39,7 +39,8 @@ export function resetKalshiWsFillsForTests(): void {
 }
 
 function fieldsFromFillMsg(msg: Record<string, unknown>, prev: KalshiOrderFields): KalshiOrderFields {
-  const fill = msg.fill_count ?? msg.filled_count ?? msg.count;
+  // `count` on user_orders is order size, not fill size. REST still wins on disagree.
+  const fill = msg.fill_count ?? msg.filled_count;
   const remaining = msg.remaining_count ?? msg.remainingCount;
   const status = String(msg.status ?? msg.order_status ?? '').toLowerCase() || prev.status;
   return preferOrderFields(prev, {

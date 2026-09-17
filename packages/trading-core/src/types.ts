@@ -143,10 +143,25 @@ export interface RiskConfig {
   protect_sell_gap_ratio: number;
   protect_sell_grace_seconds: number;
   /**
+   * Home Buy only. Dump when held mark ≥ entry × (1 + pct/100). 0 = Off.
+   * Default 0. Range 5–100 step 5. Independent of Protect money flip.
+   */
+  home_sell_at_pct?: number;
+  /**
+   * Cushion lean (Auto) only. Dump when held mark ≥ entry × (1 + pct/100). 0 = Off.
+   * Default 0. Range 5–100 step 5. Independent of Protect money flip.
+   */
+  cushion_lean_sell_at_pct?: number;
+  /**
    * Cushion lean Auto path (gap > cushion). Missing on old docs → On.
    * Off skips those buys only. Settings Auto-trade still kills every path.
    */
   cushion_lean_enabled?: boolean;
+  /**
+   * Cushion lean only. Skip buy when live gap ≥ cushion × this.
+   * Default 2.5. Range 1.5–5. Missing on old docs → 2.5.
+   */
+  cushion_lean_max_gap_mult?: number;
   /**
    * Auto-trade only. When On, buy only if model win% − ask ≥ min extra chance.
    * Missing on old docs → On.
@@ -218,6 +233,15 @@ export interface RiskConfig {
   last_minute_both_gap?: number;
   /** 0 = Off. Sell a Last-minute lot when the other side is this much richer. */
   last_minute_flip_sell_usd?: number;
+  /**
+   * Final 60s + high ask: require signed lead ≥ ATR × mult.
+   * Missing → On.
+   */
+  last_minute_atr_cushion_enabled?: boolean;
+  /** Ask floor that arms the Late ATR cushion. Default 0.88. */
+  last_minute_atr_ask_usd?: number;
+  /** Lead ≥ ATR × this. Default 1.25. Range 1–1.5. */
+  last_minute_atr_mult?: number;
   /** Last-minute Skip thin bid. Missing → inherit cash_out_skip_thin_bid. */
   last_minute_skip_thin_bid?: boolean;
   /** Assets on the Last-minute path. Missing → all catalog assets. Empty = no buys. */
@@ -226,6 +250,10 @@ export interface RiskConfig {
   step_buy_enabled?: boolean;
   step_buy_start_minutes?: number;
   step_buy_cushion_pct?: number;
+  /** Lots 2+. Missing → 75. Never below Cushion %. */
+  step_buy_add_cushion_pct?: number;
+  /** Dump the stack when gap < Cushion % or lean flips. Missing → On. */
+  step_buy_sell_if_thesis_dies?: boolean;
   step_buy_lot_count?: number;
   step_buy_add_wait_minutes?: number;
   step_buy_add_band_usd?: number;
@@ -264,6 +292,30 @@ export interface RiskConfig {
   pair_lock_recover_seconds?: number;
   pair_lock_skip_thin_bid?: boolean;
   pair_lock_assets?: string[];
+  /** Cap lock Auto path. Missing → Off. */
+  cap_lock_enabled?: boolean;
+  cap_lock_max_loss_usd?: number;
+  cap_lock_window_open_seconds?: number;
+  /** Missing → On. If asks first fit after the open seconds, still enter once. */
+  cap_lock_allow_later?: boolean;
+  cap_lock_lot_count?: number;
+  cap_lock_assets?: string[];
+  /** Buffer run Auto path. Missing → Off. */
+  buffer_run_enabled?: boolean;
+  buffer_run_ask_min_usd?: number;
+  buffer_run_ask_max_usd?: number;
+  buffer_run_take_usd?: number;
+  buffer_run_stop_usd?: number;
+  buffer_run_enter_elapsed_minutes?: number;
+  buffer_run_enter_left_minutes?: number;
+  buffer_run_flatten_minutes?: number;
+  buffer_run_atr_mult?: number;
+  buffer_run_min_gap_btc_usd?: number;
+  buffer_run_min_gap_eth_usd?: number;
+  buffer_run_fixed_dollars_per_trade?: number;
+  buffer_run_pair_sum_skip?: number;
+  buffer_run_skip_thin_bid?: boolean;
+  buffer_run_assets?: string[];
   /** Cheap loop Auto path. Missing → Off. */
   cheap_loop_enabled?: boolean;
   cheap_loop_start_minutes?: number;
@@ -409,7 +461,10 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_enabled: false,
       protect_sell_gap_ratio: 1,
       protect_sell_grace_seconds: 45,
+      home_sell_at_pct: 0,
+      cushion_lean_sell_at_pct: 0,
       cushion_lean_enabled: true,
+      cushion_lean_max_gap_mult: 2.5,
       smart_buy_enabled: true,
       smart_buy_min_edge_usd: 0.08,
       cash_out_enabled: false,
@@ -451,11 +506,16 @@ export function defaultAppConfig(): AppConfig {
       last_minute_both_min_ask: 0.9,
       last_minute_both_gap: 0.1,
       last_minute_flip_sell_usd: 0,
+      last_minute_atr_cushion_enabled: true,
+      last_minute_atr_ask_usd: 0.88,
+      last_minute_atr_mult: 1.25,
       last_minute_skip_thin_bid: false,
       last_minute_assets: AssetRegistry.getDefaultPathAssets(),
       step_buy_enabled: false,
       step_buy_start_minutes: 5,
       step_buy_cushion_pct: 50,
+      step_buy_add_cushion_pct: 75,
+      step_buy_sell_if_thesis_dies: true,
       step_buy_lot_count: 1,
       step_buy_add_wait_minutes: 1,
       step_buy_add_band_usd: 0.02,
@@ -490,6 +550,27 @@ export function defaultAppConfig(): AppConfig {
       pair_lock_recover_seconds: 20,
       pair_lock_skip_thin_bid: false,
       pair_lock_assets: AssetRegistry.getDefaultPathAssets(),
+      cap_lock_enabled: false,
+      cap_lock_max_loss_usd: 0.05,
+      cap_lock_window_open_seconds: 90,
+      cap_lock_allow_later: true,
+      cap_lock_lot_count: 1,
+      cap_lock_assets: AssetRegistry.getDefaultPathAssets(),
+      buffer_run_enabled: false,
+      buffer_run_ask_min_usd: 0.42,
+      buffer_run_ask_max_usd: 0.62,
+      buffer_run_take_usd: 0.12,
+      buffer_run_stop_usd: 0.07,
+      buffer_run_enter_elapsed_minutes: 3,
+      buffer_run_enter_left_minutes: 5,
+      buffer_run_flatten_minutes: 3,
+      buffer_run_atr_mult: 1.25,
+      buffer_run_min_gap_btc_usd: 40,
+      buffer_run_min_gap_eth_usd: 2.5,
+      buffer_run_fixed_dollars_per_trade: 2.5,
+      buffer_run_pair_sum_skip: 0.98,
+      buffer_run_skip_thin_bid: false,
+      buffer_run_assets: ['BTC', 'ETH'],
       cheap_loop_enabled: false,
       cheap_loop_start_minutes: 2,
       cheap_loop_flatten_minutes: 5,
@@ -521,18 +602,18 @@ export function defaultAppConfig(): AppConfig {
       cheap_loop_hourly_assets: [],
       cheap_loop_weekly_enabled: false,
       cheap_loop_weekly_start_minutes: 10,
-      cheap_loop_weekly_flatten_minutes: 5,
-      cheap_loop_weekly_cheap_max_ask_usd: 0.4,
-      cheap_loop_weekly_min_gap_usd: 0.1,
-      cheap_loop_weekly_take_usd: 0.05,
-      cheap_loop_weekly_stop_enabled: false,
-      cheap_loop_weekly_stop_usd: 0.06,
+      cheap_loop_weekly_flatten_minutes: 120,
+      cheap_loop_weekly_cheap_max_ask_usd: 0.45,
+      cheap_loop_weekly_min_gap_usd: 0.08,
+      cheap_loop_weekly_take_usd: 0.08,
+      cheap_loop_weekly_stop_enabled: true,
+      cheap_loop_weekly_stop_usd: 0.12,
       cheap_loop_weekly_min_hold_minutes: 2,
       cheap_loop_weekly_cooldown_minutes: 3,
       cheap_loop_weekly_cycles: 10,
       cheap_loop_weekly_lot_count: 1,
       cheap_loop_weekly_skip_thin_bid: false,
-      cheap_loop_weekly_assets: [],
+      cheap_loop_weekly_assets: ['BTC', 'ETH'],
     },
     manual_risk: {
       fixed_dollars_per_trade: 5,

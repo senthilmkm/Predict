@@ -1,8 +1,12 @@
 import {
   buildProtectSellOrder,
   computeProtectSellPnlUsd,
+  homeAutoExitWatchNeeded,
+  normalizeSellAtPct,
   protectSellMinGapUsd,
+  sellAtPctForEntryPath,
   shouldProtectSell,
+  shouldSellAtProfitPct,
 } from '../src/services/protectSell';
 
 describe('protectSell', () => {
@@ -10,6 +14,91 @@ describe('protectSell', () => {
     expect(protectSellMinGapUsd(50, 1)).toBe(50);
     expect(protectSellMinGapUsd(50, 1.5)).toBe(75);
     expect(protectSellMinGapUsd(0.3, 1)).toBe(0.3);
+  });
+
+  test('normalizeSellAtPct: 0 Off, else 5–100 step 5', () => {
+    expect(normalizeSellAtPct(0)).toBe(0);
+    expect(normalizeSellAtPct(-1)).toBe(0);
+    expect(normalizeSellAtPct(undefined)).toBe(0);
+    expect(normalizeSellAtPct(3)).toBe(5);
+    expect(normalizeSellAtPct(7)).toBe(5);
+    expect(normalizeSellAtPct(8)).toBe(10);
+    expect(normalizeSellAtPct(100)).toBe(100);
+    expect(normalizeSellAtPct(120)).toBe(100);
+  });
+
+  test('shouldSellAtProfitPct sells when mark clears entry × (1 + pct/100)', () => {
+    const filledAt = '2026-09-03T12:00:00.000Z';
+    const now = new Date('2026-09-03T12:01:00.000Z');
+    expect(
+      shouldSellAtProfitPct({
+        sellAtPct: 0,
+        entryPay: 0.5,
+        heldSide: 'YES',
+        yesBid: 0.8,
+        filledAt,
+        graceSeconds: 0,
+        now,
+      })
+    ).toMatchObject({ sell: false, reason: 'sell_at_off', pct: 0 });
+    expect(
+      shouldSellAtProfitPct({
+        sellAtPct: 20,
+        entryPay: 0.5,
+        heldSide: 'YES',
+        yesBid: 0.59,
+        filledAt,
+        graceSeconds: 0,
+        now,
+      })
+    ).toMatchObject({ sell: false, reason: 'below_sell_at', need: 0.6, pct: 20 });
+    expect(
+      shouldSellAtProfitPct({
+        sellAtPct: 20,
+        entryPay: 0.5,
+        heldSide: 'YES',
+        yesBid: 0.6,
+        filledAt,
+        graceSeconds: 0,
+        now,
+      })
+    ).toMatchObject({ sell: true, reason: 'sell_at_profit', pct: 20 });
+    expect(
+      shouldSellAtProfitPct({
+        sellAtPct: 20,
+        entryPay: 0.5,
+        heldSide: 'YES',
+        yesBid: 0.9,
+        filledAt,
+        graceSeconds: 45,
+        now: new Date('2026-09-03T12:00:20.000Z'),
+      }).reason
+    ).toBe('grace_after_fill');
+    expect(
+      shouldSellAtProfitPct({
+        sellAtPct: 10,
+        entryPay: 0.4,
+        heldSide: 'NO',
+        yesAsk: 0.5,
+        filledAt,
+        graceSeconds: 0,
+        now,
+      })
+    ).toMatchObject({ sell: true, reason: 'sell_at_profit', mark: 0.5, need: 0.44 });
+  });
+
+  test('homeAutoExitWatchNeeded and sellAtPctForEntryPath', () => {
+    expect(homeAutoExitWatchNeeded({ protect_sell_enabled: false })).toBe(false);
+    expect(homeAutoExitWatchNeeded({ protect_sell_enabled: true })).toBe(true);
+    expect(homeAutoExitWatchNeeded({ home_sell_at_pct: 10 })).toBe(true);
+    expect(homeAutoExitWatchNeeded({ cushion_lean_sell_at_pct: 15 })).toBe(true);
+    expect(sellAtPctForEntryPath('home', { home_sell_at_pct: 20, cushion_lean_sell_at_pct: 10 })).toBe(
+      20
+    );
+    expect(sellAtPctForEntryPath('auto', { home_sell_at_pct: 20, cushion_lean_sell_at_pct: 10 })).toBe(
+      10
+    );
+    expect(sellAtPctForEntryPath('cash_out', { home_sell_at_pct: 20 })).toBe(0);
   });
 
   test('shouldProtectSell requires opposite lean with enough gap', () => {

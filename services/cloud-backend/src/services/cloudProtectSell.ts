@@ -1,7 +1,10 @@
 import {
   buildProtectSellOrder,
   computeProtectSellPnlUsd,
+  homeAutoExitWatchNeeded,
+  sellAtPctForEntryPath,
   shouldProtectSell,
+  shouldSellAtProfitPct,
 } from '../../../../packages/trading-core/src/protectSell';
 import {
   TradeRecordDoc,
@@ -10,9 +13,12 @@ import {
   updateTradeRecord,
 } from './firestore';
 import { isPairLockEntryPath } from '../../../../packages/trading-core/src/pairLock';
+import { isCapLockEntryPath } from '../../../../packages/trading-core/src/capLock';
+import { isBufferRunEntryPath } from '../../../../packages/trading-core/src/bufferRun';
 import { economicPayPrice, fillCountOf } from './settlement';
 
 export { PROTECT_CLAIM_STALE_MS } from './firestore';
+export { homeAutoExitWatchNeeded };
 
 export type ProtectPlaceFn = (input: {
   ticker: string;
@@ -41,7 +47,7 @@ export function isOpenProtectCandidate(trade: TradeRecordDoc, now = new Date()):
   return isProtectClaimable(trade, now);
 }
 
-/** Home / Auto lots Protect can dump — 1s watch these assets only. */
+/** Home / Auto lots Protect / Sell at % can dump — 1s watch these assets only. */
 export function openProtectWatchAssets(trades: TradeRecordDoc[], now = new Date()): string[] {
   const out: string[] = [];
   for (const t of trades || []) {
@@ -55,7 +61,9 @@ export function openProtectWatchAssets(trades: TradeRecordDoc[], now = new Date(
       t.entryPath === 'cheap_loop' ||
       t.entryPath === 'cheap_loop_hourly' ||
       t.entryPath === 'cheap_loop_weekly' ||
-      isPairLockEntryPath(t.entryPath)
+      isPairLockEntryPath(t.entryPath) ||
+      isCapLockEntryPath(t.entryPath) ||
+      isBufferRunEntryPath(t.entryPath)
     ) {
       continue;
     }
@@ -84,20 +92,49 @@ export function pendingProtectTradesForMarket(
       t.entryPath !== 'cheap_loop_hourly' &&
       t.entryPath !== 'cheap_loop_weekly' &&
       !isPairLockEntryPath(t.entryPath) &&
+      !isCapLockEntryPath(t.entryPath) &&
+      !isBufferRunEntryPath(t.entryPath) &&
       isOpenProtectCandidate(t, now)
   );
 }
 
 export function evaluateCloudProtectSell(opts: {
   trade: TradeRecordDoc;
-  lean: { decision: string; abs_gap?: number; phase?: string };
+  lean: {
+    decision: string;
+    abs_gap?: number;
+    phase?: string;
+    yes_bid?: number | null;
+    yes_ask?: number | null;
+  };
   cushion: number;
   gapRatio: number;
   graceSeconds: number;
   enabled: boolean;
+  homeSellAtPct?: unknown;
+  cushionLeanSellAtPct?: unknown;
   now?: Date;
-}) {
-  return shouldProtectSell({
+}): { sell: boolean; reason: string; kind: 'protect_flip' | 'sell_at' | 'none'; minGap?: number; leanGap?: number; pct?: number } {
+  const sellAtPct = sellAtPctForEntryPath(opts.trade.entryPath, {
+    home_sell_at_pct: opts.homeSellAtPct,
+    cushion_lean_sell_at_pct: opts.cushionLeanSellAtPct,
+  });
+  const take = shouldSellAtProfitPct({
+    sellAtPct,
+    entryPay: economicPayPrice(opts.trade),
+    heldSide: opts.trade.decision,
+    yesBid: opts.lean.yes_bid,
+    yesAsk: opts.lean.yes_ask,
+    filledAt: opts.trade.executedAt,
+    graceSeconds: opts.graceSeconds,
+    now: opts.now,
+    phase: opts.lean.phase,
+  });
+  if (take.sell) {
+    return { sell: true, reason: take.reason, kind: 'sell_at', pct: take.pct };
+  }
+
+  const flip = shouldProtectSell({
     enabled: opts.enabled,
     heldSide: opts.trade.decision,
     lean: {
@@ -111,6 +148,23 @@ export function evaluateCloudProtectSell(opts: {
     graceSeconds: opts.graceSeconds,
     now: opts.now,
   });
+  if (flip.sell) {
+    return {
+      sell: true,
+      reason: flip.reason,
+      kind: 'protect_flip',
+      minGap: flip.minGap,
+      leanGap: flip.leanGap,
+    };
+  }
+  return {
+    sell: false,
+    reason: take.pct > 0 ? take.reason : flip.reason,
+    kind: 'none',
+    minGap: flip.minGap,
+    leanGap: flip.leanGap,
+    pct: take.pct,
+  };
 }
 
 async function revertProtectClaim(userId: string, trade: TradeRecordDoc): Promise<void> {
@@ -126,13 +180,21 @@ export async function runCloudProtectSells(opts: {
   userId: string;
   asset: string;
   ticker: string;
-  lean: { decision: string; abs_gap?: number; phase?: string; yes_bid?: number | null; yes_ask?: number | null };
+  lean: {
+    decision: string;
+    abs_gap?: number;
+    phase?: string;
+    yes_bid?: number | null;
+    yes_ask?: number | null;
+  };
   trades: TradeRecordDoc[];
   cushion: number;
   gapRatio: number;
   graceSeconds: number;
   slippageUsd: number;
   enabled: boolean;
+  homeSellAtPct?: unknown;
+  cushionLeanSellAtPct?: unknown;
   dryRun: boolean;
   now?: Date;
   place: ProtectPlaceFn;
@@ -162,6 +224,8 @@ export async function runCloudProtectSells(opts: {
       gapRatio: opts.gapRatio,
       graceSeconds: opts.graceSeconds,
       enabled: opts.enabled,
+      homeSellAtPct: opts.homeSellAtPct,
+      cushionLeanSellAtPct: opts.cushionLeanSellAtPct,
       now,
     });
     if (!evalRes.sell) {
@@ -236,12 +300,21 @@ export async function runCloudProtectSells(opts: {
       protectExitOrderId: exitOrderId,
     });
     exited += 1;
-    alerts.push({
-      tradeId: trade.tradeId,
-      title: 'Protect sell',
-      body: `${opts.asset} ${trade.decision} · early sell · P&L $${pnlUsd.toFixed(2)} · gap $${evalRes.leanGap.toFixed(2)} (need ≥$${evalRes.minGap.toFixed(2)})`,
-      pnlUsd,
-    });
+    if (evalRes.kind === 'sell_at') {
+      alerts.push({
+        tradeId: trade.tradeId,
+        title: 'Sell at profit',
+        body: `${opts.asset} ${trade.decision} · +${evalRes.pct}% target · P&L $${pnlUsd.toFixed(2)}`,
+        pnlUsd,
+      });
+    } else {
+      alerts.push({
+        tradeId: trade.tradeId,
+        title: 'Protect sell',
+        body: `${opts.asset} ${trade.decision} · early sell · P&L $${pnlUsd.toFixed(2)} · gap $${Number(evalRes.leanGap || 0).toFixed(2)} (need ≥$${Number(evalRes.minGap || 0).toFixed(2)})`,
+        pnlUsd,
+      });
+    }
   }
 
   return { exited, skipped, alerts, placed };

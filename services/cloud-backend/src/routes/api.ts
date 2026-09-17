@@ -17,8 +17,7 @@ import {
 } from '../services/firestore';
 import { resolveActiveBroadcast } from '../services/broadcast';
 import { executeManualOrder } from '../services/manualTrade';
-import { collectHomeQuoteAssets } from '../services/oneSecondMarket';
-import { refreshLiveAskBookShared } from '../services/liveAskRefresh';
+import { peekSharedLeansForClient } from '../services/leanSignalCache';
 import { getLiveAsksSnapshot, liveAsksForClient } from '../services/liveAsks';
 
 export const apiRouter = Router();
@@ -152,17 +151,14 @@ apiRouter.post('/me/disclaimer', async (req: Request, res: Response) => {
 
 // Get User Status & Config
 apiRouter.get('/me/quotes', async (req: Request, res: Response) => {
-  if (process.env.NODE_ENV !== 'test') {
-    try {
-      const userDoc = await getUserDoc(extractUserId(req));
-      const assets = collectHomeQuoteAssets([userDoc]);
-      await refreshLiveAskBookShared(assets);
-    } catch {
-      /* serve last book */
-    }
-  }
   const liveAsks = liveAsksForClient(await getLiveAsksSnapshot());
-  res.json({ ok: true, at: liveAsks.at, asks: liveAsks.byAsset });
+  res.json({
+    ok: true,
+    at: liveAsks.at,
+    asks: liveAsks.byAsset,
+    byTicker: liveAsks.byTicker,
+    leans: peekSharedLeansForClient(),
+  });
 });
 
 apiRouter.get('/me/status', async (req: Request, res: Response) => {
@@ -197,6 +193,7 @@ apiRouter.get('/me/status', async (req: Request, res: Response) => {
     assetsCatalog,
     activeBroadcast: resolveActiveBroadcast(systemConfig.broadcast),
     liveAsks: liveAsksForClient(liveAsksSnap),
+    leans: peekSharedLeansForClient(),
   });
 });
 
@@ -374,6 +371,8 @@ apiRouter.post('/me/orders/manual', async (req: Request, res: Response) => {
   const action = req.body?.action === 'sell' ? 'sell' : req.body?.action === 'buy' ? 'buy' : '';
   const requestId = String(req.body?.requestId || '').trim() || undefined;
   const tradeId = String(req.body?.tradeId || '').trim() || undefined;
+  const decisionRaw = String(req.body?.decision || '').toUpperCase().trim();
+  const decision = decisionRaw === 'YES' || decisionRaw === 'NO' ? (decisionRaw as 'YES' | 'NO') : undefined;
   if (!asset || (action !== 'buy' && action !== 'sell')) {
     res.status(400).json({
       ok: false,
@@ -383,7 +382,7 @@ apiRouter.post('/me/orders/manual', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const result = await executeManualOrder({ userId, asset, action, requestId, tradeId });
+    const result = await executeManualOrder({ userId, asset, action, requestId, tradeId, decision });
     res.status(result.httpStatus).json(result);
   } catch (err: any) {
     await writeAuditLog(userId, 'ERROR', {

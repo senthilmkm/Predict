@@ -197,6 +197,30 @@ describe('KalshiClient', () => {
     expect(String((fetchImpl as jest.Mock).mock.calls[1][0])).toMatch(/\/portfolio\/orders\/ord-late/);
   });
 
+  test('placeOrder maps insufficient_balance code and message', async () => {
+    const fetchImpl = jest.fn(async () => ({
+      status: 422,
+      json: async () => ({
+        error: {
+          code: 'insufficient_balance',
+          message: 'Required: $7.20, Available: $5.00',
+        },
+      }),
+      text: async () => '',
+    })) as unknown as typeof fetch;
+
+    const client = new KalshiClient('key', generatePem(), 'production', fetchImpl);
+    const res = await client.placeOrder({
+      ticker: 'KXGOLD15M-TEST',
+      side: 'ask',
+      count: '12.00',
+      price: '0.6000',
+      dry_run: false,
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('insufficient_balance: Required: $7.20, Available: $5.00');
+  });
+
   test('smokeTestDryRun fails on bad asset', async () => {
     const client = new KalshiClient('key', generatePem(), 'production', jest.fn() as any);
     const res = await client.smokeTestDryRun('XYZ');

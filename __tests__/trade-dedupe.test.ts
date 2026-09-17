@@ -132,6 +132,26 @@ describe('cloudTradesToRecords', () => {
     expect(row.fill_count).toBe(5);
     expect(row.outcome).toBe('pending');
     expect(row.order_id).toBe('ord-2');
+    expect(row.status).toBe('SETTLED');
+  });
+
+  test('does not treat intended count as a fill on a GTC rest', () => {
+    const [row] = cloudTradesToRecords([
+      {
+        tradeId: 'gtc',
+        ticker: 'KXBTC15M-TEST',
+        asset: 'BTC',
+        decision: 'YES',
+        price: '0.55',
+        count: '8',
+        fillCount: 0,
+        status: 'SUBMITTED',
+        outcome: 'pending',
+        executedAt: '2026-09-07T14:00:00.000Z',
+      },
+    ]);
+    expect(row.fill_count).toBe(0);
+    expect(row.status).toBe('SUBMITTED');
   });
 
   test('maps settled pnl to win/loss', () => {

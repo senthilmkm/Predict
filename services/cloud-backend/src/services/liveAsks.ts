@@ -10,6 +10,7 @@ const IDLE_WRITE_MIN_MS = 30_000;
 export type LiveAsksSnapshot = {
   at: string;
   byAsset: Record<string, LiveAskByAsset>;
+  byTicker?: Record<string, LiveAskByAsset>;
 };
 
 let memory: LiveAsksSnapshot = idleLiveAsksSnapshot(new Date(0));
@@ -18,7 +19,7 @@ let lastMemoryWriteMs = 0;
 let lastKey = '';
 
 export function idleLiveAsksSnapshot(now = new Date()): LiveAsksSnapshot {
-  return { at: now.toISOString(), byAsset: {} };
+  return { at: now.toISOString(), byAsset: {}, byTicker: {} };
 }
 
 export function mergeLiveAsks(
@@ -37,14 +38,22 @@ export function mergeLiveAsks(
 }
 
 function snapshotKey(snap: LiveAsksSnapshot): string {
-  const keys = Object.keys(snap.byAsset).sort();
-  if (keys.length === 0) return 'idle';
-  return keys
+  const assetKeys = Object.keys(snap.byAsset).sort();
+  const tickerKeys = Object.keys(snap.byTicker || {}).sort();
+  if (assetKeys.length === 0 && tickerKeys.length === 0) return 'idle';
+  const assets = assetKeys
     .map((asset) => {
       const q = snap.byAsset[asset];
-      return `${asset}:${q?.yes_ask ?? ''}:${q?.no_ask ?? ''}`;
+      return `${asset}:${q?.yes_ask ?? ''}:${q?.no_ask ?? ''}:${q?.yes_bid ?? ''}:${q?.no_bid ?? ''}`;
     })
     .join('|');
+  const tickers = tickerKeys
+    .map((ticker) => {
+      const q = snap.byTicker?.[ticker];
+      return `t:${ticker}:${q?.yes_bid ?? ''}:${q?.no_bid ?? ''}`;
+    })
+    .join('|');
+  return `${assets}#${tickers}`;
 }
 
 export function peekLiveAsksByAsset(): Record<string, LiveAskByAsset> {
@@ -64,7 +73,7 @@ export async function persistLiveAsksSnapshot(snap: LiveAsksSnapshot): Promise<v
   const watching = key !== 'idle';
   const forceIdle = lastKey !== 'idle' && lastKey !== '' && !watching;
   const minMs = watching ? WRITE_MIN_MS : IDLE_WRITE_MIN_MS;
-  memory = { at: snap.at, byAsset: { ...snap.byAsset } };
+  memory = { at: snap.at, byAsset: { ...snap.byAsset }, byTicker: { ...(snap.byTicker || {}) } };
   lastMemoryWriteMs = nowMs;
   if (!watching && !forceIdle && key === lastKey && nowMs - lastWriteMs < minMs) {
     return;
@@ -82,6 +91,32 @@ export async function persistLiveAsksSnapshot(snap: LiveAsksSnapshot): Promise<v
     });
 }
 
+function parseQuoteRow(
+  quote: LiveAskByAsset,
+  requireAsk: boolean
+): LiveAskByAsset | null {
+  const n = (v: unknown) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : undefined;
+  };
+  const yes_ask = n(quote.yes_ask);
+  const no_ask = n(quote.no_ask);
+  const yes_bid = n(quote.yes_bid);
+  const no_bid = n(quote.no_bid);
+  if (requireAsk) {
+    if (yes_ask == null && no_ask == null) return null;
+  } else if (yes_ask == null && no_ask == null && yes_bid == null && no_bid == null) {
+    return null;
+  }
+  return {
+    yes_ask,
+    no_ask,
+    yes_bid,
+    no_bid,
+    ticker: String(quote.ticker || '').trim() || undefined,
+  };
+}
+
 function parseSnapshot(raw: Partial<LiveAsksSnapshot> | null | undefined): LiveAsksSnapshot | null {
   if (!raw || typeof raw !== 'object') return null;
   const at = String(raw.at || '');
@@ -91,22 +126,18 @@ function parseSnapshot(raw: Partial<LiveAsksSnapshot> | null | undefined): LiveA
   for (const [asset, quote] of Object.entries(src)) {
     const key = String(asset || '').trim();
     if (!key || !quote || typeof quote !== 'object') continue;
-    const n = (v: unknown) => {
-      const x = Number(v);
-      return Number.isFinite(x) ? x : undefined;
-    };
-    const yes_ask = n((quote as LiveAskByAsset).yes_ask);
-    const no_ask = n((quote as LiveAskByAsset).no_ask);
-    if (yes_ask == null && no_ask == null) continue;
-    byAsset[key] = {
-      yes_ask,
-      no_ask,
-      yes_bid: n((quote as LiveAskByAsset).yes_bid),
-      no_bid: n((quote as LiveAskByAsset).no_bid),
-      ticker: String((quote as LiveAskByAsset).ticker || '').trim() || undefined,
-    };
+    const row = parseQuoteRow(quote as LiveAskByAsset, true);
+    if (row) byAsset[key] = row;
   }
-  return { at, byAsset };
+  const tickerSrc = raw.byTicker && typeof raw.byTicker === 'object' ? raw.byTicker : {};
+  const byTicker: Record<string, LiveAskByAsset> = {};
+  for (const [ticker, quote] of Object.entries(tickerSrc)) {
+    const key = String(ticker || '').trim();
+    if (!key || !quote || typeof quote !== 'object') continue;
+    const row = parseQuoteRow(quote as LiveAskByAsset, false);
+    if (row) byTicker[key] = { ...row, ticker: row.ticker || key };
+  }
+  return { at, byAsset, byTicker };
 }
 
 export async function getLiveAsksSnapshot(): Promise<LiveAsksSnapshot> {
@@ -141,10 +172,15 @@ export async function getLiveAsksSnapshot(): Promise<LiveAsksSnapshot> {
   return memory.at && memory.at !== new Date(0).toISOString() ? memory : idleLiveAsksSnapshot();
 }
 
+export function peekLiveAsksByTicker(): Record<string, LiveAskByAsset> {
+  return { ...(memory.byTicker || {}) };
+}
+
 export function liveAsksForClient(snap: LiveAsksSnapshot | null | undefined): {
   at: string;
   byAsset: Record<string, LiveAskByAsset>;
+  byTicker: Record<string, LiveAskByAsset>;
 } {
   const safe = snap && snap.at ? snap : idleLiveAsksSnapshot();
-  return { at: safe.at, byAsset: { ...safe.byAsset } };
+  return { at: safe.at, byAsset: { ...safe.byAsset }, byTicker: { ...(safe.byTicker || {}) } };
 }

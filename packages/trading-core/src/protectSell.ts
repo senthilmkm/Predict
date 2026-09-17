@@ -1,9 +1,114 @@
 export type ProtectSide = 'YES' | 'NO';
 
+export const SELL_AT_PCT_DEFAULT = 0;
+export const SELL_AT_PCT_MIN = 5;
+export const SELL_AT_PCT_MAX = 100;
+export const SELL_AT_PCT_STEP = 5;
+
 export function protectSellMinGapUsd(cushion: number, gapRatio: number): number {
   const c = Math.max(0, Number(cushion) || 0);
   const r = Math.max(0.5, Number(gapRatio) || 1);
   return Math.round(c * r * 10000) / 10000;
+}
+
+/** 0 = Off. Otherwise snap to 5–100 step 5. */
+export function normalizeSellAtPct(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const clamped = Math.min(SELL_AT_PCT_MAX, Math.max(SELL_AT_PCT_MIN, n));
+  return Math.round(clamped / SELL_AT_PCT_STEP) * SELL_AT_PCT_STEP;
+}
+
+/** Held-side mark for % profit: YES → yes_bid; NO → 1 − yes_ask. */
+export function heldSideMarkUsd(opts: {
+  heldSide: ProtectSide | string;
+  yesBid?: number | null;
+  yesAsk?: number | null;
+}): number | null {
+  const side = String(opts.heldSide || '').toUpperCase() === 'NO' ? 'NO' : 'YES';
+  if (side === 'YES') {
+    const bid = Number(opts.yesBid);
+    return bid > 0 && Number.isFinite(bid) ? bid : null;
+  }
+  const ask = Number(opts.yesAsk);
+  if (!(ask > 0) || !Number.isFinite(ask)) return null;
+  const mark = 1 - ask;
+  return mark > 0 ? Math.round(mark * 10000) / 10000 : null;
+}
+
+/**
+ * Take profit when mark ≥ entry × (1 + pct/100).
+ * pct ≤ 0 → Off. Respects grace after fill.
+ */
+export function shouldSellAtProfitPct(opts: {
+  sellAtPct: unknown;
+  entryPay: unknown;
+  heldSide: ProtectSide | string;
+  yesBid?: number | null;
+  yesAsk?: number | null;
+  filledAt?: string | Date | number | null;
+  graceSeconds?: number;
+  now?: Date;
+  phase?: string;
+}): { sell: boolean; reason: string; mark: number | null; need: number | null; pct: number } {
+  const pct = normalizeSellAtPct(opts.sellAtPct);
+  const entry = Number(opts.entryPay);
+  const mark = heldSideMarkUsd({
+    heldSide: opts.heldSide,
+    yesBid: opts.yesBid,
+    yesAsk: opts.yesAsk,
+  });
+  if (pct <= 0) {
+    return { sell: false, reason: 'sell_at_off', mark, need: null, pct: 0 };
+  }
+  if (opts.phase === 'ended') {
+    return { sell: false, reason: 'window_ended', mark, need: null, pct };
+  }
+  if (!(entry > 0) || !Number.isFinite(entry)) {
+    return { sell: false, reason: 'no_entry', mark, need: null, pct };
+  }
+  const need = Math.round(entry * (1 + pct / 100) * 10000) / 10000;
+  if (mark == null) {
+    return { sell: false, reason: 'mark_unavailable', mark, need, pct };
+  }
+  if (
+    inProtectSellGrace({
+      filledAt: opts.filledAt,
+      graceSeconds: opts.graceSeconds ?? 0,
+      now: opts.now,
+    })
+  ) {
+    return { sell: false, reason: 'grace_after_fill', mark, need, pct };
+  }
+  if (mark + 1e-9 >= need) {
+    return { sell: true, reason: 'sell_at_profit', mark, need, pct };
+  }
+  return { sell: false, reason: 'below_sell_at', mark, need, pct };
+}
+
+/** True when Home/Auto exit watcher should run (Protect flip and/or Sell at %). */
+export function homeAutoExitWatchNeeded(risk?: {
+  protect_sell_enabled?: boolean;
+  home_sell_at_pct?: unknown;
+  cushion_lean_sell_at_pct?: unknown;
+} | null): boolean {
+  if (risk?.protect_sell_enabled === true) return true;
+  return (
+    normalizeSellAtPct(risk?.home_sell_at_pct) > 0 ||
+    normalizeSellAtPct(risk?.cushion_lean_sell_at_pct) > 0
+  );
+}
+
+export function sellAtPctForEntryPath(
+  entryPath: unknown,
+  risk?: { home_sell_at_pct?: unknown; cushion_lean_sell_at_pct?: unknown } | null
+): number {
+  const v = String(entryPath ?? '')
+    .toLowerCase()
+    .trim();
+  if (v === 'home') return normalizeSellAtPct(risk?.home_sell_at_pct);
+  if (v === 'auto') return normalizeSellAtPct(risk?.cushion_lean_sell_at_pct);
+  return 0;
 }
 
 export function inProtectSellGrace(opts: {

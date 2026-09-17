@@ -84,6 +84,34 @@ describe('Cloud trade book ↔ /me/trades', () => {
     expect(row.entryPath).toBe('home');
   });
 
+  test('saveTradeRecord drops undefined fields Firestore would reject', async () => {
+    const uid = 'user_wire_undef';
+    await saveTradeRecord(uid, {
+      tradeId: 't_undef',
+      userId: uid,
+      ticker: 'KXBTC15M-A',
+      asset: 'BTC',
+      decision: 'YES',
+      count: '1',
+      price: '0.50',
+      notionalUsd: 0.5,
+      dryRun: false,
+      status: 'FILLED',
+      executedAt: new Date().toISOString(),
+      fillCount: 1,
+      outcome: 'pending',
+      pairLockAtomic: undefined,
+      stepLotIndex: undefined,
+      liveSpot: undefined,
+    } as any);
+    const row = (await getTradeRecords(uid)).find((t) => t.tradeId === 't_undef');
+    expect(row).toBeTruthy();
+    expect(Object.prototype.hasOwnProperty.call(row, 'pairLockAtomic')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(row, 'stepLotIndex')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(row, 'liveSpot')).toBe(false);
+    expect(row?.fillCount).toBe(1);
+  });
+
   test('worker settlement writes pnl and GET reflects it', async () => {
     const uid = 'user_wire_settle';
     await saveTradeRecord(uid, filledTrade({ tradeId: 't_settle', userId: uid }) as any);

@@ -60,6 +60,7 @@ export type LiveAskQuote = {
 export type LiveAsksPayload = {
   at: string | null;
   byAsset: Record<string, LiveAskQuote>;
+  byTicker: Record<string, LiveAskQuote>;
 };
 
 export interface CloudStatusResult {
@@ -68,7 +69,42 @@ export interface CloudStatusResult {
   systemConfig?: SystemConfig;
   activeBroadcast?: ActiveBroadcast | null;
   liveAsks?: LiveAsksPayload;
+  leans?: Record<string, Record<string, unknown>>;
   error?: string;
+}
+
+function parseCloudLeans(raw: unknown): Record<string, Record<string, unknown>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [asset, row] of Object.entries(raw as Record<string, unknown>)) {
+    const key = String(asset || '').trim();
+    if (!key || !row || typeof row !== 'object' || Array.isArray(row)) continue;
+    out[key] = row as Record<string, unknown>;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function parseLiveAskQuote(quote: LiveAskQuote, requireAsk: boolean): LiveAskQuote | null {
+  const n = (v: unknown) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : undefined;
+  };
+  const yes_ask = n(quote.yes_ask);
+  const no_ask = n(quote.no_ask);
+  const yes_bid = n(quote.yes_bid);
+  const no_bid = n(quote.no_bid);
+  if (requireAsk) {
+    if (yes_ask == null && no_ask == null) return null;
+  } else if (yes_ask == null && no_ask == null && yes_bid == null && no_bid == null) {
+    return null;
+  }
+  return {
+    yes_ask,
+    no_ask,
+    yes_bid,
+    no_bid,
+    ticker: typeof quote.ticker === 'string' && quote.ticker.trim() ? quote.ticker.trim() : undefined,
+  };
 }
 
 export function parseLiveAsksPayload(raw: any): LiveAsksPayload {
@@ -83,23 +119,18 @@ export function parseLiveAsksPayload(raw: any): LiveAsksPayload {
   for (const [asset, quote] of Object.entries(src)) {
     const key = String(asset || '').trim();
     if (!key || !quote || typeof quote !== 'object') continue;
-    const n = (v: unknown) => {
-      const x = Number(v);
-      return Number.isFinite(x) ? x : undefined;
-    };
-    const row = quote as LiveAskQuote;
-    const yes_ask = n(row.yes_ask);
-    const no_ask = n(row.no_ask);
-    if (yes_ask == null && no_ask == null) continue;
-    byAsset[key] = {
-      yes_ask,
-      no_ask,
-      yes_bid: n(row.yes_bid),
-      no_bid: n(row.no_bid),
-      ticker: typeof row.ticker === 'string' && row.ticker.trim() ? row.ticker.trim() : undefined,
-    };
+    const row = parseLiveAskQuote(quote as LiveAskQuote, true);
+    if (row) byAsset[key] = row;
   }
-  return { at, byAsset };
+  const byTicker: Record<string, LiveAskQuote> = {};
+  const tickerSrc = raw?.byTicker && typeof raw.byTicker === 'object' ? raw.byTicker : {};
+  for (const [ticker, quote] of Object.entries(tickerSrc)) {
+    const key = String(ticker || '').trim();
+    if (!key || !quote || typeof quote !== 'object') continue;
+    const row = parseLiveAskQuote(quote as LiveAskQuote, false);
+    if (row) byTicker[key] = { ...row, ticker: row.ticker || key };
+  }
+  return { at, byAsset, byTicker };
 }
 
 /** Status snapshot must not replace a newer 1s /me/quotes book. */
@@ -119,6 +150,9 @@ export function isNewerOrSameLiveAsksAt(
 export class PredictCloudClient {
   constructor(private readonly getAuthToken: () => Promise<string | null>) {}
 
+  /** Avoid hung History/Home pull-to-refresh when Cloud never answers. */
+  private static readonly FETCH_TIMEOUT_MS = 20_000;
+
   private async fetchWithAuth(path: string, options: RequestInit = {}): Promise<Response> {
     const token = await this.getAuthToken();
     const headers: Record<string, string> = {
@@ -129,10 +163,43 @@ export class PredictCloudClient {
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
-    return fetch(`${CLOUD_BASE_URL}${path}`, {
-      ...options,
-      headers,
-    });
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const parentSignal = options.signal;
+    let onParentAbort: (() => void) | null = null;
+    if (ctrl && parentSignal) {
+      if (parentSignal.aborted) {
+        ctrl.abort();
+      } else {
+        onParentAbort = () => ctrl.abort();
+        parentSignal.addEventListener('abort', onParentAbort);
+      }
+    }
+    const timer =
+      ctrl != null
+        ? setTimeout(() => {
+            try {
+              ctrl.abort();
+            } catch {
+              /* */
+            }
+          }, PredictCloudClient.FETCH_TIMEOUT_MS)
+        : null;
+    try {
+      return await fetch(`${CLOUD_BASE_URL}${path}`, {
+        ...options,
+        headers,
+        ...(ctrl ? { signal: ctrl.signal } : {}),
+      });
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (parentSignal && onParentAbort) {
+        try {
+          parentSignal.removeEventListener('abort', onParentAbort);
+        } catch {
+          /* */
+        }
+      }
+    }
   }
 
   async uploadCredentials(input: KalshiUploadInput): Promise<{ ok: boolean; message?: string; error?: string }> {
@@ -186,6 +253,7 @@ export class PredictCloudClient {
         systemConfig: data.systemConfig,
         activeBroadcast: data.activeBroadcast ?? null,
         liveAsks: data.liveAsks ? parseLiveAsksPayload(data.liveAsks) : undefined,
+        leans: parseCloudLeans(data.leans),
       };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
@@ -196,6 +264,7 @@ export class PredictCloudClient {
     ok: boolean;
     liveAsks?: LiveAsksPayload;
     lastTradeAction?: UserStatusDoc['lastTradeAction'];
+    leans?: Record<string, Record<string, unknown>>;
     error?: string;
   }> {
     try {
@@ -208,6 +277,7 @@ export class PredictCloudClient {
         ...(data.lastTradeAction && typeof data.lastTradeAction === 'object'
           ? { lastTradeAction: data.lastTradeAction }
           : {}),
+        leans: parseCloudLeans(data.leans),
       };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'network_error' };
@@ -345,6 +415,7 @@ export class PredictCloudClient {
     action: 'buy' | 'sell';
     requestId: string;
     tradeId?: string;
+    decision?: 'YES' | 'NO';
   }): Promise<{
     ok: boolean;
     message?: string;

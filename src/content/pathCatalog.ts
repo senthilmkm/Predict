@@ -11,6 +11,8 @@ export const PATH_FOCUS_IDS = [
   'stepBuy',
   'spikeFade',
   'pairLock',
+  'capLock',
+  'bufferRun',
   'cheapLoop',
 ] as const;
 
@@ -28,13 +30,15 @@ export type PathTileDef = {
     | 'stepBuyFeatureOn'
     | 'spikeFadeFeatureOn'
     | 'pairLockFeatureOn'
+    | 'capLockFeatureOn'
+    | 'bufferRunFeatureOn'
     | 'cheapLoopFeatureOn';
 };
 
 export const PATH_TILES: PathTileDef[] = [
   { id: 'shared', title: 'Shared limits', sub: 'Day cap, window, open' },
   { id: 'home', title: 'Home Buy', sub: 'Your tap size' },
-  { id: 'auto', title: 'Cushion lean', sub: 'Gap > cushion' },
+  { id: 'auto', title: 'Cushion lean', sub: 'Cushion < gap ≤ cushion×' },
   { id: 'cashOut', title: 'Cash out', sub: 'Partial cushion', adminFlag: 'cashOutFeatureOn' },
   { id: 'goldFade', title: 'Gold fade', sub: 'Gold, always dump', adminFlag: 'goldFadeFeatureOn' },
   { id: 'twapLock', title: 'TWAP lock', sub: 'BTC / ETH to $1', adminFlag: 'twapLockFeatureOn' },
@@ -42,6 +46,8 @@ export const PATH_TILES: PathTileDef[] = [
   { id: 'stepBuy', title: 'Step buy', sub: 'Add if lean holds', adminFlag: 'stepBuyFeatureOn' },
   { id: 'spikeFade', title: 'Spike fade', sub: 'Buy cheap side', adminFlag: 'spikeFadeFeatureOn' },
   { id: 'pairLock', title: 'Pair lock', sub: 'Both sides under $1', adminFlag: 'pairLockFeatureOn' },
+  { id: 'capLock', title: 'Cap lock', sub: 'YES+NO same ticker, cap the bleed', adminFlag: 'capLockFeatureOn' },
+  { id: 'bufferRun', title: 'Buffer run', sub: 'Mid-window lean scalp', adminFlag: 'bufferRunFeatureOn' },
   { id: 'cheapLoop', title: 'Cheap loop', sub: 'Cheap side, take or flatten', adminFlag: 'cheapLoopFeatureOn' },
 ];
 
@@ -62,4 +68,21 @@ export function normalizePinnedPathIds(raw: unknown): PathFocusId[] {
 
 export function pathTileById(id: PathFocusId): PathTileDef {
   return PATH_TILES.find((t) => t.id === id) || PATH_TILES[0];
+}
+
+/** Admin-off path pins stay in storage but must not count toward the 3-pin cap or show on Home. */
+export function isPinnedPathVisible(
+  id: PathFocusId,
+  flags: Partial<Record<NonNullable<PathTileDef['adminFlag']>, boolean>>
+): boolean {
+  const tile = pathTileById(id);
+  if (!tile.adminFlag) return true;
+  return flags[tile.adminFlag] === true;
+}
+
+export function visiblePinnedPathIds(
+  ids: readonly PathFocusId[],
+  flags: Partial<Record<NonNullable<PathTileDef['adminFlag']>, boolean>>
+): PathFocusId[] {
+  return ids.filter((id) => isPinnedPathVisible(id, flags));
 }

@@ -9,6 +9,8 @@ import {
   cheapLoopHoldingWatchText,
   cheapLoopLivePnlForTicker,
   cheapLoopLivePnlUsd,
+  historyLiveProfitForTicker,
+  historyLiveProfitUsd,
   cheapLoopHourlyEventKey,
   cheapLoopHourlyExitsForEvent,
   cheapLoopHourlySeriesTicker,
@@ -26,6 +28,7 @@ import {
   normalizeCheapLoopHourlyCycles,
   normalizeCheapLoopHourlyStartMinutes,
   normalizeCheapLoopWeeklyCycles,
+  normalizeCheapLoopWeeklyFlattenMinutes,
   normalizeCheapLoopLotCount,
   normalizeCheapLoopMinLiveCushionPct,
   cheapLoopMinLiveUsd,
@@ -38,6 +41,7 @@ import {
   pickUniqueAtmStrike,
   cheapLoopActiveStopUsd,
   reconcileCheapLoopTakeStop,
+  bumpCheapLoopStopForTake,
   tickerHasOpenCheapLoop,
   tickerHasOpenOtherThanCheapLoop,
   tickerHasOpenOtherThanCheapLoopWeekly,
@@ -113,6 +117,14 @@ describe('Cheap loop path', () => {
     expect(reconcileCheapLoopTakeStop({ takeUsd: 0.08, stopUsd: 0.05, stopEnabled: true })).toEqual({
       takeUsd: 0.04,
       stopUsd: 0.05,
+    });
+    expect(bumpCheapLoopStopForTake({ takeUsd: 0.05, stopUsd: 0.05, stopEnabled: true })).toEqual({
+      takeUsd: 0.05,
+      stopUsd: 0.06,
+    });
+    expect(bumpCheapLoopStopForTake({ takeUsd: 0.08, stopUsd: 0.05, stopEnabled: true })).toEqual({
+      takeUsd: 0.08,
+      stopUsd: 0.09,
     });
   });
 
@@ -547,6 +559,24 @@ describe('Cheap loop path', () => {
         quotes: [{ market_ticker: 'KXBTC15M-T', yes_bid: 0.35, no_bid: 0.64 }],
       })
     ).toBe(0.05);
+    expect(
+      historyLiveProfitUsd({
+        heldSide: 'YES',
+        fillUsd: 0.3,
+        fillCount: 2,
+        yesAsk: 0.28,
+        noAsk: 0.75,
+      })
+    ).toBe(-0.04);
+    expect(
+      historyLiveProfitForTicker({
+        ticker: 'KXBTC15M-T',
+        heldSide: 'YES',
+        fillUsd: 0.4,
+        fillCount: 1,
+        quotes: [{ market_ticker: 'KXBTC15M-T', yes_ask: 0.45, no_ask: 0.56 }],
+      })
+    ).toBe(0.05);
     expect(cheapLoopCooldownWatchText(80)).toBe('Cheap loop cooldown · 80s');
     expect(isCheapLoopEnterPath({ adminEnabled: true, userEnabled: true, assetEnabled: true, asset: 'BTC', assets: [] })).toBe(
       false
@@ -630,6 +660,16 @@ describe('Cheap loop path', () => {
         ],
       }).ok
     ).toBe(false);
+    expect(
+      pickUniqueAtmStrike({
+        live: 67050,
+        markets: [
+          { ticker: 'A-T66900', floor_strike: 66900 },
+          { ticker: 'B-T67200', floor_strike: 67200 },
+        ],
+        allowTie: true,
+      })
+    ).toEqual({ ok: true, ticker: 'A-T66900', strike: 66900 });
     expect(cheapLoopHourlyEventKey('KXBTCD-26SEP1406-T67099.99')).toBe('KXBTCD-26SEP1406');
     expect(cheapLoopHourlySeriesTicker('BTC')).toBe('KXBTCD');
     expect(cheapLoopHourlySeriesTicker('Gold')).toBeNull();
@@ -744,8 +784,11 @@ describe('Cheap loop path', () => {
     expect(isCheapLoopWeeklyEventDuration(60 * 60 * 1000)).toBe(false);
     expect(isCheapLoopWeeklyEventDuration(24 * 60 * 60 * 1000)).toBe(false);
     expect(isCheapLoopWeeklyEventDuration(169 * 60 * 60 * 1000)).toBe(true);
-    expect(isCheapLoopWeeklyEventDuration(3 * 24 * 60 * 60 * 1000)).toBe(false);
-    expect(isCheapLoopWeeklyEventDuration(11 * 24 * 60 * 60 * 1000)).toBe(false);
+    expect(isCheapLoopWeeklyEventDuration(3 * 24 * 60 * 60 * 1000)).toBe(true);
+    expect(isCheapLoopWeeklyEventDuration(11 * 24 * 60 * 60 * 1000)).toBe(true);
+    expect(isCheapLoopWeeklyEventDuration(15 * 24 * 60 * 60 * 1000)).toBe(false);
+    expect(normalizeCheapLoopWeeklyFlattenMinutes(5)).toBe(30);
+    expect(normalizeCheapLoopWeeklyFlattenMinutes(undefined)).toBe(120);
     const now = new Date('2026-09-14T11:30:00.000Z');
     const hour = {
       eventTicker: 'KXBTCD-26SEP1412',
@@ -790,6 +833,7 @@ describe('Cheap loop path', () => {
         market_ticker: 'KXBTCD-26SEP1817-T67099.99',
         minutes_elapsed: 12,
         minutes_left: 4000,
+        minutes_remaining: 4000,
       }),
       cfg: weekly,
       adminEnabled: true,
@@ -803,6 +847,7 @@ describe('Cheap loop path', () => {
         market_ticker: 'KXBTCD-26SEP1817-T67099.99',
         minutes_elapsed: 12,
         minutes_left: 4000,
+        minutes_remaining: 4000,
       }),
       cfg: weekly,
       adminEnabled: true,
@@ -826,6 +871,7 @@ describe('Cheap loop path', () => {
         market_ticker: 'KXBTCD-26SEP1817-T67099.99',
         minutes_elapsed: 12,
         minutes_left: 4000,
+        minutes_remaining: 4000,
       }),
       cfg: weekly50,
       adminEnabled: true,
@@ -839,6 +885,7 @@ describe('Cheap loop path', () => {
         market_ticker: 'KXBTCD-26SEP1817-T67099.99',
         minutes_elapsed: 12,
         minutes_left: 4000,
+        minutes_remaining: 4000,
       }),
       cfg: weekly50,
       adminEnabled: true,
@@ -853,6 +900,7 @@ describe('Cheap loop path', () => {
         market_ticker: 'KXBTCD-26SEP1817-T67099.99',
         minutes_elapsed: 12,
         minutes_left: 4000,
+        minutes_remaining: 4000,
       }),
       cfg: weekly,
       adminEnabled: true,

@@ -44,6 +44,8 @@ export async function runCloudStepBuyStops(opts: {
   ticker: string;
   lean: {
     phase?: string;
+    decision?: string;
+    abs_gap?: number;
     yes_bid?: number | null;
     yes_ask?: number | null;
     no_bid?: number | null;
@@ -51,6 +53,9 @@ export async function runCloudStepBuyStops(opts: {
   };
   trades: TradeRecordDoc[];
   stopUsd?: unknown;
+  cushionUsd?: unknown;
+  cushionPct?: unknown;
+  sellIfThesisDies?: unknown;
   slippageUsd: number;
   dryRun: boolean;
   now?: Date;
@@ -73,6 +78,12 @@ export async function runCloudStepBuyStops(opts: {
     noAsk: opts.lean.no_ask,
     stopUsd: opts.stopUsd,
     now,
+    sellIfThesisDies: opts.sellIfThesisDies === true,
+    absGap: opts.lean.abs_gap,
+    cushionUsd: opts.cushionUsd,
+    cushionPct: opts.cushionPct,
+    leanSide: opts.lean.decision,
+    phase: opts.lean.phase,
   });
   for (const hit of hits) {
     const trade = opts.trades.find((t) => t.tradeId === (hit.trade as TradeRecordDoc).tradeId) || (hit.trade as TradeRecordDoc);
@@ -146,10 +157,13 @@ export async function runCloudStepBuyStops(opts: {
     });
     exited += 1;
     const stop = normalizeStepBuyStopUsd(opts.stopUsd);
+    const thesisDied = hit.reason === 'step_buy_thesis_died' || hit.reason === 'step_buy_lean_flipped';
     alerts.push({
       tradeId: trade.tradeId,
-      title: 'Step buy stop',
-      body: `${opts.asset} ${trade.decision} · ${hit.flatten ? 'lot 1 flatten' : `stop ${Math.round(stop * 100)}¢`} · P&L $${pnlUsd.toFixed(2)}`,
+      title: thesisDied ? 'Step buy thesis' : 'Step buy stop',
+      body: `${opts.asset} ${trade.decision} · ${
+        thesisDied ? (hit.reason === 'step_buy_lean_flipped' ? 'lean flipped' : 'thesis died') : hit.flatten ? 'lot 1 flatten' : `stop ${Math.round(stop * 100)}¢`
+      } · P&L $${pnlUsd.toFixed(2)}`,
       pnlUsd,
     });
   }

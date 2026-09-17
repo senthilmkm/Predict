@@ -57,11 +57,14 @@ interface RuntimeState {
   stepBuyFeatureOn: boolean;
   spikeFadeFeatureOn: boolean;
   pairLockFeatureOn: boolean;
+  capLockFeatureOn: boolean;
+  bufferRunFeatureOn: boolean;
   cheapLoopFeatureOn: boolean;
   activeBroadcast: ActiveBroadcast | null;
   cloudKillSwitch: boolean;
   liveAsksAt: string | null;
   liveAsks: Partial<Record<AssetKey, LiveAskQuote>>;
+  liveAskTickers: Record<string, LiveAskQuote>;
   ensure: () => AppRuntime;
   syncFromRuntime: () => void;
   start: () => void;
@@ -104,11 +107,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   stepBuyFeatureOn: false,
   spikeFadeFeatureOn: false,
   pairLockFeatureOn: false,
+  capLockFeatureOn: false,
+  bufferRunFeatureOn: false,
   cheapLoopFeatureOn: false,
   activeBroadcast: null,
   cloudKillSwitch: false,
   liveAsksAt: null,
   liveAsks: {},
+  liveAskTickers: {},
   ensure: () => {
     let rt = get().runtime;
     if (!rt) {
@@ -149,6 +155,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         stepBuyFeatureOn: get().stepBuyFeatureOn,
         spikeFadeFeatureOn: get().spikeFadeFeatureOn,
         pairLockFeatureOn: get().pairLockFeatureOn,
+        capLockFeatureOn: get().capLockFeatureOn,
+        bufferRunFeatureOn: get().bufferRunFeatureOn,
         cheapLoopFeatureOn: get().cheapLoopFeatureOn,
         activeBroadcast: get().activeBroadcast,
         cloudKillSwitch: get().cloudKillSwitch,
@@ -258,14 +266,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         }
 
         const localConfig = useConfigStore.getState().config;
-        const displayName = await getUserDisplayName();
         if (statusRes.userDoc?.state !== 'KILL_SWITCH') {
-          void cloudClient.updateStatus(
-            localConfig.auto_trade_enabled,
-            localConfig.auto_trade_enabled ? 'ARMED' : 'DISARMED',
-            localConfig,
-            displayName
-          );
+          void getUserDisplayName().then((displayName) => {
+            void cloudClient.updateStatus(
+              localConfig.auto_trade_enabled,
+              localConfig.auto_trade_enabled ? 'ARMED' : 'DISARMED',
+              localConfig,
+              displayName
+            );
+          });
         }
 
         const cloudTrades = tradesRes.ok && Array.isArray(tradesRes.trades) ? tradesRes.trades : [];
@@ -279,11 +288,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         if (cloudTrades.length > 0) rt.syncCloudTrades(cloudTrades);
         if (alertsRes.ok) {
           rt.syncCloudAlerts(cloudAlerts);
-          await rt.catchUpAlertsInboxAfterCloudSync();
+          void rt.catchUpAlertsInboxAfterCloudSync();
         }
         if (statusRes.ok) {
           rt.syncCloudTradeActions(statusRes.userDoc?.lastTradeAction);
           rt.syncCloudHeartbeat(statusRes.userDoc?.lastTickAt, statusRes.systemConfig?.last_worker_tick_at);
+          if (statusRes.leans) {
+            rt.syncCloudHomeLeans(statusRes.leans, localConfig.cushions, statusRes.liveAsks?.at);
+          }
           set({
             lastSignalsManualTrade: statusRes.systemConfig?.featureFlags?.lastSignalsManualTrade !== false,
             cashOutFeatureOn: statusRes.systemConfig?.featureFlags?.cashOut === true,
@@ -293,6 +305,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
             stepBuyFeatureOn: statusRes.systemConfig?.featureFlags?.stepBuy === true,
             spikeFadeFeatureOn: statusRes.systemConfig?.featureFlags?.spikeFade === true,
             pairLockFeatureOn: statusRes.systemConfig?.featureFlags?.pairLock === true,
+            capLockFeatureOn: statusRes.systemConfig?.featureFlags?.capLock === true,
+            bufferRunFeatureOn: statusRes.systemConfig?.featureFlags?.bufferRun === true,
             cheapLoopFeatureOn: statusRes.systemConfig?.featureFlags?.cheapLoop === true,
             activeBroadcast: statusRes.activeBroadcast ?? null,
             cloudKillSwitch: statusRes.userDoc?.state === 'KILL_SWITCH',
@@ -301,6 +315,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
               ? {
                   liveAsksAt: statusRes.liveAsks.at,
                   liveAsks: statusRes.liveAsks.byAsset,
+                  liveAskTickers: statusRes.liveAsks.byTicker || {},
                 }
               : {}),
           });
@@ -311,7 +326,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         /* Keep local stats on network error */
       }
     })().finally(() => {
-      if (gen !== cloudSnapshotGen) return;
+      // Always clear so pull-to-refresh cannot stick if a gen is superseded mid-flight.
       cloudSnapshotInFlight = null;
       if (cloudSnapshotQueued) {
         cloudSnapshotQueued = false;
@@ -330,9 +345,19 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         set({
           liveAsksAt: res.liveAsks.at,
           liveAsks: res.liveAsks.byAsset,
+          liveAskTickers: res.liveAsks.byTicker || {},
         });
         if (res.lastTradeAction) {
           get().ensure().syncCloudTradeActions(res.lastTradeAction);
+        }
+        if (res.leans) {
+          get()
+            .ensure()
+            .syncCloudHomeLeans(
+              res.leans,
+              useConfigStore.getState().config.cushions,
+              res.liveAsks.at
+            );
         }
       } catch {
         /* keep last asks */
@@ -376,10 +401,13 @@ export function resetRuntimeStoreForTests() {
     stepBuyFeatureOn: false,
     spikeFadeFeatureOn: false,
     pairLockFeatureOn: false,
+    capLockFeatureOn: false,
+    bufferRunFeatureOn: false,
     cheapLoopFeatureOn: false,
     activeBroadcast: null,
     cloudKillSwitch: false,
     liveAsksAt: null,
     liveAsks: {},
+    liveAskTickers: {},
   });
 }

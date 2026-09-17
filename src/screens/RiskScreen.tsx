@@ -9,10 +9,15 @@ import {
   STEP_BUY_RISK_FIELD_KEYS,
   SPIKE_FADE_RISK_FIELD_KEYS,
   PAIR_LOCK_RISK_FIELD_KEYS,
+  CAP_LOCK_RISK_FIELD_KEYS,
+  BUFFER_RUN_RISK_FIELD_KEYS,
   CHEAP_LOOP_RISK_FIELD_KEYS,
   CHEAP_LOOP_HOURLY_RISK_FIELD_KEYS,
   CHEAP_LOOP_WEEKLY_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
+  CUSHION_LEAN_MAX_GAP_FIELD_KEYS,
+  HOME_SELL_AT_RISK_FIELD_KEYS,
+  CUSHION_LEAN_SELL_AT_RISK_FIELD_KEYS,
   TWAP_LOCK_RISK_FIELD_KEYS,
   PROTECT_RISK_FIELD_KEYS,
   RISK_FIELD_META,
@@ -23,15 +28,25 @@ import {
 import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { cashOutEdgeWarn, normalizeCashOutAssets } from '../../packages/trading-core/src/cashOut';
+import { normalizeSellAtPct } from '../../packages/trading-core/src/protectSell';
 import { normalizeTwapLockAssets, TWAP_LOCK_ASSETS } from '../../packages/trading-core/src/twapLock';
 import {
   LastMinuteSide,
   normalizeLastMinuteAssets,
   normalizeLastMinuteSide,
 } from '../../packages/trading-core/src/lastMinute';
-import { normalizeStepBuyAssets } from '../../packages/trading-core/src/stepBuy';
+import {
+  normalizeStepBuyAddCushionPct,
+  normalizeStepBuyAssets,
+  normalizeStepBuyCushionPct,
+} from '../../packages/trading-core/src/stepBuy';
 import { normalizeSpikeFadeAssets } from '../../packages/trading-core/src/spikeFade';
 import { normalizePairLockAssets } from '../../packages/trading-core/src/pairLock';
+import { normalizeCapLockAssets } from '../../packages/trading-core/src/capLock';
+import {
+  BUFFER_RUN_ASSETS,
+  normalizeBufferRunAssets,
+} from '../../packages/trading-core/src/bufferRun';
 import {
   CHEAP_LOOP_HOURLY_SERIES,
   CHEAP_LOOP_WEEKLY_SERIES,
@@ -70,6 +85,8 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
   const stepBuyFeatureOn = useRuntimeStore((s) => s.stepBuyFeatureOn);
   const spikeFadeFeatureOn = useRuntimeStore((s) => s.spikeFadeFeatureOn);
   const pairLockFeatureOn = useRuntimeStore((s) => s.pairLockFeatureOn);
+  const capLockFeatureOn = useRuntimeStore((s) => s.capLockFeatureOn);
+  const bufferRunFeatureOn = useRuntimeStore((s) => s.bufferRunFeatureOn);
   const cheapLoopFeatureOn = useRuntimeStore((s) => s.cheapLoopFeatureOn);
   const [tab, setTab] = useState<TabId>(resolvedFocus === 'auto' ? 'auto' : 'home');
   const [busy, setBusy] = useState(false);
@@ -176,6 +193,19 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
             testPrefix="home"
             onChange={(key, value) => setManualRiskField(key, value)}
           />
+          {metaFor(HOME_SELL_AT_RISK_FIELD_KEYS).map((meta) => (
+            <RiskStepper
+              key={meta.key}
+              meta={meta}
+              value={normalizeSellAtPct(config.risk.home_sell_at_pct)}
+              testPrefix="home"
+              onChange={(next) => setRiskField('home_sell_at_pct', normalizeSellAtPct(next))}
+            />
+          ))}
+          <Text style={styles.hint} testID="risk-home-sell-at-hint">
+            Dump when live mark is at least this % above your fill. 0 = Off. Uses Protect wait/grace.
+            Independent of Protect money lean-flip.
+          </Text>
         </>
       ) : null}
 
@@ -216,6 +246,34 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
             testPrefix="auto"
             onChange={(key, value) => setRiskField(key as keyof RiskConfig, value as never)}
           />
+          {metaFor(CUSHION_LEAN_SELL_AT_RISK_FIELD_KEYS).map((meta) => (
+            <RiskStepper
+              key={meta.key}
+              meta={meta}
+              value={normalizeSellAtPct(config.risk.cushion_lean_sell_at_pct)}
+              testPrefix="auto"
+              onChange={(next) =>
+                setRiskField('cushion_lean_sell_at_pct', normalizeSellAtPct(next))
+              }
+            />
+          ))}
+          <Text style={styles.hint} testID="risk-auto-sell-at-hint">
+            Dump when live mark is at least this % above your fill. 0 = Off. Uses Protect wait/grace.
+            Independent of Protect money lean-flip.
+          </Text>
+          {metaFor(CUSHION_LEAN_MAX_GAP_FIELD_KEYS).map((meta) => (
+            <RiskStepper
+              key={meta.key}
+              meta={meta}
+              value={config.risk[meta.key]}
+              testPrefix="auto"
+              onChange={(next) => setRiskField(meta.key, next as never)}
+            />
+          ))}
+          <Text style={styles.hint} testID="risk-auto-max-gap-hint">
+            Cushion lean only. Sit out when the live gap is at least this many times the coin’s
+            cushion (default 2.5×). Home Buy ignores this.
+          </Text>
           <View style={styles.pathInner} testID="risk-field-auto-smart_buy_enabled">
             <NestedCheckRow
               testID="risk-toggle-smart_buy_enabled"
@@ -297,6 +355,8 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
       {extra('stepBuy', stepBuyFeatureOn) ? <StepBuyFields /> : null}
       {extra('spikeFade', spikeFadeFeatureOn) ? <SpikeFadeFields /> : null}
       {extra('pairLock', pairLockFeatureOn) ? <PairLockFields /> : null}
+      {extra('capLock', capLockFeatureOn) ? <CapLockFields /> : null}
+      {extra('bufferRun', bufferRunFeatureOn) ? <BufferRunFields /> : null}
       {extra('cheapLoop', cheapLoopFeatureOn) ? <CheapLoopFields /> : null}
 
       {showRestoreTab ? (
@@ -626,7 +686,13 @@ function LastMinuteFields() {
             onChange={(v) => setRiskField('last_minute_skip_thin_bid', v)}
           />
           {metaFor(LAST_MINUTE_RISK_FIELD_KEYS)
-            .filter((meta) => meta.key !== 'last_minute_enabled')
+            .filter(
+              (meta) =>
+                meta.key !== 'last_minute_enabled' &&
+                meta.key !== 'last_minute_atr_cushion_enabled' &&
+                meta.key !== 'last_minute_atr_ask_usd' &&
+                meta.key !== 'last_minute_atr_mult'
+            )
             .map((meta) => {
               const isGap = meta.key === 'last_minute_both_gap';
               const isFlip = meta.key === 'last_minute_flip_sell_usd';
@@ -650,6 +716,32 @@ function LastMinuteFields() {
                 />
               );
             })}
+          <NestedCheckRow
+            testID="risk-toggle-last_minute_atr_cushion_enabled"
+            label="Late ATR cushion"
+            value={config.risk.last_minute_atr_cushion_enabled !== false}
+            onChange={(v) => setRiskField('last_minute_atr_cushion_enabled', v)}
+          />
+          {config.risk.last_minute_atr_cushion_enabled !== false ? (
+            <>
+              {metaFor(['last_minute_atr_ask_usd', 'last_minute_atr_mult'] as (keyof RiskConfig)[]).map(
+                (meta) => (
+                  <RiskStepper
+                    key={meta.key}
+                    meta={meta}
+                    value={config.risk[meta.key]}
+                    testPrefix="auto"
+                    onChange={(next) => setRiskField(meta.key, next as never)}
+                  />
+                )
+              )}
+              <Text style={styles.hint} testID="last-minute-atr-hint">
+                Final 60s only, when the chosen ask is at least High ask floor. Needs lead ≥ ATR ×
+                (1m noise from this window’s path) when that path can be measured. Missing path does
+                not block.
+              </Text>
+            </>
+          ) : null}
           <View style={styles.field} testID="risk-field-auto-last_minute_assets">
             <Text style={styles.label}>Last-minute assets</Text>
             <Text style={styles.hint}>Also must be On in Cushions. Empty means no Last-minute buys.</Text>
@@ -728,11 +820,20 @@ function StepBuyFields() {
           />
         </View>
         {on ? (
-          <Text style={styles.hint}>Scale in after Start after if Cushion % still holds. Per-lot ask stop.</Text>
+          <Text style={styles.hint}>
+            Scale in after Start after if Cushion % still holds. Add cushion % is stricter for lots
+            2+. Sell if thesis dies dumps the stack.
+          </Text>
         ) : null}
       </View>
       {on ? (
         <View style={styles.pathInner}>
+          <NestedCheckRow
+            testID="risk-toggle-step_buy_sell_if_thesis_dies"
+            label="Sell if thesis dies"
+            value={config.risk.step_buy_sell_if_thesis_dies !== false}
+            onChange={(v) => setRiskField('step_buy_sell_if_thesis_dies', v)}
+          />
           <SkipThinBidRow
             testID="risk-toggle-step_buy_skip_thin_bid"
             value={Boolean(config.risk.step_buy_skip_thin_bid)}
@@ -741,7 +842,8 @@ function StepBuyFields() {
           {metaFor(STEP_BUY_RISK_FIELD_KEYS)
             .filter((meta) => meta.key !== 'step_buy_enabled')
             .map((meta) => {
-              const pct = meta.key === 'step_buy_cushion_pct';
+              const lotPct = meta.key === 'step_buy_cushion_pct';
+              const addPct = meta.key === 'step_buy_add_cushion_pct';
               const wait = meta.key === 'step_buy_add_wait_minutes';
               const band = meta.key === 'step_buy_add_band_usd';
               const stop = meta.key === 'step_buy_stop_usd';
@@ -752,19 +854,49 @@ function StepBuyFields() {
                   value={config.risk[meta.key]}
                   testPrefix="auto"
                   displayOverride={
-                    pct
+                    lotPct
                       ? `${Math.round(Number(config.risk.step_buy_cushion_pct) || 0)}%`
-                      : wait
-                        ? `${Math.round(Number(config.risk.step_buy_add_wait_minutes) || 0)} min`
-                        : band
-                          ? `${Math.round(Number(config.risk.step_buy_add_band_usd) * 100)}¢`
-                          : stop
-                            ? `${Math.round(Number(config.risk.step_buy_stop_usd) * 100)}¢`
-                            : undefined
+                      : addPct
+                        ? `${Math.round(Number(config.risk.step_buy_add_cushion_pct) || 0)}%`
+                        : wait
+                          ? `${Math.round(Number(config.risk.step_buy_add_wait_minutes) || 0)} min`
+                          : band
+                            ? `${Math.round(Number(config.risk.step_buy_add_band_usd) * 100)}¢`
+                            : stop
+                              ? `${Math.round(Number(config.risk.step_buy_stop_usd) * 100)}¢`
+                              : undefined
                   }
-                  onChange={(next) => setRiskField(meta.key, next as never)}
+                  onChange={(next) => {
+                    if (meta.key === 'step_buy_cushion_pct') {
+                      const lot1 = normalizeStepBuyCushionPct(next);
+                      setRiskField('step_buy_cushion_pct', lot1);
+                      setRiskField(
+                        'step_buy_add_cushion_pct',
+                        normalizeStepBuyAddCushionPct(config.risk.step_buy_add_cushion_pct, lot1)
+                      );
+                      return;
+                    }
+                    if (meta.key === 'step_buy_add_cushion_pct') {
+                      setRiskField(
+                        'step_buy_add_cushion_pct',
+                        normalizeStepBuyAddCushionPct(next, config.risk.step_buy_cushion_pct)
+                      );
+                      return;
+                    }
+                    setRiskField(meta.key, next as never);
+                  }}
                 />
               );
+              if (addPct) {
+                return (
+                  <View key={meta.key}>
+                    {stepper}
+                    <Text style={styles.hint} testID="step-buy-add-cushion-hint">
+                      Lots 2+ only. Default 75%. Never below Cushion %. Lot 1 still uses Cushion %.
+                    </Text>
+                  </View>
+                );
+              }
               if (!band) return stepper;
               return (
                 <View key={meta.key}>
@@ -801,9 +933,11 @@ function StepBuyFields() {
             </View>
           </View>
           <Text style={styles.hint} testID="step-buy-hint">
-            Lot 1 after Start after + Cushion % + lean. Later lots need Add wait, thesis still on,
-            and ask in last fill … last fill + Add band. Stop adding with 30s left. Stop sells a lot
-            when ask is Stop ¢ under that lot’s fill; lot 1 stop sells all remaining Step buy lots.
+            Lot 1 after Start after + Cushion % + lean. Later lots need Add wait, Add cushion %,
+            lean still with you, and ask in last fill … last fill + Add band. Stop adding with 30s
+            left. Stop sells a lot when ask is Stop ¢ under that lot’s fill; lot 1 stop sells all
+            remaining Step buy lots. Sell if thesis dies (default On) dumps the stack at the live
+            bid when the gap is under Cushion % or the lean flips. 1s watcher uses live bid/ask.
           </Text>
         </View>
       ) : null}
@@ -925,8 +1059,8 @@ function PairLockFields() {
         {on ? (
           <Text style={styles.hint}>
             {config.risk.pair_lock_lock_first !== false
-              ? 'Lock first On: buy both sides together only if they already lock Min lock. One-leg miss dumps now.'
-              : 'Lock first Off: more first legs at/under Runner max. If the book already locks Min lock, both IOC together. Else buy the runner, then Recover wait (even hedge ≤ $1, or take +2¢, or smaller-hole). Flatten unmatched and Runner stop still dump leftovers.'}{' '}
+              ? 'Lock first On: buy both sides together only if they already lock Min lock. One-leg miss waits Recover wait, then hedge / take / smaller dump.'
+              : 'Lock first Off: more first legs at/under Runner max. If the book already locks Min lock, both IOC together. Else buy the runner, then Recover wait (even hedge ≤ 99¢, or take +2¢, or smaller-hole). Flatten unmatched and Runner stop still dump leftovers.'}{' '}
             Add new pair 0 = first pair only; 3 = 3 more after the first. A locked pair holds to
             settlement.
           </Text>
@@ -1001,11 +1135,182 @@ function PairLockFields() {
             {config.risk.pair_lock_lock_first !== false
               ? ', and only if the opposite ask already locks at least Min lock'
               : ''}
-            . If both sides already lock Min lock → YES and NO IOC together. One fill dumps now. Lock
-            first Off can buy the runner alone. Hedge at Min lock every 1s. After Recover wait, buy
-            the other side if fill + ask ≤ $1, else take +2¢ on the runner bid, else finish vs dump
-            the smaller hole. Add new pair 0–3 extra after the first lock. Flatten unmatched with
-            Flatten unmatched. A completed pair holds to $1.
+            . If both sides already lock Min lock → YES and NO IOC together. One-leg miss waits Recover
+            wait. Lock first Off can buy the runner alone. Hedge at Min lock every 1s. After Recover
+            wait, buy the other side if fill + ask ≤ 99¢, else take +2¢ on the runner bid, else
+            finish vs dump — finish only when that hole is strictly smaller. Add new pair 0–3 extra
+            after the first lock. Flatten unmatched with Flatten unmatched. A completed pair holds to
+            $1.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+function CapLockFields() {
+  const config = useConfigStore((s) => s.config);
+  const setRiskField = useConfigStore((s) => s.setRiskField);
+  const on = Boolean(config.risk.cap_lock_enabled);
+  return (
+    <>
+      <View style={styles.field} testID="risk-field-auto-cap_lock_enabled">
+        <View style={styles.toggleRow}>
+          <View style={styles.labelWithInfo}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Cap lock</Text>
+            <PathInfoIcon title={PATH_INFO.capLock.title} body={PATH_INFO.capLock.body} testID="path-info-capLock" />
+          </View>
+          <Switch
+            testID="risk-toggle-cap_lock_enabled"
+            value={on}
+            onValueChange={(v) => setRiskField('cap_lock_enabled', v)}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        {on ? (
+          <Text style={styles.hint}>
+            Buy YES and NO on the same ticker when the two asks plus fees still fit Max lock loss.
+            One pair. No lean. Matched pair holds to $1. Unmatched leftover flattens.
+          </Text>
+        ) : null}
+      </View>
+      {on ? (
+        <View style={styles.pathInner}>
+          <NestedCheckRow
+            testID="risk-toggle-cap_lock_allow_later"
+            label="Allow later"
+            value={config.risk.cap_lock_allow_later !== false}
+            onChange={(v) => setRiskField('cap_lock_allow_later', v)}
+          />
+          {metaFor(CAP_LOCK_RISK_FIELD_KEYS)
+            .filter((meta) => meta.key !== 'cap_lock_enabled')
+            .map((meta) => {
+              const openSec = meta.key === 'cap_lock_window_open_seconds';
+              return (
+                <RiskStepper
+                  key={meta.key}
+                  meta={meta}
+                  value={config.risk[meta.key]}
+                  testPrefix="auto"
+                  displayOverride={
+                    openSec
+                      ? `${Math.round(Number(config.risk.cap_lock_window_open_seconds) || 0)}s`
+                      : undefined
+                  }
+                  onChange={(next) => setRiskField(meta.key, next as never)}
+                />
+              );
+            })}
+          <View style={styles.field} testID="risk-field-auto-cap_lock_assets">
+            <Text style={styles.label}>Cap lock assets</Text>
+            <Text style={styles.hint}>Also must be On in Cushions. Empty means no Cap lock buys.</Text>
+            <View style={styles.tifRow}>
+              {AssetRegistry.keys.map((key) => {
+                const selected = normalizeCapLockAssets(config.risk.cap_lock_assets).includes(key);
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`cap-lock-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizeCapLockAssets(config.risk.cap_lock_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('cap_lock_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={styles.hint} testID="cap-lock-hint">
+            Prefer Try first. Allow later On: still enter once if the book later fits.
+            Skip if YES+NO+fees would lose more than Max lock loss. First IOC 0 fill does not send
+            the second. A matched pair holds to settlement.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+function BufferRunFields() {
+  const config = useConfigStore((s) => s.config);
+  const setRiskField = useConfigStore((s) => s.setRiskField);
+  const on = Boolean(config.risk.buffer_run_enabled);
+  return (
+    <>
+      <View style={styles.field} testID="risk-field-auto-buffer_run_enabled">
+        <View style={styles.toggleRow}>
+          <View style={styles.labelWithInfo}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Buffer run</Text>
+            <PathInfoIcon
+              title={PATH_INFO.bufferRun.title}
+              body={PATH_INFO.bufferRun.body}
+              testID="path-info-bufferRun"
+            />
+          </View>
+          <Switch
+            testID="risk-toggle-buffer_run_enabled"
+            value={on}
+            onValueChange={(v) => setRiskField('buffer_run_enabled', v)}
+            trackColor={{ true: colors.accent, false: colors.mute }}
+          />
+        </View>
+        {on ? (
+          <Text style={styles.hint}>
+            Mid-window lean scalp when spot has a buffer vs strike and the lead ask is mid-range.
+            Take, stop, lean-flip, or flatten — one trade per window. Never hold to $1.
+          </Text>
+        ) : null}
+      </View>
+      {on ? (
+        <View style={styles.pathInner}>
+          <SkipThinBidRow
+            testID="risk-toggle-buffer_run_skip_thin_bid"
+            value={Boolean(config.risk.buffer_run_skip_thin_bid)}
+            onChange={(v) => setRiskField('buffer_run_skip_thin_bid', v)}
+          />
+          {metaFor(BUFFER_RUN_RISK_FIELD_KEYS)
+            .filter((meta) => meta.key !== 'buffer_run_enabled')
+            .map((meta) => (
+              <RiskStepper
+                key={meta.key}
+                meta={meta}
+                value={config.risk[meta.key]}
+                testPrefix="auto"
+                onChange={(next) => setRiskField(meta.key, next as never)}
+              />
+            ))}
+          <View style={styles.field} testID="risk-field-auto-buffer_run_assets">
+            <Text style={styles.label}>Buffer run assets</Text>
+            <Text style={styles.hint}>BTC and ETH only. Also must be On in Cushions. Empty means no Buffer run buys.</Text>
+            <View style={styles.tifRow}>
+              {BUFFER_RUN_ASSETS.map((key) => {
+                const selected = normalizeBufferRunAssets(config.risk.buffer_run_assets).includes(key);
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`buffer-run-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizeBufferRunAssets(config.risk.buffer_run_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('buffer_run_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={styles.hint} testID="buffer-run-hint">
+            Enter after Enter after minutes and while Enter left remain. Lead ≥ max(min gap,
+            ATR ×). Ask must sit in Ask min…Ask max. Skip if YES+NO ≤ Pair-sum skip. Exit on
+            Take, Stop, lean flip, or Flatten left. TWAP / Last-minute / Spike / Step / Pair /
+            Cap / Cheap sit this coin out while Buffer run owns it.
           </Text>
         </View>
       ) : null}
@@ -1254,8 +1559,9 @@ function CheapLoopFields() {
         </View>
         {weeklyOn ? (
           <Text style={styles.hint}>
-            Same KX*D series as Hourly. Picks the ~7 day event by duration. Buy cheap ATM, take or
-            stop, cooldown, look again until Flatten.
+            Same KX*D series as Hourly. Picks the 3–14 day event by duration. Buy cheap ATM
+            (default ≤45¢, 8¢ gap), take 8¢ or stop 12¢, cooldown, look again until Flatten
+            (default 2 hours left).
           </Text>
         ) : null}
       </View>
@@ -1283,7 +1589,10 @@ function CheapLoopFields() {
                     start
                       ? `${Math.round(Number(config.risk.cheap_loop_weekly_start_minutes) || 0)} min`
                       : flatten
-                        ? `${Math.round(Number(config.risk.cheap_loop_weekly_flatten_minutes) || 0)} min`
+                        ? (() => {
+                            const m = Math.round(Number(config.risk.cheap_loop_weekly_flatten_minutes) || 0);
+                            return m >= 60 && m % 60 === 0 ? `${m / 60} hr` : `${m} min`;
+                          })()
                         : hold
                           ? `${Math.round(Number(config.risk.cheap_loop_weekly_min_hold_minutes) || 0)} min`
                           : cool
@@ -1378,7 +1687,7 @@ function CheapLoopStopBlock({
         </View>
         <Text style={styles.hint}>
           {enabled
-            ? 'After Min hold, sell bid IOC if that bid is fill − Stop (5–12¢).'
+            ? 'After Min hold, sell bid IOC if that bid is fill − Stop (5–12¢). Take + raises Stop if Take would catch it.'
             : 'Off. A falling ticket holds until Take or Flatten.'}
         </Text>
       </View>
@@ -1497,13 +1806,19 @@ function RiskStepper({
 }) {
   const display =
     displayOverride ??
-    (meta.kind === 'chase' || meta.kind === 'money'
-      ? `$${Number(value).toFixed(meta.kind === 'chase' ? 2 : 0)}`
-      : meta.kind === 'ratio'
-        ? `${Number(value).toFixed(2)}×`
-        : meta.kind === 'seconds'
-          ? `${Number(value)}s`
-          : String(value));
+    (meta.kind === 'percent'
+      ? Number(value) <= 0
+        ? 'Off'
+        : `${Number(value)}%`
+      : meta.kind === 'chase' || meta.kind === 'money'
+        ? `$${Number(value).toFixed(meta.kind === 'chase' ? 2 : 0)}`
+        : meta.kind === 'ratio'
+          ? `${Number(value).toFixed(2)}×`
+          : meta.kind === 'seconds'
+            ? `${Number(value)}s`
+            : String(value));
+  const atMax = Number.isFinite(Number(meta.max)) && Number(value) + meta.step > Number(meta.max) + 1e-9;
+  const atMin = Number.isFinite(Number(meta.min)) && Number(value) - meta.step < Number(meta.min) - 1e-9;
   return (
     <View
       style={[styles.field, disabled && { opacity: 0.45 }]}
@@ -1515,8 +1830,8 @@ function RiskStepper({
         </Text>
         <Pressable
           testID={`risk-down-${testPrefix}-${meta.key}`}
-          style={styles.chip}
-          disabled={disabled}
+          style={[styles.chip, (disabled || atMin) && { opacity: 0.35 }]}
+          disabled={disabled || atMin}
           onPress={() => onChange(Number(value) - meta.step)}
         >
           <Text style={styles.chipText}>−</Text>
@@ -1526,8 +1841,8 @@ function RiskStepper({
         </Text>
         <Pressable
           testID={`risk-up-${testPrefix}-${meta.key}`}
-          style={styles.chip}
-          disabled={disabled}
+          style={[styles.chip, (disabled || atMax) && { opacity: 0.35 }]}
+          disabled={disabled || atMax}
           onPress={() => onChange(Number(value) + meta.step)}
         >
           <Text style={styles.chipText}>+</Text>

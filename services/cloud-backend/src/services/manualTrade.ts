@@ -6,7 +6,8 @@ import {
   getMarketQuote,
   KalshiPlaceResult,
 } from 'trading-core';
-import { isCheapLoopHistorySellableTrade } from '../../../../packages/trading-core/src/cheapLoop';
+import { isCashOutEntryPath, isHistorySellableTrade, parseTradeEntryPath } from '../../../../packages/trading-core/src/cashOut';
+import { isCapLockEntryPath, isCapLockHistorySellable } from '../../../../packages/trading-core/src/capLock';
 import { runCheapLoopForcedBidExit } from './cloudCheapLoop';
 import {
   countWindowBuysForTicker,
@@ -40,7 +41,6 @@ import { tryAcquirePlaceLock, releasePlaceLock } from './placeLock';
 import { isCloudKalshiPaused, noteTransientKalshiFailure } from './kalshiPause';
 import { economicPayPrice, fillCountOf, liveCloudTradesToday, cloudDailyRealizedPnl } from './settlement';
 import { normalizeFeatureFlags } from './featureFlags';
-import { isCashOutEntryPath } from '../../../../packages/trading-core/src/cashOut';
 import { isGoldFadeEntryPath } from '../../../../packages/trading-core/src/goldFade';
 import { isTwapLockEntryPath } from '../../../../packages/trading-core/src/twapLock';
 import { isLastMinuteEntryPath } from '../../../../packages/trading-core/src/lastMinute';
@@ -66,6 +66,8 @@ export interface ManualOrderInput {
   action: ManualTradeAction;
   requestId?: string;
   tradeId?: string;
+  /** Home Buy / Sell side. Buy: omitted → lean. Sell: picks that open fill when both legs held. */
+  decision?: 'YES' | 'NO';
 }
 
 export interface ManualOrderResult {
@@ -118,12 +120,21 @@ async function auditError(
   await writeAuditLog(userId, 'ERROR', details);
 }
 
-function heldOpenFill(trades: TradeRecordDoc[], ticker: string, now: Date): TradeRecordDoc | undefined {
+function heldOpenFill(
+  trades: TradeRecordDoc[],
+  ticker: string,
+  now: Date,
+  decision?: 'YES' | 'NO'
+): TradeRecordDoc | undefined {
   const tkr = String(ticker || '').trim();
   if (!tkr) return undefined;
-  return trades.find(
-    (t) => String(t.ticker || '').trim() === tkr && isProtectClaimable(t, now) && fillCountOf(t) > 0
-  );
+  const want = decision === 'YES' || decision === 'NO' ? decision : null;
+  return trades.find((t) => {
+    if (String(t.ticker || '').trim() !== tkr) return false;
+    if (!isProtectClaimable(t, now) || !(fillCountOf(t) > 0)) return false;
+    if (!want) return true;
+    return String(t.decision || '').toUpperCase() === want;
+  });
 }
 
 async function fail(
@@ -190,13 +201,20 @@ async function executeCheapLoopHistorySell(opts: {
       message: 'Asset does not match this fill.',
     });
   }
-  if (!isCheapLoopHistorySellableTrade(trade)) {
+  if (!isHistorySellableTrade(trade)) {
     return fail(userId, 409, 'not_sellable', undefined, {
       asset,
       action: 'sell',
       tradeId,
-      ticker: trade.ticker,
-      message: 'History Sell is only for pending Cheap loop fills.',
+      message: 'History Sell is only for pending open fills.',
+    });
+  }
+  if (!isCapLockHistorySellable(trade, trades, trade.ticker)) {
+    return fail(userId, 409, 'not_sellable', undefined, {
+      asset,
+      action: 'sell',
+      tradeId,
+      message: 'Matched Cap lock holds to $1. Unmatched leftover can dump.',
     });
   }
   const ticker = String(trade.ticker || '').trim();
@@ -410,7 +428,11 @@ export async function executeManualOrder(
   }
 
   const rawTrades = await getTrades(userId);
-  const held = heldOpenFill(rawTrades, ticker, now);
+  const sellDecision =
+    action === 'sell' && (input.decision === 'YES' || input.decision === 'NO')
+      ? input.decision
+      : undefined;
+  const held = heldOpenFill(rawTrades, ticker, now, sellDecision);
 
   if (action === 'sell') {
     return executeManualSell({
@@ -441,6 +463,7 @@ export async function executeManualOrder(
     rawTrades,
     secretFn,
     placeOrderFn: deps.placeOrderFn,
+    decision: input.decision === 'NO' ? 'NO' : input.decision === 'YES' ? 'YES' : undefined,
   });
 }
 
@@ -457,9 +480,42 @@ async function executeManualBuy(opts: {
   rawTrades: TradeRecordDoc[];
   secretFn: typeof getUserSecret;
   placeOrderFn?: PlaceOrderFn;
+  decision?: 'YES' | 'NO';
 }): Promise<ManualOrderResult> {
   const { userId, asset, requestId, now, cfg, user, lean, ticker, held, rawTrades } = opts;
-  if (held) {
+  const buyDecision: 'YES' | 'NO' =
+    opts.decision === 'YES' || opts.decision === 'NO'
+      ? opts.decision
+      : lean.decision === 'NO'
+        ? 'NO'
+        : lean.decision === 'YES'
+          ? 'YES'
+          : 'YES';
+
+  const heldIsHome =
+    held &&
+    (parseTradeEntryPath(held.entryPath) === 'home' ||
+      held.entryPath == null ||
+      held.entryPath === undefined);
+  const oppositeHomeHedge =
+    Boolean(held) &&
+    heldIsHome &&
+    String(held!.decision || '').toUpperCase() !== buyDecision &&
+    (String(held!.decision || '').toUpperCase() === 'YES' ||
+      String(held!.decision || '').toUpperCase() === 'NO');
+
+  const alreadyHasSide = rawTrades.some(
+    (t) =>
+      String(t.ticker || '').trim() === ticker &&
+      isProtectClaimable(t, now) &&
+      fillCountOf(t) > 0 &&
+      String(t.decision || '').toUpperCase() === buyDecision
+  );
+  if (alreadyHasSide) {
+    return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
+  }
+
+  if (held && !oppositeHomeHedge) {
     if (isCashOutEntryPath(held.entryPath)) {
       return fail(userId, 409, 'cash_out_holding', 'cash_out_holding', { asset, action: 'buy', ticker });
     }
@@ -481,6 +537,17 @@ async function executeManualBuy(opts: {
     if (isPairLockEntryPath(held.entryPath)) {
       return fail(userId, 409, 'pair_lock_holding', 'pair_lock_holding', { asset, action: 'buy', ticker });
     }
+    if (isCapLockEntryPath(held.entryPath)) {
+      return fail(userId, 409, 'cap_lock_holding', 'cap_lock_holding', { asset, action: 'buy', ticker });
+    }
+    return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
+  }
+  // Already have this side open on the ticker.
+  if (
+    held &&
+    oppositeHomeHedge &&
+    String(held.decision || '').toUpperCase() === buyDecision
+  ) {
     return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
   }
   if (lean.decision !== 'YES' && lean.decision !== 'NO') {
@@ -493,31 +560,43 @@ async function executeManualBuy(opts: {
   ).length;
   const existingBuys = countWindowBuysForTicker(rawTrades, ticker);
   const cap = windowBuyCap(cfg.risk);
-  const absGap = Number.isFinite(Number(lean.abs_gap))
-    ? Number(lean.abs_gap)
-    : Math.abs((lean.live || 0) - (lean.strike || 0));
+  const absGap = (() => {
+    const live = Number(lean.live);
+    const strike = Number(lean.strike);
+    if (Number.isFinite(live) && Number.isFinite(strike)) {
+      return Math.abs(live - strike);
+    }
+    const raw = Number(lean.abs_gap);
+    return Number.isFinite(raw) ? raw : 0;
+  })();
 
   const gate = evaluateStaticGate(
     {
       asset,
       market_ticker: ticker,
-      decision: lean.decision,
+      decision: buyDecision,
       live: lean.live || 0,
       strike: lean.strike || 0,
       abs_gap: absGap,
       minutes_left: lean.minutes_left || 0,
       minutes_elapsed: lean.minutes_elapsed || 0,
+      minutes_remaining: (lean as { minutes_remaining?: number }).minutes_remaining,
       phase: lean.phase === 'live' ? 'live' : 'ended',
       yes_ask: lean.yes_ask ?? undefined,
       no_ask: lean.no_ask ?? undefined,
+      open_utc: (lean as { open_utc?: string }).open_utc,
+      close_utc: (lean as { close_utc?: string }).close_utc,
     },
     cfg,
     {
       openPositions,
       tradesToday: tradesTodayList.length,
-      assetTradesInWindow: existingBuys,
+      // Opposite Home leg does not burn the 1/window first-clip cap again.
+      assetTradesInWindow: oppositeHomeHedge ? 0 : existingBuys,
       dailyPnlUsd: cloudDailyRealizedPnl(tradesTodayList),
       allowWhenAutoTradeOff: true,
+      // Phone always offers the other Home side after one fill — do not re-block on cushion.
+      skipCushion: oppositeHomeHedge,
     }
   );
 
@@ -537,9 +616,9 @@ async function executeManualBuy(opts: {
   const lock = await tryAcquirePlaceLock({
     userId,
     ticker,
-    cap,
+    cap: oppositeHomeHedge ? Math.max(cap, existingBuys + 1) : cap,
     requestId,
-    existingBuys,
+    existingBuys: oppositeHomeHedge ? 0 : existingBuys,
   });
   if (!lock.ok) {
     return fail(userId, 409, lock.reason, lock.reason, { asset, action: 'buy', ticker });
@@ -562,13 +641,23 @@ async function executeManualBuy(opts: {
     });
 
     if (!placeRes.ok) {
-      const errMsg = String(placeRes.error || 'order failed');
-      noteTransientKalshiFailure(errMsg);
+      const rawErr = String(placeRes.error || 'order failed');
+      noteTransientKalshiFailure(rawErr);
+      const lowBal = /insufficient[_ ]balance/i.test(rawErr);
+      const need =
+        gate.notional_usd != null && Number.isFinite(Number(gate.notional_usd))
+          ? ` Home Buy sized ~$${Number(gate.notional_usd).toFixed(2)}.`
+          : '';
+      const message = lowBal
+        ? rawErr.includes(':')
+          ? rawErr
+          : `insufficient_balance — Kalshi cash is too low for this tap.${need}`
+        : rawErr;
       return fail(userId, 502, 'place_failed', undefined, {
         asset,
         action: 'buy',
         ticker,
-        message: errMsg,
+        message,
       });
     }
 
@@ -587,7 +676,7 @@ async function executeManualBuy(opts: {
       userId,
       ticker,
       asset,
-      decision: lean.decision as 'YES' | 'NO',
+      decision: buyDecision,
       count: filled ? String(fillCount) : String(gate.count || 0),
       price: gate.price,
       notionalUsd:
@@ -611,7 +700,7 @@ async function executeManualBuy(opts: {
       tradeId,
       ticker,
       asset,
-      decision: lean.decision,
+      decision: buyDecision,
       mode: isLive ? 'live' : 'demo',
       filled,
       accepted,
@@ -623,13 +712,13 @@ async function executeManualBuy(opts: {
         [asset]: filled
           ? {
               status: 'placed',
-              detail: `placed ${lean.decision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
+              detail: `placed ${buyDecision} · ${fillCount} @ $${priceVal.toFixed(2)}`,
               at: now.toISOString(),
             }
           : accepted
             ? {
                 status: 'placed',
-                detail: `resting ${lean.decision} · waiting for fill`,
+                detail: `resting ${buyDecision} · waiting for fill`,
                 at: now.toISOString(),
               }
             : { status: 'failed', detail: 'IOC no fill', at: now.toISOString() },
@@ -648,7 +737,7 @@ async function executeManualBuy(opts: {
         title: orderPlacedAlertTitle({
           live: isLive,
           asset,
-          decision: String(lean.decision || ''),
+          decision: buyDecision,
           entryPath: 'home',
         }),
         body: `${fillCount} ctr @ $${priceVal.toFixed(2)} · Cost $${(tradeDoc.notionalUsd || 0).toFixed(2)}`,
@@ -658,7 +747,7 @@ async function executeManualBuy(opts: {
         asset,
         ticker,
         tradeId,
-        decision: lean.decision,
+        decision: buyDecision,
         at: now.toISOString(),
       });
     }
@@ -670,7 +759,7 @@ async function executeManualBuy(opts: {
       ].filter((t, i, arr) => t && arr.indexOf(t) === i);
       const missBody = iocMissAlertBody({
         asset,
-        decision: String(lean.decision || ''),
+        decision: buyDecision,
         entryPath: 'home',
         price: priceVal,
         count: gate.count,
@@ -686,7 +775,7 @@ async function executeManualBuy(opts: {
         asset,
         ticker,
         tradeId,
-        decision: lean.decision,
+        decision: buyDecision,
         at: now.toISOString(),
       });
       const ticket = Number.isFinite(priceVal) && priceVal > 0 ? ` at $${priceVal.toFixed(2)}` : '';
@@ -712,8 +801,8 @@ async function executeManualBuy(opts: {
       ok: true,
       httpStatus: 200,
       message: filled
-        ? `Bought ${lean.decision} · ${fillCount} contracts`
-        : `Submitted ${lean.decision} · resting on Kalshi`,
+        ? `Bought ${buyDecision} · ${fillCount} contracts`
+        : `Submitted ${buyDecision} · resting on Kalshi`,
       tradeId,
       filled,
       ticker,
@@ -768,6 +857,9 @@ async function executeManualSell(opts: {
   }
   if (isPairLockEntryPath(held.entryPath)) {
     return fail(userId, 409, 'pair_lock_holding', 'pair_lock_holding', { asset, action: 'sell', ticker });
+  }
+  if (isCapLockEntryPath(held.entryPath)) {
+    return fail(userId, 409, 'cap_lock_holding', 'cap_lock_holding', { asset, action: 'sell', ticker });
   }
 
   const order = buildProtectSellOrder({

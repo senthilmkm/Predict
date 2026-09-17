@@ -17,6 +17,7 @@ import {
   evaluateCashOutExit,
   isCashOutEnterPath,
   isCashOutEntryPath,
+  isHistorySellableTrade,
   isOpenLiveFill,
   noAskOf,
   noBidOf,
@@ -738,6 +739,19 @@ describe('Cash out path book', () => {
     expect(openCashOutAssets([cash, home])).toEqual(['Gold']);
     expect(isOpenLiveFill({ ...cash, outcome: 'exited', status: 'SETTLED' })).toBe(false);
     expect(isOpenLiveFill({ ...cash, fillCount: 0 })).toBe(false);
+    expect(isHistorySellableTrade(home)).toBe(true);
+    expect(isHistorySellableTrade(cash)).toBe(true);
+    expect(isHistorySellableTrade({ ...home, protectExitOrderId: 'ord-x' })).toBe(false);
+    expect(isHistorySellableTrade({ ...cash, outcome: 'exited', status: 'SETTLED' })).toBe(false);
+    expect(isHistorySellableTrade({ ...home, status: 'SETTLED', outcome: 'pending' })).toBe(false);
+    expect(
+      isHistorySellableTrade({
+        ticker: 'KXBTC15M-T',
+        fillCount: 1,
+        status: 'FILLED',
+        outcome: 'pending',
+      })
+    ).toBe(true);
   });
 
   test('skip labels', () => {

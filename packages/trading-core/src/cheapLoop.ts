@@ -2,6 +2,7 @@ import { AppConfig, ASSETS_CATALOG, AssetKey } from './types';
 import { capGateLotCount, evaluateStaticGate, GateResult, LeanSignal } from './gates';
 import {
   CashOutQuotes,
+  isHistorySellableTrade,
   isOpenLiveFill,
   openFillsForTicker,
   sideBidOf,
@@ -79,6 +80,30 @@ export function normalizeCheapLoopFlattenMinutes(raw: unknown): number {
   );
 }
 
+/** Weekly flatten is hours-left, not the 15m/hourly 3–10 minute dump. */
+export const CHEAP_LOOP_WEEKLY_FLATTEN_DEFAULT = 120;
+export const CHEAP_LOOP_WEEKLY_FLATTEN_MIN = 30;
+export const CHEAP_LOOP_WEEKLY_FLATTEN_MAX = 720;
+export const CHEAP_LOOP_WEEKLY_FLATTEN_STEP = 30;
+
+export function normalizeCheapLoopWeeklyFlattenMinutes(raw: unknown): number {
+  const snapped = Math.round(
+    Number(raw ?? CHEAP_LOOP_WEEKLY_FLATTEN_DEFAULT) / CHEAP_LOOP_WEEKLY_FLATTEN_STEP
+  ) * CHEAP_LOOP_WEEKLY_FLATTEN_STEP;
+  return Math.round(
+    clamp(snapped, CHEAP_LOOP_WEEKLY_FLATTEN_MIN, CHEAP_LOOP_WEEKLY_FLATTEN_MAX)
+  );
+}
+
+/** 15m/hourly 3–10, or weekly 30–720 once cfg already mapped the weekly field. */
+export function normalizeCheapLoopEnterFlattenMinutes(raw: unknown): number {
+  const n = Math.round(Number(raw));
+  if (Number.isFinite(n) && n >= CHEAP_LOOP_WEEKLY_FLATTEN_MIN) {
+    return normalizeCheapLoopWeeklyFlattenMinutes(n);
+  }
+  return normalizeCheapLoopFlattenMinutes(raw);
+}
+
 export function normalizeCheapLoopCheapMaxAskUsd(raw: unknown): number {
   return snap(
     clamp(Number(raw ?? CHEAP_LOOP_CHEAP_MAX_DEFAULT), CHEAP_LOOP_CHEAP_MAX_MIN, CHEAP_LOOP_CHEAP_MAX_MAX),
@@ -107,7 +132,7 @@ export function cheapLoopActiveStopUsd(enabled: unknown, stopUsd?: unknown): num
   return normalizeCheapLoopStopUsd(stopUsd);
 }
 
-/** Take must stay strictly below Stop when Stop is On. Cut Take; never raise Stop. Off = Take 3–8¢ only. */
+/** Take must stay strictly below Stop when Stop is On. Hydrate cuts Take; never raise Stop. Off = Take 3–8¢ only. */
 export function reconcileCheapLoopTakeStop(opts: {
   takeUsd?: unknown;
   stopUsd?: unknown;
@@ -125,6 +150,20 @@ export function reconcileCheapLoopTakeStop(opts: {
     }
   }
   return { takeUsd, stopUsd };
+}
+
+/** Settings Take + : if Stop is On and in the way, raise Stop so + is not a no-op. */
+export function bumpCheapLoopStopForTake(opts: {
+  takeUsd?: unknown;
+  stopUsd?: unknown;
+  stopEnabled?: unknown;
+}): { takeUsd: number; stopUsd: number } {
+  const takeUsd = normalizeCheapLoopTakeUsd(opts.takeUsd);
+  let stopUsd = normalizeCheapLoopStopUsd(opts.stopUsd);
+  if (opts.stopEnabled === true && takeUsd + 1e-9 >= stopUsd) {
+    stopUsd = snap(clamp(takeUsd + 0.01, CHEAP_LOOP_STOP_MIN, CHEAP_LOOP_STOP_MAX), 0.01);
+  }
+  return reconcileCheapLoopTakeStop({ takeUsd, stopUsd, stopEnabled: opts.stopEnabled });
 }
 
 export function normalizeCheapLoopMinHoldMinutes(raw: unknown): number {
@@ -229,6 +268,8 @@ export function cheapLoopWeeklyEventKey(ticker: string): string {
 export function pickUniqueAtmStrike(opts: {
   live?: unknown;
   markets: Array<{ ticker?: string; strike?: unknown; floor_strike?: unknown }>;
+  /** Weekly: pick nearest even when two strikes are equally close. Hourly still sits. */
+  allowTie?: boolean;
 }): { ok: true; ticker: string; strike: number } | { ok: false; skip_reason: string } {
   const live = Number(opts.live);
   if (!Number.isFinite(live)) return { ok: false, skip_reason: 'cheap_loop_hourly_no_atm' };
@@ -241,7 +282,7 @@ export function pickUniqueAtmStrike(opts: {
   }
   if (!rows.length) return { ok: false, skip_reason: 'cheap_loop_hourly_no_market' };
   rows.sort((a, b) => a.dist - b.dist || a.ticker.localeCompare(b.ticker));
-  if (rows.length >= 2 && Math.abs(rows[0].dist - rows[1].dist) < 1e-9) {
+  if (rows.length >= 2 && Math.abs(rows[0].dist - rows[1].dist) < 1e-9 && opts.allowTie !== true) {
     return { ok: false, skip_reason: 'cheap_loop_hourly_no_atm' };
   }
   return { ok: true, ticker: rows[0].ticker, strike: rows[0].strike };
@@ -320,8 +361,9 @@ export function isCheapLoopHistorySellPath(raw: unknown): boolean {
 /** Kalshi hourly books are ~1h. Daily ~24h and weekly ~7d share the same series. */
 export const CHEAP_LOOP_HOURLY_DURATION_MIN_MS = 20 * 60 * 1000;
 export const CHEAP_LOOP_HOURLY_DURATION_MAX_MS = 3 * 60 * 60 * 1000;
-export const CHEAP_LOOP_WEEKLY_DURATION_MIN_MS = 4 * 24 * 60 * 60 * 1000;
-export const CHEAP_LOOP_WEEKLY_DURATION_MAX_MS = 10 * 24 * 60 * 60 * 1000;
+/** Catch Mon–Fri weeks (~3–5d) and 2-week books. Still skip daily (~24h). */
+export const CHEAP_LOOP_WEEKLY_DURATION_MIN_MS = 3 * 24 * 60 * 60 * 1000;
+export const CHEAP_LOOP_WEEKLY_DURATION_MAX_MS = 14 * 24 * 60 * 60 * 1000;
 
 export function cheapLoopEventDurationMs(
   openUtc: Date | null | undefined,
@@ -377,12 +419,7 @@ export function isCheapLoopHistorySellableTrade(trade: {
 }): boolean {
   const path = trade.entryPath ?? trade.entry_path;
   if (!isCheapLoopHistorySellPath(path)) return false;
-  if (trade.dryRun === true || trade.dry_run === true) return false;
-  if (String(trade.protectExitOrderId || '').trim()) return false;
-  const fills = Number(trade.fillCount ?? trade.fill_count ?? 0);
-  if (!(fills > 0)) return false;
-  const outcome = String(trade.outcome || 'pending').toLowerCase();
-  return outcome === 'pending' || outcome === 'exiting';
+  return isHistorySellableTrade(trade);
 }
 
 export function isCheapLoopHourlyEnterPath(opts: {
@@ -605,7 +642,7 @@ export function cheapLoopCfgForWeekly(cfg: AppConfig): AppConfig {
       ...cfg.risk,
       cheap_loop_enabled: risk.cheap_loop_weekly_enabled === true,
       cheap_loop_start_minutes: normalizeCheapLoopHourlyStartMinutes(risk.cheap_loop_weekly_start_minutes),
-      cheap_loop_flatten_minutes: normalizeCheapLoopFlattenMinutes(risk.cheap_loop_weekly_flatten_minutes),
+      cheap_loop_flatten_minutes: normalizeCheapLoopWeeklyFlattenMinutes(risk.cheap_loop_weekly_flatten_minutes),
       cheap_loop_cheap_max_ask_usd: normalizeCheapLoopCheapMaxAskUsd(risk.cheap_loop_weekly_cheap_max_ask_usd),
       cheap_loop_min_gap_usd: normalizeCheapLoopMinGapUsd(risk.cheap_loop_weekly_min_gap_usd),
       cheap_loop_take_usd: normalizeCheapLoopTakeUsd(risk.cheap_loop_weekly_take_usd),
@@ -770,7 +807,7 @@ export function isCheapLoopEnterWindow(opts: {
   if (elapsed + 1e-9 < start) return false;
   const left = Number(opts.minutesLeft);
   if (!Number.isFinite(left)) return false;
-  const flatten = normalizeCheapLoopFlattenMinutes(opts.flattenMinutes);
+  const flatten = normalizeCheapLoopEnterFlattenMinutes(opts.flattenMinutes);
   return left > flatten + 1e-9;
 }
 
@@ -1020,7 +1057,7 @@ export function evaluateCheapLoopEnter(opts: {
   if (opts.lastMinuteOwnsNewBuys) return { ok: false, skip_reason: 'cheap_loop_last_minute_owns' };
   if (opts.alreadyHolding) return { ok: false, skip_reason: 'cheap_loop_holding' };
   if (opts.hasOpenOnTicker) return { ok: false, skip_reason: 'cheap_loop_holding_other_path' };
-  const flatten = normalizeCheapLoopFlattenMinutes(risk.cheap_loop_flatten_minutes);
+  const flatten = normalizeCheapLoopEnterFlattenMinutes(risk.cheap_loop_flatten_minutes);
   if (
     !isCheapLoopEnterWindow({
       minutesElapsed: opts.lean.minutes_elapsed,
@@ -1108,7 +1145,7 @@ export function evaluateCheapLoopExit(opts: {
 }): { sell: boolean; kind: CheapLoopExitKind; reason: string } {
   const held = String(opts.heldSide || '').toUpperCase() === 'NO' ? 'NO' : 'YES';
   const takeUsd = normalizeCheapLoopTakeUsd(opts.takeUsd);
-  const flatten = normalizeCheapLoopFlattenMinutes(opts.flattenMinutes);
+  const flatten = normalizeCheapLoopEnterFlattenMinutes(opts.flattenMinutes);
   const minHoldMs = normalizeCheapLoopMinHoldMinutes(opts.minHoldMinutes) * 60_000;
   const fill = ticketUsd(opts.fillUsd);
   const bid = sideBidOf(held, opts.quotes);
@@ -1195,6 +1232,62 @@ export function cheapLoopLivePnlUsd(opts: {
     exitEconomic: bid,
     fillCount: n,
   });
+}
+
+/**
+ * History mark: (current ask − cost) × contracts.
+ * Ask is the live ticket price; Sell still fills on the bid.
+ */
+export function historyLiveProfitUsd(opts: {
+  heldSide?: unknown;
+  fillUsd?: unknown;
+  fillCount?: unknown;
+  yesAsk?: unknown;
+  noAsk?: unknown;
+}): number | null {
+  const fill = ticketUsd(opts.fillUsd);
+  const n = Math.floor(Number(opts.fillCount) || 0);
+  if (fill == null || n <= 0) return null;
+  const held = String(opts.heldSide || '').toUpperCase() === 'NO' ? 'NO' : 'YES';
+  const yesAsk = ticketUsd(opts.yesAsk);
+  const noAsk = ticketUsd(opts.noAsk);
+  const ask = held === 'NO' ? noAsk : yesAsk;
+  if (ask == null) return null;
+  return computeProtectSellPnlUsd({
+    heldSide: held,
+    entryPay: fill,
+    exitEconomic: ask,
+    fillCount: n,
+  });
+}
+
+export function historyLiveProfitForTicker(opts: {
+  ticker?: unknown;
+  heldSide?: unknown;
+  fillUsd?: unknown;
+  fillCount?: unknown;
+  quotes?: Array<{
+    ticker?: string | null;
+    market_ticker?: string | null;
+    yes_ask?: unknown;
+    no_ask?: unknown;
+  } | null | undefined>;
+}): number | null {
+  const want = String(opts.ticker || '').trim();
+  if (!want) return null;
+  for (const q of opts.quotes || []) {
+    if (!q) continue;
+    const got = String(q.ticker || q.market_ticker || '').trim();
+    if (got !== want) continue;
+    return historyLiveProfitUsd({
+      heldSide: opts.heldSide,
+      fillUsd: opts.fillUsd,
+      fillCount: opts.fillCount,
+      yesAsk: q.yes_ask,
+      noAsk: q.no_ask,
+    });
+  }
+  return null;
 }
 
 export function cheapLoopLivePnlForTicker(opts: {
