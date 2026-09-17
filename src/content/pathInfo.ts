@@ -28,7 +28,7 @@ export const PATH_INFO = {
       '• This tab’s $ per trade / min / max\n' +
       '• Minutes left and elapsed\n' +
       '• Home max entry ask, TIF, chase\n' +
-      '• Sell at % take-profit (0 = Off; uses Protect wait/grace)\n' +
+      '• Sell at % take-profit (0 = Off; 1s mark watch; Protect wait/grace)\n' +
       '• Shared limits\n' +
       '• Cushions $ gap and asset on/off (Cushions tab)\n\n' +
       'Does not use\n' +
@@ -50,7 +50,7 @@ export const PATH_INFO = {
       '• This path’s $ per trade / min / max\n' +
       '• Minutes left and elapsed (default 2 / 2 — no last-minute chase)\n' +
       '• Auto max entry ask, TIF, chase\n' +
-      '• Sell at % take-profit (0 = Off; uses Protect wait/grace)\n' +
+      '• Sell at % take-profit (0 = Off; 1s mark watch; Protect wait/grace)\n' +
       '• Cushions $ gap (above cushion, below cushion × max gap), Smart buy (if On), shared limits, asset on/off\n\n' +
       'Does not use\n' +
       '• Home Buy size/timing\n' +

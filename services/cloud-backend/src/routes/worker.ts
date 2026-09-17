@@ -409,7 +409,7 @@ function applyDumpWatchMaps(
   else protectWatchUsers.delete(userId);
 }
 
-/** Re-read open Cash out / Gold fade / Protect lots so a mid-tick fill joins the same 1s snapshot. */
+/** Re-read open Cash out / Gold fade / Protect / Sell at lots so a mid-tick fill joins the 1s snapshot. */
 export async function refreshDumpWatchFromTradeBooks(now = new Date()): Promise<void> {
   const activeUsers = await getEnrolledActiveUsers();
   const seen = new Set<string>();
@@ -424,10 +424,24 @@ export async function refreshDumpWatchFromTradeBooks(now = new Date()): Promise<
         return;
       }
       const cfg = user.config || defaultAppConfig();
+      const homeAutoExitWatch = homeAutoExitWatchNeeded(cfg.risk);
+      const cashOn = Boolean(cfg.risk?.cash_out_enabled);
+      const fadeOn = Boolean(cfg.risk?.gold_fade_enabled);
+      const already =
+        cashOutWatchUsers.has(userId) ||
+        goldFadeWatchUsers.has(userId) ||
+        protectWatchUsers.has(userId);
+      // Skip trade-book reads when nothing can arm dump watch for this user.
+      if (!homeAutoExitWatch && !cashOn && !fadeOn && !already) {
+        cashOutWatchUsers.delete(userId);
+        goldFadeWatchUsers.delete(userId);
+        protectWatchUsers.delete(userId);
+        return;
+      }
       const trades = await getTradeRecords(userId);
       applyDumpWatchMaps(userId, {
         trades,
-        homeAutoExitWatch: homeAutoExitWatchNeeded(cfg.risk),
+        homeAutoExitWatch,
         killSwitch: user.state === 'KILL_SWITCH',
         now,
       });
@@ -8331,10 +8345,8 @@ async function refreshHomeQuoteAssetsIfStale(now: Date): Promise<void> {
 }
 
 async function runOneSecondPathWatchers(pulseNow: Date): Promise<void> {
-  const dumpWatching = oneSecondDumpWatching();
-  if (dumpWatching) {
-    await refreshDumpWatchFromTradeBooks(pulseNow);
-  }
+  // Always refresh first so Sell at / Protect lots arm 1s even when the map was empty last beat.
+  await refreshDumpWatchFromTradeBooks(pulseNow);
   const watchAssets = oneSecondWatchAssets();
   const snap = watchAssets.length ? await buildOneSecondMarketSnapshot(watchAssets, pulseNow) : null;
   if (snap) {
@@ -8370,7 +8382,7 @@ export function kickOneSecondPathWatch(): void {
     while (pathWatchDirty) {
       pathWatchDirty = false;
       try {
-        if (!oneSecondPathWatching() && !oneSecondDumpWatching()) continue;
+        // Always enter so refreshDumpWatch can arm Sell at / Protect mid-minute.
         await runOneSecondPathWatchers(new Date());
       } catch (err: any) {
         noteTransientKalshiFailure(err);

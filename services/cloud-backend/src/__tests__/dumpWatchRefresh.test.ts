@@ -48,6 +48,38 @@ describe('refresh dump watch from trade book', () => {
     expect(dumpWatchSnapshotForTests().protect[userId]).toEqual(['BTC']);
   });
 
+  test('Sell at On (Protect Off) joins the 1s dump list for Home and Auto fills', async () => {
+    const homeId = 'user_dump_sell_at_home';
+    const autoId = 'user_dump_sell_at_auto';
+    await upsertUserDoc(homeId, {
+      userId: homeId,
+      kalshiConfigured: true,
+      state: 'ARMED',
+      config: {
+        alerts_enabled: false,
+        risk: { protect_sell_enabled: false, home_sell_at_pct: 10, cushion_lean_sell_at_pct: 0 },
+      },
+    } as any);
+    await upsertUserDoc(autoId, {
+      userId: autoId,
+      kalshiConfigured: true,
+      state: 'ARMED',
+      config: {
+        alerts_enabled: false,
+        risk: { protect_sell_enabled: false, home_sell_at_pct: 0, cushion_lean_sell_at_pct: 12.5 },
+      },
+    } as any);
+    await saveTradeRecord(homeId, filledTrade({ userId: homeId, asset: 'BTC', entryPath: 'home' }));
+    await saveTradeRecord(
+      autoId,
+      filledTrade({ userId: autoId, tradeId: 't_auto', asset: 'ETH', entryPath: 'auto' })
+    );
+    await refreshDumpWatchFromTradeBooks(now);
+    const snap = dumpWatchSnapshotForTests();
+    expect(snap.protect[homeId]).toEqual(['BTC']);
+    expect(snap.protect[autoId]).toEqual(['ETH']);
+  });
+
   test('Protect Off and Kill Switch drop Home lots; Cash out still arms', async () => {
     const offId = 'user_dump_protect_off';
     const killId = 'user_dump_protect_kill';

@@ -224,7 +224,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Home Buy “Sell at” %?',
           a:
             'Settings → Risk → Home Buy → Sell at. Dump when the live held-side mark is at least this % above your fill (0 = Off; default Off). Steps 0.5–100.\n\n' +
-            'Uses the same Protect wait-after-fill / grace. Independent of Protect money lean-flip — it can dump on mark profit even if Protect is Off.',
+            'Cloud checks the live mark about once per second while you hold a Home fill. Uses the same Protect wait-after-fill / grace. Independent of Protect money lean-flip — it can dump on mark profit even if Protect is Off.',
         },
         {
           id: 'need-keys-for-alerts',
@@ -417,7 +417,7 @@ export function getFaqCategories(): FaqCategory[] {
           q: 'What is Cushion lean “Sell at” %?',
           a:
             'Settings → Paths → Cushion lean → Sell at (when Cushion lean is On). Dump Auto fills when the live held-side mark is at least this % above your fill (0 = Off; default Off). Steps 0.5–100.\n\n' +
-            'Uses the same Protect wait-after-fill / grace. Independent of Protect money lean-flip. Home Buy has its own Sell at knob.',
+            'Cloud checks the live mark about once per second while you hold an Auto fill. Uses the same Protect wait-after-fill / grace. Independent of Protect money lean-flip. Home Buy has its own Sell at knob.',
         },
       ],
     },
