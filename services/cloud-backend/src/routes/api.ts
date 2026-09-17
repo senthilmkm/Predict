@@ -373,6 +373,7 @@ apiRouter.post('/me/orders/manual', async (req: Request, res: Response) => {
   const tradeId = String(req.body?.tradeId || '').trim() || undefined;
   const decisionRaw = String(req.body?.decision || '').toUpperCase().trim();
   const decision = decisionRaw === 'YES' || decisionRaw === 'NO' ? (decisionRaw as 'YES' | 'NO') : undefined;
+  const skipGates = req.body?.skipGates === true || req.body?.skip_gates === true;
   if (!asset || (action !== 'buy' && action !== 'sell')) {
     res.status(400).json({
       ok: false,
@@ -382,7 +383,15 @@ apiRouter.post('/me/orders/manual', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const result = await executeManualOrder({ userId, asset, action, requestId, tradeId, decision });
+    const result = await executeManualOrder({
+      userId,
+      asset,
+      action,
+      requestId,
+      tradeId,
+      decision,
+      skipGates: action === 'buy' ? skipGates : false,
+    });
     res.status(result.httpStatus).json(result);
   } catch (err: any) {
     await writeAuditLog(userId, 'ERROR', {

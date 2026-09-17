@@ -23,7 +23,7 @@ import {
   isMarketOpen,
 } from '../services/marketHours';
 import { PathInfoIcon } from '../components/PathInfoIcon';
-import { TapFingerIcon } from '../components/TapFingerIcon';
+import { PlusIcon } from '../components/PlusIcon';
 import { PathFocusId, pathTileById } from '../content/pathCatalog';
 import { usePinnedPathsStore } from '../state/pinnedPathsStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
@@ -305,7 +305,8 @@ export function HomeScreen({
       asset: AssetKey,
       action: 'buy' | 'sell',
       origin?: { x: number; y: number },
-      decision?: 'YES' | 'NO'
+      decision?: 'YES' | 'NO',
+      opts?: { skipGates?: boolean }
     ) => {
       if (useRuntimeStore.getState().lastSignalsManualTrade === false) {
         Alert.alert('Buy / Sell is off', 'Last signals Buy / Sell is turned off.');
@@ -317,7 +318,7 @@ export function HomeScreen({
       }
       const placeKey =
         decision && (action === 'buy' || action === 'sell')
-          ? `${asset}:${action}:${decision}`
+          ? `${asset}:${action}:${decision}${opts?.skipGates ? ':force' : ''}`
           : String(asset);
       // Side-specific lock — Buy/Sell YES must not block the other side.
       if (placingRef.current[placeKey]) return;
@@ -331,6 +332,7 @@ export function HomeScreen({
           action,
           requestId,
           ...(decision === 'YES' || decision === 'NO' ? { decision } : {}),
+          ...(opts?.skipGates ? { skipGates: true } : {}),
         });
         if (!mountedRef.current) return;
         if (!res.ok) {
@@ -761,6 +763,9 @@ export function HomeScreen({
       placingBuyNo: Boolean(placing[`${row.asset}:buy:NO`] || placing[`${row.asset}:NO`]),
       placingSellYes: Boolean(placing[`${row.asset}:sell:YES`]),
       placingSellNo: Boolean(placing[`${row.asset}:sell:NO`]),
+      placingForce: Boolean(
+        placing[`${row.asset}:buy:YES:force`] || placing[`${row.asset}:buy:NO:force`]
+      ),
       extraLine,
       strongBuy: offerKind === 'buy' && strongBuy,
       pairBuySides,
@@ -968,8 +973,8 @@ export function HomeScreen({
               <LastSignalRow
                 key={row.asset}
                 row={row}
-                onPlace={(action, origin, decision) =>
-                  void placeManual(row.asset, action, origin, decision)
+                onPlace={(action, origin, decision, opts) =>
+                  void placeManual(row.asset, action, origin, decision, opts)
                 }
               />
             ))}
@@ -982,8 +987,8 @@ export function HomeScreen({
               <LastSignalRow
                 key={row.asset}
                 row={row}
-                onPlace={(action, origin, decision) =>
-                  void placeManual(row.asset, action, origin, decision)
+                onPlace={(action, origin, decision, opts) =>
+                  void placeManual(row.asset, action, origin, decision, opts)
                 }
               />
             ))}
@@ -991,15 +996,13 @@ export function HomeScreen({
         )}
         {featureOn ? (
           <Text style={styles.tradeHint}>
-            Lean YES/NO here is a signal. Home Buy is the green tap-finger when gap clears Enter ×
-            cushion (darker green when live is at least 25% past that coin’s Cushion). Gray tap =
-            no Home Buy right now. After a Home fill, only Sell for that side stays — no opposite
-            Buy. A tap places now on Cloud Run
-            (this phone never talks to Kalshi). If Auto-trade is On and its Risk tab also passes,
-            Cloud can buy that same lean too, as long as shared caps allow (max trades / asset /
-            15m window, max trades / day, max open, daily loss). Ask too rich and other Home skips
-            leave the gray tap. A miss is under History → Misses. Kill-Switch and the Last signals
-            Buy / Sell flag hide the green tap.
+            Lean YES/NO here is a signal. Green plus = Home Buy when gap clears Enter × cushion
+            (darker green when live is at least 25% past that coin’s Cushion). Gray plus = place
+            anyway (skips Home gates). After a Home fill, only Sell for that side stays — no
+            opposite Buy. A tap places now on Cloud Run (this phone never talks to Kalshi). If
+            Auto-trade is On and its Risk tab also passes, Cloud can buy that same lean too, as
+            long as shared caps allow. A miss is under History → Misses. Kill-Switch and the Last
+            signals Buy / Sell flag hide these controls.
           </Text>
         ) : autoTradeOn ? (
           <Text style={styles.tradeHint}>
@@ -1217,14 +1220,17 @@ function LastSignalRow({
     placingBuyNo?: boolean;
     placingSellYes?: boolean;
     placingSellNo?: boolean;
+    placingForce?: boolean;
   };
   onPlace: (
     action: 'buy' | 'sell',
     origin?: { x: number; y: number },
-    decision?: 'YES' | 'NO'
+    decision?: 'YES' | 'NO',
+    opts?: { skipGates?: boolean }
   ) => void;
 }) {
   const btnRef = React.useRef<View>(null);
+  const forceRef = React.useRef<View>(null);
   const pairBuySides = row.pairBuySides || [];
   const pairSellSides = row.pairSellSides || [];
   const showPairCol = pairBuySides.length > 0 || pairSellSides.length > 0;
@@ -1237,10 +1243,18 @@ function LastSignalRow({
     decision: row.decision,
     heldSide: row.held?.side,
   });
+  const forceBuySide = (): 'YES' | 'NO' => {
+    if (row.decision === 'YES' || row.decision === 'NO') return row.decision;
+    const live = Number(row.live);
+    const strike = Number(row.strike);
+    if (Number.isFinite(live) && Number.isFinite(strike)) return live >= strike ? 'YES' : 'NO';
+    return 'YES';
+  };
   const measureAndPlace = (
     action: 'buy' | 'sell',
     decision?: 'YES' | 'NO',
-    ref?: React.RefObject<View | null>
+    ref?: React.RefObject<View | null>,
+    opts?: { skipGates?: boolean }
   ) => {
     const node = (ref?.current || btnRef.current) as {
       measureInWindow?: (cb: (...args: number[]) => void) => void;
@@ -1249,7 +1263,7 @@ function LastSignalRow({
     const send = (origin?: { x: number; y: number }) => {
       if (sent) return;
       sent = true;
-      onPlace(action, origin, decision);
+      onPlace(action, origin, decision, opts);
     };
     try {
       if (node && typeof node.measureInWindow === 'function') {
@@ -1284,6 +1298,9 @@ function LastSignalRow({
     }
     const decision = row.decision === 'NO' ? 'NO' : 'YES';
     measureAndPlace('buy', decision);
+  };
+  const fireForceBuy = () => {
+    measureAndPlace('buy', forceBuySide(), forceRef, { skipGates: true });
   };
   return (
     <View
@@ -1389,7 +1406,7 @@ function LastSignalRow({
           {row.placing ? (
             <ActivityIndicator color="#fff" size="small" testID={`manual-placing-${row.asset}`} />
           ) : (
-            <TapFingerIcon color="#fff" size={18} testID={`buy-tap-icon-${row.asset}`} />
+            <PlusIcon color="#fff" size={18} testID={`buy-plus-icon-${row.asset}`} />
           )}
         </Pressable>
       ) : row.manualKind === 'sell' ? (
@@ -1419,13 +1436,24 @@ function LastSignalRow({
           (No Kalshi 15m contract)
         </Text>
       ) : (
-        <View
-          style={styles.tapIdle}
+        <Pressable
+          ref={forceRef}
+          collapsable={false}
+          style={[styles.tapIdle, styles.tapIdleBtn, row.placingForce && styles.manualBtnBusy]}
+          onPress={fireForceBuy}
+          disabled={Boolean(row.placingForce)}
+          hitSlop={6}
           testID={`tap-idle-${row.asset}`}
-          accessibilityLabel="No Home Buy right now"
+          accessibilityLabel={`Force buy ${forceBuySide()} (skip Home gates)`}
+          accessibilityRole="button"
+          accessibilityState={{ busy: Boolean(row.placingForce), disabled: Boolean(row.placingForce) }}
         >
-          <TapFingerIcon color={colors.mute} size={18} testID={`idle-tap-icon-${row.asset}`} />
-        </View>
+          {row.placingForce ? (
+            <ActivityIndicator color={colors.mute} size="small" testID={`force-placing-${row.asset}`} />
+          ) : (
+            <PlusIcon color={colors.mute} size={18} testID={`idle-plus-icon-${row.asset}`} />
+          )}
+        </Pressable>
       )}
     </View>
   );
@@ -1635,6 +1663,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     opacity: 0.85,
+  },
+  tapIdleBtn: {
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    opacity: 1,
   },
   signalLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   signalAsset: { color: colors.textPrimary, fontWeight: '700', minWidth: 44 },

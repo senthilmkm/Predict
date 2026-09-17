@@ -416,6 +416,8 @@ export class PredictCloudClient {
     requestId: string;
     tradeId?: string;
     decision?: 'YES' | 'NO';
+    /** Gray plus: Cloud skips Home Buy gates. */
+    skipGates?: boolean;
   }): Promise<{
     ok: boolean;
     message?: string;

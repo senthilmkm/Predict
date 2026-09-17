@@ -360,6 +360,59 @@ describe('HomeScreen', () => {
     expect(s.queryByTestId('home-buy-sell-label')).toBeNull();
     expect(s.getByTestId('skip-reason-BTC').props.children).toBe('ask too rich');
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
+    expect(s.getByTestId('tap-idle-BTC')).toBeTruthy();
+    expect(s.getByTestId('idle-plus-icon-BTC')).toBeTruthy();
+  });
+
+  test('gray plus force-buys with skipGates', async () => {
+    const { cloudClient } = require('../../src/services/cloud/cloudClient');
+    const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockResolvedValue({
+      ok: true,
+      filled: true,
+      message: 'Bought',
+      tradeId: 't-force',
+    });
+    try {
+      useConfigStore.setState({
+        config: {
+          ...defaultAppConfig(),
+          assets_enabled: { BTC: true } as any,
+          manual_risk: {
+            ...defaultAppConfig().manual_risk,
+            max_entry_ask_usd: 0.5,
+            min_minutes_elapsed: 0,
+            min_minutes_left: 0,
+          },
+        },
+        hydrated: true,
+      });
+      useRuntimeStore.setState({
+        refreshPredictionsBalance: async () => {},
+        refreshCloudSnapshot: async () => {},
+        lastSignalsManualTrade: true,
+        cloudKillSwitch: false,
+        leans: {
+          BTC: {
+            ...homeBuyReadyLean,
+            yes_ask: 0.94,
+          },
+        } as any,
+        leanAt: { BTC: new Date().toISOString() },
+      });
+      const s = await render(<HomeScreen />);
+      await waitFor(() => expect(s.getByTestId('tap-idle-BTC')).toBeTruthy());
+      await fireEvent.press(s.getByTestId('tap-idle-BTC'));
+      await waitFor(() => expect(placeSpy).toHaveBeenCalled());
+      expect(placeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'buy',
+          decision: 'YES',
+          skipGates: true,
+        })
+      );
+    } finally {
+      placeSpy.mockRestore();
+    }
   });
 
   test('heartbeat stays Live when Cloud ticked recently even if the phone poller clock is 40m old', async () => {
@@ -437,7 +490,7 @@ describe('HomeScreen', () => {
     });
     const on = await render(<HomeScreen />);
     expect(on.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
-    expect(on.getByTestId('buy-tap-icon-BTC')).toBeTruthy();
+    expect(on.getByTestId('buy-plus-icon-BTC')).toBeTruthy();
     expect(on.queryByText('Buy YES')).toBeNull();
     expect(on.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
     expect(on.queryByTestId('btn-manual-pair-BTC')).toBeNull();
@@ -466,14 +519,14 @@ describe('HomeScreen', () => {
     });
     const s = await render(<HomeScreen />);
     expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
-    expect(s.getByTestId('buy-tap-icon-BTC')).toBeTruthy();
+    expect(s.getByTestId('buy-plus-icon-BTC')).toBeTruthy();
     expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
     expect(StyleSheet.flatten(s.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
       colors.win
     );
   });
 
-  test('feature flag off hides green Buy and shows gray tap', async () => {
+  test('feature flag off hides green Buy and shows gray force plus', async () => {
     useConfigStore.setState({
       config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
       hydrated: true,
@@ -500,7 +553,7 @@ describe('HomeScreen', () => {
     const off = await render(<HomeScreen />);
     expect(off.queryByTestId('btn-manual-buy-BTC')).toBeNull();
     expect(off.getByTestId('tap-idle-BTC')).toBeTruthy();
-    expect(off.getByTestId('idle-tap-icon-BTC')).toBeTruthy();
+    expect(off.getByTestId('idle-plus-icon-BTC')).toBeTruthy();
   });
 
   test('held fill shows Sell YES not Buy', async () => {

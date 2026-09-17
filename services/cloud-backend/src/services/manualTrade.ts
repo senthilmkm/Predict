@@ -75,6 +75,11 @@ export interface ManualOrderInput {
   tradeId?: string;
   /** Home Buy / Sell side. Buy: omitted → lean. Sell: picks that open fill when both legs held. */
   decision?: 'YES' | 'NO';
+  /**
+   * Gray Home plus: place at live ask + chase using Home $ size.
+   * Skips cushion / ask max / minutes / chips / window caps / path-hold blocks.
+   */
+  skipGates?: boolean;
 }
 
 export interface ManualOrderResult {
@@ -155,19 +160,20 @@ async function freshManualBuyAsks(
   }
 }
 
-/** Reprice gate at send: live ask + Home chase, capped by max entry ask. */
+/** Reprice gate at send: live ask + Home chase, capped by max entry ask (or 0.99 when force). */
 function repriceHomeBuyGate(
   gate: GateResult,
   decision: 'YES' | 'NO',
   quotes: { yes_ask?: number | null; no_ask?: number | null },
-  cfg: ReturnType<typeof defaultAppConfig>
+  cfg: ReturnType<typeof defaultAppConfig>,
+  opts?: { skipGates?: boolean }
 ): GateResult {
   if (!gate.ok) return gate;
   const liveAsk = liveAskForDecision(decision, quotes);
   const priced = homeBuyPayFromLiveAsk({
     liveAskUsd: liveAsk,
     chaseUsd: cfg.risk?.chase_above_ask_usd,
-    maxEntryAskUsd: cfg.risk?.max_entry_ask_usd,
+    maxEntryAskUsd: opts?.skipGates ? 0.99 : cfg.risk?.max_entry_ask_usd,
   });
   if (!priced.ok) {
     // No live ask → keep gate pay (already ask+chase from evaluateStaticGate).
@@ -181,14 +187,65 @@ function repriceHomeBuyGate(
     existingPrice: gate.price,
     existingPayUsd: gate.pay_price,
   });
-  const count = Math.max(0, Number(gate.count) || 0);
+  const dollars = Math.min(
+    Number(cfg.risk?.fixed_dollars_per_trade) || 5,
+    Number(cfg.risk?.max_dollars_per_trade) || 5
+  );
+  let countNum = Math.max(0, Math.floor(dollars / priced.payUsd + 1e-9));
+  if (countNum < 1 && opts?.skipGates) countNum = 1;
+  const count = opts?.skipGates ? countNum : Math.max(0, Number(gate.count) || 0);
   return {
     ...gate,
     decision,
     pay_price: priced.payUsd,
     price: px.price,
     side: px.side,
-    notional_usd: count > 0 ? Math.round(count * priced.payUsd * 100) / 100 : gate.notional_usd,
+    count: String(Math.max(count, opts?.skipGates ? countNum : count)),
+    notional_usd:
+      count > 0 || opts?.skipGates
+        ? Math.round(Math.max(count, countNum) * priced.payUsd * 100) / 100
+        : gate.notional_usd,
+  };
+}
+
+/** Size a Home Buy with no cushion / ask / minutes / chip gates (gray plus). */
+function forceHomeBuyGate(
+  decision: 'YES' | 'NO',
+  lean: { yes_ask?: number | null; no_ask?: number | null; market_ticker?: string },
+  cfg: ReturnType<typeof defaultAppConfig>,
+  asset: string
+): GateResult {
+  let ask =
+    decision === 'NO'
+      ? Number(lean.no_ask)
+      : Number(lean.yes_ask);
+  if (!Number.isFinite(ask) || !(ask > 0)) ask = 0.5;
+  ask = Math.min(0.99, Math.max(0.01, ask));
+  const chase = Math.max(0, Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0));
+  const pay = Math.min(0.99, Math.max(0.01, ask + chase));
+  const dollars = Math.min(
+    Number(cfg.risk?.fixed_dollars_per_trade) || 5,
+    Number(cfg.risk?.max_dollars_per_trade) || 5
+  );
+  let countNum = Math.max(1, Math.floor(dollars / pay + 1e-9));
+  let notional = Math.round(countNum * pay * 100) / 100;
+  while (countNum > 1 && notional > dollars + 1e-9) {
+    countNum -= 1;
+    notional = Math.round(countNum * pay * 100) / 100;
+  }
+  const side: 'bid' | 'ask' = decision === 'YES' ? 'bid' : 'ask';
+  return {
+    ok: true,
+    asset,
+    decision,
+    market_ticker: String(lean.market_ticker || ''),
+    side,
+    price: pay.toFixed(4),
+    count: String(countNum),
+    pay_price: pay,
+    notional_usd: notional,
+    time_in_force: cfg.risk?.time_in_force || 'immediate_or_cancel',
+    config_snapshot: cfg,
   };
 }
 
@@ -551,6 +608,7 @@ export async function executeManualOrder(
     placeOrderFn: deps.placeOrderFn,
     getMarketQuoteFn: quoteFn,
     decision: input.decision === 'NO' ? 'NO' : input.decision === 'YES' ? 'YES' : undefined,
+    skipGates: input.skipGates === true,
   });
 }
 
@@ -569,8 +627,10 @@ async function executeManualBuy(opts: {
   placeOrderFn?: PlaceOrderFn;
   getMarketQuoteFn?: typeof getMarketQuote;
   decision?: 'YES' | 'NO';
+  skipGates?: boolean;
 }): Promise<ManualOrderResult> {
   const { userId, asset, requestId, now, cfg, user, lean, ticker, held, rawTrades } = opts;
+  const skipGates = opts.skipGates === true;
   const buyDecision: 'YES' | 'NO' =
     opts.decision === 'YES' || opts.decision === 'NO'
       ? opts.decision
@@ -578,49 +638,58 @@ async function executeManualBuy(opts: {
         ? 'NO'
         : lean.decision === 'YES'
           ? 'YES'
-          : 'YES';
+          : (() => {
+              const live = Number(lean.live);
+              const strike = Number(lean.strike);
+              if (Number.isFinite(live) && Number.isFinite(strike)) {
+                return live >= strike ? 'YES' : 'NO';
+              }
+              return 'YES';
+            })();
 
-  const alreadyHasSide = rawTrades.some(
-    (t) =>
-      String(t.ticker || '').trim() === ticker &&
-      isProtectClaimable(t, now) &&
-      fillCountOf(t) > 0 &&
-      String(t.decision || '').toUpperCase() === buyDecision
-  );
-  if (alreadyHasSide) {
-    return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
-  }
+  if (!skipGates) {
+    const alreadyHasSide = rawTrades.some(
+      (t) =>
+        String(t.ticker || '').trim() === ticker &&
+        isProtectClaimable(t, now) &&
+        fillCountOf(t) > 0 &&
+        String(t.decision || '').toUpperCase() === buyDecision
+    );
+    if (alreadyHasSide) {
+      return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
+    }
 
-  if (held) {
-    if (isCashOutEntryPath(held.entryPath)) {
-      return fail(userId, 409, 'cash_out_holding', 'cash_out_holding', { asset, action: 'buy', ticker });
+    if (held) {
+      if (isCashOutEntryPath(held.entryPath)) {
+        return fail(userId, 409, 'cash_out_holding', 'cash_out_holding', { asset, action: 'buy', ticker });
+      }
+      if (isGoldFadeEntryPath(held.entryPath)) {
+        return fail(userId, 409, 'gold_fade_holding', 'gold_fade_holding', { asset, action: 'buy', ticker });
+      }
+      if (isTwapLockEntryPath(held.entryPath)) {
+        return fail(userId, 409, 'twap_lock_holding', 'twap_lock_holding', { asset, action: 'buy', ticker });
+      }
+      if (isLastMinuteEntryPath(held.entryPath)) {
+        return fail(userId, 409, 'last_minute_holding', 'last_minute_holding', { asset, action: 'buy', ticker });
+      }
+      if (isStepBuyEntryPath(held.entryPath)) {
+        return fail(userId, 409, 'step_buy_holding', 'step_buy_holding', { asset, action: 'buy', ticker });
+      }
+      if (isSpikeFadeEntryPath(held.entryPath)) {
+        return fail(userId, 409, 'spike_fade_holding', 'spike_fade_holding', { asset, action: 'buy', ticker });
+      }
+      if (isPairLockEntryPath(held.entryPath)) {
+        return fail(userId, 409, 'pair_lock_holding', 'pair_lock_holding', { asset, action: 'buy', ticker });
+      }
+      if (isCapLockEntryPath(held.entryPath)) {
+        return fail(userId, 409, 'cap_lock_holding', 'cap_lock_holding', { asset, action: 'buy', ticker });
+      }
+      // Home (or any other open) already on this ticker — one Buy only via lean; no opposite leg.
+      return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
     }
-    if (isGoldFadeEntryPath(held.entryPath)) {
-      return fail(userId, 409, 'gold_fade_holding', 'gold_fade_holding', { asset, action: 'buy', ticker });
+    if (lean.decision !== 'YES' && lean.decision !== 'NO') {
+      return fail(userId, 409, 'skip_decision', 'skip_decision', { asset, action: 'buy', ticker });
     }
-    if (isTwapLockEntryPath(held.entryPath)) {
-      return fail(userId, 409, 'twap_lock_holding', 'twap_lock_holding', { asset, action: 'buy', ticker });
-    }
-    if (isLastMinuteEntryPath(held.entryPath)) {
-      return fail(userId, 409, 'last_minute_holding', 'last_minute_holding', { asset, action: 'buy', ticker });
-    }
-    if (isStepBuyEntryPath(held.entryPath)) {
-      return fail(userId, 409, 'step_buy_holding', 'step_buy_holding', { asset, action: 'buy', ticker });
-    }
-    if (isSpikeFadeEntryPath(held.entryPath)) {
-      return fail(userId, 409, 'spike_fade_holding', 'spike_fade_holding', { asset, action: 'buy', ticker });
-    }
-    if (isPairLockEntryPath(held.entryPath)) {
-      return fail(userId, 409, 'pair_lock_holding', 'pair_lock_holding', { asset, action: 'buy', ticker });
-    }
-    if (isCapLockEntryPath(held.entryPath)) {
-      return fail(userId, 409, 'cap_lock_holding', 'cap_lock_holding', { asset, action: 'buy', ticker });
-    }
-    // Home (or any other open) already on this ticker — one Buy only via lean; no opposite leg.
-    return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
-  }
-  if (lean.decision !== 'YES' && lean.decision !== 'NO') {
-    return fail(userId, 409, 'skip_decision', 'skip_decision', { asset, action: 'buy', ticker });
   }
 
   const tradesTodayList = liveCloudTradesToday(rawTrades, now);
@@ -639,32 +708,34 @@ async function executeManualBuy(opts: {
     return Number.isFinite(raw) ? raw : 0;
   })();
 
-  const gate = evaluateStaticGate(
-    {
-      asset,
-      market_ticker: ticker,
-      decision: buyDecision,
-      live: lean.live || 0,
-      strike: lean.strike || 0,
-      abs_gap: absGap,
-      minutes_left: lean.minutes_left || 0,
-      minutes_elapsed: lean.minutes_elapsed || 0,
-      minutes_remaining: (lean as { minutes_remaining?: number }).minutes_remaining,
-      phase: lean.phase === 'live' ? 'live' : 'ended',
-      yes_ask: lean.yes_ask ?? undefined,
-      no_ask: lean.no_ask ?? undefined,
-      open_utc: (lean as { open_utc?: string }).open_utc,
-      close_utc: (lean as { close_utc?: string }).close_utc,
-    },
-    cfg,
-    {
-      openPositions,
-      tradesToday: tradesTodayList.length,
-      assetTradesInWindow: existingBuys,
-      dailyPnlUsd: cloudDailyRealizedPnl(tradesTodayList),
-      allowWhenAutoTradeOff: true,
-    }
-  );
+  const gate = skipGates
+    ? forceHomeBuyGate(buyDecision, lean, cfg, asset)
+    : evaluateStaticGate(
+        {
+          asset,
+          market_ticker: ticker,
+          decision: buyDecision,
+          live: lean.live || 0,
+          strike: lean.strike || 0,
+          abs_gap: absGap,
+          minutes_left: lean.minutes_left || 0,
+          minutes_elapsed: lean.minutes_elapsed || 0,
+          minutes_remaining: (lean as { minutes_remaining?: number }).minutes_remaining,
+          phase: lean.phase === 'live' ? 'live' : 'ended',
+          yes_ask: lean.yes_ask ?? undefined,
+          no_ask: lean.no_ask ?? undefined,
+          open_utc: (lean as { open_utc?: string }).open_utc,
+          close_utc: (lean as { close_utc?: string }).close_utc,
+        },
+        cfg,
+        {
+          openPositions,
+          tradesToday: tradesTodayList.length,
+          assetTradesInWindow: existingBuys,
+          dailyPnlUsd: cloudDailyRealizedPnl(tradesTodayList),
+          allowWhenAutoTradeOff: true,
+        }
+      );
 
   if (!gate.ok || !gate.price || !gate.count) {
     return fail(userId, 409, 'gate_skip', gate.skip_reason || 'notional_too_small', {
@@ -677,9 +748,9 @@ async function executeManualBuy(opts: {
   const lock = await tryAcquirePlaceLock({
     userId,
     ticker,
-    cap,
+    cap: skipGates ? Math.max(cap, existingBuys + 1) : cap,
     requestId,
-    existingBuys,
+    existingBuys: skipGates ? 0 : existingBuys,
   });
   if (!lock.ok) {
     return fail(userId, 409, lock.reason, lock.reason, { asset, action: 'buy', ticker });
@@ -695,7 +766,7 @@ async function executeManualBuy(opts: {
       return fail(userId, 409, 'no_client', 'no_client', { asset, action: 'buy', ticker });
     }
 
-    const buyGate = repriceHomeBuyGate(gate, buyDecision, liveQuotes, cfg);
+    const buyGate = repriceHomeBuyGate(gate, buyDecision, liveQuotes, cfg, { skipGates });
     if (!buyGate.ok || !buyGate.price || !buyGate.count) {
       return fail(userId, 409, 'gate_skip', buyGate.skip_reason || 'ask_moved', {
         asset,

@@ -294,6 +294,80 @@ describe('manual buy/sell place-now', () => {
     );
   });
 
+  test('skipGates places below cushion when gray plus forces buy', async () => {
+    const uid = 'usr_manual_force_skip';
+    const cfg = liveCfg();
+    cfg.cushions.BTC = 500;
+    cfg.risk.chase_above_ask_usd = 0.02;
+    cfg.manual_risk = {
+      ...(defaultAppConfig().manual_risk as NonNullable<typeof cfg.manual_risk>),
+      chase_above_ask_usd: 0.02,
+      max_entry_ask_usd: 0.5,
+      min_minutes_elapsed: 0,
+      min_minutes_left: 0,
+    };
+    await upsertUserDoc(uid, { state: 'DISARMED', kalshiConfigured: true, config: cfg });
+    const place = jest.fn(async () => ({
+      ok: true,
+      http_status: 200,
+      dry_run: false,
+      payload: {},
+      fill_count: '5',
+      order_id: 'ord_force',
+    }));
+    const blocked = await executeManualOrder(
+      { userId: uid, asset: 'BTC', action: 'buy', decision: 'YES', requestId: 'force_block' },
+      {
+        computeLeanFn: async () =>
+          richLean({
+            decision: 'SKIP',
+            live: 100_010,
+            strike: 100_000,
+            abs_gap: 10,
+            yes_ask: 0.62,
+            no_ask: 0.4,
+          }) as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: place as any,
+      }
+    );
+    expect(blocked.ok).toBe(false);
+    expect(place).not.toHaveBeenCalled();
+
+    const res = await executeManualOrder(
+      {
+        userId: uid,
+        asset: 'BTC',
+        action: 'buy',
+        decision: 'YES',
+        requestId: 'force_ok',
+        skipGates: true,
+      },
+      {
+        computeLeanFn: async () =>
+          richLean({
+            decision: 'SKIP',
+            live: 100_010,
+            strike: 100_000,
+            abs_gap: 10,
+            yes_ask: 0.62,
+            no_ask: 0.4,
+          }) as any,
+        getUserSecretFn: async () => ({ keyId: 'k', privateKeyPem: 'pem' }) as any,
+        isMarketOpenFn: () => ({ open: true }) as any,
+        placeOrderFn: place as any,
+      }
+    );
+    expect(res.ok).toBe(true);
+    expect(place).toHaveBeenCalledWith(
+      expect.objectContaining({
+        side: 'bid',
+        price: expect.stringMatching(/^0\.6/),
+      })
+    );
+  });
+
   test('opposite Home Buy NO is rejected after a Home YES fill', async () => {
     const uid = 'usr_manual_opp_no';
     const cfg = liveCfg();
