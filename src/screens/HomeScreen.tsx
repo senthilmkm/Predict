@@ -149,7 +149,7 @@ export function HomeScreen({
   const [statusOpen, setStatusOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [placing, setPlacing] = useState<Record<string, boolean>>({});
-  /** Home Buy fills before Cloud trades refresh — keeps Sell + opposite Buy on screen. */
+  /** Home Buy fills before Cloud trades refresh — keeps Sell on screen. */
   const [optimisticHomeLegs, setOptimisticHomeLegs] = useState<
     Partial<Record<AssetKey, Array<{ ticker: string; side: 'YES' | 'NO' }>>>
   >({});
@@ -991,9 +991,10 @@ export function HomeScreen({
         {featureOn ? (
           <Text style={styles.tradeHint}>
             Lean YES/NO here is a signal. Home Buy / Sell is the Home tap path — one Buy for the
-            lean side (mint, or dark green when live is at least 25% past that coin’s Cushion). After
-            a Home fill, Sell for that side and Buy for the other stay on the row. Holding both
-            sides shows Sell YES and Sell NO. Each tap is one side. A tap places now on Cloud Run
+            lean side only (mint, or dark green when live is at least 25% past that coin’s Cushion).
+            After a Home fill, only Sell for that side stays on the row — no opposite Buy. Holding
+            both sides (e.g. older fills) shows Sell YES and Sell NO. Each tap is one side. A tap
+            places now on Cloud Run
             (this phone never talks to Kalshi). If Auto-trade is On and its Risk tab also passes,
             Cloud can buy that same lean too, as long as shared caps allow (max trades / asset /
             15m window, max trades / day, max open, daily loss). Ask too rich and other Home skips

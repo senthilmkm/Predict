@@ -268,10 +268,11 @@ export function homeSellSides(opts: {
 }
 
 /**
- * After one Home side is open on the ticker: offer Buy on the missing opposite side.
- * Before any fill: never dual YES+NO — a single Buy uses the lean side (mint or dark green).
+ * Home never dual-offers Buy YES+NO, and never offers the opposite side after a fill.
+ * One Buy only — lean side, when gap clears Home Enter × cushion (gate elsewhere).
+ * Kept as a stub so HomeScreen / tests stay stable.
  */
-export function homeStrongBuySides(opts: {
+export function homeStrongBuySides(_opts: {
   strongBuy: boolean;
   offerKind: 'buy' | 'sell' | 'none';
   leanDecision?: string;
@@ -279,29 +280,6 @@ export function homeStrongBuySides(opts: {
   heldEntryPath?: string | null;
   openSides?: Array<'YES' | 'NO'>;
 }): Array<'YES' | 'NO'> {
-  const open = new Set(opts.openSides || []);
-  if (opts.heldSide === 'YES' || opts.heldSide === 'NO') open.add(opts.heldSide);
-  const missing: Array<'YES' | 'NO'> = [];
-  if (!open.has('YES')) missing.push('YES');
-  if (!open.has('NO')) missing.push('NO');
-  if (missing.length === 0) return [];
-
-  const path = String(opts.heldEntryPath || '')
-    .toLowerCase()
-    .trim();
-  const isHome =
-    !path ||
-    path === 'home' ||
-    path === 'manual' ||
-    path === 'manual_buy' ||
-    path === 'home_buy';
-
-  // One side already open (fill or optimistic) → offer only the other Buy for Home.
-  if (open.size === 1 && missing.length === 1) {
-    if (path && !isHome) return [];
-    return missing;
-  }
-
   return [];
 }
 

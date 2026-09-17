@@ -6,7 +6,7 @@ import {
   getMarketQuote,
   KalshiPlaceResult,
 } from 'trading-core';
-import { isCashOutEntryPath, isHistorySellableTrade, parseTradeEntryPath } from '../../../../packages/trading-core/src/cashOut';
+import { isCashOutEntryPath, isHistorySellableTrade } from '../../../../packages/trading-core/src/cashOut';
 import { isCapLockEntryPath, isCapLockHistorySellable } from '../../../../packages/trading-core/src/capLock';
 import { runCheapLoopForcedBidExit } from './cloudCheapLoop';
 import {
@@ -580,18 +580,6 @@ async function executeManualBuy(opts: {
           ? 'YES'
           : 'YES';
 
-  const heldIsHome =
-    held &&
-    (parseTradeEntryPath(held.entryPath) === 'home' ||
-      held.entryPath == null ||
-      held.entryPath === undefined);
-  const oppositeHomeHedge =
-    Boolean(held) &&
-    heldIsHome &&
-    String(held!.decision || '').toUpperCase() !== buyDecision &&
-    (String(held!.decision || '').toUpperCase() === 'YES' ||
-      String(held!.decision || '').toUpperCase() === 'NO');
-
   const alreadyHasSide = rawTrades.some(
     (t) =>
       String(t.ticker || '').trim() === ticker &&
@@ -603,7 +591,7 @@ async function executeManualBuy(opts: {
     return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
   }
 
-  if (held && !oppositeHomeHedge) {
+  if (held) {
     if (isCashOutEntryPath(held.entryPath)) {
       return fail(userId, 409, 'cash_out_holding', 'cash_out_holding', { asset, action: 'buy', ticker });
     }
@@ -628,14 +616,7 @@ async function executeManualBuy(opts: {
     if (isCapLockEntryPath(held.entryPath)) {
       return fail(userId, 409, 'cap_lock_holding', 'cap_lock_holding', { asset, action: 'buy', ticker });
     }
-    return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
-  }
-  // Already have this side open on the ticker.
-  if (
-    held &&
-    oppositeHomeHedge &&
-    String(held.decision || '').toUpperCase() === buyDecision
-  ) {
+    // Home (or any other open) already on this ticker — one Buy only via lean; no opposite leg.
     return fail(userId, 409, 'already_holding', 'already_holding', { asset, action: 'buy', ticker });
   }
   if (lean.decision !== 'YES' && lean.decision !== 'NO') {
@@ -679,12 +660,9 @@ async function executeManualBuy(opts: {
     {
       openPositions,
       tradesToday: tradesTodayList.length,
-      // Opposite Home leg does not burn the 1/window first-clip cap again.
-      assetTradesInWindow: oppositeHomeHedge ? 0 : existingBuys,
+      assetTradesInWindow: existingBuys,
       dailyPnlUsd: cloudDailyRealizedPnl(tradesTodayList),
       allowWhenAutoTradeOff: true,
-      // Phone always offers the other Home side after one fill — do not re-block on cushion.
-      skipCushion: oppositeHomeHedge,
     }
   );
 
@@ -699,9 +677,9 @@ async function executeManualBuy(opts: {
   const lock = await tryAcquirePlaceLock({
     userId,
     ticker,
-    cap: oppositeHomeHedge ? Math.max(cap, existingBuys + 1) : cap,
+    cap,
     requestId,
-    existingBuys: oppositeHomeHedge ? 0 : existingBuys,
+    existingBuys,
   });
   if (!lock.ok) {
     return fail(userId, 409, lock.reason, lock.reason, { asset, action: 'buy', ticker });

@@ -798,7 +798,7 @@ describe('HomeScreen', () => {
     }
   });
 
-  test('Buy YES then opposite Buy NO each place only that side', async () => {
+  test('Buy YES then only Sell YES — no opposite Buy NO', async () => {
     const { cloudClient } = require('../../src/services/cloud/cloudClient');
     const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockResolvedValue({
       ok: true,
@@ -829,21 +829,16 @@ describe('HomeScreen', () => {
       expect(placeSpy).toHaveBeenLastCalledWith(
         expect.objectContaining({ action: 'buy', decision: 'YES' })
       );
-      await waitFor(() => expect(s.getByTestId('btn-manual-buy-no-BTC')).toBeTruthy());
-      expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy();
+      await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
       expect(s.getByText('Sell YES')).toBeTruthy();
+      expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
       expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
-      await fireEvent.press(s.getByTestId('btn-manual-buy-no-BTC'));
-      await waitFor(() => expect(placeSpy).toHaveBeenCalledTimes(2));
-      expect(placeSpy).toHaveBeenLastCalledWith(
-        expect.objectContaining({ action: 'buy', decision: 'NO' })
-      );
     } finally {
       placeSpy.mockRestore();
     }
   });
 
-  test('mint Buy YES then shows Sell and Buy NO', async () => {
+  test('mint Buy YES then shows Sell YES only', async () => {
     const { cloudClient } = require('../../src/services/cloud/cloudClient');
     const placeSpy = jest.spyOn(cloudClient, 'placeManualOrder').mockResolvedValue({
       ok: true,
@@ -883,9 +878,9 @@ describe('HomeScreen', () => {
       await waitFor(() => expect(placeSpy).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'buy', decision: 'YES' })
       ));
-      await waitFor(() => expect(s.getByTestId('btn-manual-buy-no-BTC')).toBeTruthy());
-      expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy();
+      await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
       expect(s.getByText('Sell YES')).toBeTruthy();
+      expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
       expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
     } finally {
       placeSpy.mockRestore();

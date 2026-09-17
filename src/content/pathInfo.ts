@@ -41,6 +41,7 @@ export const PATH_INFO = {
       '• A tap still spends real money even if Auto-trade is Off\n' +
       '• Enter × scales this tab only — Cushion lean keeps its own Enter ×\n' +
       '• Asset chips are Home-only — Cushion lean keeps its own chips\n' +
+      '• One Buy only for the lean side when gap clears Enter × cushion — no opposite Buy after a fill\n' +
       '• Will not buy a ticker Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, Pair lock, or Cheap loop already holds\n' +
       '• A Home fill counts toward window cap 1 (Last-minute first clip then sits out)\n' +
       '• Protect money can later sell a Home fill (if Protect is On)\n' +

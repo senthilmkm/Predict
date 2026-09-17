@@ -210,7 +210,7 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'home-buy-sell',
           q: 'What does tapping Buy or Sell on Home do?',
           a:
-            'When Last signals Buy / Sell is On, Home shows one Home Buy / Sell block. Buy YES / Buy NO is a Home tap only; it appears only if Home Buy gates would pass (the same gates Cloud uses on a tap). If the row says ask too rich, too little time left, and so on, there is no Buy button. Sell is in that same block when you already hold that 15-minute window.\n\n' +
+            'When Last signals Buy / Sell is On, Home shows one Home Buy / Sell block. Buy YES / Buy NO is a Home tap only for the lean side; it appears only if Home Buy gates would pass (the same gates Cloud uses on a tap). There is never an opposite-side Buy after a fill. If the row says ask too rich, too little time left, and so on, there is no Buy button. Sell is in that same block when you already hold that 15-minute window.\n\n' +
             'If Auto-trade is On and its Risk tab also passes, Cloud Run can still buy that same lean on the worker tick — even while Home shows Buy. Shared caps apply to both paths (max open, max trades / day, max trades / asset / 15m window, daily loss). If the 15m window cap is 1, the first fill (Home or Auto) uses the slot.\n\n' +
             'One tap tells Cloud Run to place now. The phone never talks to Kalshi. There is no confirm sheet.\n\n' +
             'Purpose: trade without Auto-trade, or take a contract you see while the app is open even if Auto-trade is On.\n\n' +

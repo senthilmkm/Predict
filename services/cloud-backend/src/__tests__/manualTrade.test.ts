@@ -294,7 +294,7 @@ describe('manual buy/sell place-now', () => {
     );
   });
 
-  test('opposite Home Buy NO skips cushion after a Home YES fill', async () => {
+  test('opposite Home Buy NO is rejected after a Home YES fill', async () => {
     const uid = 'usr_manual_opp_no';
     const cfg = liveCfg();
     cfg.cushions.BTC = 500;
@@ -349,13 +349,9 @@ describe('manual buy/sell place-now', () => {
         placeOrderFn: place as any,
       }
     );
-    expect(res.ok).toBe(true);
-    expect(place).toHaveBeenCalledWith(
-      expect.objectContaining({
-        side: 'ask',
-        price: expect.stringMatching(/^0\.44/),
-      })
-    );
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('already_holding');
+    expect(place).not.toHaveBeenCalled();
   });
 
   test('insufficient_balance surfaces Kalshi detail', async () => {

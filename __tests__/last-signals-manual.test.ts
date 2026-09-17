@@ -185,7 +185,7 @@ describe('last signals manual kind', () => {
     ).toBe('sell');
   });
 
-  test('strong Home Buy does not dual-offer; opposite only after one Home leg', () => {
+  test('Home Buy never offers opposite side after one Home leg', () => {
     expect(
       homeStrongBuySides({
         strongBuy: true,
@@ -202,7 +202,7 @@ describe('last signals manual kind', () => {
         heldEntryPath: 'home',
         openSides: ['YES'],
       })
-    ).toEqual(['NO']);
+    ).toEqual([]);
     expect(
       homeStrongBuySides({
         strongBuy: true,
@@ -210,13 +210,6 @@ describe('last signals manual kind', () => {
         heldSide: 'NO',
         heldEntryPath: 'home',
         openSides: ['NO'],
-      })
-    ).toEqual(['YES']);
-    expect(
-      homeStrongBuySides({
-        strongBuy: false,
-        offerKind: 'buy',
-        leanDecision: 'YES',
       })
     ).toEqual([]);
   });
