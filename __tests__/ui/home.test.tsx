@@ -783,7 +783,7 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('trade-action-BTC').props.children).toBe('placed YES · 5 @ $0.55');
   });
 
-  test('manual buy error shows a popup', async () => {
+  test('manual buy error flies a toast instead of a blocking popup', async () => {
     const Alert = require('react-native').Alert;
     const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const { cloudClient } = require('../../src/services/cloud/cloudClient');
@@ -809,9 +809,11 @@ describe('HomeScreen', () => {
       const s = await render(<HomeScreen />);
       await waitFor(() => expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy());
       await fireEvent.press(s.getByTestId('btn-manual-buy-BTC'));
-      await waitFor(() => expect(spy).toHaveBeenCalled());
-      expect(String(spy.mock.calls[0][0])).toMatch(/Could not place order/i);
-      expect(String(spy.mock.calls[0][1])).toMatch(/below cushion/i);
+      await waitFor(() => expect(s.getByTestId('manual-error-fly')).toBeTruthy());
+      expect(s.getByTestId('manual-error-fly-text').props.children).toMatch(/below cushion/i);
+      expect(spy).not.toHaveBeenCalled();
+      // Button unlocks immediately so another tap is possible without dismissing OK.
+      await waitFor(() => expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy());
     } finally {
       spy.mockRestore();
       placeSpy.mockRestore();

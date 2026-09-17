@@ -154,9 +154,13 @@ export function HomeScreen({
   const [optimisticHomeLegs, setOptimisticHomeLegs] = useState<
     Partial<Record<AssetKey, Array<{ ticker: string; side: 'YES' | 'NO' }>>>
   >({});
-  const [fly, setFly] = useState<{ id: string; text: string; startX: number; startY: number } | null>(
-    null
-  );
+  const [fly, setFly] = useState<{
+    id: string;
+    text: string;
+    startX: number;
+    startY: number;
+    tone?: 'success' | 'error';
+  } | null>(null);
   const placingRef = useRef<Record<string, boolean>>({});
   const mountedRef = useRef(true);
   const homeRootRef = useRef<View>(null);
@@ -336,10 +340,16 @@ export function HomeScreen({
         });
         if (!mountedRef.current) return;
         if (!res.ok) {
-          Alert.alert(
-            'Could not place order',
-            res.message || res.error || 'Order failed. Check your connection and try again.'
-          );
+          const start = await windowToHomeLocal(homeRootRef.current, origin);
+          if (!mountedRef.current) return;
+          const detail = String(res.message || res.error || 'Order failed').trim();
+          setFly({
+            id: `${asset}-${action}-err-${Date.now()}`,
+            text: detail.slice(0, 72) || 'Missed',
+            startX: start.x,
+            startY: start.y,
+            tone: 'error',
+          });
           return;
         }
         if (action === 'buy' && (decision === 'YES' || decision === 'NO') && leanTicker) {
@@ -374,7 +384,16 @@ export function HomeScreen({
         void refreshCloudSnapshot();
       } catch (err: any) {
         if (!mountedRef.current) return;
-        Alert.alert('Could not place order', String(err?.message || err || 'Order failed.'));
+        const start = await windowToHomeLocal(homeRootRef.current, origin);
+        if (!mountedRef.current) return;
+        const detail = String(err?.message || err || 'Order failed').trim();
+        setFly({
+          id: `${asset}-${action}-err-${Date.now()}`,
+          text: detail.slice(0, 72) || 'Missed',
+          startX: start.x,
+          startY: start.y,
+          tone: 'error',
+        });
       } finally {
         delete placingRef.current[placeKey];
         if (mountedRef.current) {
@@ -1030,6 +1049,7 @@ export function HomeScreen({
         text={fly.text}
         startX={fly.startX}
         startY={fly.startY}
+        tone={fly.tone || 'success'}
         onDone={() => setFly(null)}
       />
     ) : null}
