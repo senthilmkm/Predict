@@ -183,6 +183,8 @@ export interface RiskConfig {
    * Default 0. Range 0.5–100 step 0.5. Independent of Protect money flip.
    */
   cushion_lean_sell_at_pct?: number;
+  /** Buffer run: dump when held mark ≥ fill × (1 + pct/100). 0 = Off. */
+  buffer_run_sell_at_pct?: number;
   /**
    * Cushion lean Auto path (gap > cushion). Missing → On.
    * Off skips those buys only. Settings Auto-trade still kills every path.
@@ -480,6 +482,7 @@ export function defaultAppConfig(): AppConfig {
       home_buy_assets: AssetRegistry.getDefaultPathAssets(),
       home_sell_at_pct: 0,
       cushion_lean_sell_at_pct: 0,
+      buffer_run_sell_at_pct: 0,
       cushion_lean_enabled: true,
       cushion_lean_assets: AssetRegistry.getDefaultPathAssets(),
       cushion_lean_enter_mult: 1,

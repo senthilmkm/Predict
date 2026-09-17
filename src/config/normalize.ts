@@ -254,6 +254,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     cushion_lean_sell_at_pct: normalizeSellAtPct(
       r.cushion_lean_sell_at_pct ?? d.cushion_lean_sell_at_pct ?? 0
     ),
+    buffer_run_sell_at_pct: normalizeSellAtPct(
+      r.buffer_run_sell_at_pct ?? d.buffer_run_sell_at_pct ?? 0
+    ),
     cushion_lean_enabled: r.cushion_lean_enabled !== false,
     cushion_lean_assets: normalizeCushionLeanAssets(
       r.cushion_lean_assets !== undefined ? r.cushion_lean_assets : d.cushion_lean_assets

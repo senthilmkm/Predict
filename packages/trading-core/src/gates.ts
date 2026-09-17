@@ -564,6 +564,8 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'bid too thin';
     case 'buffer_run_take':
       return 'Buffer run take';
+    case 'buffer_run_sell_at':
+      return 'Buffer run sell at %';
     case 'buffer_run_stop':
       return 'Buffer run stop';
     case 'buffer_run_lean_flip':

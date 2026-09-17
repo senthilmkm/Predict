@@ -43,6 +43,7 @@ async function revertBufferRunClaim(userId: string, trade: TradeRecordDoc): Prom
 
 function exitTitle(kind: string): string {
   if (kind === 'buffer_run_take') return 'Buffer run take';
+  if (kind === 'buffer_run_sell_at') return 'Buffer run sell at %';
   if (kind === 'buffer_run_stop') return 'Buffer run stop';
   if (kind === 'buffer_run_lean_flip') return 'Buffer run lean flip';
   return 'Buffer run flatten';
@@ -67,6 +68,7 @@ export async function runCloudBufferRunExits(opts: {
   takeUsd?: unknown;
   stopUsd?: unknown;
   flattenMinutes?: unknown;
+  sellAtPct?: unknown;
   slippageUsd: number;
   dryRun: boolean;
   now?: Date;
@@ -102,6 +104,7 @@ export async function runCloudBufferRunExits(opts: {
       takeUsd: opts.takeUsd,
       stopUsd: opts.stopUsd,
       flattenMinutes: opts.flattenMinutes,
+      sellAtPct: opts.sellAtPct,
       lean: {
         phase: opts.lean.phase,
         minutes_left: opts.lean.minutes_left,

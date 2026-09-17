@@ -341,18 +341,19 @@ export const PATH_INFO = {
       'Uses\n' +
       '• BTC / ETH chips only, and that asset On (Cushions). Empty chips = no Buffer run buys\n' +
       '• Ask min / Ask max (default 42–62¢), Take (default +12¢), Stop (default −7¢)\n' +
+      '• Sell at % take-profit (0 = Off; same mark rule as Cushion lean; Buffer run grace)\n' +
       '• Enter after (default 3m), Enter left (default 5m), Flatten left (default 3m)\n' +
       '• ATR × (default 1.25) and BTC / ETH min gap floors ($40 / $2.50). Lead must clear max(floor, ATR×)\n' +
       '• $ per trade (default $2.50), Pair-sum skip (default 0.98 — sit when YES+NO looks like a lock)\n' +
       '• Shared: max open, trades/day, daily loss stop. One trade per ticker per window\n' +
-      '• IOC. Exits: Take, Stop, lean flip, or Flatten. Never hold to $1\n\n' +
+      '• IOC. Exits: Take, Sell at %, Stop, lean flip, or Flatten. Never hold to $1\n\n' +
       'Does not use\n' +
       '• Auto lean $, Auto max ask, Smart buy, chase, Auto TIF, Cushions $ gap\n' +
       '• Cap lock / Pair lock / Cheap loop / Cash out / Gold fade knobs\n' +
       '• Skip thin bid unless you turn that checkbox On (default Off)\n\n' +
       'Isolation\n' +
       '• Own path. Default Off. Admin must enable the block first\n' +
-      '• Example: BTC live $100 above strike, YES ask 55¢ → buy YES. Sell if bid ≥ fill + 12¢, dump if bid ≤ fill − 7¢ or lean flips, else flatten with ≤ 3m left\n' +
+      '• Example: BTC live $100 above strike, YES ask 55¢ → buy YES. Sell if bid ≥ fill + 12¢, or Sell at % hits, dump if bid ≤ fill − 7¢ or lean flips, else flatten with ≤ 3m left\n' +
       '• One trade per ticker per window. A sent IOC (including a 0-fill) burns the attempt\n' +
       '• TWAP / Last-minute / Spike fade / Step buy / Pair lock / Cap lock / Cheap loop sit Buffer run out when they own the coin\n' +
       '• While Buffer run holds, those paths sit that ticker out\n' +

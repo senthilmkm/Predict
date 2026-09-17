@@ -21,7 +21,12 @@ import {
   sideBidOf,
   ticketUsd,
 } from './cashOut';
-import { buildProtectSellOrder, computeProtectSellPnlUsd, inProtectSellGrace } from './protectSell';
+import {
+  buildProtectSellOrder,
+  computeProtectSellPnlUsd,
+  inProtectSellGrace,
+  shouldSellAtProfitPct,
+} from './protectSell';
 import { lastMinuteTwapOwns } from './lastMinute';
 import { goldFadeMinutesLeft } from './goldFade';
 import {
@@ -89,6 +94,7 @@ export type BufferRunSide = 'YES' | 'NO';
 export type BufferRunExitKind =
   | 'none'
   | 'buffer_run_take'
+  | 'buffer_run_sell_at'
   | 'buffer_run_stop'
   | 'buffer_run_lean_flip'
   | 'buffer_run_flatten';
@@ -677,6 +683,8 @@ export function evaluateBufferRunExit(opts: {
   takeUsd?: unknown;
   stopUsd?: unknown;
   flattenMinutes?: unknown;
+  /** 0 = Off. Dump when held mark ≥ fill × (1 + pct/100). Independent of Take ¢. */
+  sellAtPct?: unknown;
   lean: {
     phase?: string;
     minutes_left?: number;
@@ -718,6 +726,21 @@ export function evaluateBufferRunExit(opts: {
     if (leanNow !== side) {
       return { sell: true, kind: 'buffer_run_lean_flip', reason: 'buffer_run_lean_flip', bid };
     }
+  }
+
+  const sellAt = shouldSellAtProfitPct({
+    sellAtPct: opts.sellAtPct,
+    entryPay: fill,
+    heldSide: side,
+    yesBid: opts.quotes.yes_bid,
+    yesAsk: opts.quotes.yes_ask,
+    filledAt: opts.filledAt,
+    graceSeconds: 0,
+    now: opts.now,
+    phase: opts.lean.phase,
+  });
+  if (sellAt.sell) {
+    return { sell: true, kind: 'buffer_run_sell_at', reason: 'buffer_run_sell_at', bid };
   }
 
   if (bid != null && fill != null && bid + 1e-9 >= fill + takeUsd) {

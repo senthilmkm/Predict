@@ -233,6 +233,39 @@ describe('bufferRun exits', () => {
     expect(res.sell).toBe(true);
     expect(res.kind).toBe('buffer_run_flatten');
   });
+
+  it('sells at % when mark clears fill × (1 + pct/100)', () => {
+    // fill 50¢, Sell at 10% → need 55¢. Bid 56¢ hits % before Take +12¢ (62¢).
+    const res = evaluateBufferRunExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.56, yes_ask: 0.58, no_bid: 0.42, no_ask: 0.44 },
+      fillUsd: 0.5,
+      takeUsd: 0.12,
+      stopUsd: 0.07,
+      flattenMinutes: 3,
+      sellAtPct: 10,
+      lean: { phase: 'open', minutes_left: 6, live: 100_100, strike: 100_000 },
+      filledAt: new Date(Date.now() - 10_000).toISOString(),
+    });
+    expect(res.sell).toBe(true);
+    expect(res.kind).toBe('buffer_run_sell_at');
+  });
+
+  it('sell at % Off leaves take ¢ in charge', () => {
+    const res = evaluateBufferRunExit({
+      heldSide: 'YES',
+      quotes: { yes_bid: 0.56, yes_ask: 0.58, no_bid: 0.42, no_ask: 0.44 },
+      fillUsd: 0.5,
+      takeUsd: 0.12,
+      stopUsd: 0.07,
+      flattenMinutes: 3,
+      sellAtPct: 0,
+      lean: { phase: 'open', minutes_left: 6, live: 100_100, strike: 100_000 },
+      filledAt: new Date(Date.now() - 10_000).toISOString(),
+    });
+    expect(res.sell).toBe(false);
+    expect(res.kind).toBe('none');
+  });
 });
 
 describe('bufferRun helpers', () => {

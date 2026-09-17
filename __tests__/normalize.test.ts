@@ -106,6 +106,7 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.protect_sell_grace_seconds).toBe(45);
     expect(cfg.risk.home_sell_at_pct).toBe(0);
     expect(cfg.risk.cushion_lean_sell_at_pct).toBe(0);
+    expect(cfg.risk.buffer_run_sell_at_pct).toBe(0);
     expect(cfg.risk.smart_buy_enabled).toBe(true);
     expect(cfg.risk.smart_buy_min_edge_usd).toBe(0.08);
     expect(cfg.risk.cushion_lean_enabled).toBe(true);

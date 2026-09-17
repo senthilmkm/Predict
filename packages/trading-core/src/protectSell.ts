@@ -101,13 +101,18 @@ export function homeAutoExitWatchNeeded(risk?: {
 
 export function sellAtPctForEntryPath(
   entryPath: unknown,
-  risk?: { home_sell_at_pct?: unknown; cushion_lean_sell_at_pct?: unknown } | null
+  risk?: {
+    home_sell_at_pct?: unknown;
+    cushion_lean_sell_at_pct?: unknown;
+    buffer_run_sell_at_pct?: unknown;
+  } | null
 ): number {
   const v = String(entryPath ?? '')
     .toLowerCase()
     .trim();
   if (v === 'home') return normalizeSellAtPct(risk?.home_sell_at_pct);
   if (v === 'auto') return normalizeSellAtPct(risk?.cushion_lean_sell_at_pct);
+  if (v === 'buffer_run') return normalizeSellAtPct(risk?.buffer_run_sell_at_pct);
   return 0;
 }
 

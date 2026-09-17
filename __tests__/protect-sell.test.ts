@@ -101,6 +101,7 @@ describe('protectSell', () => {
     expect(sellAtPctForEntryPath('auto', { home_sell_at_pct: 20, cushion_lean_sell_at_pct: 10 })).toBe(
       10
     );
+    expect(sellAtPctForEntryPath('buffer_run', { buffer_run_sell_at_pct: 12.5 })).toBe(12.5);
     expect(sellAtPctForEntryPath('cash_out', { home_sell_at_pct: 20 })).toBe(0);
   });
 

@@ -1339,7 +1339,7 @@ function BufferRunFields() {
         {on ? (
           <Text style={styles.hint}>
             Mid-window lean scalp when spot has a buffer vs strike and the lead ask is mid-range.
-            Take, stop, lean-flip, or flatten — one trade per window. Never hold to $1.
+            Take, Sell at %, stop, lean-flip, or flatten — one trade per window. Never hold to $1.
           </Text>
         ) : null}
       </View>
@@ -1356,11 +1356,26 @@ function BufferRunFields() {
               <RiskStepper
                 key={meta.key}
                 meta={meta}
-                value={config.risk[meta.key]}
+                value={
+                  meta.key === 'buffer_run_sell_at_pct'
+                    ? normalizeSellAtPct(config.risk.buffer_run_sell_at_pct)
+                    : config.risk[meta.key]
+                }
                 testPrefix="auto"
-                onChange={(next) => setRiskField(meta.key, next as never)}
+                onChange={(next) =>
+                  setRiskField(
+                    meta.key,
+                    (meta.key === 'buffer_run_sell_at_pct'
+                      ? normalizeSellAtPct(next)
+                      : next) as never
+                  )
+                }
               />
             ))}
+          <Text style={styles.hint} testID="risk-buffer-run-sell-at-hint">
+            Sell at % dumps when the held mark is that % above your fill (0 = Off). Independent of
+            Take ¢. Uses Buffer run’s 5s grace. Take / Stop / lean flip / Flatten still apply.
+          </Text>
           <View style={styles.field} testID="risk-field-auto-buffer_run_assets">
             <Text style={styles.label}>Buffer run assets</Text>
             <Text style={styles.hint}>BTC and ETH only. Also must be On in Cushions. Empty means no Buffer run buys.</Text>
@@ -1387,8 +1402,8 @@ function BufferRunFields() {
           <Text style={styles.hint} testID="buffer-run-hint">
             Enter after Enter after minutes and while Enter left remain. Lead ≥ max(min gap,
             ATR ×). Ask must sit in Ask min…Ask max. Skip if YES+NO ≤ Pair-sum skip. Exit on
-            Take, Stop, lean flip, or Flatten left. TWAP / Last-minute / Spike / Step / Pair /
-            Cap / Cheap sit this coin out while Buffer run owns it.
+            Take, Sell at %, Stop, lean flip, or Flatten left. TWAP / Last-minute / Spike / Step /
+            Pair / Cap / Cheap sit this coin out while Buffer run owns it.
           </Text>
         </View>
       ) : null}
