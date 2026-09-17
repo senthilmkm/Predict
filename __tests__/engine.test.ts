@@ -179,6 +179,30 @@ describe('evaluateStaticGate edge cases', () => {
     ).toBe('below_cushion');
   });
 
+  test('Cushion lean asset chips sit coins out without changing Home', () => {
+    const cfg = base();
+    cfg.risk.cushion_lean_assets = ['BTC'];
+    cfg.risk.home_buy_assets = ['Gold'];
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 10 }), cfg, { applyCushionLeanMaxGap: true }).skip_reason
+    ).toBe('cushion_lean_asset_off');
+    expect(evaluateStaticGate(lean({ abs_gap: 10 }), cfg, { allowWhenAutoTradeOff: true }).ok).toBe(
+      true
+    );
+  });
+
+  test('Home Buy asset chips sit coins out without changing Cushion lean', () => {
+    const cfg = base();
+    cfg.risk.home_buy_assets = ['BTC'];
+    cfg.risk.cushion_lean_assets = ['Gold'];
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 10 }), cfg, { allowWhenAutoTradeOff: true }).skip_reason
+    ).toBe('home_buy_asset_off');
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 10 }), cfg, { applyCushionLeanMaxGap: true }).ok
+    ).toBe(true);
+  });
+
   test('skipCushion allows Home opposite leg below cushion', () => {
     const g = evaluateStaticGate(lean({ abs_gap: 1, decision: 'NO', no_ask: 0.4 }), base(), {
       allowWhenAutoTradeOff: true,

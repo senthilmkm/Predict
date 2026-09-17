@@ -14,6 +14,10 @@ import { normalizeCapLockAssets } from '../../packages/trading-core/src/capLock'
 import { normalizeBufferRunAssets } from '../../packages/trading-core/src/bufferRun';
 import { normalizeCheapLoopAssets } from '../../packages/trading-core/src/cheapLoop';
 import { normalizeTwapLockAssets } from '../../packages/trading-core/src/twapLock';
+import {
+  normalizeCushionLeanAssets,
+  normalizeHomeBuyAssets,
+} from '../../packages/trading-core/src/gates';
 import { formatSharedChipOverlapNote } from './tickerOverlap';
 
 const PATHS_HELP =
@@ -88,6 +92,10 @@ export function PathsPickerSheet({
   const tiles = PATH_TILES.filter((t) => !t.adminFlag || flags[t.adminFlag]);
   const overlapNote = formatSharedChipOverlapNote(
     [
+      config.risk.cushion_lean_enabled !== false
+        ? { title: 'Cushion lean', assets: normalizeCushionLeanAssets(config.risk.cushion_lean_assets) }
+        : null,
+      { title: 'Home Buy', assets: normalizeHomeBuyAssets(config.risk.home_buy_assets) },
       twapLockFeatureOn && config.risk.twap_lock_enabled
         ? { title: 'TWAP lock', assets: normalizeTwapLockAssets(config.risk.twap_lock_assets) }
         : null,

@@ -227,6 +227,12 @@ export function getFaqCategories(): FaqCategory[] {
             'Default 1× = full cushion (same as before). 0.8× = Buy can light earlier (80% of cushion). Cushion lean has its own Enter × and ignores this one.',
         },
         {
+          id: 'home-buy-assets',
+          q: 'What are Home Buy asset chips?',
+          a:
+            'Settings → Risk → Home Buy → Home Buy assets. Pick which coins the Buy tap can use. Empty chips = no Home taps. The coin must also be On in Cushions. Cushion lean has its own chips and ignores these.',
+        },
+        {
           id: 'home-sell-at',
           q: 'What is Home Buy “Sell at” %?',
           a:
@@ -406,10 +412,16 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'cushion-lean',
           q: 'What is Cushion lean?',
           a:
-            'Settings → Paths → Cushion lean. This is the leftover Auto path: Cloud buys when the live gap is at least Enter × your Cushions $ (default 1×) and not yet Skip if gap ≥ cushion × (default 2.5×), and Smart buy, minutes, max ask, and shared caps pass. Default On.\n\n' +
+            'Settings → Paths → Cushion lean. This is the leftover Auto path: Cloud buys when the live gap is at least Enter × your Cushions $ (default 1×) and not yet Skip if gap ≥ cushion × (default 2.5×), and Smart buy, minutes, max ask, and shared caps pass. Default On. Asset chips at the bottom pick which coins (empty = no Cushion lean buys; coin must also be On in Cushions).\n\n' +
             'Off = Cloud skips those gap>cushion buys only. Last-minute, Pair lock, Spike fade, Step buy, Cheap loop, Cash out, Gold fade, and TWAP lock keep their own switches.\n\n' +
             'Settings Auto-trade is the master. Off there stops every Auto path, including Cushion lean.\n\n' +
             'Missing on old phones = On, so nothing changes until you flip it. Protect money still works when Cushion lean is Off.',
+        },
+        {
+          id: 'cushion-lean-assets',
+          q: 'What are Cushion lean asset chips?',
+          a:
+            'Settings → Paths → Cushion lean → Cushion lean assets. Pick which coins Cloud may buy on this path. Empty chips = no Cushion lean buys. The coin must also be On in Cushions. Home Buy has its own chips and ignores these.',
         },
         {
           id: 'cushion-lean-enter',

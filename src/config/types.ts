@@ -169,6 +169,11 @@ export interface RiskConfig {
    */
   home_enter_cushion_mult?: number;
   /**
+   * Home Buy only. Selected asset chips. Missing → catalog defaultOn.
+   * Empty = no Home Buy taps. Asset must also be On in Cushions.
+   */
+  home_buy_assets?: string[];
+  /**
    * Home Buy only. Dump when held mark ≥ entry × (1 + pct/100). 0 = Off.
    * Default 0. Range 0.5–100 step 0.5. Independent of Protect money flip.
    */
@@ -183,6 +188,11 @@ export interface RiskConfig {
    * Off skips those buys only. Settings Auto-trade still kills every path.
    */
   cushion_lean_enabled?: boolean;
+  /**
+   * Cushion lean only. Selected asset chips. Missing → catalog defaultOn.
+   * Empty = no Cushion lean buys. Asset must also be On in Cushions.
+   */
+  cushion_lean_assets?: string[];
   /**
    * Cushion lean only. Buy when live gap ≥ cushion × this.
    * Default 1. Range 0.5–1.5. Missing → 1. Home Buy ignores it.
@@ -467,9 +477,11 @@ export function defaultAppConfig(): AppConfig {
       protect_sell_gap_ratio: 1,
       protect_sell_grace_seconds: 45,
       home_enter_cushion_mult: 1,
+      home_buy_assets: AssetRegistry.getDefaultPathAssets(),
       home_sell_at_pct: 0,
       cushion_lean_sell_at_pct: 0,
       cushion_lean_enabled: true,
+      cushion_lean_assets: AssetRegistry.getDefaultPathAssets(),
       cushion_lean_enter_mult: 1,
       cushion_lean_max_gap_mult: 2.5,
       smart_buy_enabled: true,

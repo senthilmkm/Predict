@@ -58,6 +58,10 @@ import {
 } from '../../packages/trading-core/src/lateAtrCushion';
 import { normalizeSellAtPct } from '../../packages/trading-core/src/protectSell';
 import {
+  normalizeCushionLeanAssets,
+  normalizeHomeBuyAssets,
+} from '../../packages/trading-core/src/gates';
+import {
   normalizeStepBuyAddBandUsd,
   normalizeStepBuyAddCushionPct,
   normalizeStepBuyAddWaitMinutes,
@@ -243,11 +247,17 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
       clamp(Number(r.home_enter_cushion_mult ?? d.home_enter_cushion_mult ?? 1), 0.5, 1.5),
       0.05
     ),
+    home_buy_assets: normalizeHomeBuyAssets(
+      r.home_buy_assets !== undefined ? r.home_buy_assets : d.home_buy_assets
+    ),
     home_sell_at_pct: normalizeSellAtPct(r.home_sell_at_pct ?? d.home_sell_at_pct ?? 0),
     cushion_lean_sell_at_pct: normalizeSellAtPct(
       r.cushion_lean_sell_at_pct ?? d.cushion_lean_sell_at_pct ?? 0
     ),
     cushion_lean_enabled: r.cushion_lean_enabled !== false,
+    cushion_lean_assets: normalizeCushionLeanAssets(
+      r.cushion_lean_assets !== undefined ? r.cushion_lean_assets : d.cushion_lean_assets
+    ),
     cushion_lean_enter_mult: snap(
       clamp(Number(r.cushion_lean_enter_mult ?? d.cushion_lean_enter_mult ?? 1), 0.5, 1.5),
       0.05

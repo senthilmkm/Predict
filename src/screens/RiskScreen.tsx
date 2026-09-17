@@ -31,6 +31,10 @@ import { useConfigStore } from '../state/configStore';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { cashOutEdgeWarn, normalizeCashOutAssets } from '../../packages/trading-core/src/cashOut';
 import { normalizeSellAtPct } from '../../packages/trading-core/src/protectSell';
+import {
+  normalizeCushionLeanAssets,
+  normalizeHomeBuyAssets,
+} from '../../packages/trading-core/src/gates';
 import { normalizeTwapLockAssets, TWAP_LOCK_ASSETS } from '../../packages/trading-core/src/twapLock';
 import {
   LastMinuteSide,
@@ -221,6 +225,29 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
             Dump when live mark is at least this % above your fill. 0 = Off. Uses Protect wait/grace.
             Independent of Protect money lean-flip.
           </Text>
+          <View style={styles.field} testID="risk-field-home-home_buy_assets">
+            <Text style={styles.label}>Home Buy assets</Text>
+            <Text style={styles.hint}>Also must be On in Cushions. Empty means no Home Buy taps.</Text>
+            <View style={styles.tifRow}>
+              {AssetRegistry.keys.map((key) => {
+                const selected = normalizeHomeBuyAssets(config.risk.home_buy_assets).includes(key);
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`home-buy-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizeHomeBuyAssets(config.risk.home_buy_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('home_buy_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
         </>
       ) : null}
 
@@ -332,6 +359,29 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
                 </Text>
               </>
             ) : null}
+          </View>
+          <View style={styles.field} testID="risk-field-auto-cushion_lean_assets">
+            <Text style={styles.label}>Cushion lean assets</Text>
+            <Text style={styles.hint}>Also must be On in Cushions. Empty means no Cushion lean buys.</Text>
+            <View style={styles.tifRow}>
+              {AssetRegistry.keys.map((key) => {
+                const selected = normalizeCushionLeanAssets(config.risk.cushion_lean_assets).includes(key);
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`cushion-lean-asset-${key}`}
+                    style={[styles.tifChip, selected && styles.tifChipOn, { flex: undefined, minWidth: 64 }]}
+                    onPress={() => {
+                      const cur = normalizeCushionLeanAssets(config.risk.cushion_lean_assets);
+                      const next = selected ? cur.filter((a) => a !== key) : [...cur, key];
+                      setRiskField('cushion_lean_assets', next);
+                    }}
+                  >
+                    <Text style={[styles.tifText, selected && styles.tifTextOn]}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
             </>
           ) : null}

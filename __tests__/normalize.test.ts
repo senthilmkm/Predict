@@ -112,6 +112,17 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.cushion_lean_max_gap_mult).toBe(2.5);
     expect(cfg.risk.cushion_lean_enter_mult).toBe(1);
     expect(cfg.risk.home_enter_cushion_mult).toBe(1);
+    expect(cfg.risk.cushion_lean_assets?.length).toBeGreaterThan(0);
+    expect(cfg.risk.home_buy_assets?.length).toBeGreaterThan(0);
+    expect(cfg.risk.cushion_lean_assets).toContain('Gold');
+    expect(cfg.risk.home_buy_assets).toContain('Gold');
+    expect(
+      normalizeAppConfig({ risk: { cushion_lean_assets: [] } } as any).risk.cushion_lean_assets
+    ).toEqual([]);
+    expect(
+      normalizeAppConfig({ risk: { home_buy_assets: ['Gold', 'NOPE', 'Gold'] } } as any).risk
+        .home_buy_assets
+    ).toEqual(['Gold']);
     expect(
       normalizeAppConfig({ risk: { cushion_lean_enabled: false } } as any).risk.cushion_lean_enabled
     ).toBe(false);

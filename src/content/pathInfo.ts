@@ -30,15 +30,17 @@ export const PATH_INFO = {
       '• Home max entry ask, TIF, chase\n' +
       '• Enter when gap ≥ cushion × (default 1×; Home-only scale of Cushions $)\n' +
       '• Sell at % take-profit (0 = Off; 1s mark watch; Protect wait/grace)\n' +
+      '• Home Buy asset chips, and that asset On (Cushions). Empty chips = no Home taps\n' +
       '• Shared limits\n' +
       '• Cushions $ gap and asset on/off (Cushions tab)\n\n' +
       'Does not use\n' +
       '• Auto max ask, Auto TIF, Auto chase\n' +
-      '• Smart buy / Cushion lean Enter × or Skip ×\n' +
+      '• Smart buy / Cushion lean Enter × or Skip × / Cushion lean chips\n' +
       '• Cash out / Gold fade / TWAP lock / Last-minute fields\n\n' +
       'Isolation\n' +
       '• A tap still spends real money even if Auto-trade is Off\n' +
       '• Enter × scales this tab only — Cushion lean keeps its own Enter ×\n' +
+      '• Asset chips are Home-only — Cushion lean keeps its own chips\n' +
       '• Will not buy a ticker Cash out, Gold fade, TWAP lock, Last-minute, Step buy, Spike fade, Pair lock, or Cheap loop already holds\n' +
       '• A Home fill counts toward window cap 1 (Last-minute first clip then sits out)\n' +
       '• Protect money can later sell a Home fill (if Protect is On)\n' +
@@ -53,14 +55,16 @@ export const PATH_INFO = {
       '• Minutes left and elapsed (default 2 / 2 — no last-minute chase)\n' +
       '• Auto max entry ask, TIF, chase\n' +
       '• Sell at % take-profit (0 = Off; 1s mark watch; Protect wait/grace)\n' +
-      '• Cushions $ gap (above cushion × enter, below cushion × max gap), Smart buy (if On), shared limits, asset on/off\n\n' +
+      '• Cushions $ gap (above cushion × enter, below cushion × max gap), Smart buy (if On), shared limits, asset on/off\n' +
+      '• Cushion lean asset chips (empty = no Cushion lean buys; asset must also be On in Cushions)\n\n' +
       'Does not use\n' +
-      '• Home Buy size/timing\n' +
+      '• Home Buy size/timing / Home chips\n' +
       '• Cash out / Gold fade / TWAP / Last-minute / Step buy / Spike fade / Pair lock / Cheap loop ask, side, or lots\n\n' +
       'Isolation\n' +
       '• Off = Cloud skips gap>cushion buys only. Last-minute and other paths keep their own switches\n' +
       '• Enter when gap ≥ cushion × (default 1×) scales Auto enter without changing Cushions $ — Home Buy ignores it\n' +
       '• Skip if gap ≥ cushion × (default 2.5) sits out stretched moves — Home Buy ignores it\n' +
+      '• Asset chips are Cushion lean only — Home Buy keeps its own chips\n' +
       '• Settings Auto-trade Off still stops every Auto path\n' +
       '• Missing on old configs = On\n' +
       '• Default minutes left = 2, so Auto sits out the last minute\n' +

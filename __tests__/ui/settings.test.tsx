@@ -617,6 +617,18 @@ describe('Settings credentials', () => {
     expect(useConfigStore.getState().config.risk.cushion_lean_enter_mult).toBe(1);
   });
 
+  test('Home Buy asset chip toggles without changing Cushion lean chips', async () => {
+    const s = await render(<SettingsHost />);
+    await openFocusedPath(s, 'home');
+    expect(s.getByTestId('home-buy-asset-Gold')).toBeTruthy();
+    const beforeLean = [...(useConfigStore.getState().config.risk.cushion_lean_assets || [])];
+    await fireEvent.press(s.getByTestId('home-buy-asset-Gold'));
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.risk.home_buy_assets).not.toContain('Gold')
+    );
+    expect(useConfigStore.getState().config.risk.cushion_lean_assets).toEqual(beforeLean);
+  });
+
   test('Cheap loop Weekly Take + raises Stop when Stop is in the way', async () => {
     const s = await render(<SettingsHost />);
     await waitFor(() => {
@@ -657,6 +669,7 @@ describe('Settings credentials', () => {
     );
     expect(s.queryByTestId('risk-field-auto-cushion_lean_enter_mult')).toBeNull();
     expect(s.queryByTestId('risk-field-auto-cushion_lean_max_gap_mult')).toBeNull();
+    expect(s.queryByTestId('risk-field-auto-cushion_lean_assets')).toBeNull();
     expect(s.queryByTestId('risk-toggle-smart_buy_enabled')).toBeNull();
     expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy();
     expect(s.getByText(/no gap>cushion buys/i)).toBeTruthy();
@@ -670,6 +683,18 @@ describe('Settings credentials', () => {
     await waitFor(() =>
       expect(useConfigStore.getState().config.risk.cushion_lean_enter_mult).toBe(0.95)
     );
+  });
+
+  test('Cushion lean asset chip toggles without changing Home chips', async () => {
+    const s = await render(<SettingsHost />);
+    await openFocusedPath(s, 'auto');
+    expect(s.getByTestId('cushion-lean-asset-Gold')).toBeTruthy();
+    const beforeHome = [...(useConfigStore.getState().config.risk.home_buy_assets || [])];
+    await fireEvent.press(s.getByTestId('cushion-lean-asset-Gold'));
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.risk.cushion_lean_assets).not.toContain('Gold')
+    );
+    expect(useConfigStore.getState().config.risk.home_buy_assets).toEqual(beforeHome);
   });
 
   test('Cushion lean max gap stepper updates × cushion', async () => {

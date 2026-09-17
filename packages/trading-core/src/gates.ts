@@ -1,4 +1,4 @@
-import { AppConfig, AssetKey } from './types';
+import { AppConfig, ASSETS_CATALOG, AssetKey } from './types';
 import {
   evaluateSmartBuy,
   isSmartBuyEnabled,
@@ -124,6 +124,54 @@ export function normalizeCushionLeanEnterMult(raw: unknown): number {
   return Math.round(clamped * 20) / 20;
 }
 
+/** Full 15m catalog — every chip is selectable. */
+export function cushionLeanDefaultAssets(): string[] {
+  return ASSETS_CATALOG.map((a) => a.key);
+}
+
+/** Missing → catalog coins that start On. Empty = no Cushion lean buys. */
+export function normalizeCushionLeanAssets(raw: unknown): string[] {
+  const allowed = cushionLeanDefaultAssets();
+  const allowedSet = new Set(allowed);
+  if (raw == null || !Array.isArray(raw)) {
+    return allowed.filter((k) => ASSETS_CATALOG.find((a) => a.key === k)?.defaultOn !== false);
+  }
+  const out: string[] = [];
+  for (const item of raw) {
+    const k = String(item || '').trim();
+    if (allowedSet.has(k) && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
+export function isCushionLeanAssetSelected(assets: unknown, asset: string): boolean {
+  return normalizeCushionLeanAssets(assets).includes(String(asset));
+}
+
+/** Full 15m catalog — every chip is selectable. */
+export function homeBuyDefaultAssets(): string[] {
+  return ASSETS_CATALOG.map((a) => a.key);
+}
+
+/** Missing → catalog coins that start On. Empty = no Home Buy taps. */
+export function normalizeHomeBuyAssets(raw: unknown): string[] {
+  const allowed = homeBuyDefaultAssets();
+  const allowedSet = new Set(allowed);
+  if (raw == null || !Array.isArray(raw)) {
+    return allowed.filter((k) => ASSETS_CATALOG.find((a) => a.key === k)?.defaultOn !== false);
+  }
+  const out: string[] = [];
+  for (const item of raw) {
+    const k = String(item || '').trim();
+    if (allowedSet.has(k) && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
+export function isHomeBuyAssetSelected(assets: unknown, asset: string): boolean {
+  return normalizeHomeBuyAssets(assets).includes(String(asset));
+}
+
 /** Home Last-signals amber/green label for a Cloud gate skip. */
 export function formatSkipReason(reason: string | undefined): string {
   switch (reason) {
@@ -131,6 +179,10 @@ export function formatSkipReason(reason: string | undefined): string {
       return 'auto-trade off';
     case 'asset_disabled':
       return 'asset off';
+    case 'cushion_lean_asset_off':
+      return 'Cushion lean asset off';
+    case 'home_buy_asset_off':
+      return 'Home Buy asset off';
     case 'window_ended':
       return 'window ended';
     case 'skip_decision':
@@ -725,6 +777,16 @@ export function evaluateStaticGate(
   }
   if (!cfg.assets_enabled[lean.asset]) {
     return { ok: false, skip_reason: 'asset_disabled' };
+  }
+  if (opts?.applyCushionLeanMaxGap && !isCushionLeanAssetSelected(cfg.risk.cushion_lean_assets, lean.asset)) {
+    return { ok: false, skip_reason: 'cushion_lean_asset_off' };
+  }
+  if (
+    opts?.allowWhenAutoTradeOff &&
+    !opts?.applyCushionLeanMaxGap &&
+    !isHomeBuyAssetSelected(cfg.risk.home_buy_assets, lean.asset)
+  ) {
+    return { ok: false, skip_reason: 'home_buy_asset_off' };
   }
   if (lean.phase === 'ended') {
     return { ok: false, skip_reason: 'window_ended' };
