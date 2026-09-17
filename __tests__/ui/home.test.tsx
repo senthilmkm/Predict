@@ -497,7 +497,7 @@ describe('HomeScreen', () => {
     expect(on.queryByTestId('tap-idle-BTC')).toBeNull();
     expect(on.getByTestId('signal-gap-BTC').props.children).toBe('\u25B2 $400.00 (gap)');
     expect(on.getByTestId('home-buy-sell-label')).toBeTruthy();
-    expect(StyleSheet.flatten(on.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
+    expect(StyleSheet.flatten(on.getByTestId('buy-orb-BTC').props.style).backgroundColor).toBe(
       colors.buyDeep
     );
   });
@@ -521,7 +521,7 @@ describe('HomeScreen', () => {
     expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
     expect(s.getByTestId('buy-plus-icon-BTC')).toBeTruthy();
     expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
-    expect(StyleSheet.flatten(s.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
+    expect(StyleSheet.flatten(s.getByTestId('buy-orb-BTC').props.style).backgroundColor).toBe(
       colors.win
     );
   });
@@ -598,7 +598,7 @@ describe('HomeScreen', () => {
     expect(heldOpenFillForTicker(useRuntimeStore.getState().trades, 'KXBTC15M-X')?.side).toBe('YES');
     const s = await render(<HomeScreen />);
     await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
-    expect(s.getByText('Sell YES')).toBeTruthy();
+    expect(s.getByTestId('sell-minus-icon-yes-BTC')).toBeTruthy();
     expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
     expect(s.queryByText('Buy NO')).toBeNull();
     expect(s.getByTestId('signal-gap-BTC').props.children).toBe('against you $10.00 (gap)');
@@ -661,6 +661,8 @@ describe('HomeScreen', () => {
     const s = await render(<HomeScreen />);
     await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
     expect(s.getByTestId('btn-manual-sell-no-BTC')).toBeTruthy();
+    expect(s.getByTestId('sell-minus-icon-yes-BTC')).toBeTruthy();
+    expect(s.getByTestId('sell-minus-icon-no-BTC')).toBeTruthy();
     expect(s.queryByTestId('btn-manual-buy-yes-BTC')).toBeNull();
     expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
   });
@@ -888,7 +890,7 @@ describe('HomeScreen', () => {
         expect.objectContaining({ action: 'buy', decision: 'YES' })
       );
       await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
-      expect(s.getByText('Sell YES')).toBeTruthy();
+      expect(s.getByTestId('sell-minus-icon-yes-BTC')).toBeTruthy();
       expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
       expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
     } finally {
@@ -937,7 +939,7 @@ describe('HomeScreen', () => {
         expect.objectContaining({ action: 'buy', decision: 'YES' })
       ));
       await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
-      expect(s.getByText('Sell YES')).toBeTruthy();
+      expect(s.getByTestId('sell-minus-icon-yes-BTC')).toBeTruthy();
       expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
       expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
     } finally {

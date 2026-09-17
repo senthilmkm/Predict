@@ -23,7 +23,7 @@ import {
   isMarketOpen,
 } from '../services/marketHours';
 import { PathInfoIcon } from '../components/PathInfoIcon';
-import { PlusIcon } from '../components/PlusIcon';
+import { TradeActionOrb } from '../components/TradeActionOrb';
 import { PathFocusId, pathTileById } from '../content/pathCatalog';
 import { usePinnedPathsStore } from '../state/pinnedPathsStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
@@ -996,13 +996,13 @@ export function HomeScreen({
         )}
         {featureOn ? (
           <Text style={styles.tradeHint}>
-            Lean YES/NO here is a signal. Green plus = Home Buy when gap clears Enter × cushion
-            (darker green when live is at least 25% past that coin’s Cushion). Gray plus = place
-            anyway (skips Home gates). After a Home fill, only Sell for that side stays — no
-            opposite Buy. A tap places now on Cloud Run (this phone never talks to Kalshi). If
-            Auto-trade is On and its Risk tab also passes, Cloud can buy that same lean too, as
-            long as shared caps allow. A miss is under History → Misses. Kill-Switch and the Last
-            signals Buy / Sell flag hide these controls.
+            Lean YES/NO here is a signal. Green + = Home Buy when gap clears Enter × cushion
+            (darker green when live is at least 25% past that coin’s Cushion). Gray + = place
+            anyway (skips Home gates). Orange − = Sell that side. After a Home fill, only Sell
+            for that side stays — no opposite Buy. A tap places now on Cloud Run (this phone never
+            talks to Kalshi). If Auto-trade is On and its Risk tab also passes, Cloud can buy that
+            same lean too, as long as shared caps allow. A miss is under History → Misses.
+            Kill-Switch and the Last signals Buy / Sell flag hide these controls.
           </Text>
         ) : autoTradeOn ? (
           <Text style={styles.tradeHint}>
@@ -1372,15 +1372,31 @@ function LastSignalRow({
             return (
               <Pressable
                 key={`sell-${side}`}
-                style={[styles.manualBtn, styles.manualBtnSell, busy && styles.manualBtnBusy]}
+                style={[styles.orbPress, busy && styles.manualBtnBusy]}
                 onPress={() => measureAndPlace('sell', side)}
                 disabled={Boolean(busy)}
-                hitSlop={{ left: 8, right: 8, top: 0, bottom: 0 }}
+                hitSlop={8}
                 testID={`btn-manual-sell-${side.toLowerCase()}-${row.asset}`}
                 accessibilityLabel={`Sell ${side} only`}
+                accessibilityRole="button"
+                accessibilityState={{ busy: Boolean(busy), disabled: Boolean(busy) }}
               >
-                {busy ? <ActivityIndicator color="#fff" size="small" /> : null}
-                <Text style={styles.manualBtnText}>{busy ? 'Placing…' : `Sell ${side}`}</Text>
+                {({ pressed }) =>
+                  busy ? (
+                    <View style={styles.orbBusy}>
+                      <ActivityIndicator color={colors.warn} size="small" />
+                    </View>
+                  ) : (
+                    <TradeActionOrb
+                      tone="sell"
+                      glyph="minus"
+                      size={44}
+                      pressed={pressed}
+                      badge={side}
+                      iconTestID={`sell-minus-icon-${side.toLowerCase()}-${row.asset}`}
+                    />
+                  )
+                }
               </Pressable>
             );
           })}
@@ -1389,43 +1405,61 @@ function LastSignalRow({
         <Pressable
           ref={btnRef}
           collapsable={false}
-          style={[
-            styles.manualBtn,
-            styles.manualBtnIcon,
-            row.strongBuy ? styles.manualBtnBuyDeep : styles.manualBtnBuy,
-            row.placing && styles.manualBtnBusy,
-          ]}
+          style={[styles.orbPress, row.placing && styles.manualBtnBusy]}
           onPress={firePlace}
           disabled={row.placing}
-          hitSlop={6}
+          hitSlop={8}
           testID={`btn-manual-buy-${row.asset}`}
           accessibilityState={{ busy: row.placing, disabled: row.placing }}
           accessibilityLabel={`Buy ${buySide}`}
           accessibilityRole="button"
         >
-          {row.placing ? (
-            <ActivityIndicator color="#fff" size="small" testID={`manual-placing-${row.asset}`} />
-          ) : (
-            <PlusIcon color="#fff" size={18} testID={`buy-plus-icon-${row.asset}`} />
-          )}
+          {({ pressed }) =>
+            row.placing ? (
+              <View style={styles.orbBusy}>
+                <ActivityIndicator color={colors.win} size="small" testID={`manual-placing-${row.asset}`} />
+              </View>
+            ) : (
+              <TradeActionOrb
+                tone={row.strongBuy ? 'buyDeep' : 'buy'}
+                glyph="plus"
+                size={44}
+                pressed={pressed}
+                testID={`buy-orb-${row.asset}`}
+                iconTestID={`buy-plus-icon-${row.asset}`}
+              />
+            )
+          }
         </Pressable>
       ) : row.manualKind === 'sell' ? (
         <Pressable
           ref={btnRef}
           collapsable={false}
-          style={[styles.manualBtn, styles.manualBtnSell, row.placing && styles.manualBtnBusy]}
+          style={[styles.orbPress, row.placing && styles.manualBtnBusy]}
           onPress={firePlace}
           disabled={row.placing}
-          hitSlop={6}
+          hitSlop={8}
           testID={`btn-manual-sell-${row.asset}`}
           accessibilityState={{ busy: row.placing, disabled: row.placing }}
           accessibilityLabel={btnLabel || 'Sell'}
           accessibilityRole="button"
         >
-          {row.placing ? (
-            <ActivityIndicator color="#fff" size="small" testID={`manual-placing-${row.asset}`} />
-          ) : null}
-          <Text style={styles.manualBtnText}>{btnLabel}</Text>
+          {({ pressed }) =>
+            row.placing ? (
+              <View style={styles.orbBusy}>
+                <ActivityIndicator color={colors.warn} size="small" testID={`manual-placing-${row.asset}`} />
+              </View>
+            ) : (
+              <TradeActionOrb
+                tone="sell"
+                glyph="minus"
+                size={44}
+                pressed={pressed}
+                badge={row.held?.side === 'NO' ? 'NO' : 'YES'}
+                iconTestID={`sell-minus-icon-${row.asset}`}
+              />
+            )
+          }
         </Pressable>
       ) : !row.isOpen ? (
         <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
@@ -1439,20 +1473,34 @@ function LastSignalRow({
         <Pressable
           ref={forceRef}
           collapsable={false}
-          style={[styles.tapIdle, styles.tapIdleBtn, row.placingForce && styles.manualBtnBusy]}
+          style={[styles.orbPress, row.placingForce && styles.manualBtnBusy]}
           onPress={fireForceBuy}
           disabled={Boolean(row.placingForce)}
-          hitSlop={6}
+          hitSlop={8}
           testID={`tap-idle-${row.asset}`}
           accessibilityLabel={`Force buy ${forceBuySide()} (skip Home gates)`}
           accessibilityRole="button"
           accessibilityState={{ busy: Boolean(row.placingForce), disabled: Boolean(row.placingForce) }}
         >
-          {row.placingForce ? (
-            <ActivityIndicator color={colors.mute} size="small" testID={`force-placing-${row.asset}`} />
-          ) : (
-            <PlusIcon color={colors.mute} size={18} testID={`idle-plus-icon-${row.asset}`} />
-          )}
+          {({ pressed }) =>
+            row.placingForce ? (
+              <View style={styles.orbBusy}>
+                <ActivityIndicator
+                  color={colors.textSecondary}
+                  size="small"
+                  testID={`force-placing-${row.asset}`}
+                />
+              </View>
+            ) : (
+              <TradeActionOrb
+                tone="idle"
+                glyph="plus"
+                size={44}
+                pressed={pressed}
+                iconTestID={`idle-plus-icon-${row.asset}`}
+              />
+            )
+          }
         </Pressable>
       )}
     </View>
@@ -1645,31 +1693,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
   },
-  manualBtnIcon: {
-    minWidth: 40,
-    paddingHorizontal: 10,
-    borderRadius: 20,
+  orbPress: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44,
+    minHeight: 44,
   },
-  manualBtnCol: { gap: 10, alignItems: 'stretch' },
+  orbBusy: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  manualBtnCol: { gap: 10, alignItems: 'center' },
   manualBtnBuy: { backgroundColor: colors.win },
   manualBtnBuyDeep: { backgroundColor: colors.buyDeep },
   manualBtnSell: { backgroundColor: colors.warn },
   manualBtnBusy: { opacity: 0.72 },
   manualBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
-  tapIdle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0.85,
-  },
-  tapIdleBtn: {
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    opacity: 1,
-  },
   signalLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   signalAsset: { color: colors.textPrimary, fontWeight: '700', minWidth: 44 },
   signalCategoryIcon: {
