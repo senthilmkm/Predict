@@ -110,6 +110,7 @@ describe('normalize / cushions', () => {
     expect(cfg.risk.smart_buy_min_edge_usd).toBe(0.08);
     expect(cfg.risk.cushion_lean_enabled).toBe(true);
     expect(cfg.risk.cushion_lean_max_gap_mult).toBe(2.5);
+    expect(cfg.risk.cushion_lean_enter_mult).toBe(1);
     expect(
       normalizeAppConfig({ risk: { cushion_lean_enabled: false } } as any).risk.cushion_lean_enabled
     ).toBe(false);
@@ -121,6 +122,14 @@ describe('normalize / cushions', () => {
       normalizeAppConfig({ risk: { cushion_lean_max_gap_mult: 1 } } as any).risk
         .cushion_lean_max_gap_mult
     ).toBe(1.5);
+    expect(
+      normalizeAppConfig({ risk: { cushion_lean_enter_mult: 0.82 } } as any).risk
+        .cushion_lean_enter_mult
+    ).toBe(0.8);
+    expect(
+      normalizeAppConfig({ risk: { cushion_lean_enter_mult: 0.1 } } as any).risk
+        .cushion_lean_enter_mult
+    ).toBe(0.5);
   });
 
   test('Cash out $ seeds from Auto $ when missing, then keeps its own', () => {

@@ -158,6 +158,11 @@ export interface RiskConfig {
    */
   cushion_lean_enabled?: boolean;
   /**
+   * Cushion lean only. Buy when live gap ≥ cushion × this.
+   * Default 1. Range 0.5–1.5. Missing on old docs → 1. Home Buy ignores it.
+   */
+  cushion_lean_enter_mult?: number;
+  /**
    * Cushion lean only. Skip buy when live gap ≥ cushion × this.
    * Default 2.5. Range 1.5–5. Missing on old docs → 2.5.
    */
@@ -464,6 +469,7 @@ export function defaultAppConfig(): AppConfig {
       home_sell_at_pct: 0,
       cushion_lean_sell_at_pct: 0,
       cushion_lean_enabled: true,
+      cushion_lean_enter_mult: 1,
       cushion_lean_max_gap_mult: 2.5,
       smart_buy_enabled: true,
       smart_buy_min_edge_usd: 0.08,

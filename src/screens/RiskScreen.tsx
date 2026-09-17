@@ -15,6 +15,7 @@ import {
   CHEAP_LOOP_HOURLY_RISK_FIELD_KEYS,
   CHEAP_LOOP_WEEKLY_RISK_FIELD_KEYS,
   PATH_RISK_FIELD_KEYS,
+  CUSHION_LEAN_ENTER_FIELD_KEYS,
   CUSHION_LEAN_MAX_GAP_FIELD_KEYS,
   HOME_SELL_AT_RISK_FIELD_KEYS,
   CUSHION_LEAN_SELL_AT_RISK_FIELD_KEYS,
@@ -260,6 +261,19 @@ export function RiskScreen({ focus, route }: RiskScreenProps = {}) {
           <Text style={styles.hint} testID="risk-auto-sell-at-hint">
             Dump when live mark is at least this % above your fill. 0 = Off. Uses Protect wait/grace.
             Independent of Protect money lean-flip.
+          </Text>
+          {metaFor(CUSHION_LEAN_ENTER_FIELD_KEYS).map((meta) => (
+            <RiskStepper
+              key={meta.key}
+              meta={meta}
+              value={config.risk[meta.key]}
+              testPrefix="auto"
+              onChange={(next) => setRiskField(meta.key, next as never)}
+            />
+          ))}
+          <Text style={styles.hint} testID="risk-auto-enter-cushion-hint">
+            Cushion lean only. Buy when the live gap is at least this many times the coin’s cushion
+            (default 1× = full cushion). Home Buy ignores this.
           </Text>
           {metaFor(CUSHION_LEAN_MAX_GAP_FIELD_KEYS).map((meta) => (
             <RiskStepper

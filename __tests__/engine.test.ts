@@ -142,6 +142,27 @@ describe('evaluateStaticGate edge cases', () => {
     ).toBe('above_cushion_max');
   });
 
+  test('Cushion lean enter mult scales enter without changing Home cushion', () => {
+    const cfg = base();
+    cfg.cushions.Gold = 100;
+    cfg.risk.cushion_lean_enter_mult = 0.8;
+    cfg.risk.cushion_lean_max_gap_mult = 2.5;
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 80 }), cfg, { applyCushionLeanMaxGap: true }).ok
+    ).toBe(true);
+    expect(evaluateStaticGate(lean({ abs_gap: 80 }), cfg).skip_reason).toBe('below_cushion');
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 79 }), cfg, { applyCushionLeanMaxGap: true }).skip_reason
+    ).toBe('below_cushion');
+    cfg.risk.cushion_lean_enter_mult = 1.2;
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 110 }), cfg, { applyCushionLeanMaxGap: true }).skip_reason
+    ).toBe('below_cushion');
+    expect(
+      evaluateStaticGate(lean({ abs_gap: 120 }), cfg, { applyCushionLeanMaxGap: true }).ok
+    ).toBe(true);
+  });
+
   test('skipCushion allows Home opposite leg below cushion', () => {
     const g = evaluateStaticGate(lean({ abs_gap: 1, decision: 'NO', no_ask: 0.4 }), base(), {
       allowWhenAutoTradeOff: true,

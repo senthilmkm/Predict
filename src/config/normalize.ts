@@ -244,6 +244,10 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
       r.cushion_lean_sell_at_pct ?? d.cushion_lean_sell_at_pct ?? 0
     ),
     cushion_lean_enabled: r.cushion_lean_enabled !== false,
+    cushion_lean_enter_mult: snap(
+      clamp(Number(r.cushion_lean_enter_mult ?? d.cushion_lean_enter_mult ?? 1), 0.5, 1.5),
+      0.05
+    ),
     cushion_lean_max_gap_mult: snap(
       clamp(Number(r.cushion_lean_max_gap_mult ?? d.cushion_lean_max_gap_mult ?? 2.5), 1.5, 5),
       0.25

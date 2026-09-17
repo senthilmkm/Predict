@@ -633,7 +633,9 @@ describe('Settings credentials', () => {
     const s = await render(<SettingsHost />);
     await openFocusedPath(s, 'auto');
     expect(s.getByTestId('risk-toggle-cushion_lean_enabled')).toBeTruthy();
+    expect(s.getByTestId('risk-field-auto-cushion_lean_enter_mult')).toBeTruthy();
     expect(s.getByTestId('risk-field-auto-cushion_lean_max_gap_mult')).toBeTruthy();
+    expect(useConfigStore.getState().config.risk.cushion_lean_enter_mult).toBe(1);
     expect(useConfigStore.getState().config.risk.cushion_lean_max_gap_mult).toBe(2.5);
     expect(s.getByTestId('risk-toggle-smart_buy_enabled')).toBeTruthy();
     expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy();
@@ -641,10 +643,21 @@ describe('Settings credentials', () => {
     await waitFor(() =>
       expect(useConfigStore.getState().config.risk.cushion_lean_enabled).toBe(false)
     );
+    expect(s.queryByTestId('risk-field-auto-cushion_lean_enter_mult')).toBeNull();
     expect(s.queryByTestId('risk-field-auto-cushion_lean_max_gap_mult')).toBeNull();
     expect(s.queryByTestId('risk-toggle-smart_buy_enabled')).toBeNull();
     expect(s.getByTestId('risk-toggle-protect_sell_enabled')).toBeTruthy();
     expect(s.getByText(/no gap>cushion buys/i)).toBeTruthy();
+  });
+
+  test('Cushion lean enter mult stepper updates × cushion', async () => {
+    const s = await render(<SettingsHost />);
+    await openFocusedPath(s, 'auto');
+    expect(s.getByTestId('risk-field-auto-cushion_lean_enter_mult')).toBeTruthy();
+    await fireEvent.press(s.getByTestId('risk-down-auto-cushion_lean_enter_mult'));
+    await waitFor(() =>
+      expect(useConfigStore.getState().config.risk.cushion_lean_enter_mult).toBe(0.95)
+    );
   });
 
   test('Cushion lean max gap stepper updates × cushion', async () => {

@@ -116,6 +116,14 @@ export function normalizeCushionLeanMaxGapMult(raw: unknown): number {
   return Math.round(clamped * 4) / 4;
 }
 
+/** Cushion lean enter when gap ≥ cushion × this. Default 1. Range 0.5–1.5 step 0.05. */
+export function normalizeCushionLeanEnterMult(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 1;
+  const clamped = Math.min(1.5, Math.max(0.5, n));
+  return Math.round(clamped * 20) / 20;
+}
+
 /** Home Last-signals amber/green label for a Cloud gate skip. */
 export function formatSkipReason(reason: string | undefined): string {
   switch (reason) {
@@ -735,7 +743,11 @@ export function evaluateStaticGate(
 
   if (!opts?.skipCushion) {
     const cushion = Number(cfg.cushions[lean.asset]);
-    if (lean.abs_gap + 1e-9 < cushion) {
+    const enterNeed =
+      opts?.applyCushionLeanMaxGap && cushion > 0
+        ? cushion * normalizeCushionLeanEnterMult(cfg.risk.cushion_lean_enter_mult)
+        : cushion;
+    if (lean.abs_gap + 1e-9 < enterNeed) {
       return { ok: false, skip_reason: 'below_cushion' };
     }
     if (opts?.applyCushionLeanMaxGap && cushion > 0) {

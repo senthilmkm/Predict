@@ -51,12 +51,13 @@ export const PATH_INFO = {
       '• Minutes left and elapsed (default 2 / 2 — no last-minute chase)\n' +
       '• Auto max entry ask, TIF, chase\n' +
       '• Sell at % take-profit (0 = Off; 1s mark watch; Protect wait/grace)\n' +
-      '• Cushions $ gap (above cushion, below cushion × max gap), Smart buy (if On), shared limits, asset on/off\n\n' +
+      '• Cushions $ gap (above cushion × enter, below cushion × max gap), Smart buy (if On), shared limits, asset on/off\n\n' +
       'Does not use\n' +
       '• Home Buy size/timing\n' +
       '• Cash out / Gold fade / TWAP / Last-minute / Step buy / Spike fade / Pair lock / Cheap loop ask, side, or lots\n\n' +
       'Isolation\n' +
       '• Off = Cloud skips gap>cushion buys only. Last-minute and other paths keep their own switches\n' +
+      '• Enter when gap ≥ cushion × (default 1×) scales Auto enter without changing Cushions $ — Home Buy ignores it\n' +
       '• Skip if gap ≥ cushion × (default 2.5) sits out stretched moves — Home Buy ignores it\n' +
       '• Settings Auto-trade Off still stops every Auto path\n' +
       '• Missing on old configs = On\n' +

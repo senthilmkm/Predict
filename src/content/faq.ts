@@ -399,18 +399,26 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'cushion-lean',
           q: 'What is Cushion lean?',
           a:
-            'Settings → Paths → Cushion lean. This is the leftover Auto path: Cloud buys when the live gap is bigger than your Cushions $ and not yet Skip if gap ≥ cushion × (default 2.5×), and Smart buy, minutes, max ask, and shared caps pass. Default On.\n\n' +
+            'Settings → Paths → Cushion lean. This is the leftover Auto path: Cloud buys when the live gap is at least Enter × your Cushions $ (default 1×) and not yet Skip if gap ≥ cushion × (default 2.5×), and Smart buy, minutes, max ask, and shared caps pass. Default On.\n\n' +
             'Off = Cloud skips those gap>cushion buys only. Last-minute, Pair lock, Spike fade, Step buy, Cheap loop, Cash out, Gold fade, and TWAP lock keep their own switches.\n\n' +
             'Settings Auto-trade is the master. Off there stops every Auto path, including Cushion lean.\n\n' +
             'Missing on old phones = On, so nothing changes until you flip it. Protect money still works when Cushion lean is Off.',
+        },
+        {
+          id: 'cushion-lean-enter',
+          q: 'What does “Enter when gap ≥ cushion ×” mean?',
+          a:
+            'Settings → Paths → Cushion lean only. Home Buy ignores it.\n\n' +
+            'Scales Auto’s enter threshold without changing Cushions $. Default 1× = same as today’s full cushion. 0.8× = enter earlier (80% of cushion). 1.2× = stricter.\n\n' +
+            'Example: BTC cushion $100 and Enter 0.8× → Auto can buy from a $80 gap (still under Skip ×). Cushions tile stays $100.',
         },
         {
           id: 'cushion-lean-max-gap',
           q: 'What does “Skip if gap ≥ cushion ×” mean?',
           a:
             'Settings → Paths → Cushion lean only. Home Buy ignores it.\n\n' +
-            'Cushion lean buys when the live gap is above your Cushions $. This knob also skips when the gap is too stretched — at least X times that cushion (default 2.5×).\n\n' +
-            'Example: BTC cushion $100 and 2.5× → buy only when gap is above $100 and at most $250. A $300 gap sits out.',
+            'Cushion lean buys when the live gap clears Enter × cushion. This knob also skips when the gap is too stretched — at least X times that cushion (default 2.5×).\n\n' +
+            'Example: BTC cushion $100, Enter 1×, Skip 2.5× → buy only when gap is above $100 and at most $250. A $300 gap sits out.',
         },
         {
           id: 'cushion-lean-sell-at',

@@ -25,6 +25,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   home_sell_at_pct: 0,
   cushion_lean_sell_at_pct: 0,
   cushion_lean_enabled: true,
+  cushion_lean_enter_mult: 1,
   cushion_lean_max_gap_mult: 2.5,
   smart_buy_enabled: true,
   smart_buy_min_edge_usd: 0.08,
@@ -222,6 +223,15 @@ export const RISK_FIELD_META: {
   { key: 'max_entry_ask_usd', label: 'Max entry ask ($) (Buy limit)', group: 'timing', kind: 'chase', step: 0.01, min: 0.5, max: 0.99 },
   { key: 'time_in_force', label: 'Time in force', group: 'timing', kind: 'tif', step: 0, min: 0, max: 0 },
   { key: 'chase_above_ask_usd', label: 'Chase above ask ($)', group: 'timing', kind: 'chase', step: 0.01, min: 0, max: 0.05 },
+  {
+    key: 'cushion_lean_enter_mult',
+    label: 'Enter when gap ≥ cushion ×',
+    group: 'timing',
+    kind: 'ratio',
+    step: 0.05,
+    min: 0.5,
+    max: 1.5,
+  },
   {
     key: 'cushion_lean_max_gap_mult',
     label: 'Skip if gap ≥ cushion ×',
@@ -1327,6 +1337,8 @@ export const PATH_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'chase_above_ask_usd',
 ];
 
+export const CUSHION_LEAN_ENTER_FIELD_KEYS: (keyof RiskConfig)[] = ['cushion_lean_enter_mult'];
+
 export const CUSHION_LEAN_MAX_GAP_FIELD_KEYS: (keyof RiskConfig)[] = [
   'cushion_lean_max_gap_mult',
 ];
@@ -1504,6 +1516,8 @@ export const CHEAP_LOOP_WEEKLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
 
 export const AUTO_ONLY_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   ...CUSHION_LEAN_SELL_AT_RISK_FIELD_KEYS,
+  ...CUSHION_LEAN_ENTER_FIELD_KEYS,
+  ...CUSHION_LEAN_MAX_GAP_FIELD_KEYS,
   ...SMART_BUY_RISK_FIELD_KEYS,
   ...PROTECT_RISK_FIELD_KEYS,
   ...CASH_OUT_RISK_FIELD_KEYS,
