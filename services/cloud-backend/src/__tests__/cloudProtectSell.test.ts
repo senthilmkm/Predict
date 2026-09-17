@@ -222,7 +222,63 @@ describe('cloud protect-sell', () => {
     expect(stored?.entryPath).toBe('home');
     expect(needsSettlement(stored as any)).toBe(false);
     expect(res.alerts).toHaveLength(1);
-    expect(res.alerts[0].title).toBe('Protect sell');
+    expect(res.alerts[0].title).toBe('Protect sell · Home Buy');
+  });
+
+  test('Sell at profit alert includes path name', async () => {
+    const userId = 'user_sell_at_path';
+    const home = filledTrade({
+      userId,
+      tradeId: 't_sell_at_home',
+      entryPath: 'home',
+      payPrice: 0.5,
+      price: '0.50',
+    });
+    const auto = filledTrade({
+      userId,
+      tradeId: 't_sell_at_auto',
+      ticker: 'KXETH15M-PROT',
+      asset: 'ETH',
+      entryPath: 'auto',
+      payPrice: 0.5,
+      price: '0.50',
+    });
+    await saveTradeRecord(userId, home as any);
+    await saveTradeRecord(userId, auto as any);
+    const lean = {
+      decision: 'YES',
+      abs_gap: 10,
+      phase: 'live',
+      yes_bid: 0.65,
+      yes_ask: 0.66,
+    };
+    const homeRes = await runCloudProtectSells({
+      ...runOpts({
+        userId,
+        trade: home,
+        trades: [home],
+        lean,
+        place: async () => ({ ok: true, fill_count: 10, order_id: 'ord-sell-home' }),
+      }),
+      enabled: false,
+      homeSellAtPct: 20,
+    });
+    const autoRes = await runCloudProtectSells({
+      ...runOpts({
+        userId,
+        trade: auto,
+        trades: [auto],
+        lean,
+        place: async () => ({ ok: true, fill_count: 10, order_id: 'ord-sell-auto' }),
+      }),
+      asset: 'ETH',
+      enabled: false,
+      cushionLeanSellAtPct: 20,
+    });
+    expect(homeRes.exited).toBe(1);
+    expect(homeRes.alerts[0].title).toBe('Sell at profit · Home Buy');
+    expect(autoRes.exited).toBe(1);
+    expect(autoRes.alerts[0].title).toBe('Sell at profit · Cushion lean');
   });
 
   test('NO cover uses bid above ask and economic exit 1 − limit', async () => {

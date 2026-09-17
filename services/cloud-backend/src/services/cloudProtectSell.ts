@@ -16,6 +16,7 @@ import { isPairLockEntryPath } from '../../../../packages/trading-core/src/pairL
 import { isCapLockEntryPath } from '../../../../packages/trading-core/src/capLock';
 import { isBufferRunEntryPath } from '../../../../packages/trading-core/src/bufferRun';
 import { economicPayPrice, fillCountOf } from './settlement';
+import { pathTaggedAlertTitle } from './cloudAlerts';
 
 export { PROTECT_CLAIM_STALE_MS } from './firestore';
 export { homeAutoExitWatchNeeded };
@@ -303,14 +304,14 @@ export async function runCloudProtectSells(opts: {
     if (evalRes.kind === 'sell_at') {
       alerts.push({
         tradeId: trade.tradeId,
-        title: 'Sell at profit',
+        title: pathTaggedAlertTitle('Sell at profit', trade.entryPath),
         body: `${opts.asset} ${trade.decision} · +${evalRes.pct}% target · P&L $${pnlUsd.toFixed(2)}`,
         pnlUsd,
       });
     } else {
       alerts.push({
         tradeId: trade.tradeId,
-        title: 'Protect sell',
+        title: pathTaggedAlertTitle('Protect sell', trade.entryPath),
         body: `${opts.asset} ${trade.decision} · early sell · P&L $${pnlUsd.toFixed(2)} · gap $${Number(evalRes.leanGap || 0).toFixed(2)} (need ≥$${Number(evalRes.minGap || 0).toFixed(2)})`,
         pnlUsd,
       });
