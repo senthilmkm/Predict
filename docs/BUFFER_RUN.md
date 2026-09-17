@@ -19,7 +19,7 @@ POC model: `poc/buffer-run/MODEL.md`
 | Assets | BTC, ETH | Empty = no buys |
 | Ask min / max | 42¢ / 62¢ | Lead-side ask must sit in band |
 | Take | +12¢ | Bid ≥ fill + Take |
-| Sell at % | Off (0) | Mark ≥ fill × (1 + pct/100); independent of Take |
+| Sell at % | Off (0) | Mark ≥ fill × (1 + pct/100); checked **before** Take — Sell at fires first if both could hit |
 | Stop | −7¢ | Bid ≤ fill − Stop |
 | Enter after | 3 min | Minutes elapsed |
 | Enter left | 5 min | Must stay above Flatten |

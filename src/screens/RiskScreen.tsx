@@ -1373,8 +1373,9 @@ function BufferRunFields() {
               />
             ))}
           <Text style={styles.hint} testID="risk-buffer-run-sell-at-hint">
-            Sell at % dumps when the held mark is that % above your fill (0 = Off). Independent of
-            Take ¢. Uses Buffer run’s 5s grace. Take / Stop / lean flip / Flatten still apply.
+            Sell at % dumps when the held mark is that % above your fill (0 = Off). Checked before
+            Take ¢ — if both could hit, Sell at fires first. Take / Stop / lean flip / Flatten still
+            apply. Uses Buffer run’s 5s grace.
           </Text>
           <View style={styles.field} testID="risk-field-auto-buffer_run_assets">
             <Text style={styles.label}>Buffer run assets</Text>
@@ -1402,8 +1403,9 @@ function BufferRunFields() {
           <Text style={styles.hint} testID="buffer-run-hint">
             Enter after Enter after minutes and while Enter left remain. Lead ≥ max(min gap,
             ATR ×). Ask must sit in Ask min…Ask max. Skip if YES+NO ≤ Pair-sum skip. Exit on
-            Take, Sell at %, Stop, lean flip, or Flatten left. TWAP / Last-minute / Spike / Step /
-            Pair / Cap / Cheap sit this coin out while Buffer run owns it.
+            Take, Sell at %, Stop, lean flip, or Flatten left. Sell at is checked before Take — if
+            both could hit, Sell at fires first. TWAP / Last-minute / Spike / Step / Pair / Cap /
+            Cheap sit this coin out while Buffer run owns it.
           </Text>
         </View>
       ) : null}
