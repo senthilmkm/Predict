@@ -21,7 +21,7 @@ import {
   computeProtectSellPnlUsd,
 } from '../../../../packages/trading-core/src/protectSell';
 import { setActiveKalshiRetryPolicy } from '../../../../packages/trading-core/src/kalshiRetry';
-import { isGoodTillCanceled, resolvedPlaceFillCount } from '../../../../packages/trading-core/src/orderFill';
+import { isGoodTillCanceled, resolvedPlaceFillCount, sleepMs, placeFillLooksComplete, orderFillIsTerminal, preferOrderFields } from '../../../../packages/trading-core/src/orderFill';
 import {
   homeBuyPayFromLiveAsk,
   iocKalshiPrice,
@@ -778,8 +778,25 @@ async function executeManualBuy(opts: {
     const isLive = user?.state !== 'KILL_SWITCH';
     const place =
       opts.placeOrderFn ||
-      ((input) =>
-        cloudKalshi(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo').placeOrder(input));
+      ((input) => {
+        const client = cloudKalshi(secret.keyId, secret.privateKeyPem, isLive ? 'production' : 'demo');
+        // Home taps must return ASAP. Default confirm races fill-WS up to ~4.2s + REST polls.
+        // Trust place response; one short GET if fill_count is still missing. WS sync catches up.
+        client.fillConfirmOverride = async (initial) => {
+          if (placeFillLooksComplete(initial) || orderFillIsTerminal(initial)) return initial;
+          const orderId = String(initial.order_id || '').trim();
+          if (!orderId) return initial;
+          await sleepMs(process.env.NODE_ENV === 'test' ? 0 : 120);
+          try {
+            const got = await client.getOrder(orderId);
+            if (got.ok) return preferOrderFields(initial, got.fields);
+          } catch {
+            /* keep place fields */
+          }
+          return initial;
+        };
+        return client.placeOrder(input);
+      });
     const placeRes = await place({
       ticker,
       side: buyGate.side || 'bid',
