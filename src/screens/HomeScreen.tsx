@@ -345,7 +345,7 @@ export function HomeScreen({
           const detail = String(res.message || res.error || 'Order failed').trim();
           setFly({
             id: `${asset}-${action}-err-${Date.now()}`,
-            text: detail.slice(0, 72) || 'Missed',
+            text: detail.slice(0, 120) || 'Missed',
             startX: start.x,
             startY: start.y,
             tone: 'error',
@@ -389,7 +389,7 @@ export function HomeScreen({
         const detail = String(err?.message || err || 'Order failed').trim();
         setFly({
           id: `${asset}-${action}-err-${Date.now()}`,
-          text: detail.slice(0, 72) || 'Missed',
+          text: detail.slice(0, 120) || 'Missed',
           startX: start.x,
           startY: start.y,
           tone: 'error',

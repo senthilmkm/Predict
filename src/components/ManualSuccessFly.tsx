@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Animated, Dimensions, StyleSheet, Text } from 'react-native';
 
 export type ManualTradeFlyTone = 'success' | 'error';
 
@@ -10,6 +10,20 @@ export type ManualTradeFlyProps = {
   tone?: ManualTradeFlyTone;
   onDone: () => void;
 };
+
+/** Keep the chip fully on-screen (Plus/Sell sit on the right edge). */
+function clampChipLeft(
+  startX: number,
+  chipMaxWidth: number,
+  screenWidth: number,
+  expandLeft: boolean
+): number {
+  const pad = 12;
+  const maxLeft = Math.max(pad, screenWidth - chipMaxWidth - pad);
+  // Errors are long — grow left from the tap. Success stays near the button.
+  const preferred = expandLeft ? startX - chipMaxWidth + 36 : startX - 20;
+  return Math.min(maxLeft, Math.max(pad, preferred));
+}
 
 /** Non-blocking chip from the Buy/Sell button — never steals taps (no OK alert). */
 export function ManualSuccessFly({
@@ -23,6 +37,12 @@ export function ManualSuccessFly({
   const opacity = useRef(new Animated.Value(1)).current;
   const done = useRef(false);
   const isError = tone === 'error';
+  const screenWidth = Dimensions.get('window').width;
+  const chipMaxWidth = Math.min(isError ? 300 : 240, Math.max(160, screenWidth - 24));
+  const left = useMemo(
+    () => clampChipLeft(startX, chipMaxWidth, screenWidth, isError),
+    [chipMaxWidth, isError, screenWidth, startX]
+  );
 
   useEffect(() => {
     const travel = Math.max(72, startY - 28);
@@ -59,8 +79,10 @@ export function ManualSuccessFly({
         styles.chip,
         isError ? styles.chipError : styles.chipSuccess,
         {
-          left: Math.max(8, startX - 20),
+          left,
           top: startY,
+          maxWidth: chipMaxWidth,
+          width: isError ? chipMaxWidth : undefined,
           opacity,
           transform: [{ translateY }],
         },
@@ -69,7 +91,7 @@ export function ManualSuccessFly({
       <Text
         style={[styles.text, isError ? styles.textError : styles.textSuccess]}
         testID={isError ? 'manual-error-fly-text' : 'manual-success-fly-text'}
-        numberOfLines={2}
+        numberOfLines={isError ? 3 : 2}
       >
         {text}
       </Text>
@@ -84,7 +106,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 14,
-    maxWidth: 240,
   },
   chipSuccess: {
     backgroundColor: 'rgba(198, 167, 94, 0.95)',
