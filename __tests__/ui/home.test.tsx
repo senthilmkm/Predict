@@ -420,7 +420,7 @@ describe('HomeScreen', () => {
     expect(s.getByText('Down for a bit.')).toBeTruthy();
   });
 
-  test('YES row shows single dark green Buy YES', async () => {
+  test('YES row shows single dark green tap Buy', async () => {
     useConfigStore.setState({
       config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
       hydrated: true,
@@ -437,9 +437,11 @@ describe('HomeScreen', () => {
     });
     const on = await render(<HomeScreen />);
     expect(on.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
-    expect(on.getByText('Buy YES')).toBeTruthy();
+    expect(on.getByTestId('buy-tap-icon-BTC')).toBeTruthy();
+    expect(on.queryByText('Buy YES')).toBeNull();
     expect(on.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
     expect(on.queryByTestId('btn-manual-pair-BTC')).toBeNull();
+    expect(on.queryByTestId('tap-idle-BTC')).toBeNull();
     expect(on.getByTestId('signal-gap-BTC').props.children).toBe('\u25B2 $400.00 (gap)');
     expect(on.getByTestId('home-buy-sell-label')).toBeTruthy();
     expect(StyleSheet.flatten(on.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
@@ -464,13 +466,14 @@ describe('HomeScreen', () => {
     });
     const s = await render(<HomeScreen />);
     expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy();
+    expect(s.getByTestId('buy-tap-icon-BTC')).toBeTruthy();
     expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
     expect(StyleSheet.flatten(s.getByTestId('btn-manual-buy-BTC').props.style).backgroundColor).toBe(
       colors.win
     );
   });
 
-  test('feature flag off hides Buy YES', async () => {
+  test('feature flag off hides green Buy and shows gray tap', async () => {
     useConfigStore.setState({
       config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
       hydrated: true,
@@ -496,6 +499,8 @@ describe('HomeScreen', () => {
     });
     const off = await render(<HomeScreen />);
     expect(off.queryByTestId('btn-manual-buy-BTC')).toBeNull();
+    expect(off.getByTestId('tap-idle-BTC')).toBeTruthy();
+    expect(off.getByTestId('idle-tap-icon-BTC')).toBeTruthy();
   });
 
   test('held fill shows Sell YES not Buy', async () => {
@@ -541,8 +546,8 @@ describe('HomeScreen', () => {
     const s = await render(<HomeScreen />);
     await waitFor(() => expect(s.getByTestId('btn-manual-sell-yes-BTC')).toBeTruthy());
     expect(s.getByText('Sell YES')).toBeTruthy();
-    expect(s.getByTestId('btn-manual-buy-no-BTC')).toBeTruthy();
-    expect(s.getByText('Buy NO')).toBeTruthy();
+    expect(s.queryByTestId('btn-manual-buy-no-BTC')).toBeNull();
+    expect(s.queryByText('Buy NO')).toBeNull();
     expect(s.getByTestId('signal-gap-BTC').props.children).toBe('against you $10.00 (gap)');
     expect(s.queryByTestId('btn-manual-buy-BTC')).toBeNull();
     expect(s.queryByTestId('btn-manual-buy-yes-BTC')).toBeNull();

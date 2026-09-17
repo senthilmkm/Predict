@@ -23,6 +23,7 @@ import {
   isMarketOpen,
 } from '../services/marketHours';
 import { PathInfoIcon } from '../components/PathInfoIcon';
+import { TapFingerIcon } from '../components/TapFingerIcon';
 import { PathFocusId, pathTileById } from '../content/pathCatalog';
 import { usePinnedPathsStore } from '../state/pinnedPathsStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
@@ -990,16 +991,15 @@ export function HomeScreen({
         )}
         {featureOn ? (
           <Text style={styles.tradeHint}>
-            Lean YES/NO here is a signal. Home Buy / Sell is the Home tap path — one Buy for the
-            lean side only (mint, or dark green when live is at least 25% past that coin’s Cushion).
-            After a Home fill, only Sell for that side stays on the row — no opposite Buy. Holding
-            both sides (e.g. older fills) shows Sell YES and Sell NO. Each tap is one side. A tap
-            places now on Cloud Run
+            Lean YES/NO here is a signal. Home Buy is the green tap-finger when gap clears Enter ×
+            cushion (darker green when live is at least 25% past that coin’s Cushion). Gray tap =
+            no Home Buy right now. After a Home fill, only Sell for that side stays — no opposite
+            Buy. A tap places now on Cloud Run
             (this phone never talks to Kalshi). If Auto-trade is On and its Risk tab also passes,
             Cloud can buy that same lean too, as long as shared caps allow (max trades / asset /
             15m window, max trades / day, max open, daily loss). Ask too rich and other Home skips
-            hide Buy. A miss is under History → Misses. Kill-Switch and the Last signals Buy / Sell
-            flag hide these buttons.
+            leave the gray tap. A miss is under History → Misses. Kill-Switch and the Last signals
+            Buy / Sell flag hide the green tap.
           </Text>
         ) : autoTradeOn ? (
           <Text style={styles.tradeHint}>
@@ -1274,7 +1274,9 @@ function LastSignalRow({
       ? 'Placing…'
       : row.manualKind === 'sell' && !showPairCol
         ? `Sell ${row.held?.side || 'YES'}`
-        : `Buy ${row.decision}`;
+        : null;
+  const buySide =
+    row.manualKind === 'buy' ? (row.decision === 'NO' ? 'NO' : 'YES') : null;
   const firePlace = () => {
     if (row.manualKind === 'sell') {
       measureAndPlace('sell', row.held?.side === 'NO' ? 'NO' : 'YES');
@@ -1365,49 +1367,43 @@ function LastSignalRow({
               </Pressable>
             );
           })}
-          {pairBuySides.map((side) => {
-            const busy = side === 'YES' ? row.placingBuyYes : row.placingBuyNo;
-            return (
-              <Pressable
-                key={`buy-${side}`}
-                style={[
-                  styles.manualBtn,
-                  styles.manualBtnBuyDeep,
-                  busy && styles.manualBtnBusy,
-                ]}
-                onPress={() => measureAndPlace('buy', side)}
-                disabled={Boolean(busy)}
-                hitSlop={{ left: 8, right: 8, top: 0, bottom: 0 }}
-                testID={`btn-manual-buy-${side.toLowerCase()}-${row.asset}`}
-                accessibilityState={{ busy: Boolean(busy), disabled: Boolean(busy) }}
-                accessibilityLabel={`Buy ${side} only`}
-              >
-                {busy ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : null}
-                <Text style={styles.manualBtnText}>{busy ? 'Placing…' : `Buy ${side}`}</Text>
-              </Pressable>
-            );
-          })}
         </View>
-      ) : actionable ? (
+      ) : row.manualKind === 'buy' ? (
         <Pressable
           ref={btnRef}
           collapsable={false}
           style={[
             styles.manualBtn,
-            row.manualKind === 'sell'
-              ? styles.manualBtnSell
-              : row.strongBuy
-                ? styles.manualBtnBuyDeep
-                : styles.manualBtnBuy,
+            styles.manualBtnIcon,
+            row.strongBuy ? styles.manualBtnBuyDeep : styles.manualBtnBuy,
             row.placing && styles.manualBtnBusy,
           ]}
           onPress={firePlace}
           disabled={row.placing}
           hitSlop={6}
-          testID={`btn-manual-${row.manualKind}-${row.asset}`}
+          testID={`btn-manual-buy-${row.asset}`}
           accessibilityState={{ busy: row.placing, disabled: row.placing }}
+          accessibilityLabel={`Buy ${buySide}`}
+          accessibilityRole="button"
+        >
+          {row.placing ? (
+            <ActivityIndicator color="#fff" size="small" testID={`manual-placing-${row.asset}`} />
+          ) : (
+            <TapFingerIcon color="#fff" size={18} testID={`buy-tap-icon-${row.asset}`} />
+          )}
+        </Pressable>
+      ) : row.manualKind === 'sell' ? (
+        <Pressable
+          ref={btnRef}
+          collapsable={false}
+          style={[styles.manualBtn, styles.manualBtnSell, row.placing && styles.manualBtnBusy]}
+          onPress={firePlace}
+          disabled={row.placing}
+          hitSlop={6}
+          testID={`btn-manual-sell-${row.asset}`}
+          accessibilityState={{ busy: row.placing, disabled: row.placing }}
+          accessibilityLabel={btnLabel || 'Sell'}
+          accessibilityRole="button"
         >
           {row.placing ? (
             <ActivityIndicator color="#fff" size="small" testID={`manual-placing-${row.asset}`} />
@@ -1422,7 +1418,15 @@ function LastSignalRow({
         <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
           (No Kalshi 15m contract)
         </Text>
-      ) : null}
+      ) : (
+        <View
+          style={styles.tapIdle}
+          testID={`tap-idle-${row.asset}`}
+          accessibilityLabel="No Home Buy right now"
+        >
+          <TapFingerIcon color={colors.mute} size={18} testID={`idle-tap-icon-${row.asset}`} />
+        </View>
+      )}
     </View>
   );
 }
@@ -1613,12 +1617,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
   },
+  manualBtnIcon: {
+    minWidth: 40,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+  },
   manualBtnCol: { gap: 10, alignItems: 'stretch' },
   manualBtnBuy: { backgroundColor: colors.win },
   manualBtnBuyDeep: { backgroundColor: colors.buyDeep },
   manualBtnSell: { backgroundColor: colors.warn },
   manualBtnBusy: { opacity: 0.72 },
   manualBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  tapIdle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.85,
+  },
   signalLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   signalAsset: { color: colors.textPrimary, fontWeight: '700', minWidth: 44 },
   signalCategoryIcon: {
