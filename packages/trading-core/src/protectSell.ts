@@ -1,9 +1,9 @@
 export type ProtectSide = 'YES' | 'NO';
 
 export const SELL_AT_PCT_DEFAULT = 0;
-export const SELL_AT_PCT_MIN = 5;
+export const SELL_AT_PCT_MIN = 0.5;
 export const SELL_AT_PCT_MAX = 100;
-export const SELL_AT_PCT_STEP = 5;
+export const SELL_AT_PCT_STEP = 0.5;
 
 export function protectSellMinGapUsd(cushion: number, gapRatio: number): number {
   const c = Math.max(0, Number(cushion) || 0);
@@ -11,7 +11,7 @@ export function protectSellMinGapUsd(cushion: number, gapRatio: number): number 
   return Math.round(c * r * 10000) / 10000;
 }
 
-/** 0 = Off. Otherwise snap to 5–100 step 5. */
+/** 0 = Off. Otherwise snap to 0.5–100 step 0.5. */
 export function normalizeSellAtPct(raw: unknown): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return 0;

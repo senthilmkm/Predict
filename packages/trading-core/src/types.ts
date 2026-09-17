@@ -144,12 +144,12 @@ export interface RiskConfig {
   protect_sell_grace_seconds: number;
   /**
    * Home Buy only. Dump when held mark ≥ entry × (1 + pct/100). 0 = Off.
-   * Default 0. Range 5–100 step 5. Independent of Protect money flip.
+   * Default 0. Range 0.5–100 step 0.5. Independent of Protect money flip.
    */
   home_sell_at_pct?: number;
   /**
    * Cushion lean (Auto) only. Dump when held mark ≥ entry × (1 + pct/100). 0 = Off.
-   * Default 0. Range 5–100 step 5. Independent of Protect money flip.
+   * Default 0. Range 0.5–100 step 0.5. Independent of Protect money flip.
    */
   cushion_lean_sell_at_pct?: number;
   /**

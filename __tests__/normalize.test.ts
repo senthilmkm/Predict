@@ -189,14 +189,14 @@ describe('normalize / cushions', () => {
         protect_sell_enabled: true,
         protect_sell_gap_ratio: 9,
         protect_sell_grace_seconds: 999,
-        home_sell_at_pct: 17,
+        home_sell_at_pct: 17.3,
         cushion_lean_sell_at_pct: -3,
       },
     } as any);
     expect(cfg.risk.protect_sell_enabled).toBe(true);
     expect(cfg.risk.protect_sell_gap_ratio).toBe(3);
     expect(cfg.risk.protect_sell_grace_seconds).toBe(120);
-    expect(cfg.risk.home_sell_at_pct).toBe(15);
+    expect(cfg.risk.home_sell_at_pct).toBe(17.5);
     expect(cfg.risk.cushion_lean_sell_at_pct).toBe(0);
   });
 

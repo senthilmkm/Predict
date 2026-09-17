@@ -16,13 +16,16 @@ describe('protectSell', () => {
     expect(protectSellMinGapUsd(0.3, 1)).toBe(0.3);
   });
 
-  test('normalizeSellAtPct: 0 Off, else 5–100 step 5', () => {
+  test('normalizeSellAtPct: 0 Off, else 0.5–100 step 0.5', () => {
     expect(normalizeSellAtPct(0)).toBe(0);
     expect(normalizeSellAtPct(-1)).toBe(0);
     expect(normalizeSellAtPct(undefined)).toBe(0);
-    expect(normalizeSellAtPct(3)).toBe(5);
-    expect(normalizeSellAtPct(7)).toBe(5);
-    expect(normalizeSellAtPct(8)).toBe(10);
+    expect(normalizeSellAtPct(0.2)).toBe(0.5);
+    expect(normalizeSellAtPct(0.5)).toBe(0.5);
+    expect(normalizeSellAtPct(3)).toBe(3);
+    expect(normalizeSellAtPct(7.2)).toBe(7);
+    expect(normalizeSellAtPct(7.3)).toBe(7.5);
+    expect(normalizeSellAtPct(10.5)).toBe(10.5);
     expect(normalizeSellAtPct(100)).toBe(100);
     expect(normalizeSellAtPct(120)).toBe(100);
   });

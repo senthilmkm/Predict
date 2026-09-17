@@ -223,7 +223,7 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'home-sell-at',
           q: 'What is Home Buy “Sell at” %?',
           a:
-            'Settings → Risk → Home Buy → Sell at. Dump when the live held-side mark is at least this % above your fill (0 = Off; default Off). Steps 5–100.\n\n' +
+            'Settings → Risk → Home Buy → Sell at. Dump when the live held-side mark is at least this % above your fill (0 = Off; default Off). Steps 0.5–100.\n\n' +
             'Uses the same Protect wait-after-fill / grace. Independent of Protect money lean-flip — it can dump on mark profit even if Protect is Off.',
         },
         {
@@ -416,7 +416,7 @@ export function getFaqCategories(): FaqCategory[] {
           id: 'cushion-lean-sell-at',
           q: 'What is Cushion lean “Sell at” %?',
           a:
-            'Settings → Paths → Cushion lean → Sell at (when Cushion lean is On). Dump Auto fills when the live held-side mark is at least this % above your fill (0 = Off; default Off). Steps 5–100.\n\n' +
+            'Settings → Paths → Cushion lean → Sell at (when Cushion lean is On). Dump Auto fills when the live held-side mark is at least this % above your fill (0 = Off; default Off). Steps 0.5–100.\n\n' +
             'Uses the same Protect wait-after-fill / grace. Independent of Protect money lean-flip. Home Buy has its own Sell at knob.',
         },
       ],
