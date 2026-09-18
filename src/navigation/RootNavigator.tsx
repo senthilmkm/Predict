@@ -13,8 +13,9 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { SettingsMoreScreen } from '../screens/SettingsMoreScreen';
 import { RiskScreen } from '../screens/RiskScreen';
 import { PathsGuideScreen } from '../screens/PathsGuideScreen';
-import { PathFocusId, pathTileById } from '../content/pathCatalog';
+import { PathFocusId, entryPathsForFocus, pathTileById } from '../content/pathCatalog';
 import { AlertsHubScreen } from '../screens/AlertsHubScreen';
+import { PathTradesScreen } from '../screens/PathTradesScreen';
 import { useRuntimeStore } from '../state/runtimeStore';
 import { exportAndShareHistory } from '../services/exportHistory';
 import { withSupportContact } from '../config/appMeta';
@@ -37,6 +38,43 @@ const navTheme = {
     primary: colors.accent,
   },
 };
+
+function PathHeaderActions({
+  navigation,
+  focus,
+}: {
+  navigation: any;
+  focus?: PathFocusId;
+}) {
+  const showTrades = focus != null && entryPathsForFocus(focus) != null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4, gap: 2 }}>
+      <Pressable
+        testID="btn-path-home"
+        style={{ padding: 6, minWidth: 28, alignItems: 'center' }}
+        onPress={() => {
+          // @ts-expect-error nested tab route
+          navigation.navigate('Main', { screen: 'Home' });
+        }}
+        accessibilityLabel="Go to Home"
+        accessibilityRole="button"
+      >
+        <Text style={{ color: colors.textPrimary, fontSize: 17 }}>⌂</Text>
+      </Pressable>
+      {showTrades ? (
+        <Pressable
+          testID="btn-path-trades"
+          style={{ padding: 6, minWidth: 28, alignItems: 'center' }}
+          onPress={() => navigation.navigate('PathTrades', { focus })}
+          accessibilityLabel={`${focus ? pathTileById(focus).title : 'Path'} trades`}
+          accessibilityRole="button"
+        >
+          <Text style={{ color: colors.textPrimary, fontSize: 16 }}>☰</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
 
 function BellButton({ onPress, count }: { onPress: () => void; count: number }) {
   const label = count > 99 ? '99+' : String(count);
@@ -168,10 +206,25 @@ export function RootNavigator() {
         <Stack.Screen
           name="RiskSettings"
           component={RiskScreen}
-          options={({ route }) => {
+          options={({ navigation, route }) => {
             const focus = (route.params as { focus?: PathFocusId } | undefined)?.focus;
             return {
               title: focus ? pathTileById(focus).title : 'Risk',
+              headerBackTitle: 'Back',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.textPrimary,
+              headerRight: () => <PathHeaderActions navigation={navigation} focus={focus} />,
+            };
+          }}
+        />
+        <Stack.Screen
+          name="PathTrades"
+          component={PathTradesScreen}
+          options={({ route }) => {
+            const focus = (route.params as { focus?: PathFocusId } | undefined)?.focus;
+            return {
+              title: focus ? `${pathTileById(focus).title} trades` : 'Path trades',
+              presentation: 'modal',
               headerBackTitle: 'Back',
               headerStyle: { backgroundColor: colors.surface },
               headerTintColor: colors.textPrimary,
