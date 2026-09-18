@@ -113,14 +113,14 @@ export const PATH_INFO = {
       '• Checked Cash out assets that are also On (Cushions tab on/off)\n' +
       '• Cushions $ × Enter cushion % (default 60% of the dollar gap — not the full cushion)\n' +
       '• Cash out max ask / bid / stop\n' +
+      '• Slip (chase above ask) — Cash out–only marketable buy/sell slip\n' +
       '• This path’s Skip thin bid (sells into the bid — thin book matters here)\n' +
       '• This path’s $ per trade / min / max (missing seeds from Cushion lean $)\n' +
-      '• Shared slip (chase) — marketable buy at live ask + slip; exits use bid − slip\n' +
       '• Shared caps\n' +
       '• Minutes left floor of 3 (never last-minute)\n\n' +
       'Does not use\n' +
       '• Cushion lean $ after this path has its own $ saved\n' +
-      '• Auto max ask, Smart buy, Protect\n' +
+      '• Auto max ask, Auto slip, Smart buy, Protect\n' +
       '• Gold fade / TWAP / Last-minute fields\n' +
       '• Last-minute watch / clips / Both gate\n\n' +
       'Isolation\n' +

@@ -482,7 +482,10 @@ function CashOutFields() {
           />
         </View>
         {on ? (
-          <Text style={styles.hint}>Cloud buys and sells only the checked assets on this path</Text>
+          <Text style={styles.hint}>
+            Cloud buys and sells only the checked assets on this path. Slip is Cash out–only
+            (marketable ask + slip / bid − slip) — not Auto-trade chase.
+          </Text>
         ) : null}
       </View>
       {on ? (

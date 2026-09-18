@@ -6,6 +6,7 @@ import {
   shouldProtectSell,
 } from './protectSell';
 import { resolveSkipThinBid } from './skipThinBid';
+import { normalizeSlipUsd } from './iocPlace';
 
 export const CASH_OUT_SPREAD_MAX_USD = 0.06;
 export const CASH_OUT_MIN_MINUTES_LEFT = 3;
@@ -24,6 +25,7 @@ export const CASH_OUT_MIN_EDGE_WARN_USD = 0.04;
 export const CASH_OUT_STOP_DEFAULT_USD = 0.05;
 export const CASH_OUT_STOP_MIN_USD = 0.03;
 export const CASH_OUT_STOP_MAX_USD = 0.1;
+export const CASH_OUT_CHASE_DEFAULT_USD = 0.02;
 export const CASH_OUT_DEFAULT_ASSETS: AssetKey[] = ['Gold'];
 
 export type TradeEntryPath = 'home' | 'auto' | 'cash_out' | 'gold_fade' | 'twap_lock' | 'last_minute' | 'step_buy' | 'spike_fade' | 'pair_lock' | 'cap_lock' | 'buffer_run' | 'cheap_loop' | 'cheap_loop_hourly' | 'cheap_loop_weekly';
@@ -243,6 +245,29 @@ export function normalizeCashOutStopUsd(raw: unknown): number {
     clamp(Number(raw ?? CASH_OUT_STOP_DEFAULT_USD), CASH_OUT_STOP_MIN_USD, CASH_OUT_STOP_MAX_USD),
     0.01
   );
+}
+
+/** Cash out slip (chase). 0…5¢. Missing callers should seed from Auto chase then default 2¢. */
+export function normalizeCashOutChaseUsd(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return CASH_OUT_CHASE_DEFAULT_USD;
+  return normalizeSlipUsd(n);
+}
+
+/** Buy/sell slip for Cash out: path knob, else Auto chase, else 2¢. */
+export function cashOutSlipUsd(risk?: {
+  cash_out_chase_above_ask_usd?: unknown;
+  chase_above_ask_usd?: unknown;
+} | null): number {
+  if (risk && risk.cash_out_chase_above_ask_usd != null && risk.cash_out_chase_above_ask_usd !== '') {
+    const n = Number(risk.cash_out_chase_above_ask_usd);
+    if (Number.isFinite(n)) {
+      const slip = normalizeSlipUsd(n);
+      return slip > 0 ? slip : CASH_OUT_CHASE_DEFAULT_USD;
+    }
+  }
+  const fallback = normalizeSlipUsd(risk?.chase_above_ask_usd);
+  return fallback > 0 ? fallback : CASH_OUT_CHASE_DEFAULT_USD;
 }
 
 export function normalizeCashOutBidCheckSeconds(raw: unknown): number {
@@ -475,6 +500,7 @@ export function cashOutGateConfig(cfg: AppConfig, asset: AssetKey): AppConfig {
   const dollars = cashOutTradeDollars(cfg.risk);
   const fullCushion = Number(cfg.cushions[asset]) || 0;
   const enterCushion = cashOutEnterMinGapUsd(fullCushion, enterPct);
+  const slip = cashOutSlipUsd(cfg.risk);
   return {
     ...cfg,
     risk: {
@@ -483,6 +509,7 @@ export function cashOutGateConfig(cfg: AppConfig, asset: AssetKey): AppConfig {
       max_dollars_per_trade: dollars.max,
       min_dollars_per_trade: dollars.min,
       max_entry_ask_usd: maxAsk,
+      chase_above_ask_usd: slip,
       min_minutes_left: cashOutMinMinutesLeft(cfg.risk.min_minutes_left),
       smart_buy_enabled: false,
     },

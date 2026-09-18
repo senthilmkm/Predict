@@ -41,6 +41,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   cash_out_max_ask_usd: 0.82,
   cash_out_bid_usd: 0.88,
   cash_out_stop_usd: 0.05,
+  cash_out_chase_above_ask_usd: 0.02,
   cash_out_skip_thin_bid: false,
   cash_out_assets: ['Gold'],
   gold_fade_enabled: false,
@@ -388,6 +389,15 @@ export const RISK_FIELD_META: {
     step: 0.01,
     min: 0.03,
     max: 0.1,
+  },
+  {
+    key: 'cash_out_chase_above_ask_usd',
+    label: 'Slip (chase above ask)',
+    group: 'timing',
+    kind: 'chase',
+    step: 0.01,
+    min: 0,
+    max: 0.05,
   },
   {
     key: 'cash_out_skip_thin_bid',
@@ -1396,6 +1406,7 @@ export const CASH_OUT_RISK_FIELD_KEYS: (keyof RiskConfig)[] = [
   'cash_out_max_ask_usd',
   'cash_out_bid_usd',
   'cash_out_stop_usd',
+  'cash_out_chase_above_ask_usd',
   'cash_out_skip_thin_bid',
 ];
 

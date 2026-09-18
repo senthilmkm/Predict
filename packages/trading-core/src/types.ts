@@ -205,6 +205,8 @@ export interface RiskConfig {
   cash_out_bid_usd?: number;
   /** Sell if held-side bid falls this far below fill. Default 0.05. Range 0.03–0.10. */
   cash_out_stop_usd?: number;
+  /** Cash out marketable slip (ask + / bid −). Default 2¢. */
+  cash_out_chase_above_ask_usd?: number;
   /** Skip buy / sell early when bid size < contracts. Default Off. */
   cash_out_skip_thin_bid?: boolean;
   /** Assets on the Cash out path. Default Gold. Empty = no Cash out buys. */
@@ -502,6 +504,7 @@ export function defaultAppConfig(): AppConfig {
       cash_out_max_ask_usd: 0.82,
       cash_out_bid_usd: 0.88,
       cash_out_stop_usd: 0.05,
+      cash_out_chase_above_ask_usd: 0.02,
       cash_out_skip_thin_bid: false,
       cash_out_assets: ['Gold'],
       gold_fade_enabled: false,

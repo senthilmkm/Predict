@@ -19,6 +19,7 @@ import {
   cashOutTradeDollars,
   normalizeCashOutAssets,
   normalizeCashOutBid,
+  normalizeCashOutChaseUsd,
   normalizeCashOutEnterPct,
   normalizeCashOutMaxAsk,
   normalizeCashOutStopUsd,
@@ -282,6 +283,9 @@ export function normalizeRiskConfig(raw: Partial<RiskConfig> | null | undefined)
     cash_out_max_ask_usd: normalizeCashOutMaxAsk(r.cash_out_max_ask_usd ?? d.cash_out_max_ask_usd),
     cash_out_bid_usd: normalizeCashOutBid(r.cash_out_bid_usd ?? d.cash_out_bid_usd),
     cash_out_stop_usd: normalizeCashOutStopUsd(r.cash_out_stop_usd ?? d.cash_out_stop_usd),
+    cash_out_chase_above_ask_usd: normalizeCashOutChaseUsd(
+      r.cash_out_chase_above_ask_usd ?? r.chase_above_ask_usd ?? d.cash_out_chase_above_ask_usd
+    ),
     cash_out_skip_thin_bid: r.cash_out_skip_thin_bid === true,
     cash_out_assets: normalizeCashOutAssets(
       r.cash_out_assets !== undefined ? r.cash_out_assets : d.cash_out_assets

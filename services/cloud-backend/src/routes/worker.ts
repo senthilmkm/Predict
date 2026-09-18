@@ -117,6 +117,7 @@ import { normalizeFeatureFlags } from '../services/featureFlags';
 import {
   evaluateCashOutEnter,
   isCashOutEnterPath,
+  cashOutSlipUsd,
   normalizeCashOutStopUsd,
   openCashOutAssets,
   tickerHasOpenCashOut,
@@ -1854,7 +1855,7 @@ async function runOneTick() {
                     resolveSkipThinBid(cfg.risk, 'cash_out')
                   ),
                   graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
-                  slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+                  slippageUsd: cashOutSlipUsd(cfg.risk),
                   dryRun: false,
                   now,
                   place: (input) =>
@@ -3297,7 +3298,9 @@ async function runOneTick() {
                       entryPath === 'cash_out'
                         ? Number(cfg.risk?.cash_out_max_ask_usd || quotedPay)
                         : Number(cfg.risk?.max_entry_ask_usd || quotedPay),
-                      cfg.risk?.chase_above_ask_usd
+                      entryPath === 'cash_out'
+                        ? cashOutSlipUsd(cfg.risk)
+                        : cfg.risk?.chase_above_ask_usd
                     )
                   : liveIocBuyGate(
                       gate,
@@ -8116,7 +8119,7 @@ export async function runCashOutBidWatchTick(
             resolveSkipThinBid(cfg.risk, 'cash_out')
           ),
           graceSeconds: Number(cfg.risk?.protect_sell_grace_seconds ?? 45),
-          slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+          slippageUsd: cashOutSlipUsd(cfg.risk),
           dryRun: false,
           now,
           place: (input) =>

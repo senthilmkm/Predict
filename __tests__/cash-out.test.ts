@@ -24,9 +24,11 @@ import {
   normalizeCashOutAssets,
   normalizeCashOutBid,
   normalizeCashOutBidCheckSeconds,
+  normalizeCashOutChaseUsd,
   normalizeCashOutEnterPct,
   normalizeCashOutMaxAsk,
   normalizeCashOutStopUsd,
+  cashOutSlipUsd,
   openCashOutAssets,
   parseKalshiOrderbook,
   bestBidSizeOnBook,
@@ -115,6 +117,11 @@ describe('Cash out ticket math', () => {
     expect(normalizeCashOutStopUsd(0.05)).toBe(0.05);
     expect(normalizeCashOutStopUsd(0.01)).toBe(0.03);
     expect(normalizeCashOutStopUsd(0.99)).toBe(0.1);
+    expect(normalizeCashOutChaseUsd(0.03)).toBe(0.03);
+    expect(normalizeCashOutChaseUsd(-1)).toBe(0);
+    expect(cashOutSlipUsd({ cash_out_chase_above_ask_usd: 0.04, chase_above_ask_usd: 0.01 })).toBe(0.04);
+    expect(cashOutSlipUsd({ chase_above_ask_usd: 0.03 })).toBe(0.03);
+    expect(cashOutSlipUsd({})).toBe(0.02);
     expect(cashOutStopFloorUsd(0.78, 0.05)).toBe(0.73);
     expect(cashOutStopFloorUsd(null, 0.05)).toBeNull();
     expect(normalizeCashOutBidCheckSeconds(3)).toBe(3);

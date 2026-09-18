@@ -387,7 +387,7 @@ export function getFaqCategories(): FaqCategory[] {
             '• daily loss stop\n' +
             '• cushions and asset on/off (Cushions tab)\n\n' +
             'Home Buy tab only: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, slip (chase). Used when you tap Buy on Home. Home Sell stays IOC; its slip is the same chase.\n\n' +
-            'Auto-trade tab only: the same size/timing fields for Cloud’s scheduled buys, plus Smart buy (default On, min extra chance $0.08) and Protect money (early sell). Protect can still exit a fill that started as a Home Buy. Smart buy does not apply to a Home tap. Cushion lean and Cash out buys also use slip (chase) as a marketable limit at send.\n\n' +
+            'Auto-trade tab only: the same size/timing fields for Cloud’s scheduled buys, plus Smart buy (default On, min extra chance $0.08) and Protect money (early sell). Protect can still exit a fill that started as a Home Buy. Smart buy does not apply to a Home tap. Cushion lean uses Auto slip; Cash out has its own Slip on the Cash out tile.\n\n' +
             'Home Buy / Sell on Last signals is the Home tap path. If Auto-trade is also On and its tab passes, the worker can buy that same lean as long as shared caps still have room (15m window, trades/day, max open, daily loss).\n\n' +
             'Last signals never shows both skips at once. If Home Buy would skip (ask too rich, timing, size, shared cap), Buy is hidden and that Home skip stays on the row. Auto-trade’s last skip/place shows only when there is no Home skip and no Buy/Sell button.',
         },
