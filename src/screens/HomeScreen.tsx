@@ -827,6 +827,7 @@ export function HomeScreen({
       held: effectiveHeld
         ? { side: effectiveHeld.side, entry_path: effectiveHeld.entry_path ?? held?.entry_path }
         : null,
+      hasOpenHold: openSides.length > 0 || Boolean(effectiveHeld),
       manualKind: offerKind,
       placing: Boolean(
         placing[row.asset] ||
@@ -862,7 +863,10 @@ export function HomeScreen({
     .filter((r) => r.isOpen && !r.noMarket && !r.err && Boolean(r.at))
     .slice()
     .sort((a, b) => {
-      // Gap clears cushion → top (even if other Home Buy gates failed).
+      // Open contracts first, then gap-clears-cushion, then catalog order.
+      const aHold = a.hasOpenHold ? 1 : 0;
+      const bHold = b.hasOpenHold ? 1 : 0;
+      if (bHold !== aHold) return bHold - aHold;
       const aTop = a.strongBuy ? 1 : 0;
       const bTop = b.strongBuy ? 1 : 0;
       if (bTop !== aTop) return bTop - aTop;

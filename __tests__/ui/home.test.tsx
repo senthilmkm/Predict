@@ -527,6 +527,75 @@ describe('HomeScreen', () => {
     );
   });
 
+  test('open holdings sort above cushion-clear and other assets', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        assets_enabled: { BTC: true, ETH: true } as any,
+        cushions: { ...defaultAppConfig().cushions, BTC: 50, ETH: 50 },
+        manual_risk: {
+          ...defaultAppConfig().manual_risk,
+          max_entry_ask_usd: 0.99,
+          min_minutes_elapsed: 0,
+          min_minutes_left: 0,
+        },
+      },
+      hydrated: true,
+    });
+    const now = new Date().toISOString();
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
+      cloudKillSwitch: false,
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'YES',
+          live: 200,
+          strike: 100,
+          abs_gap: 100,
+          minutes_left: 8,
+          minutes_elapsed: 5,
+          phase: 'live',
+          yes_ask: 0.4,
+        },
+        ETH: {
+          asset: 'ETH',
+          market_ticker: 'KXETH15M-X',
+          decision: 'YES',
+          live: 110,
+          strike: 100,
+          abs_gap: 10,
+          minutes_left: 8,
+          minutes_elapsed: 5,
+          phase: 'live',
+          yes_ask: 0.4,
+        },
+      } as any,
+      leanAt: { BTC: now, ETH: now },
+      trades: [
+        {
+          id: 'eth-hold',
+          at: now,
+          asset: 'ETH',
+          market_ticker: 'KXETH15M-X',
+          side: 'YES',
+          notional_usd: 5,
+          fill_count: 5,
+          outcome: 'pending',
+          dry_run: false,
+          entry_path: 'home',
+        },
+      ],
+    });
+    const s = await render(<HomeScreen />);
+    const rows = s.getAllByTestId(/^signal-row-/);
+    expect(rows.map((r) => r.props.testID)).toEqual(['signal-row-ETH', 'signal-row-BTC']);
+    expect(s.getByTestId('btn-manual-sell-yes-ETH')).toBeTruthy();
+  });
+
   test('cushion-clear assets sort above others even when Home Buy gates fail', async () => {
     useConfigStore.setState({
       config: {
