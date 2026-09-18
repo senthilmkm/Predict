@@ -4,7 +4,7 @@ import { homeStatusPillModel } from '../src/screens/homeStatusPill';
 const nowMs = Date.parse('2026-09-12T18:00:00.000Z');
 
 describe('home status pill', () => {
-  test('auto + alerts live is Auto, bell, and tick seconds', () => {
+  test('auto + alerts live is Auto, bell, no collapsed seconds', () => {
     const m = homeStatusPillModel({
       config: { auto_trade_enabled: true, alerts_enabled: true },
       running: true,
@@ -15,7 +15,7 @@ describe('home status pill', () => {
     expect(m.paused).toBe(false);
     expect(m.showAuto).toBe(true);
     expect(m.showBell).toBe(true);
-    expect(m.tickLabel).toBe('10s');
+    expect(m.tickLabel).toBe('');
     expect(m.tone).toBe('live');
     expect(m.modeLine).toBe('Alerts on · auto-trading');
     expect(m.tickLine).toBe('Live · Cloud tick 10s · 4s ago');

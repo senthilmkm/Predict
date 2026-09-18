@@ -777,31 +777,32 @@ export function HomeScreen({
           placing[`${row.asset}:YES`] ||
           placing[`${row.asset}:NO`]
       ),
-      placingBuyYes: Boolean(placing[`${row.asset}:buy:YES`] || placing[`${row.asset}:YES`]),
-      placingBuyNo: Boolean(placing[`${row.asset}:buy:NO`] || placing[`${row.asset}:NO`]),
+      placingBuyYes: Boolean(
+        placing[`${row.asset}:buy:YES`] ||
+          placing[`${row.asset}:YES`] ||
+          placing[`${row.asset}:buy:YES:force`]
+      ),
+      placingBuyNo: Boolean(
+        placing[`${row.asset}:buy:NO`] ||
+          placing[`${row.asset}:NO`] ||
+          placing[`${row.asset}:buy:NO:force`]
+      ),
       placingSellYes: Boolean(placing[`${row.asset}:sell:YES`]),
       placingSellNo: Boolean(placing[`${row.asset}:sell:NO`]),
       placingForce: Boolean(
         placing[`${row.asset}:buy:YES:force`] || placing[`${row.asset}:buy:NO:force`]
       ),
       extraLine,
-      strongBuy: offerKind === 'buy' && strongBuy,
+      strongBuy,
       pairBuySides,
       pairSellSides,
     };
   });
   const actionRows = decoratedRows.filter(
-    (r) =>
-      r.manualKind === 'buy' ||
-      r.manualKind === 'sell' ||
-      (r.pairBuySides && r.pairBuySides.length > 0) ||
-      (r.pairSellSides && r.pairSellSides.length > 0)
+    (r) => r.isOpen && !r.noMarket && !r.err && Boolean(r.at)
   );
   const otherRows = decoratedRows.filter(
-    (r) =>
-      r.manualKind === 'none' &&
-      !(r.pairBuySides && r.pairBuySides.length > 0) &&
-      !(r.pairSellSides && r.pairSellSides.length > 0)
+    (r) => !(r.isOpen && !r.noMarket && !r.err && Boolean(r.at))
   );
   const visiblePinnedPaths = useMemo(() => {
     const flags: Record<string, boolean> = {
@@ -1145,16 +1146,24 @@ function HomeStatusPill({
           <Text style={[styles.statusTick, { color: colors.mute }]}>Paused</Text>
         ) : (
           <>
-            {model.showAuto ? <Text style={styles.statusAuto}>Auto</Text> : null}
+            {model.showAuto ? (
+              <Text style={[styles.statusAuto, { color: tickColor }]}>Auto</Text>
+            ) : null}
             {model.showBell ? (
               <Text style={styles.statusBell} testID="home-status-bell">
                 🔔
               </Text>
             ) : null}
-            <Text style={styles.statusDot}>·</Text>
-            <Text style={[styles.statusTick, { color: tickColor }]} testID="home-status-tick">
-              {model.tickLabel}
-            </Text>
+            {model.tickLabel ? (
+              <>
+                {(model.showAuto || model.showBell) ? (
+                  <Text style={styles.statusDot}>·</Text>
+                ) : null}
+                <Text style={[styles.statusTick, { color: tickColor }]} testID="home-status-tick">
+                  {model.tickLabel}
+                </Text>
+              </>
+            ) : null}
           </>
         )}
       </Pressable>
@@ -1219,12 +1228,12 @@ function LastSignalRow({
     opts?: { skipGates?: boolean }
   ) => void;
 }) {
-  const btnRef = React.useRef<View>(null);
-  const forceRef = React.useRef<View>(null);
-  const pairBuySides = row.pairBuySides || [];
+  const buyYesRef = React.useRef<View>(null);
+  const buyNoRef = React.useRef<View>(null);
+  const sellYesRef = React.useRef<View>(null);
+  const sellNoRef = React.useRef<View>(null);
   const pairSellSides = row.pairSellSides || [];
-  const showPairCol = pairBuySides.length > 0 || pairSellSides.length > 0;
-  const actionable = row.manualKind !== 'none' || showPairCol;
+  const showTradeActions = row.isOpen && !row.noMarket && !row.err && Boolean(row.at);
   const gap = formatGapDisplay({
     gap: row.gap,
     assetKey: row.asset,
@@ -1233,20 +1242,15 @@ function LastSignalRow({
     decision: row.decision,
     heldSide: row.held?.side,
   });
-  const forceBuySide = (): 'YES' | 'NO' => {
-    if (row.decision === 'YES' || row.decision === 'NO') return row.decision;
-    const live = Number(row.live);
-    const strike = Number(row.strike);
-    if (Number.isFinite(live) && Number.isFinite(strike)) return live >= strike ? 'YES' : 'NO';
-    return 'YES';
-  };
+  /** Green when lean side clears Cushions $; gray Plus otherwise (force). */
+  const buyReady = (side: 'YES' | 'NO') => Boolean(row.strongBuy && row.decision === side);
   const measureAndPlace = (
     action: 'buy' | 'sell',
-    decision?: 'YES' | 'NO',
-    ref?: React.RefObject<View | null>,
+    decision: 'YES' | 'NO',
+    ref: React.RefObject<View | null>,
     opts?: { skipGates?: boolean }
   ) => {
-    const node = (ref?.current || btnRef.current) as {
+    const node = ref.current as {
       measureInWindow?: (cb: (...args: number[]) => void) => void;
     } | null;
     let sent = false;
@@ -1273,38 +1277,97 @@ function LastSignalRow({
     }
     send();
   };
-  const btnLabel =
-    row.placing && !showPairCol
-      ? 'Placing…'
-      : row.manualKind === 'sell' && !showPairCol
-        ? `Sell ${row.held?.side || 'YES'}`
-        : null;
-  const buySide =
-    row.manualKind === 'buy' ? (row.decision === 'NO' ? 'NO' : 'YES') : null;
-  const firePlace = () => {
-    if (row.manualKind === 'sell') {
-      measureAndPlace('sell', row.held?.side === 'NO' ? 'NO' : 'YES');
-      return;
-    }
-    const decision = row.decision === 'NO' ? 'NO' : 'YES';
-    measureAndPlace('buy', decision);
+  const fireBuy = (side: 'YES' | 'NO') => {
+    const ready = buyReady(side);
+    const gated = ready && row.manualKind === 'buy';
+    const ref = side === 'YES' ? buyYesRef : buyNoRef;
+    measureAndPlace('buy', side, ref, gated ? undefined : { skipGates: true });
   };
-  const fireForceBuy = () => {
-    measureAndPlace('buy', forceBuySide(), forceRef, { skipGates: true });
+  const fireSell = (side: 'YES' | 'NO') => {
+    const ref = side === 'YES' ? sellYesRef : sellNoRef;
+    measureAndPlace('sell', side, ref);
   };
+  const buyBusy = (side: 'YES' | 'NO') =>
+    side === 'YES' ? Boolean(row.placingBuyYes) : Boolean(row.placingBuyNo);
+  const sellBusy = (side: 'YES' | 'NO') =>
+    side === 'YES' ? Boolean(row.placingSellYes) : Boolean(row.placingSellNo);
+
+  const renderBuyOrb = (side: 'YES' | 'NO') => {
+    const ready = buyReady(side);
+    const busy = buyBusy(side);
+    const ref = side === 'YES' ? buyYesRef : buyNoRef;
+    const gated = ready && row.manualKind === 'buy';
+    return (
+      <Pressable
+        key={`buy-${side}`}
+        ref={ref}
+        collapsable={false}
+        style={[styles.orbPress, busy && styles.manualBtnBusy]}
+        onPress={() => fireBuy(side)}
+        disabled={busy}
+        hitSlop={6}
+        testID={
+          gated
+            ? side === 'YES'
+              ? `btn-manual-buy-${row.asset}`
+              : `btn-manual-buy-no-${row.asset}`
+            : side === 'YES'
+              ? `tap-idle-${row.asset}`
+              : `tap-idle-no-${row.asset}`
+        }
+        accessibilityLabel={
+          gated ? `Buy ${side}` : `Force buy ${side} (skip Home gates)`
+        }
+        accessibilityRole="button"
+        accessibilityState={{ busy, disabled: busy }}
+      >
+        {({ pressed }) =>
+          busy ? (
+            <View style={styles.orbBusy}>
+              <ActivityIndicator
+                color={ready ? colors.win : colors.textSecondary}
+                size="small"
+                testID={
+                  gated ? `manual-placing-${row.asset}` : `force-placing-${row.asset}`
+                }
+              />
+            </View>
+          ) : (
+            <TradeActionOrb
+              tone={ready ? 'buyDeep' : 'idle'}
+              glyph="plus"
+              size={40}
+              pressed={pressed}
+              badge={side}
+              testID={
+                ready
+                  ? `buy-orb-${row.asset}`
+                  : `buy-orb-idle-${side.toLowerCase()}-${row.asset}`
+              }
+              iconTestID={
+                ready
+                  ? side === 'YES'
+                    ? `buy-plus-icon-${row.asset}`
+                    : `buy-plus-icon-no-${row.asset}`
+                  : side === 'YES'
+                    ? `idle-plus-icon-${row.asset}`
+                    : `idle-plus-icon-no-${row.asset}`
+              }
+            />
+          )
+        }
+      </Pressable>
+    );
+  };
+
   return (
     <View
-      style={[styles.signalRow, actionable && styles.signalRowReady]}
+      style={[styles.signalRow, showTradeActions && styles.signalRowReady]}
       testID={`signal-row-${row.asset}`}
     >
       <View style={{ flex: 1 }}>
         <View style={styles.signalLeft}>
           <Text style={styles.signalAsset}>{row.asset}</Text>
-          {AssetRegistry.get(row.asset)?.category ? (
-            <Text style={styles.signalCategoryIcon} testID={`signal-category-icon-${row.asset}`}>
-              {AssetRegistry.getCategoryIcon(AssetRegistry.get(row.asset)?.category)}
-            </Text>
-          ) : null}
           <Text
             style={[
               styles.signalDecision,
@@ -1355,103 +1418,7 @@ function LastSignalRow({
           </Text>
         ) : null}
       </View>
-      {showPairCol ? (
-        <View style={styles.manualBtnCol} testID={`btn-manual-pair-${row.asset}`}>
-          {pairSellSides.map((side) => {
-            const busy = side === 'YES' ? row.placingSellYes : row.placingSellNo;
-            return (
-              <Pressable
-                key={`sell-${side}`}
-                style={[styles.orbPress, busy && styles.manualBtnBusy]}
-                onPress={() => measureAndPlace('sell', side)}
-                disabled={Boolean(busy)}
-                hitSlop={8}
-                testID={`btn-manual-sell-${side.toLowerCase()}-${row.asset}`}
-                accessibilityLabel={`Sell ${side} only`}
-                accessibilityRole="button"
-                accessibilityState={{ busy: Boolean(busy), disabled: Boolean(busy) }}
-              >
-                {({ pressed }) =>
-                  busy ? (
-                    <View style={styles.orbBusy}>
-                      <ActivityIndicator color={colors.warn} size="small" />
-                    </View>
-                  ) : (
-                    <TradeActionOrb
-                      tone="sell"
-                      glyph="minus"
-                      size={44}
-                      pressed={pressed}
-                      badge={side}
-                      iconTestID={`sell-minus-icon-${side.toLowerCase()}-${row.asset}`}
-                    />
-                  )
-                }
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : row.manualKind === 'buy' ? (
-        <Pressable
-          ref={btnRef}
-          collapsable={false}
-          style={[styles.orbPress, row.placing && styles.manualBtnBusy]}
-          onPress={firePlace}
-          disabled={row.placing}
-          hitSlop={8}
-          testID={`btn-manual-buy-${row.asset}`}
-          accessibilityState={{ busy: row.placing, disabled: row.placing }}
-          accessibilityLabel={`Buy ${buySide}`}
-          accessibilityRole="button"
-        >
-          {({ pressed }) =>
-            row.placing ? (
-              <View style={styles.orbBusy}>
-                <ActivityIndicator color={colors.win} size="small" testID={`manual-placing-${row.asset}`} />
-              </View>
-            ) : (
-              <TradeActionOrb
-                tone={row.strongBuy ? 'buyDeep' : 'buy'}
-                glyph="plus"
-                size={44}
-                pressed={pressed}
-                testID={`buy-orb-${row.asset}`}
-                iconTestID={`buy-plus-icon-${row.asset}`}
-              />
-            )
-          }
-        </Pressable>
-      ) : row.manualKind === 'sell' ? (
-        <Pressable
-          ref={btnRef}
-          collapsable={false}
-          style={[styles.orbPress, row.placing && styles.manualBtnBusy]}
-          onPress={firePlace}
-          disabled={row.placing}
-          hitSlop={8}
-          testID={`btn-manual-sell-${row.asset}`}
-          accessibilityState={{ busy: row.placing, disabled: row.placing }}
-          accessibilityLabel={btnLabel || 'Sell'}
-          accessibilityRole="button"
-        >
-          {({ pressed }) =>
-            row.placing ? (
-              <View style={styles.orbBusy}>
-                <ActivityIndicator color={colors.warn} size="small" testID={`manual-placing-${row.asset}`} />
-              </View>
-            ) : (
-              <TradeActionOrb
-                tone="sell"
-                glyph="minus"
-                size={44}
-                pressed={pressed}
-                badge={row.held?.side === 'NO' ? 'NO' : 'YES'}
-                iconTestID={`sell-minus-icon-${row.asset}`}
-              />
-            )
-          }
-        </Pressable>
-      ) : !row.isOpen ? (
+      {!row.isOpen ? (
         <Text style={styles.signalTime} testID={`signal-time-${row.asset}`}>
           (Market closed)
         </Text>
@@ -1460,38 +1427,60 @@ function LastSignalRow({
           (No Kalshi 15m contract)
         </Text>
       ) : (
-        <Pressable
-          ref={forceRef}
-          collapsable={false}
-          style={[styles.orbPress, row.placingForce && styles.manualBtnBusy]}
-          onPress={fireForceBuy}
-          disabled={Boolean(row.placingForce)}
-          hitSlop={8}
-          testID={`tap-idle-${row.asset}`}
-          accessibilityLabel={`Force buy ${forceBuySide()} (skip Home gates)`}
-          accessibilityRole="button"
-          accessibilityState={{ busy: Boolean(row.placingForce), disabled: Boolean(row.placingForce) }}
-        >
-          {({ pressed }) =>
-            row.placingForce ? (
-              <View style={styles.orbBusy}>
-                <ActivityIndicator
-                  color={colors.textSecondary}
-                  size="small"
-                  testID={`force-placing-${row.asset}`}
-                />
-              </View>
-            ) : (
-              <TradeActionOrb
-                tone="idle"
-                glyph="plus"
-                size={44}
-                pressed={pressed}
-                iconTestID={`idle-plus-icon-${row.asset}`}
-              />
-            )
-          }
-        </Pressable>
+        <View style={styles.tradeCols} testID={`btn-manual-pair-${row.asset}`}>
+          <View style={styles.tradeCol}>
+            <Text style={styles.tradeColLabel}>Buy</Text>
+            <View style={styles.tradeColOrbs}>
+              {renderBuyOrb('YES')}
+              {renderBuyOrb('NO')}
+            </View>
+          </View>
+          <View style={styles.tradeCol}>
+            <Text style={styles.tradeColLabel}>Sell</Text>
+            <View style={styles.tradeColOrbs}>
+              {pairSellSides.length === 0 ? (
+                <View style={styles.tradeColEmpty} />
+              ) : (
+                pairSellSides.map((side) => {
+                  const busy = sellBusy(side);
+                  const ref = side === 'YES' ? sellYesRef : sellNoRef;
+                  return (
+                    <Pressable
+                      key={`sell-${side}`}
+                      ref={ref}
+                      collapsable={false}
+                      style={[styles.orbPress, busy && styles.manualBtnBusy]}
+                      onPress={() => fireSell(side)}
+                      disabled={busy}
+                      hitSlop={6}
+                      testID={`btn-manual-sell-${side.toLowerCase()}-${row.asset}`}
+                      accessibilityLabel={`Sell ${side} only`}
+                      accessibilityRole="button"
+                      accessibilityState={{ busy, disabled: busy }}
+                    >
+                      {({ pressed }) =>
+                        busy ? (
+                          <View style={styles.orbBusy}>
+                            <ActivityIndicator color={colors.warn} size="small" />
+                          </View>
+                        ) : (
+                          <TradeActionOrb
+                            tone="sell"
+                            glyph="minus"
+                            size={40}
+                            pressed={pressed}
+                            badge={side}
+                            iconTestID={`sell-minus-icon-${side.toLowerCase()}-${row.asset}`}
+                          />
+                        )
+                      }
+                    </Pressable>
+                  );
+                })
+              )}
+            </View>
+          </View>
+        </View>
       )}
     </View>
   );
@@ -1692,6 +1681,17 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   manualBtnCol: { gap: 10, alignItems: 'center' },
+  tradeCols: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  tradeCol: { alignItems: 'center', gap: 4, minWidth: 88 },
+  tradeColLabel: {
+    color: colors.mute,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  tradeColOrbs: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tradeColEmpty: { width: 40, height: 40 },
   manualBtnBuy: { backgroundColor: colors.win },
   manualBtnBuyDeep: { backgroundColor: colors.buyDeep },
   manualBtnSell: { backgroundColor: colors.warn },
@@ -1699,10 +1699,6 @@ const styles = StyleSheet.create({
   manualBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   signalLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   signalAsset: { color: colors.textPrimary, fontWeight: '700', minWidth: 44 },
-  signalCategoryIcon: {
-    fontSize: 13,
-    marginRight: 2,
-  },
   signalDecision: { color: colors.accent, fontWeight: '800', minWidth: 36 },
   signalMeta: { color: colors.mute, fontSize: 12, flexShrink: 1 },
   signalErr: { color: colors.loss, fontSize: 11, marginTop: 2, marginLeft: 52 },

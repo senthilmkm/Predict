@@ -804,11 +804,11 @@ describe('last signal extra line', () => {
 });
 
 describe('homeBuyGapBeatsCushion', () => {
-  test('needs live at least 25% past that coin’s cushion', () => {
-    expect(homeBuyGapBeatsCushion({ absGap: 218.75, cushionUsd: 175 })).toBe(true);
-    expect(homeBuyGapBeatsCushion({ absGap: 218, cushionUsd: 175 })).toBe(false);
-    expect(homeBuyGapBeatsCushion({ absGap: 0.625, cushionUsd: 0.5 })).toBe(true);
-    expect(homeBuyGapBeatsCushion({ absGap: 0.5, cushionUsd: 0.5 })).toBe(false);
+  test('needs live at least that coin’s cushion', () => {
+    expect(homeBuyGapBeatsCushion({ absGap: 175, cushionUsd: 175 })).toBe(true);
+    expect(homeBuyGapBeatsCushion({ absGap: 174, cushionUsd: 175 })).toBe(false);
+    expect(homeBuyGapBeatsCushion({ absGap: 0.5, cushionUsd: 0.5 })).toBe(true);
+    expect(homeBuyGapBeatsCushion({ absGap: 0.49, cushionUsd: 0.5 })).toBe(false);
     expect(homeBuyGapBeatsCushion({ absGap: 400, cushionUsd: 0 })).toBe(false);
   });
 });

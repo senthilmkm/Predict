@@ -317,8 +317,8 @@ function openLiveFills(
   }).length;
 }
 
-/** Home Buy turns dark green when |live − strike| is at least this × that coin’s Cushions $. */
-export const HOME_BUY_STRONG_GAP_MULT = 1.25;
+/** Home Buy orb turns green when |live − strike| clears that coin’s Cushions $. */
+export const HOME_BUY_STRONG_GAP_MULT = 1;
 
 export function homeBuyGapBeatsCushion(opts: { absGap?: unknown; cushionUsd?: unknown }): boolean {
   const gap = Number(opts.absGap);

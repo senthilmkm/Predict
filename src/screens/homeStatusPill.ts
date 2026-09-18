@@ -53,7 +53,8 @@ export function homeStatusPillModel(opts: {
   const ageSec = cloudPulseAgeSec(opts.lastPulseAt, opts.nowMs);
   const stale = isCloudPulseStale(opts.running, ageSec, opts.intervalSec);
   const tone: HomeCloudTone = !opts.running ? 'idle' : stale ? 'stale' : 'live';
-  const tickLabel = !opts.running ? 'Idle' : stale ? 'Stale' : `${opts.intervalSec}s`;
+  // Collapsed chip: no poll-interval seconds — tone color carries live health.
+  const tickLabel = !opts.running ? 'Idle' : stale ? 'Stale' : '';
   const autoOn = Boolean(opts.config.auto_trade_enabled);
   const alertsOn = Boolean(opts.config.alerts_enabled);
   return {

@@ -9,7 +9,7 @@ export const colors = {
   accentSoft: 'rgba(61, 184, 160, 0.2)',
   gold: '#C6A75E',
   win: '#3DDC97',
-  /** Home Buy when |live − strike| ≥ 1.25 × that coin’s Cushions $. */
+  /** Home Buy when |live − strike| clears that coin’s Cushions $. */
   buyDeep: '#157A45',
   loss: '#F07178',
   warn: '#E6B35A',
