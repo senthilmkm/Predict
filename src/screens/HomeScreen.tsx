@@ -447,7 +447,6 @@ export function HomeScreen({
     };
   });
 
-  const lastTick = status?.cloudLastTickAt ?? status?.lastTickAt ?? status?.lastPulseAt;
   const rawIntegrationError = status?.lastError;
   let integrationError: string | null = null;
   if (rawIntegrationError) {
@@ -971,14 +970,7 @@ export function HomeScreen({
       ) : null}
 
       <View style={styles.card} testID="home-last-signals">
-        <View style={styles.signalsHeader}>
-          <Text style={styles.label}>Last signals</Text>
-          <Text style={styles.liveTick} testID="home-last-tick">
-            {lastTick
-              ? `Last tick ${formatSignalTime(lastTick)} · ${relativeAge(lastTick, nowMs)}`
-              : 'Last tick —'}
-          </Text>
-        </View>
+        <Text style={styles.label}>Last signals</Text>
         {decoratedRows.length === 0 ? (
           <Text style={styles.valueSmall}>—</Text>
         ) : (
@@ -1097,28 +1089,6 @@ function decisionColor(decision: string): { color: string } {
   if (decision === 'SKIP') return { color: colors.warn };
   if (decision === 'ERR') return { color: colors.loss };
   return { color: colors.accent };
-}
-
-function formatSignalTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function relativeAge(iso: string, nowMs: number): string {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return '';
-  const sec = Math.max(0, Math.floor((nowMs - t) / 1000));
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  return `${Math.floor(min / 60)}h ago`;
 }
 
 function HomeStatusPill({
@@ -1639,14 +1609,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     gap: 8,
   },
-  signalsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  liveTick: { color: colors.accent, fontSize: 11, fontWeight: '600' },
   label: { color: colors.textSecondary, fontSize: 13 },
   todayCard: {
     backgroundColor: colors.surface,

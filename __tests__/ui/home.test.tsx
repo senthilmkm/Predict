@@ -435,10 +435,7 @@ describe('HomeScreen', () => {
     expect(s.getByText('Alerts on · auto-trading')).toBeTruthy();
     expect(s.getByText(/Live · Cloud tick 20s/)).toBeTruthy();
     expect(s.queryByText(/Stale · Cloud tick/)).toBeNull();
-    const lastTickLabel = String(s.getByTestId('home-last-tick').props.children);
-    expect(lastTickLabel).toMatch(/Last tick /);
-    expect(lastTickLabel).not.toMatch(/40m ago/);
-    expect(lastTickLabel).toMatch(/\d+s ago/);
+    expect(s.queryByTestId('home-last-tick')).toBeNull();
   });
 
   test('returning to the foreground refreshes Predictions and Cash', async () => {
