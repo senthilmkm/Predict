@@ -883,7 +883,7 @@ describe('HomeScreen', () => {
     }
   });
 
-  test('manual buy success flies a gold message instead of a popup', async () => {
+  test('manual buy success shows corner toast instead of a popup', async () => {
     const Alert = require('react-native').Alert;
     const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const { cloudClient } = require('../../src/services/cloud/cloudClient');
@@ -911,8 +911,10 @@ describe('HomeScreen', () => {
       const s = await render(<HomeScreen />);
       await waitFor(() => expect(s.getByTestId('btn-manual-buy-BTC')).toBeTruthy());
       await fireEvent.press(s.getByTestId('btn-manual-buy-BTC'));
-      await waitFor(() => expect(s.getByTestId('manual-success-fly')).toBeTruthy());
-      expect(s.getByTestId('manual-success-fly-text').props.children).toBe('BTC YES success');
+      await waitFor(() => expect(s.getByTestId('trade-toast-stack')).toBeTruthy());
+      expect(s.getByTestId('trade-toast-asset-BTC')).toBeTruthy();
+      expect(s.getByTestId('trade-toast-icon-buy-BTC')).toBeTruthy();
+      expect(s.queryByTestId('manual-success-fly')).toBeNull();
       expect(placeSpy).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'buy', decision: 'YES' })
       );

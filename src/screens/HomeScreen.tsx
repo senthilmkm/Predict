@@ -29,6 +29,8 @@ import { usePinnedPathsStore } from '../state/pinnedPathsStore';
 import { SupportContactFooter } from '../components/SupportContactFooter';
 import { TradingDisclaimer } from '../components/TradingDisclaimer';
 import { ManualSuccessFly } from '../components/ManualSuccessFly';
+import { TradeToastStack, TradeToastItem } from '../components/TradeToastStack';
+import { toastFromAlert, toastFromManualTrade, toastFromTradeRecord } from './tradeToasts';
 import { supportContactEmail, withSupportContact } from '../config/appMeta';
 import { formatChange24h, formatChangeWindowLabel, formatUsd } from '../util/moneyFormat';
 import { cloudClient } from '../services/cloud/cloudClient';
@@ -161,6 +163,21 @@ export function HomeScreen({
     startY: number;
     tone?: 'success' | 'error';
   } | null>(null);
+  const [tradeToasts, setTradeToasts] = useState<TradeToastItem[]>([]);
+  const seenAlertIdsRef = useRef<Set<string> | null>(null);
+  const seenTradeIdsRef = useRef<Set<string> | null>(null);
+  const recentManualToastKeysRef = useRef<Set<string>>(new Set());
+
+  const pushTradeToast = useCallback((item: TradeToastItem) => {
+    setTradeToasts((prev) => {
+      if (prev.some((t) => t.id === item.id)) return prev;
+      return [item, ...prev].slice(0, 3);
+    });
+  }, []);
+
+  const dismissTradeToast = useCallback((id: string) => {
+    setTradeToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
   const placingRef = useRef<Record<string, boolean>>({});
   const mountedRef = useRef(true);
   const homeRootRef = useRef<View>(null);
@@ -294,6 +311,41 @@ export function HomeScreen({
     }
   }, [latestAlertId, latestAlertKind, refreshCloudSnapshot]);
 
+  // Corner toasts for path fills (and Home) from Cloud alerts + new trade rows.
+  useEffect(() => {
+    if (seenAlertIdsRef.current == null) {
+      seenAlertIdsRef.current = new Set(alerts.map((a) => a.id));
+      return;
+    }
+    for (const alert of alerts) {
+      if (seenAlertIdsRef.current.has(alert.id)) continue;
+      seenAlertIdsRef.current.add(alert.id);
+      const toast = toastFromAlert(alert);
+      if (!toast) continue;
+      const key = `${toast.asset}:${toast.side || ''}:${toast.action}`;
+      if (recentManualToastKeysRef.current.has(key)) continue;
+      pushTradeToast(toast);
+    }
+  }, [alerts, pushTradeToast]);
+
+  useEffect(() => {
+    if (seenTradeIdsRef.current == null) {
+      seenTradeIdsRef.current = new Set(trades.map((t) => t.id));
+      return;
+    }
+    for (const trade of trades) {
+      if (seenTradeIdsRef.current.has(trade.id)) continue;
+      seenTradeIdsRef.current.add(trade.id);
+      const toast = toastFromTradeRecord(trade);
+      if (!toast) continue;
+      const key = `${toast.asset}:${toast.side || ''}:${toast.action}`;
+      if (recentManualToastKeysRef.current.has(key)) continue;
+      // Prefer alert-driven toasts when both arrive; skip home buys already toasted manually.
+      if (toast.pathLabel === 'Home Buy' && toast.action === 'buy') continue;
+      pushTradeToast(toast);
+    }
+  }, [trades, pushTradeToast]);
+
   // 4. On Manual Pull-to-Refresh
   const onPullToRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -375,12 +427,20 @@ export function HomeScreen({
         }
         const start = await windowToHomeLocal(homeRootRef.current, origin);
         if (!mountedRef.current) return;
-        setFly({
-          id: `${asset}-${action}-${decision || ''}-${Date.now()}`,
-          text: `${asset} ${decision || action} success`,
-          startX: start.x,
-          startY: start.y,
-        });
+        const side = decision === 'YES' || decision === 'NO' ? decision : null;
+        const key = `${asset}:${side || ''}:${action}`;
+        recentManualToastKeysRef.current.add(key);
+        const dedupeMs =
+          typeof process !== 'undefined' && process.env.JEST_WORKER_ID != null ? 50 : 8000;
+        setTimeout(() => recentManualToastKeysRef.current.delete(key), dedupeMs);
+        pushTradeToast(
+          toastFromManualTrade({
+            asset,
+            action,
+            side,
+            id: `${asset}-${action}-${decision || ''}-${Date.now()}`,
+          })
+        );
         void refreshCloudSnapshot();
       } catch (err: any) {
         if (!mountedRef.current) return;
@@ -405,7 +465,7 @@ export function HomeScreen({
         }
       }
     },
-    [refreshCloudSnapshot]
+    [pushTradeToast, refreshCloudSnapshot]
   );
 
   void bump;
@@ -969,7 +1029,6 @@ export function HomeScreen({
                   accessibilityLabel={`${tile.title}. Edit path.`}
                 >
                   <Text style={styles.pinnedChipText}>{tile.title}</Text>
-                  <Text style={styles.pinnedChipDot}> · edit</Text>
                 </Pressable>
               );
             })}
@@ -1043,16 +1102,17 @@ export function HomeScreen({
       />
       <SupportContactFooter />
     </ScrollView>
-    {fly ? (
+    {fly && fly.tone === 'error' ? (
       <ManualSuccessFly
         key={fly.id}
         text={fly.text}
         startX={fly.startX}
         startY={fly.startY}
-        tone={fly.tone || 'success'}
+        tone="error"
         onDone={() => setFly(null)}
       />
     ) : null}
+    <TradeToastStack items={tradeToasts} onDismiss={dismissTradeToast} />
     </View>
   );
 }
@@ -1637,7 +1697,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pinnedChipText: { color: colors.textPrimary, fontSize: 12, fontWeight: '700' },
-  pinnedChipDot: { color: colors.mute, fontSize: 12, fontWeight: '600' },
   valueSmall: { color: colors.textPrimary, fontSize: 14, marginTop: 4, lineHeight: 20 },
   signalRow: {
     flexDirection: 'row',
