@@ -18,7 +18,7 @@ import {
   type GateResult,
 } from '../../../../packages/trading-core/src/gates';
 import { isGoodTillCanceled, placeResultShouldPersist, resolvedPlaceFillCount } from '../../../../packages/trading-core/src/orderFill';
-import { iocKalshiPrice, refreshIocPayForPlace } from '../../../../packages/trading-core/src/iocPlace';
+import { iocKalshiPrice, marketableBuyPayForPlace, refreshIocPayForPlace } from '../../../../packages/trading-core/src/iocPlace';
 import { LastTradeAction } from '../../../../packages/trading-core/src/types';
 import { getCfbApiCredentials, getUserSecret } from '../services/secretManager';
 import { cloudKalshi } from '../services/cloudKalshi';
@@ -881,6 +881,47 @@ function liveIocBuyGate(
     price: px.price,
     side: px.side,
     notional_usd: count > 0 ? Math.round(count * refreshed.payUsd * 100) / 100 : gate.notional_usd,
+  };
+}
+
+/**
+ * Home Buy / Cushion lean / Cash out: marketable limit = live ask + chase slip, capped by max ask.
+ * Other paths keep liveIocBuyGate (±1¢ only).
+ */
+function marketableIocBuyGate(
+  gate: GateResult,
+  ticker: string,
+  lean: { yes_ask?: number | null; no_ask?: number | null } | null | undefined,
+  maxPayUsd: number,
+  chaseUsd: unknown
+): GateResult {
+  if (!gate.ok) return gate;
+  const ws = readWsAskBid(String(ticker || ''));
+  const priced = marketableBuyPayForPlace({
+    decision: gate.decision,
+    quotedPayUsd: gate.pay_price,
+    maxPayUsd,
+    chaseUsd,
+    quotes: {
+      yes_ask: ws?.yes_ask ?? lean?.yes_ask,
+      no_ask: ws?.no_ask ?? lean?.no_ask,
+    },
+  });
+  if (!priced.ok) return { ok: false, skip_reason: priced.skip_reason };
+  const px = iocKalshiPrice({
+    decision: gate.decision,
+    payUsd: priced.payUsd,
+    existingSide: gate.side,
+    existingPrice: gate.price,
+    existingPayUsd: gate.pay_price,
+  });
+  const count = Math.max(0, Number(gate.count) || 0);
+  return {
+    ...gate,
+    pay_price: priced.payUsd,
+    price: px.price,
+    side: px.side,
+    notional_usd: count > 0 ? Math.round(count * priced.payUsd * 100) / 100 : gate.notional_usd,
   };
 }
 
@@ -3245,17 +3286,28 @@ async function runOneTick() {
               } else {
               const quotedPay = Number(gate.pay_price) || 0;
               const pairish = entryPath === 'pair_lock';
-              const buyGate = liveIocBuyGate(
-                gate,
-                marketTicker,
-                lean,
-                pairish
-                  ? quotedPay
-                  : entryPath === 'buffer_run'
-                    ? Number(cfg.risk?.buffer_run_ask_max_usd || quotedPay)
-                    : Number(cfg.risk?.max_entry_ask_usd || quotedPay),
-                !pairish
-              );
+              const marketableHomeish = entryPath === 'auto' || entryPath === 'cash_out';
+              const buyGate = pairish
+                ? pairLockIocBuyGate(gate, marketTicker, lean)
+                : marketableHomeish
+                  ? marketableIocBuyGate(
+                      gate,
+                      marketTicker,
+                      lean,
+                      entryPath === 'cash_out'
+                        ? Number(cfg.risk?.cash_out_max_ask_usd || quotedPay)
+                        : Number(cfg.risk?.max_entry_ask_usd || quotedPay),
+                      cfg.risk?.chase_above_ask_usd
+                    )
+                  : liveIocBuyGate(
+                      gate,
+                      marketTicker,
+                      lean,
+                      entryPath === 'buffer_run'
+                        ? Number(cfg.risk?.buffer_run_ask_max_usd || quotedPay)
+                        : Number(cfg.risk?.max_entry_ask_usd || quotedPay),
+                      true
+                    );
               if (!buyGate.ok || !buyGate.price || !buyGate.count) {
                 lastTradeAction[asset] = skippedTradeAction(buyGate.skip_reason || 'ask_moved', tickIso);
               } else {

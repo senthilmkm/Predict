@@ -374,7 +374,7 @@ export function getFaqCategories(): FaqCategory[] {
             '• FOK = fill all now or cancel all\n' +
             '• GTC = leave it working until filled or canceled\n\n' +
             'Most people keep IOC on these short windows. GTC on a Home tap can rest until the 15-minute window ends. Protect money sells and Home Sell taps always use IOC.\n\n' +
-            'Chase above ask (default $0.02) is a tiny extra above the ask. Each path caps pay by that path’s max entry ask (max $0.99). Auto-trade chase is also protect-sell slippage.',
+            'Chase / slip (default $0.02) is a marketable-limit cushion above the live ask on Home Buy, Cushion lean, and Cash out buys (and below the bid on Home Sell / Cash out exits). Each path still caps pay by that path’s max entry ask (max $0.99).',
         },
         {
           id: 'risk-shared-vs-path',
@@ -386,8 +386,8 @@ export function getFaqCategories(): FaqCategory[] {
             '• max trades / asset / 15m window\n' +
             '• daily loss stop\n' +
             '• cushions and asset on/off (Cushions tab)\n\n' +
-            'Home Buy tab only: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, chase. Used when you tap Buy on Home. Home Sell stays IOC; its slippage is Home Buy chase.\n\n' +
-            'Auto-trade tab only: the same size/timing fields for Cloud’s scheduled buys, plus Smart buy (default On, min extra chance $0.08) and Protect money (early sell). Protect can still exit a fill that started as a Home Buy. Smart buy does not apply to a Home tap.\n\n' +
+            'Home Buy tab only: $ per trade, min/max $, minutes left, minutes elapsed, max entry ask, time in force, slip (chase). Used when you tap Buy on Home. Home Sell stays IOC; its slip is the same chase.\n\n' +
+            'Auto-trade tab only: the same size/timing fields for Cloud’s scheduled buys, plus Smart buy (default On, min extra chance $0.08) and Protect money (early sell). Protect can still exit a fill that started as a Home Buy. Smart buy does not apply to a Home tap. Cushion lean and Cash out buys also use slip (chase) as a marketable limit at send.\n\n' +
             'Home Buy / Sell on Last signals is the Home tap path. If Auto-trade is also On and its tab passes, the worker can buy that same lean as long as shared caps still have room (15m window, trades/day, max open, daily loss).\n\n' +
             'Last signals never shows both skips at once. If Home Buy would skip (ask too rich, timing, size, shared cap), Buy is hidden and that Home skip stays on the row. Auto-trade’s last skip/place shows only when there is no Home skip and no Buy/Sell button.',
         },

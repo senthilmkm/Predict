@@ -46,7 +46,7 @@ export const PATH_INFO = {
       '• A Home fill counts toward window cap 1 (Last-minute first clip then sits out)\n' +
       '• Protect money can later sell a Home fill (if Protect is On)\n' +
       '• Sell at % can dump a Home fill without a lean flip\n' +
-      '• Home Sell is IOC; slippage is Home Buy chase',
+      '• Home Sell is IOC; marketable limit uses bid − Home slip (chase)',
   },
   auto: {
     title: 'Cushion lean',
@@ -54,7 +54,7 @@ export const PATH_INFO = {
       'Uses\n' +
       '• This path’s $ per trade / min / max\n' +
       '• Minutes left and elapsed (default 2 / 2 — no last-minute chase)\n' +
-      '• Auto max entry ask, TIF, chase\n' +
+      '• Auto max entry ask, TIF, slip (chase) — marketable limit at live ask + slip on send\n' +
       '• Sell at % take-profit (0 = Off; 1s mark watch; Protect wait/grace)\n' +
       '• Cushions $ gap (above cushion × enter, below cushion × max gap), Smart buy (if On), shared limits, asset on/off\n' +
       '• Cushion lean asset chips (empty = no Cushion lean buys; asset must also be On in Cushions)\n\n' +
@@ -115,11 +115,12 @@ export const PATH_INFO = {
       '• Cash out max ask / bid / stop\n' +
       '• This path’s Skip thin bid (sells into the bid — thin book matters here)\n' +
       '• This path’s $ per trade / min / max (missing seeds from Cushion lean $)\n' +
+      '• Shared slip (chase) — marketable buy at live ask + slip; exits use bid − slip\n' +
       '• Shared caps\n' +
       '• Minutes left floor of 3 (never last-minute)\n\n' +
       'Does not use\n' +
       '• Cushion lean $ after this path has its own $ saved\n' +
-      '• Auto max ask, Smart buy, chase, Protect\n' +
+      '• Auto max ask, Smart buy, Protect\n' +
       '• Gold fade / TWAP / Last-minute fields\n' +
       '• Last-minute watch / clips / Both gate\n\n' +
       'Isolation\n' +

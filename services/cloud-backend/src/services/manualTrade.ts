@@ -26,6 +26,7 @@ import {
   homeBuyPayFromLiveAsk,
   iocKalshiPrice,
   liveAskForDecision,
+  normalizeSlipUsd,
 } from '../../../../packages/trading-core/src/iocPlace';
 import { configForHomeBuy } from '../../../../packages/trading-core/src/pathRisk';
 import { isMarketOpen } from './marketHours';
@@ -221,8 +222,8 @@ function forceHomeBuyGate(
       : Number(lean.yes_ask);
   if (!Number.isFinite(ask) || !(ask > 0)) ask = 0.5;
   ask = Math.min(0.99, Math.max(0.01, ask));
-  const chase = Math.max(0, Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0));
-  const pay = Math.min(0.99, Math.max(0.01, ask + chase));
+  const chase = normalizeSlipUsd(cfg.risk?.chase_above_ask_usd);
+  const pay = Math.min(0.99, Math.max(0.01, Math.round((ask + chase) * 100) / 100));
   const dollars = Math.min(
     Number(cfg.risk?.fixed_dollars_per_trade) || 5,
     Number(cfg.risk?.max_dollars_per_trade) || 5
@@ -389,7 +390,10 @@ async function executeCheapLoopHistorySell(opts: {
       ticker,
       trade,
       quotes,
-      slippageUsd: Math.min(0.05, Number(cfg.risk?.chase_above_ask_usd) || 0.02),
+      slippageUsd: (() => {
+        const s = normalizeSlipUsd(cfg.risk?.chase_above_ask_usd);
+        return s > 0 ? s : 0.02;
+      })(),
       dryRun: false,
       now,
       place,
@@ -1029,7 +1033,10 @@ async function executeManualSell(opts: {
     fillCount: fillCountOf(held),
     yesBid: lean.yes_bid,
     yesAsk: lean.yes_ask,
-    slippageUsd: Math.min(0.05, Number(opts.cfg.risk?.chase_above_ask_usd) || 0.02),
+    slippageUsd: (() => {
+      const s = normalizeSlipUsd(opts.cfg.risk?.chase_above_ask_usd);
+      return s > 0 ? s : 0.02;
+    })(),
   });
   if (!order.ok || !order.side || !order.price || !order.count) {
     return fail(userId, 409, order.reason || 'quote', undefined, {

@@ -6,9 +6,18 @@ export type IocLiveAsks = {
 };
 
 const ONE_CENT = 0.01;
+/** Shared Home / Cushion lean / Cash out slip (chase). */
+export const SLIP_USD_MAX = 0.05;
 
 function snapCent(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Clamp chase / sell slip to 0…5¢. */
+export function normalizeSlipUsd(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(SLIP_USD_MAX, Math.max(0, snapCent(n)));
 }
 
 /** Live ask for this buy. Null = no book; keep the quoted pay. */
@@ -65,8 +74,8 @@ export function iocKalshiPrice(opts: {
 }
 
 /**
- * Home Buy limit at send: live ask + chase, capped by max entry ask.
- * Prefer this over a stale gate pay so the IOC hits the book ASAP at the right ticket.
+ * Marketable buy limit: live ask + slip (chase), capped by max entry ask.
+ * Used by Home Buy, Cushion lean, and Cash out at send time.
  */
 export function homeBuyPayFromLiveAsk(opts: {
   liveAskUsd?: unknown;
@@ -77,9 +86,39 @@ export function homeBuyPayFromLiveAsk(opts: {
   | { ok: false; skip_reason: 'ask_unavailable' | 'ask_moved' } {
   const ask = ticketUsd(opts.liveAskUsd);
   if (ask == null || !(ask > 0)) return { ok: false, skip_reason: 'ask_unavailable' };
-  const chase = Math.max(0, Math.min(0.05, Number(opts.chaseUsd) || 0));
+  const chase = normalizeSlipUsd(opts.chaseUsd);
   const maxEntry = ticketUsd(opts.maxEntryAskUsd) ?? 0.99;
   if (ask > maxEntry + 1e-9) return { ok: false, skip_reason: 'ask_moved' };
   const pay = Math.min(0.99, maxEntry, snapCent(ask + chase));
   return { ok: true, payUsd: pay };
+}
+
+/** @see homeBuyPayFromLiveAsk */
+export const marketableBuyPayFromLiveAsk = homeBuyPayFromLiveAsk;
+
+/**
+ * Send-time marketable buy pay for Home / Cushion lean / Cash out.
+ * Prefers live ask + slip; if the book is missing, keeps the quoted gate pay.
+ */
+export function marketableBuyPayForPlace(opts: {
+  decision?: unknown;
+  quotes?: IocLiveAsks | null;
+  chaseUsd?: unknown;
+  maxPayUsd?: unknown;
+  quotedPayUsd?: unknown;
+}):
+  | { ok: true; payUsd: number; fromLive: boolean }
+  | { ok: false; skip_reason: 'ask_moved' } {
+  const liveAsk = liveAskForDecision(opts.decision, opts.quotes);
+  const priced = homeBuyPayFromLiveAsk({
+    liveAskUsd: liveAsk,
+    chaseUsd: opts.chaseUsd,
+    maxEntryAskUsd: opts.maxPayUsd,
+  });
+  if (priced.ok) return { ok: true, payUsd: priced.payUsd, fromLive: true };
+  if (priced.skip_reason === 'ask_moved') return { ok: false, skip_reason: 'ask_moved' };
+  const quoted = ticketUsd(opts.quotedPayUsd);
+  const maxPay = ticketUsd(opts.maxPayUsd) ?? 0.99;
+  if (quoted == null || quoted > maxPay + 1e-9) return { ok: false, skip_reason: 'ask_moved' };
+  return { ok: true, payUsd: quoted, fromLive: false };
 }

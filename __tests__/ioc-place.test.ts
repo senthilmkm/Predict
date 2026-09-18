@@ -1,4 +1,4 @@
-import { iocKalshiPrice, refreshIocPayForPlace, homeBuyPayFromLiveAsk } from '../packages/trading-core/src/iocPlace';
+import { iocKalshiPrice, refreshIocPayForPlace, homeBuyPayFromLiveAsk, marketableBuyPayForPlace } from '../packages/trading-core/src/iocPlace';
 
 describe('refreshIocPayForPlace', () => {
   const quotes = { yes_ask: 0.52, no_ask: 0.41 };
@@ -110,5 +110,43 @@ describe('homeBuyPayFromLiveAsk', () => {
       ok: false,
       skip_reason: 'ask_unavailable',
     });
+  });
+});
+
+describe('marketableBuyPayForPlace', () => {
+  test('reprices to live ask + slip when the book walked more than 1¢', () => {
+    expect(
+      marketableBuyPayForPlace({
+        decision: 'YES',
+        quotedPayUsd: 0.52,
+        maxPayUsd: 0.7,
+        chaseUsd: 0.02,
+        quotes: { yes_ask: 0.55 },
+      })
+    ).toEqual({ ok: true, payUsd: 0.57, fromLive: true });
+  });
+
+  test('skips when live ask is above max', () => {
+    expect(
+      marketableBuyPayForPlace({
+        decision: 'YES',
+        quotedPayUsd: 0.52,
+        maxPayUsd: 0.54,
+        chaseUsd: 0.02,
+        quotes: { yes_ask: 0.55 },
+      })
+    ).toEqual({ ok: false, skip_reason: 'ask_moved' });
+  });
+
+  test('keeps quoted pay when the book is missing', () => {
+    expect(
+      marketableBuyPayForPlace({
+        decision: 'NO',
+        quotedPayUsd: 0.4,
+        maxPayUsd: 0.6,
+        chaseUsd: 0.02,
+        quotes: null,
+      })
+    ).toEqual({ ok: true, payUsd: 0.4, fromLive: false });
   });
 });

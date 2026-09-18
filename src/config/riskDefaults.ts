@@ -226,7 +226,7 @@ export const RISK_FIELD_META: {
   },
   { key: 'max_entry_ask_usd', label: 'Max entry ask ($) (Buy limit)', group: 'timing', kind: 'chase', step: 0.01, min: 0.5, max: 0.99 },
   { key: 'time_in_force', label: 'Time in force', group: 'timing', kind: 'tif', step: 0, min: 0, max: 0 },
-  { key: 'chase_above_ask_usd', label: 'Chase above ask ($)', group: 'timing', kind: 'chase', step: 0.01, min: 0, max: 0.05 },
+  { key: 'chase_above_ask_usd', label: 'Slip (chase above ask)', group: 'timing', kind: 'chase', step: 0.01, min: 0, max: 0.05 },
   {
     key: 'cushion_lean_enter_mult',
     label: 'Enter when gap ≥ cushion ×',
