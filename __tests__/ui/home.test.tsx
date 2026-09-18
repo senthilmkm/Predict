@@ -362,7 +362,7 @@ describe('HomeScreen', () => {
     expect(s.queryByTestId('trade-action-BTC')).toBeNull();
     expect(s.getByTestId('tap-idle-BTC')).toBeTruthy();
     expect(s.getByTestId('tap-idle-no-BTC')).toBeTruthy();
-    expect(s.getByTestId('buy-plus-icon-BTC')).toBeTruthy();
+    expect(s.getByTestId('idle-plus-icon-BTC')).toBeTruthy();
     expect(s.getByTestId('idle-plus-icon-no-BTC')).toBeTruthy();
   });
 

@@ -1242,8 +1242,9 @@ function LastSignalRow({
     decision: row.decision,
     heldSide: row.held?.side,
   });
-  /** Green when lean side clears Cushions $; gray Plus otherwise (force). */
-  const buyReady = (side: 'YES' | 'NO') => Boolean(row.strongBuy && row.decision === side);
+  /** Green only when lean side clears cushion AND Home Buy gates pass; else gray force. */
+  const buyReady = (side: 'YES' | 'NO') =>
+    Boolean(row.manualKind === 'buy' && row.strongBuy && row.decision === side);
   const measureAndPlace = (
     action: 'buy' | 'sell',
     decision: 'YES' | 'NO',
@@ -1279,9 +1280,8 @@ function LastSignalRow({
   };
   const fireBuy = (side: 'YES' | 'NO') => {
     const ready = buyReady(side);
-    const gated = ready && row.manualKind === 'buy';
     const ref = side === 'YES' ? buyYesRef : buyNoRef;
-    measureAndPlace('buy', side, ref, gated ? undefined : { skipGates: true });
+    measureAndPlace('buy', side, ref, ready ? undefined : { skipGates: true });
   };
   const fireSell = (side: 'YES' | 'NO') => {
     const ref = side === 'YES' ? sellYesRef : sellNoRef;
@@ -1296,7 +1296,6 @@ function LastSignalRow({
     const ready = buyReady(side);
     const busy = buyBusy(side);
     const ref = side === 'YES' ? buyYesRef : buyNoRef;
-    const gated = ready && row.manualKind === 'buy';
     return (
       <Pressable
         key={`buy-${side}`}
@@ -1307,7 +1306,7 @@ function LastSignalRow({
         disabled={busy}
         hitSlop={6}
         testID={
-          gated
+          ready
             ? side === 'YES'
               ? `btn-manual-buy-${row.asset}`
               : `btn-manual-buy-no-${row.asset}`
@@ -1316,7 +1315,7 @@ function LastSignalRow({
               : `tap-idle-no-${row.asset}`
         }
         accessibilityLabel={
-          gated ? `Buy ${side}` : `Force buy ${side} (skip Home gates)`
+          ready ? `Buy ${side}` : `Force buy ${side} (skip Home gates)`
         }
         accessibilityRole="button"
         accessibilityState={{ busy, disabled: busy }}
@@ -1328,7 +1327,7 @@ function LastSignalRow({
                 color={ready ? colors.win : colors.textSecondary}
                 size="small"
                 testID={
-                  gated ? `manual-placing-${row.asset}` : `force-placing-${row.asset}`
+                  ready ? `manual-placing-${row.asset}` : `force-placing-${row.asset}`
                 }
               />
             </View>
