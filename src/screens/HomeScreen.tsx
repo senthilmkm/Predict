@@ -798,9 +798,16 @@ export function HomeScreen({
       pairSellSides,
     };
   });
-  const actionRows = decoratedRows.filter(
-    (r) => r.isOpen && !r.noMarket && !r.err && Boolean(r.at)
-  );
+  const actionRows = decoratedRows
+    .filter((r) => r.isOpen && !r.noMarket && !r.err && Boolean(r.at))
+    .slice()
+    .sort((a, b) => {
+      // Gap clears cushion → top (even if other Home Buy gates failed).
+      const aTop = a.strongBuy ? 1 : 0;
+      const bTop = b.strongBuy ? 1 : 0;
+      if (bTop !== aTop) return bTop - aTop;
+      return ASSET_ORDER.indexOf(a.asset) - ASSET_ORDER.indexOf(b.asset);
+    });
   const otherRows = decoratedRows.filter(
     (r) => !(r.isOpen && !r.noMarket && !r.err && Boolean(r.at))
   );

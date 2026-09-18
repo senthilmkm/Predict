@@ -527,6 +527,64 @@ describe('HomeScreen', () => {
     );
   });
 
+  test('cushion-clear assets sort above others even when Home Buy gates fail', async () => {
+    useConfigStore.setState({
+      config: {
+        ...defaultAppConfig(),
+        assets_enabled: { BTC: true, ETH: true } as any,
+        cushions: { ...defaultAppConfig().cushions, BTC: 100, ETH: 50 },
+        manual_risk: {
+          ...defaultAppConfig().manual_risk,
+          max_entry_ask_usd: 0.5,
+          min_minutes_elapsed: 0,
+          min_minutes_left: 0,
+        },
+      },
+      hydrated: true,
+    });
+    const now = new Date().toISOString();
+    useRuntimeStore.setState({
+      refreshPredictionsBalance: async () => {},
+      refreshCloudSnapshot: async () => {},
+      lastSignalsManualTrade: true,
+      cloudKillSwitch: false,
+      leans: {
+        BTC: {
+          asset: 'BTC',
+          market_ticker: 'KXBTC15M-X',
+          decision: 'YES',
+          live: 250,
+          strike: 100,
+          abs_gap: 40,
+          minutes_left: 8,
+          minutes_elapsed: 5,
+          phase: 'live',
+          yes_ask: 0.4,
+        },
+        ETH: {
+          asset: 'ETH',
+          market_ticker: 'KXETH15M-X',
+          decision: 'YES',
+          live: 200,
+          strike: 100,
+          abs_gap: 100,
+          minutes_left: 8,
+          minutes_elapsed: 5,
+          phase: 'live',
+          yes_ask: 0.94,
+        },
+      } as any,
+      leanAt: { BTC: now, ETH: now },
+    });
+    const s = await render(<HomeScreen />);
+    const rows = s.getAllByTestId(/^signal-row-/);
+    expect(rows.map((r) => r.props.testID)).toEqual(['signal-row-ETH', 'signal-row-BTC']);
+    expect(s.getByTestId('tap-idle-ETH')).toBeTruthy();
+    expect(s.getByTestId('idle-plus-icon-ETH')).toBeTruthy();
+    expect(s.getByTestId('skip-reason-ETH').props.children).toBe('ask too rich');
+    expect(s.getByTestId('tap-idle-BTC')).toBeTruthy();
+  });
+
   test('feature flag off hides green Buy and shows gray force plus', async () => {
     useConfigStore.setState({
       config: { ...defaultAppConfig(), assets_enabled: { BTC: true } as any },
